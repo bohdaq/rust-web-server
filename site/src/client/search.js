@@ -48,7 +48,8 @@ export function initSearch() {
     // several arrive while the index is still loading.
     timer = setTimeout(async () => {
       try {
-        const search = await (await load()).search(query);
+        const version = document.querySelector("[data-docs-version]")?.dataset.docsVersion;
+        const search = await (await load()).search(query, version ? { filters: { version } } : {});
         if (mine !== token) return;
         const items = await Promise.all(search.results.slice(0, 8).map((r) => r.data()));
         if (mine !== token) return;

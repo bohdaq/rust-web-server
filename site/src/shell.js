@@ -62,7 +62,7 @@ export function footer() {
 // a cream flash. Storage can throw (private windows), hence the try.
 const THEME_BOOT = `try{var t=localStorage.getItem("rws-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}`;
 
-export function documentHtml({ title, description, path, body, assets, noindex = false }) {
+export function documentHtml({ title, description, path, body, assets, noindex = false, canonical = path }) {
   const css = assets.css.map((href) => `<link rel="stylesheet" href="${href}">`).join("");
   return `<!doctype html>
 <html lang="en">
@@ -72,7 +72,7 @@ export function documentHtml({ title, description, path, body, assets, noindex =
 <title>${title}</title>
 <meta name="description" content="${description}">
 ${noindex ? '<meta name="robots" content="noindex">' : ""}
-<link rel="canonical" href="https://rws8.tech${path}">
+<link rel="canonical" href="https://rws8.tech${canonical}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="${title}">
 <meta property="og:description" content="${description}">

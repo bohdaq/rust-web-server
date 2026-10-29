@@ -179,7 +179,8 @@ review.
 |---|---|
 | 1. Theme spike | **done 2026-10-29**, not committed: `site/` (Vite 8.3.4 + `@lit-labs/ssr` 4.1.0 prerender, plain JS modules), `src/theme.css`, `/theme/` page, SVG brand (`src/brand/mark.js` → `favicon.svg`, `brand/mark*.svg`, `brand/icon-{black,orange}.svg`), floating nav + mobile menu, theme toggle. Checked in headless Chromium: light, dark, 390px (no horizontal scroll), 20 declarative shadow roots hydrate, tabs/toggle/menu work, no console errors |
 | 2. Docs renderer | **done 2026-10-29**: `docs/sidebar.json` is the one sidebar (Starlight imports it, `ci/gen_llms.py` reads it — `llms.txt` byte-identical, Starlight still builds 107 pages); `site/src/docs/` renders all 106 sidebar pages + `/docs/` index under `/docs/…` (128 asides → `lit-material-alert`, 873 fences → `lit-material-code-block` with Shiki dual-theme highlighting at build time), sidebar/TOC/prev-next/edit link, Pagefind search (106 pages, `/` shortcut). Checks: page set equals the sidebar, 0 broken internal links or anchors, all 108 pages free of horizontal scroll and console errors at 390px, `ci/check_docs.py` green; full build 12 s |
-| 3–8 | not started |
+| 3. Versions | **done 2026-10-29**: `site/scripts/versions.js` builds the working tree as latest (`/docs/`) and the newest patch tag of every older minor of the current major (18.0–18.7, from `git archive` into the gitignored `site/.versions/`, 8 MB) under `/docs/<minor>/`; tags without `docs/sidebar.json` have their sidebar read from that tag's `astro.config.mjs`. Version switcher keeps the reader on the same page (else that version's index), older pages carry a "you are reading 18.x" notice, `noindex` and a canonical to the latest copy when it exists; search is filtered to the version being read (Pagefind filter `version`). Checks: 937 pages, 0 broken links or anchors across all versions, all 937 clean at 390px; build 47 s, 900 MB peak |
+| 4–8 | not started |
 
 Phase 1 findings:
 - Brand orange `#D2551E` is 4.15:1 under white text, so interactive orange is
@@ -207,6 +208,15 @@ Phase 2 findings:
   Chromium; spell translucent colours per scheme.
 - Pagefind's `debouncedSearch` drops the last query when several arrive while
   the index loads; the client debounces itself and calls `search()`.
+
+Phase 3 findings:
+- `dist/` is 136 MB: 123 MB of docs HTML across nine versions (about 160 KB
+  per page, mostly the declarative shadow DOM of each code block), 12 MB
+  gzipped. Over the wire that is ~19 KB a page since rws compresses text;
+  for disk, phase 6 can write `.br` siblings (rws serves precompressed files)
+  or older versions can drop SSR of code blocks if it matters.
+- The release workflow must fetch tags (`fetch-depth: 0` or `git fetch
+  --tags`) for the older versions to build.
 
 New work found:
 - `install.sh` for `curl -fsSL https://rws8.tech/install.sh | sh` does not exist

@@ -7,9 +7,24 @@ import { footer, header } from "../shell.js";
 
 const REPO = "https://github.com/bohdaq/rust-web-server";
 
-function sidebarNav(sidebar, current, base) {
+// Links to this page in every version that has it, else to that version's index.
+function versionSwitch(version, current, base) {
+  const rel = current.slice(base.length);
+  return html`
+    <details class="version-switch">
+      <summary>Version <b>${version.key}</b>${version.latest ? html` <span class="latest-tag">latest</span>` : nothing}</summary>
+      <ul>
+        ${version.all.map(
+          (v) => html`<li><a href=${v.pages.has(rel) ? v.base + rel : `${v.base}/`} aria-current=${v.key === version.key ? "page" : "false"}>${v.key}${v.latest ? " (latest)" : ""}</a></li>`,
+        )}
+      </ul>
+    </details>`;
+}
+
+function sidebarNav(sidebar, current, base, version) {
   return html`
     <nav class="docs-nav" aria-label="Docs">
+      ${versionSwitch(version, current, base)}
       <button class="docs-search-button" type="button" data-search-open>
         ${unsafeHTML(icon("magnifying-glass"))}<span>Search docs</span><kbd>/</kbd>
       </button>
@@ -47,18 +62,30 @@ function pager(prev, next) {
     </nav>`;
 }
 
-function shell({ path, sidebar, base, content, toc = [] }) {
+function oldVersionNotice(version, path, base) {
+  if (version.latest) return nothing;
+  const rel = path.slice(base.length);
+  const target = version.latestPages.has(rel) ? `/docs${rel}` : "/docs/";
+  return html`
+    <lit-material-alert variant="info" class="version-notice">
+      <span slot="icon">${unsafeHTML(icon("clock-counter-clockwise"))}</span>
+      <span slot="title">You are reading the docs for rws ${version.key}</span>
+      The latest release is ${version.latestKey}. <a href=${target}>${version.latestPages.has(rel) ? "Read this page for the latest release" : "Go to the latest docs"}</a>.
+    </lit-material-alert>`;
+}
+
+function shell({ path, sidebar, base, content, toc = [], version }) {
   return html`
     ${header(path)}
     <div class="docs-layout">
       <aside class="docs-sidebar">
         <details class="docs-nav-mobile">
           <summary>${unsafeHTML(icon("list"))} Docs menu</summary>
-          ${sidebarNav(sidebar, path, base)}
+          ${sidebarNav(sidebar, path, base, version)}
         </details>
-        <div class="docs-nav-desktop">${sidebarNav(sidebar, path, base)}</div>
+        <div class="docs-nav-desktop">${sidebarNav(sidebar, path, base, version)}</div>
       </aside>
-      <main id="main" class="docs-main">${content}</main>
+      <main id="main" class="docs-main" data-docs-version=${version.key}>${oldVersionNotice(version, path, base)}${content}</main>
       <aside class="docs-aside">${tocNav(toc)}</aside>
     </div>
     <dialog class="search-dialog" aria-label="Search docs">
@@ -72,14 +99,15 @@ function shell({ path, sidebar, base, content, toc = [] }) {
     ${footer()}`;
 }
 
-export function docsPage({ page, sidebar, base, prev, next }) {
+export function docsPage({ page, sidebar, base, prev, next, version }) {
   return shell({
     path: page.path,
     sidebar,
     base,
+    version,
     toc: page.toc,
     content: html`
-      <article class="docs-article" data-pagefind-body>
+      <article class="docs-article" data-pagefind-body data-pagefind-filter=${`version:${version.key}`}>
         <h1>${page.title}</h1>
         ${page.description ? html`<p class="docs-lead">${page.description}</p>` : nothing}
         <div class="prose">${unsafeHTML(page.html)}</div>
@@ -91,11 +119,12 @@ export function docsPage({ page, sidebar, base, prev, next }) {
   });
 }
 
-export function docsIndex({ path, sidebar, base, pages }) {
+export function docsIndex({ path, sidebar, base, pages, version }) {
   return shell({
     path,
     sidebar,
     base,
+    version,
     content: html`
       <article class="docs-article">
         <h1>Documentation</h1>

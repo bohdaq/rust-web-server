@@ -6,7 +6,14 @@ import { join } from "node:path";
 import { docsIndex, docsPage } from "./layout.js";
 import { renderMarkdown } from "./markdown.js";
 
-export async function buildDocs({ contentRoot, sidebar, base = "/docs" }) {
+// Older versions are noindex, with the canonical on the latest copy of the
+// same page when it still exists.
+function versionMeta(version, rel) {
+  if (version.latest) return {};
+  return { noindex: true, canonical: version.latestPages.has(rel) ? `/docs${rel}` : undefined };
+}
+
+export async function buildDocs({ contentRoot, sidebar, base = "/docs", version }) {
   const pages = new Map();
   for (const group of sidebar) {
     for (const item of group.items) {
@@ -20,19 +27,30 @@ export async function buildDocs({ contentRoot, sidebar, base = "/docs" }) {
 
   const order = [...pages.values()];
   const out = order.map((page, i) => ({
-    meta: { path: page.path, title: `${page.title} · rws docs`, description: page.description || page.title },
+    meta: {
+      path: page.path,
+      title: `${page.title} · rws ${version.latest ? "docs" : `${version.key} docs`}`,
+      description: page.description || page.title,
+      ...versionMeta(version, page.path.slice(base.length)),
+    },
     render: () =>
       docsPage({
         page,
         sidebar,
         base,
+        version,
         prev: order[i - 1] && { href: order[i - 1].path, label: order[i - 1].label },
         next: order[i + 1] && { href: order[i + 1].path, label: order[i + 1].label },
       }),
   }));
   out.unshift({
-    meta: { path: `${base}/`, title: "Documentation · rws", description: "rust-web-server documentation: configuration, proxy, building apps, MCP, database and deployment." },
-    render: () => docsIndex({ path: `${base}/`, sidebar, base, pages }),
+    meta: {
+      path: `${base}/`,
+      title: version.latest ? "Documentation · rws" : `Documentation for ${version.key} · rws`,
+      description: "rust-web-server documentation: configuration, proxy, building apps, MCP, database and deployment.",
+      ...versionMeta(version, "/"),
+    },
+    render: () => docsIndex({ path: `${base}/`, sidebar, base, pages, version }),
   });
   return out;
 }

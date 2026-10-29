@@ -11,10 +11,10 @@ import { favicon, icon, mark } from "../src/brand/mark.js";
 import { documentHtml } from "../src/shell.js";
 import * as themePage from "../src/pages/theme.js";
 import { buildDocs } from "../src/docs/build.js";
+import { docsVersions } from "./versions.js";
 
 const site = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(site, "dist");
-const docsRoot = join(site, "..", "docs");
 const manifest = JSON.parse(readFileSync(join(dist, ".vite", "manifest.json"), "utf8"));
 const entry = manifest["src/client/main.js"];
 const assets = { js: `/${entry.file}`, css: (entry.css ?? []).map((f) => `/${f}`) };
@@ -25,8 +25,14 @@ function write(path, content) {
   writeFileSync(file, content);
 }
 
-const sidebar = JSON.parse(readFileSync(join(docsRoot, "sidebar.json"), "utf8"));
-const docs = await buildDocs({ contentRoot: join(docsRoot, "src", "content", "docs"), sidebar });
+const versions = docsVersions({ repo: join(site, ".."), cacheDir: join(site, ".versions") });
+for (const v of versions) v.pages = new Set(["/", ...v.sidebar.flatMap((g) => g.items.map((i) => i.link))]);
+const docs = [];
+for (const v of versions) {
+  const version = { ...v, all: versions, latestKey: versions[0].key, latestPages: versions[0].pages };
+  docs.push(...(await buildDocs({ contentRoot: v.contentRoot, sidebar: v.sidebar, base: v.base, version })));
+  console.log("docs", v.key, v.latest ? "(latest, working tree)" : `(tag ${v.tag})`);
+}
 const pages = [themePage, ...docs];
 for (const page of pages) {
   const body = await collectResult(render(page.render()));
