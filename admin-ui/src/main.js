@@ -1,0 +1,11 @@
+import "@lit-material/tokens/css/index.css";
+import "./styles.css";
+import "@lit-material/alert";
+import "@lit-material/button";
+import "@lit-material/card";
+import "@lit-material/navigation";
+import "@lit-material/skeleton";
+import "@lit-material/snackbar";
+import "@lit-material/switch";
+import "@lit-material/text-field";
+import "./app.js";

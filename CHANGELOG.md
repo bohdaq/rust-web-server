@@ -30,6 +30,18 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - Admin API: `GET /admin/api/v1/logs` (the last access-log lines, up to
   500) and `GET /admin/api/v1/logs/stream` (a live tail as server-sent
   events), fed from the access-log sink's writes (`log::tail`).
+- Admin UI at `/admin/` on the admin listener: overview with a live
+  requests-per-second chart, upstreams with drain switches, certificates
+  and renew, controls (maintenance, reload, cache, blocklist, flags),
+  config and a live log. Built with lit-material from `admin-ui/` and
+  embedded in the binary; strict CSP; `ci/e2e/admin_ui.sh` drives it in
+  headless Chromium.
+
+### Changed
+
+- The `rws` binary's maintenance mode now also covers config-file proxy
+  routes. `MaintenanceLayer` passes requests through while it is off, so
+  proxy routes keep their non-blocking forwarder.
 
 ## 18.9.1 — 2026-10-29
 

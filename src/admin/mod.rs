@@ -21,6 +21,7 @@
 //! saturated server can still be administered.
 
 pub mod ops;
+mod ui;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -199,12 +200,20 @@ impl Application for AdminApi {
         if !self.origin_allowed(request) {
             return Ok(error(STATUS_CODE_REASON_PHRASE.n403_forbidden, "origin not allowed"));
         }
+        let path = crate::url::URL::request_target_path(&request.request_uri).unwrap_or_default();
+        if request.method == "GET" || request.method == "HEAD" {
+            if path == "/admin" || path == "/" {
+                return Ok(ui::redirect());
+            }
+            if let Some(file) = ui::file(path) {
+                return Ok(file);
+            }
+        }
         if !self.authorized(request) {
             let mut response = error(STATUS_CODE_REASON_PHRASE.n401_unauthorized, "missing or wrong bearer token");
             response.headers.push(Header::new("WWW-Authenticate", r#"Bearer realm="rws admin""#));
             return Ok(response);
         }
-        let path = crate::url::URL::request_target_path(&request.request_uri).unwrap_or_default();
         let Some(route) = path.strip_prefix(API_PREFIX) else {
             return Ok(error(STATUS_CODE_REASON_PHRASE.n404_not_found, "not found"));
         };

@@ -55,3 +55,15 @@ fn readyz_passes_in_maintenance_mode() {
     // readyz returns its own 503 "not ready" — maintenance layer let it through.
     assert_ne!(b"Service Temporarily Unavailable".as_ref(), res.body_bytes());
 }
+
+#[test]
+fn passes_through_only_while_off() {
+    let _g = lock();
+    let request = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+    let connection = crate::server::ConnectionInfo::default();
+    MAINTENANCE_MODE.store(false, Ordering::SeqCst);
+    assert!(MaintenanceLayer.is_passthrough(&request, &connection));
+    MAINTENANCE_MODE.store(true, Ordering::SeqCst);
+    assert!(!MaintenanceLayer.is_passthrough(&request, &connection));
+    MAINTENANCE_MODE.store(false, Ordering::SeqCst);
+}

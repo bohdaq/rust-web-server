@@ -483,7 +483,7 @@ fn main() {
     telemetry();
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         Server::run(listener, pool, proxy_app);
     } else {
@@ -512,7 +512,7 @@ async fn serve() {
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),
@@ -547,7 +547,7 @@ async fn serve() {
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),

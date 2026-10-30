@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mcp-gateway, llm-proxy, admin, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mcp-gateway, llm-proxy, admin, admin-ui, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -156,6 +156,16 @@ jobs:
       - name: Admin API on its own listener
         if: matrix.check == 'admin'
         run: ci/e2e/admin.sh target/debug/rws
+      - uses: actions/setup-node@v4
+        if: matrix.check == 'admin-ui'
+        with:
+          node-version: 24
+      - name: Admin UI (embedded bundle up to date; headless Chromium against the binary)
+        if: matrix.check == 'admin-ui'
+        run: |
+          admin-ui/build.sh --check
+          (cd ci/e2e/admin_ui && npm install --no-save --no-audit --no-fund playwright@1.64.0 && npx playwright install --with-deps chromium)
+          ci/e2e/admin_ui.sh target/debug/rws
       - name: LLM proxy from the config file (fallback, usage, budgets, Redis-shared budgets)
         if: matrix.check == 'llm-proxy'
         run: |

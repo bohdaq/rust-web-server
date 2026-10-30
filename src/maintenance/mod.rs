@@ -78,4 +78,11 @@ impl Middleware for MaintenanceLayer {
     fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         true
     }
+
+    /// Off, it does nothing: config-driven proxy routes keep their
+    /// non-blocking forwarder (since 18.10.0, when the binary added this
+    /// layer to proxy mode for the admin API's maintenance switch).
+    fn is_passthrough(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        !MAINTENANCE_MODE.load(Ordering::Relaxed)
+    }
 }

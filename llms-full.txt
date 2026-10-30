@@ -19135,6 +19135,19 @@ The token lives in the environment, never in the file. When the variable is unse
 
 Keep it on loopback and reach it through an SSH tunnel (`ssh -L 9901:127.0.0.1:9901 host`). If you must listen on another address, firewall the port: the token is the only protection.
 
+## The web UI
+
+Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) and paste the token. It shows:
+
+- **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
+- **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
+- **Certificates**: what the server presents and when it expires, and ACME's renew button.
+- **Controls**: maintenance mode, reload, the response cache, the IP blocklist and feature flags.
+- **Config**: every setting in effect, filterable, secrets hidden.
+- **Logs**: the access log as it's written, with pause.
+
+The token stays in the browser tab (`sessionStorage`), and the page talks only to the API below with it. The UI's own files (`/admin/`, `/admin/admin.js`, `/admin/admin.css`) are served without the token: they hold no data. They are built into the binary, so there is nothing to deploy, and they're served with a strict `Content-Security-Policy` (scripts and connections to the listener itself only, no framing).
+
 ## Security
 
 - Every request needs `Authorization: Bearer <token>`, on loopback too. A missing or wrong token gets `401`, whatever the path, and the token is compared in constant time.
@@ -19180,6 +19193,8 @@ Lines are kept only while the admin API runs, and come from the access log (`log
 To reload certificates from files (after replacing them yourself), use `POST /reload`: it reloads them as `SIGHUP` does.
 
 A typical backend rollout: drain it, wait for its in-flight requests (`rws_upstream_requests_total` stops moving), deploy, check `GET /upstreams` shows it `healthy`, undrain.
+
+Maintenance mode applies in proxy mode too (the binary puts the maintenance check in front of config-file routes since 18.10.0; while it's off, proxy routes keep their non-blocking forwarder).
 
 Changes made here are in memory: they last until the process restarts (a reload doesn't undo them). The binary's [MCP tools](/mcp/operate/) run the same code, so both answer alike.
 

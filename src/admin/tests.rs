@@ -314,3 +314,26 @@ fn long_lines_are_cut_and_the_buffer_is_bounded() {
     }
     assert_eq!(crate::log::tail::recent(usize::MAX).len(), crate::log::tail::CAPACITY);
 }
+
+#[test]
+fn the_ui_is_served_without_the_token_and_locked_down() {
+    let api = AdminApi::new("t");
+    let page = get(&api, "/admin/", "");
+    assert_eq!(page.status_code, 200);
+    assert!(body(&page).contains("<rws-admin>"), "{}", body(&page));
+    let csp = page.headers.iter().find(|h| h.name == "Content-Security-Policy").map(|h| h.value.to_string()).unwrap_or_default();
+    assert!(csp.contains("script-src 'self'") && csp.contains("frame-ancestors 'none'") && !csp.contains("script-src 'self' 'unsafe"), "{csp}");
+    assert!(page.headers.iter().any(|h| h.name == "X-Content-Type-Options" && h.value == "nosniff"));
+    for (path, kind) in [("/admin/admin.js", "text/javascript"), ("/admin/admin.css", "text/css")] {
+        let file = get(&api, path, "");
+        assert_eq!(file.status_code, 200, "{path}");
+        assert!(file.content_range_list[0].content_type.starts_with(kind), "{path}");
+        assert!(!file.content_range_list[0].body.is_empty(), "{path} is built");
+    }
+    let redirect = get(&api, "/admin", "");
+    assert_eq!(redirect.status_code, 308);
+    assert!(redirect.headers.iter().any(|h| h.name == "Location" && h.value == "/admin/"));
+    assert_eq!(get(&api, "/admin/other.js", "").status_code, 401, "only the UI's own files are public");
+    let raw = "POST /admin/ HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n";
+    assert_eq!(api.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap().status_code, 401);
+}
