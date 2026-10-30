@@ -16,6 +16,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   GitHub Actions workflows that test, push to GHCR and deploy to a kube-dc
   project, with a preview per pull request removed when it closes.
 
+### Changed
+
+- Admin UI built on the new lit-material components (status, stat,
+  empty-state, log-viewer, table, chart, adaptive navigation): one navigation
+  that is a drawer, rail or bottom bar by window width; the log stops
+  following while you scroll up, with a "new lines" button; the overview
+  adds a requests-per-second sparkline.
+
 ### Fixed
 
 - Admin API `GET /status` and `GET /build` (and the `feature_flags` MCP tool)
