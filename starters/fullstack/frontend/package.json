@@ -1,0 +1,17 @@
+{
+  "name": "frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@lit-material/button": "0.1.0",
+    "@lit-material/tokens": "0.0.1",
+    "lit": "3.3.3"
+  },
+  "devDependencies": {
+    "vite": "8.3.4"
+  }
+}

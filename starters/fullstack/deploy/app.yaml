@@ -1,0 +1,71 @@
+# The app on kube-dc: a Deployment and a ClusterIP Service that the platform
+# publishes over HTTPS (hostname + certificate, no public IP).
+# Rendered with envsubst: APP (name), IMAGE (full reference), DB_SECRET (the
+# managed database's binding Secret, default ${APP}-db-owner). Without that
+# Secret the app keeps notes in memory.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${APP}
+  labels: { app: ${APP} }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ${APP} }
+  template:
+    metadata:
+      labels: { app: ${APP} }
+    spec:
+      imagePullSecrets:
+        - name: ${APP}-pull
+      containers:
+        - name: app
+          image: ${IMAGE}
+          ports:
+            - { name: http, containerPort: 7878 }
+          env:
+            - { name: PGHOST, valueFrom: { secretKeyRef: { name: "${DB_SECRET}", key: host, optional: true } } }
+            - { name: PGPORT, valueFrom: { secretKeyRef: { name: "${DB_SECRET}", key: port, optional: true } } }
+            - { name: PGDATABASE, valueFrom: { secretKeyRef: { name: "${DB_SECRET}", key: dbname, optional: true } } }
+            - { name: PGUSER, valueFrom: { secretKeyRef: { name: "${DB_SECRET}", key: username, optional: true } } }
+            - { name: PGPASSWORD, valueFrom: { secretKeyRef: { name: "${DB_SECRET}", key: password, optional: true } } }
+            # Managed databases are TLS-only: verify the server against the
+            # CA delivered in the same Secret.
+            - { name: PGSSLMODE, value: verify-full }
+            - { name: PGSSLROOTCERT, value: /etc/db-ca/ca.crt }
+          volumeMounts:
+            - { name: db-ca, mountPath: /etc/db-ca, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: [ALL] }
+      volumes:
+        - name: db-ca
+          secret:
+            secretName: "${DB_SECRET}"
+            optional: true
+            items: [{ key: ca.crt, path: ca.crt }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${APP}
+  annotations:
+    service.nlb.kube-dc.com/expose-route: https
+    service.nlb.kube-dc.com/https-redirect: "true"
+spec:
+  type: ClusterIP
+  selector: { app: ${APP} }
+  ports:
+    - { name: http, port: 80, targetPort: http }

@@ -12,6 +12,7 @@ Each starter is a standalone project that builds and passes its own tests (CI ch
 ```sh
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/api   # JSON API + OpenAPI 3.1, TestClient tests
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/mcp   # MCP server: typed tools, a resource, a bearer token
+cargo generate --git https://github.com/bohdaq/rust-web-server starters/fullstack   # lit frontend + API + PostgreSQL, Dockerfile, GitHub Actions deploy to kube-dc with PR previews
 ```
 
 ([cargo-generate](https://github.com/cargo-generate/cargo-generate): `cargo install cargo-generate`.) Without it, copy the directory and replace `{{project-name}}` in `Cargo.toml`.

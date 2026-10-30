@@ -1,0 +1,77 @@
+# Every pull request gets its own copy of the app in vars.KUBE_DC_PREVIEW_NAMESPACE,
+# named <app>-pr-<number>, with its URL in the PR's deployments. Closing the PR
+# removes it. Previews have no database Secret, so they keep notes in memory.
+name: preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+  packages: write
+  deployments: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    # Pull requests from forks get no secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment:
+      name: preview-pr-${{ github.event.pull_request.number }}
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: names
+        run: |
+          base=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-\n' '-' | cut -c1-30 | sed 's/^-*//; s/-*$//')
+          echo "app=$base-pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}:pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Sign in to kube-dc
+        env:
+          KUBE_DC_API_SERVER: ${{ vars.KUBE_DC_API_SERVER }}
+          KUBE_DC_TOKEN_URL: ${{ vars.KUBE_DC_TOKEN_URL }}
+          KUBE_DC_CLIENT_ID: ${{ secrets.KUBE_DC_CLIENT_ID }}
+          KUBE_DC_CLIENT_SECRET: ${{ secrets.KUBE_DC_CLIENT_SECRET }}
+          KUBE_DC_CA_CERT: ${{ secrets.KUBE_DC_CA_CERT }}
+        run: echo "KUBECONFIG=$(deploy/kubeconfig.sh)" >> "$GITHUB_ENV"
+      - name: Remove the preview
+        if: github.event.action == 'closed'
+        env:
+          PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          app="${{ steps.names.outputs.app }}"
+          kubectl -n "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" delete deployment,service "$app" --ignore-not-found
+          # A pull Secret exists only for private images.
+          if [ -n "$PULL_TOKEN" ]; then
+            kubectl -n "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" delete secret "$app-pull" --ignore-not-found
+          fi
+      - if: github.event.action != 'closed'
+        uses: docker/setup-buildx-action@v3
+      - if: github.event.action != 'closed'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: github.event.action != 'closed'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.names.outputs.image }}
+          # Links the package to this repository (and its visibility).
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - id: deploy
+        if: github.event.action != 'closed'
+        env:
+          PULL_USER: ${{ github.repository_owner }}
+          PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          DB_SECRET: none
+        run: deploy/deploy.sh "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" "${{ steps.names.outputs.app }}" "${{ steps.names.outputs.image }}"

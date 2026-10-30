@@ -1,0 +1,4 @@
+[template]
+cargo_generate_version = ">=0.21"
+# Copied as they are: GitHub Actions expressions (${{ }}) are not templates.
+exclude = [".github/**"]

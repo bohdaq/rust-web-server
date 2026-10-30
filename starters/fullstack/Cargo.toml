@@ -1,0 +1,18 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# One binary name for every generated project, so the Dockerfile and the
+# deploy files never change with the project name.
+[[bin]]
+name = "app"
+path = "src/main.rs"
+
+[dependencies]
+rust-web-server = { version = "18.7", features = ["serde", "model-postgres"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = ["postgres"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

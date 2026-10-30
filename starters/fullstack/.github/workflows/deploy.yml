@@ -1,0 +1,61 @@
+# main → image in GHCR → the kube-dc project in vars.KUBE_DC_NAMESPACE.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: names
+        run: |
+          app=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-\n' '-' | cut -c1-40 | sed 's/^-*//; s/-*$//')
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.names.outputs.image }}
+          # Links the package to this repository (and its visibility).
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Sign in to kube-dc
+        env:
+          KUBE_DC_API_SERVER: ${{ vars.KUBE_DC_API_SERVER }}
+          KUBE_DC_TOKEN_URL: ${{ vars.KUBE_DC_TOKEN_URL }}
+          KUBE_DC_CLIENT_ID: ${{ secrets.KUBE_DC_CLIENT_ID }}
+          KUBE_DC_CLIENT_SECRET: ${{ secrets.KUBE_DC_CLIENT_SECRET }}
+          KUBE_DC_CA_CERT: ${{ secrets.KUBE_DC_CA_CERT }}
+        run: echo "KUBECONFIG=$(deploy/kubeconfig.sh)" >> "$GITHUB_ENV"
+      - id: deploy
+        env:
+          PULL_USER: ${{ github.repository_owner }}
+          PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: deploy/deploy.sh "${{ vars.KUBE_DC_NAMESPACE }}" "${{ steps.names.outputs.app }}" "${{ steps.names.outputs.image }}"

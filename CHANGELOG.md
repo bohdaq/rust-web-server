@@ -7,6 +7,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- `starters/fullstack`: a lit (`@lit-material`) frontend served by rws as
+  static files with the SPA fallback, a JSON API under `/api` with
+  `App::with_async_state`, PostgreSQL through the standard `PG*` variables
+  (in memory without `PGHOST`), a distroless multi-stage `Dockerfile`, and
+  GitHub Actions workflows that test, push to GHCR and deploy to a kube-dc
+  project, with a preview per pull request removed when it closes.
+
 ### Fixed
 
 - Admin API `GET /status` and `GET /build` (and the `feature_flags` MCP tool)
