@@ -381,7 +381,7 @@ pub fn features() -> Vec<&'static str> {
     macro_rules! feature {
         ($($name:literal),*) => { $( if cfg!(feature = $name) { on.push($name); } )* };
     }
-    feature!("http1", "http2", "http3", "acme", "auth", "sso", "sso-saml", "sso-server", "gateway-api", "tower", "openapi", "mimalloc", "brotli", "zstd");
+    feature!("http1", "http2", "http3", "acme", "auth", "sso", "sso-saml", "sso-server", "gateway-api", "tower", "openapi", "mimalloc", "brotli", "zstd", "wasm-plugins");
     on
 }
 

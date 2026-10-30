@@ -5,6 +5,13 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Fixed
+
+- Admin API `GET /status` and `GET /build` (and the `feature_flags` MCP tool)
+  list the `wasm-plugins` feature.
+
 ## 18.10.0 — 2026-10-30
 
 ### Added

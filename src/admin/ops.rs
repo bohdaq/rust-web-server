@@ -32,7 +32,7 @@ pub fn build_features_json() -> String {
     }
     let all: Vec<(&str, bool)> = features!(
         "http1", "http2", "http3", "acme", "auth", "serde", "macros", "sso", "sso-saml", "sso-server", "gateway-api",
-        "tower", "openapi", "mimalloc", "brotli", "zstd"
+        "tower", "openapi", "mimalloc", "brotli", "zstd", "wasm-plugins"
     );
     let members: Vec<String> = all.iter().map(|(name, on)| format!("\"{name}\":{on}")).collect();
     format!("{{{}}}", members.join(","))
