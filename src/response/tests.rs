@@ -917,3 +917,19 @@ fn a_bodiless_response_says_its_length_is_zero() {
     set.headers.push(crate::header::Header::new("Content-Length", "0".to_string()));
     assert_eq!(1, head(set).matches("Content-Length").count());
 }
+
+#[test]
+fn with_status_and_default_build_empty_responses() {
+    let response = Response::with_status(STATUS_CODE_REASON_PHRASE.n204_no_content);
+    assert_eq!((response.status_code, response.reason_phrase.as_str()), (204, "No Content"));
+    assert!(response.headers.is_empty() && response.content_range_list.is_empty() && response.stream_pipe.is_none());
+    assert_eq!(Response::default().status_code, 501);
+    assert_eq!(Response::default().http_version, "HTTP/1.1");
+}
+
+#[test]
+fn is_blank_matches_trim_is_empty() {
+    for line in ["", "\r\n", "\n", "  \t\r\n", "a\r\n", " a", "\u{a0}\r\n", "\u{2003}", "x\u{a0}", "\u{feff}\r\n", "\u{85}"] {
+        assert_eq!(super::is_blank(line), line.trim().is_empty(), "{line:?}");
+    }
+}

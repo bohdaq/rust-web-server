@@ -3244,6 +3244,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "libc",
+ "memchr",
  "mimalloc",
  "p256",
  "quinn",

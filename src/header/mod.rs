@@ -217,7 +217,9 @@ impl Header {
     /// user input (a redirect target, an upstream header) can't end the line
     /// and inject headers or a second response (#47).
     pub fn single_line(s: &str) -> std::borrow::Cow<'_, str> {
-        if s.contains(['\r', '\n']) {
+        // A byte search: `contains(['\r', '\n'])` decoded every char, and
+        // this runs for every name and value of every response written.
+        if memchr::memchr2(b'\r', b'\n', s.as_bytes()).is_some() {
             std::borrow::Cow::Owned(s.replace(['\r', '\n'], " "))
         } else {
             std::borrow::Cow::Borrowed(s)

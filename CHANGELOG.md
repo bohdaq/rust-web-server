@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- `Response::with_status(status)` and `impl Default for Response`: build a
+  response without a struct literal.
+
+### Changed
+
+- Faster header writing and upstream-response parsing: byte searches
+  (`memchr`) for CR/LF checks and line splits, and a cheaper blank-line
+  test. Output is unchanged.
+
 ## 18.10.1 — 2026-10-30
 
 ### Added

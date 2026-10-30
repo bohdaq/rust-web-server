@@ -338,6 +338,22 @@ impl Response {
         }
     }
 
+    /// A response with `status`, no headers and no body; set fields or push
+    /// headers and body parts after.
+    ///
+    /// ```rust
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    ///
+    /// let mut response = Response::with_status(STATUS_CODE_REASON_PHRASE.n204_no_content);
+    /// response.headers.push(rust_web_server::header::Header::new("X-Done", "yes"));
+    /// assert_eq!(response.status_code, 204);
+    /// ```
+    pub fn with_status(status: &StatusCodeReasonPhrase) -> Response {
+        let mut response = <Response as New>::new();
+        response.set_status(status);
+        response
+    }
+
     /// Set the status code and reason phrase, reusing the phrase's buffer.
     pub(crate) fn set_status(&mut self, status: &StatusCodeReasonPhrase) {
         self.status_code = *status.status_code;
@@ -991,7 +1007,7 @@ impl Response {
         let mut first = true;
         loop {
             let rest = &input[pos.min(input.len())..];
-            let line_len = rest.iter().position(|&b| b == b'\n').map_or(rest.len(), |i| i + 1);
+            let line_len = memchr::memchr(b'\n', rest).map_or(rest.len(), |i| i + 1);
             pos += line_len;
             let line = std::str::from_utf8(&rest[..line_len]).map_err(|e| e.to_string())?;
             if first {
@@ -1000,7 +1016,7 @@ impl Response {
                 response.status_code = status_code;
                 response.reason_phrase = reason_phrase.to_string();
             }
-            if line.trim().is_empty() {
+            if is_blank(line) {
                 if content_type.is_some_and(|ct| ct.starts_with("multipart/byteranges")) {
                     return Response::parse(input).map(normalized_like_proxy(dropped));
                 }
@@ -1061,14 +1077,14 @@ impl Response {
         loop {
             let start = (cursor.position() as usize).min(input.len());
             let rest = &input[start..];
-            let line_len = rest.iter().position(|&b| b == b'\n').map_or(rest.len(), |i| i + 1);
+            let line_len = memchr::memchr(b'\n', rest).map_or(rest.len(), |i| i + 1);
             cursor.set_position((start + line_len) as u64);
             bytes_read += line_len as i32;
             let line = std::str::from_utf8(&rest[..line_len]).map_err(|e| e.to_string())?;
 
             let is_first_iteration = iteration_number == 0;
             let new_line_char_found = line_len != 0;
-            let current_string_is_empty = line.trim().is_empty();
+            let current_string_is_empty = is_blank(line);
 
             if is_first_iteration {
                 let status_line = without_cr_lf(line);
@@ -1145,6 +1161,14 @@ impl Response {
     }
 }
 
+impl Default for Response {
+    /// The same as `Response::new()`: HTTP/1.1, no headers, no body, status
+    /// `501 Not Implemented` until you set one.
+    fn default() -> Self {
+        <Response as New>::new()
+    }
+}
+
 impl New for Response {
     fn new() -> Self {
         Response {
@@ -1183,10 +1207,20 @@ fn normalized_like_proxy<'a>(dropped: &'a [&'a str]) -> impl FnOnce(Response) ->
 }
 
 /// `s` with every CR and LF removed — borrowed when they only end the line.
+/// `line.trim().is_empty()`, deciding on the first byte for the usual
+/// header line instead of decoding chars from both ends.
+fn is_blank(line: &str) -> bool {
+    match line.bytes().find(|b| !b.is_ascii_whitespace()) {
+        None => true,
+        Some(b) if b.is_ascii() => false,
+        Some(_) => line.trim().is_empty(),
+    }
+}
+
 fn without_cr_lf(s: &str) -> std::borrow::Cow<'_, str> {
     let trimmed = s.strip_suffix('\n').unwrap_or(s);
     let trimmed = trimmed.strip_suffix('\r').unwrap_or(trimmed);
-    if trimmed.contains(['\r', '\n']) {
+    if memchr::memchr2(b'\r', b'\n', trimmed.as_bytes()).is_some() {
         std::borrow::Cow::Owned(StringExt::truncate_new_line_carriage_return(s))
     } else {
         std::borrow::Cow::Borrowed(trimmed)
@@ -1198,7 +1232,7 @@ fn without_cr_lf(s: &str) -> std::borrow::Cow<'_, str> {
 fn split_name_value(line: &str) -> Option<(&str, &str)> {
     let bytes = line.as_bytes();
     let mut from = 0;
-    while let Some(offset) = bytes[from..].iter().position(|&b| b == b':') {
+    while let Some(offset) = memchr::memchr(b':', &bytes[from..]) {
         let colon = from + offset;
         if bytes.get(colon + 1) == Some(&b' ') {
             return Some((&line[..colon], &line[colon + 2..]));
