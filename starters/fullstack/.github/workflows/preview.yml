@@ -80,4 +80,10 @@ jobs:
           PULL_USER: ${{ github.repository_owner }}
           PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           DB_SECRET: none
+          # kube-dc removes the preview after 72 hours without a deploy, or once
+          # GitHub reports the pull request closed, even if this workflow's
+          # cleanup on close does not run.
+          PREVIEW_HOURS: "72"
+          PREVIEW_REPOSITORY: ${{ github.repository }}
+          PREVIEW_PULL_REQUEST: ${{ github.event.pull_request.number }}
         run: deploy/deploy.sh "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" "${{ steps.names.outputs.app }}" "${{ steps.names.outputs.image }}"

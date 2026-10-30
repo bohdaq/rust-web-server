@@ -49,6 +49,7 @@ in another (http://127.0.0.1:5173, `/api` proxied to the app).
 
 5. **Push to `main`.** `deploy` tests, builds the image into GHCR, deploys
    and prints the HTTPS URL. Each pull request gets a preview at its own
-   URL (`preview`), removed when the PR closes.
+   URL (`preview`), removed when the PR closes; kube-dc also removes it after
+   72 hours without a deploy, or once the PR is closed, if that cleanup fails.
 
 By hand: `KUBECONFIG=$(deploy/kubeconfig.sh) deploy/deploy.sh <namespace> <app> <image>`.

@@ -6,7 +6,10 @@
 # Uses the current kubectl context (CI writes one with a short-lived token).
 # Optional: DB_SECRET (default <app>-db-owner), PULL_USER + PULL_TOKEN to
 # create/refresh the <app>-pull image pull Secret for a private registry,
-# TIMEOUT (rollout and hostname wait, default 300s).
+# TIMEOUT (rollout and hostname wait, default 300s), and for a preview
+# PREVIEW_HOURS (kube-dc removes it that long after the last deploy),
+# PREVIEW_REPOSITORY + PREVIEW_PULL_REQUEST (and when that pull request
+# closes; public repositories).
 set -euo pipefail
 
 NAMESPACE="$1" APP="$2" IMAGE="$3"
@@ -21,6 +24,16 @@ if [ -n "${PULL_TOKEN:-}" ]; then
 fi
 
 envsubst '${APP} ${IMAGE} ${DB_SECRET}' < app.yaml | kubectl -n "$NAMESPACE" apply -f -
+
+if [ -n "${PREVIEW_HOURS:-}" ]; then
+  # Every object of the preview carries its name; the Deployment, when and why it goes.
+  kubectl -n "$NAMESPACE" label --overwrite deployment/"$APP" service/"$APP" preview.kube-dc.com/name="$APP" >/dev/null
+  [ -n "${PULL_TOKEN:-}" ] && kubectl -n "$NAMESPACE" label --overwrite secret/"$APP-pull" preview.kube-dc.com/name="$APP" >/dev/null
+  kubectl -n "$NAMESPACE" annotate --overwrite deployment/"$APP" \
+    preview.kube-dc.com/expires-at="$(date -u -d "+${PREVIEW_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)" \
+    ${PREVIEW_REPOSITORY:+preview.kube-dc.com/repository="$PREVIEW_REPOSITORY"} \
+    ${PREVIEW_PULL_REQUEST:+preview.kube-dc.com/pull-request="$PREVIEW_PULL_REQUEST"} >/dev/null
+fi
 
 if ! kubectl -n "$NAMESPACE" rollout status "deployment/$APP" --timeout="${TIMEOUT}s"; then
   echo "Rollout failed. Recent events and logs:"
