@@ -171,11 +171,11 @@ jobs:
           # Linux builds (the binaries and the container image) also carry the
           # Kubernetes Gateway API controller, off unless enabled (it doubles
           # the binary, so not on macOS/Windows; user's call for 18.8.0).
-          - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest,    features: "acme auth mimalloc gateway-api" }
-          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, features: "acme auth mimalloc gateway-api" }
-          - { target: x86_64-apple-darwin,        os: macos-latest,     features: "acme auth mimalloc" }
-          - { target: aarch64-apple-darwin,       os: macos-latest,     features: "acme auth mimalloc" }
-          - { target: x86_64-pc-windows-msvc,     os: windows-latest,   features: "acme auth mimalloc" }
+          - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest,    features: "acme auth mimalloc gateway-api wasm-plugins" }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, features: "acme auth mimalloc gateway-api wasm-plugins" }
+          - { target: x86_64-apple-darwin,        os: macos-latest,     features: "acme auth mimalloc wasm-plugins" }
+          - { target: aarch64-apple-darwin,       os: macos-latest,     features: "acme auth mimalloc wasm-plugins" }
+          - { target: x86_64-pc-windows-msvc,     os: windows-latest,   features: "acme auth mimalloc wasm-plugins" }
     steps:
       - uses: actions/checkout@v4
         with:

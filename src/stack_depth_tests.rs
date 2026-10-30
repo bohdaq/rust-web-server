@@ -165,3 +165,15 @@ fn llm_usage_with_deep_nesting_and_thousands_of_events() {
         let _ = json.finish();
     });
 }
+
+#[test]
+#[cfg(feature = "wasm-plugins")]
+fn wasm_plugin_output_with_hundreds_of_thousands_of_lines() {
+    on_small_stack(|| {
+        let output = "set x-a: 1\n".repeat(200_000);
+        assert!(crate::wasm_plugin::parse_request_output(output.as_bytes()).is_ok());
+        let respond = format!("respond 200\n{}\nbody", "x-h: v\n".repeat(200_000));
+        assert!(crate::wasm_plugin::parse_request_output(respond.as_bytes()).is_ok());
+        assert!(crate::wasm_plugin::parse_response_output("status 200\n".repeat(200_000).as_bytes()).is_ok());
+    });
+}

@@ -141,6 +141,8 @@ pub mod proxy_config;
 pub mod llm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod admin;
+#[cfg(feature = "wasm-plugins")]
+pub mod wasm_plugin;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ingress;
 #[cfg(feature = "tera")]
@@ -329,6 +331,14 @@ pub mod fuzz_api {
                 assert!(!(refused && listed_once), "{value:?} refused {chosen:?}");
             }
         }
+    }
+
+    /// What a WebAssembly plugin returns, as the host reads it (#40).
+    /// Must never panic.
+    #[cfg(feature = "wasm-plugins")]
+    pub fn wasm_plugin_output(data: &[u8]) {
+        let _ = crate::wasm_plugin::parse_request_output(data);
+        let _ = crate::wasm_plugin::parse_response_output(data);
     }
 
     /// Provider responses as the LLM proxy reads them (#41): usage from a

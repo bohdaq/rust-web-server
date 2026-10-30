@@ -224,6 +224,10 @@
         "link": "/features/rewrite/"
       },
       {
+        "label": "WebAssembly Plugins",
+        "link": "/features/wasm-plugins/"
+      },
+      {
         "label": "IP Filtering",
         "link": "/features/ip-filter/"
       },

@@ -82,6 +82,7 @@ Use it as:
 - [Distributed Tracing](https://rws8.tech/features/tracing/): OpenTelemetry-compatible HTTP server spans and nested child spans via OtelLayer and otel::span, with W3C traceparent propagation.
 - [Hot Config Reload](https://rws8.tech/features/hot-reload/): Update proxy routes, CORS rules, rate limits, log format, TLS certificates, and Tera templates without restarting the server.
 - [Request/Response Rewriting](https://rws8.tech/features/rewrite/): Transform requests before dispatch and responses on the way back with the RewriteLayer middleware.
+- [WebAssembly Plugins](https://rws8.tech/features/wasm-plugins/): Extend rws without recompiling it. A WebAssembly module checks or changes each request and response, sandboxed with no imports, and bounded in CPU and memory.
 - [IP Filtering](https://rws8.tech/features/ip-filter/): Allow or deny requests by client IPv4 or IPv6 address or CIDR range with the IpFilter middleware.
 - [Request ID / Correlation ID](https://rws8.tech/features/request-id/): Give every request/response pair a stable ID so log lines can be correlated across services.
 - [Background Scheduler](https://rws8.tech/features/scheduler/): Run background tasks on a fixed rate, fixed delay, or 6-field cron schedule without an external crate.

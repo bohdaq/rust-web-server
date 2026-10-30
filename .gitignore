@@ -14,3 +14,4 @@ admin-ui/node_modules
 .claude/worktrees/
 bench-results.md
 bench-results.json
+examples/wasm_plugin/target

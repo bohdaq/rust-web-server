@@ -69,6 +69,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.middleware.cache" => vec!["ttl_secs", "vary_by"],
         "route.middleware.auth" => vec!["type", "token_env", "secret_env", "htpasswd_file"],
         "route.middleware.ip_filter" => vec!["allow", "deny"],
+        "route.middleware.wasm" => vec!["module", "fuel", "memory_mb", "config"],
         "route.middleware.rewrite.request" | "route.middleware.rewrite.response" => REWRITE_RULE_KEYS.to_vec(),
         "tcp_proxy" => vec!["name", "listen", "backends", "connect_timeout_ms"],
         "udp_proxy" => vec!["name", "listen", "backends", "reply_timeout_ms", "buffer_size"],
@@ -310,6 +311,21 @@ impl ProxyConfig {
 }
 
 fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigReport) {
+    if let Some(wasm) = &mw.wasm {
+        if wasm.module.is_empty() {
+            report.error(format!("{label}: [middleware.wasm] has no `module`; the route answers 503"));
+        } else if cfg!(not(feature = "wasm-plugins")) {
+            report.error(format!("{label}: [middleware.wasm] needs the wasm-plugins feature, which this build doesn't include; the route answers 503"));
+        } else if !crate::config_check::offline() {
+            #[cfg(feature = "wasm-plugins")]
+            if let Err(e) = crate::wasm_plugin::WasmLayer::from_file(&wasm.module) {
+                report.error(format!("{label}: {e}; the route answers 503"));
+            }
+        }
+        if wasm.fuel == 0 || wasm.memory_mb == 0 {
+            report.error(format!("{label}: [middleware.wasm] fuel and memory_mb must be above 0"));
+        }
+    }
     match &mw.auth {
         Some(AuthConfig::Bearer { token_env }) | Some(AuthConfig::Jwt { secret_env: token_env }) => {
             if token_env.is_empty() {

@@ -37,6 +37,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   embedded in the binary; strict CSP; `ci/e2e/admin_ui.sh` drives it in
   headless Chromium.
 
+- WebAssembly plugins (feature `wasm-plugins`, on in the release binaries):
+  `wasm_plugin::WasmLayer` and `[route.middleware.wasm]` run a core module
+  on each request (pass, edit headers or target, or answer) and response
+  (edit status and headers). No imports (no WASI); CPU bounded by fuel,
+  memory by `memory_mb`; a fresh instance per request; failures answer
+  `500` and count in `rws_wasm_plugin_errors_total`. A route whose plugin
+  can't load answers `503`. Example plugin in `examples/wasm_plugin`, fuzz
+  target `wasm_plugin_output`, `ci/e2e/wasm_plugin.sh`.
+
 ### Changed
 
 - The `rws` binary's maintenance mode now also covers config-file proxy

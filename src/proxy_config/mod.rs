@@ -181,6 +181,20 @@ pub struct MiddlewareConfig {
     /// `max_body_size` protects only this route's own logic/upstream from
     /// an oversized-but-still-within-the-global-limit body.
     pub max_body_size: Option<u64>,
+    /// `[route.middleware.wasm]`: a WebAssembly plugin (feature
+    /// `wasm-plugins`, 18.10.0).
+    pub wasm: Option<WasmConfig>,
+}
+
+/// `[route.middleware.wasm]`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct WasmConfig {
+    /// Path of the `.wasm` file.
+    pub module: String,
+    pub fuel: u64,
+    pub memory_mb: u64,
+    /// The string the plugin's `rws_init` gets.
+    pub config: String,
 }
 
 #[derive(Debug, Clone)]
@@ -628,9 +642,17 @@ fn parse_middleware_config(
         n => Some(n),
     };
 
+    let w_sec = format!("{}.wasm", mw_sec);
+    let wasm = section_exists(map, &w_sec).then(|| WasmConfig {
+        module: get_str(map, &w_sec, "module"),
+        fuel: get_u64(map, &w_sec, "fuel", 50_000_000),
+        memory_mb: get_u64(map, &w_sec, "memory_mb", 16),
+        config: get_str(map, &w_sec, "config"),
+    });
+
     MiddlewareConfig {
         rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny,
-        timeout_ms, max_body_size,
+        timeout_ms, max_body_size, wasm,
     }
 }
 
@@ -872,7 +894,7 @@ impl MiddlewareConfig {
         self.rate_limit.is_none() && self.cache.is_none() && self.auth.is_none()
             && self.rewrite_request.is_empty() && self.rewrite_response.is_empty()
             && self.ip_allow.is_empty() && self.ip_deny.is_empty()
-            && self.timeout_ms.is_none() && self.max_body_size.is_none()
+            && self.timeout_ms.is_none() && self.max_body_size.is_none() && self.wasm.is_none()
     }
 }
 
@@ -1971,6 +1993,19 @@ pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// Stands in for an auth layer whose configuration can't be honoured (see
 /// `builder::apply_middleware`): every request gets `503`, never the route.
 pub(crate) struct AuthMisconfigured;
+
+/// A `[route.middleware.wasm]` plugin that couldn't be loaded: the route
+/// fails closed.
+pub(crate) struct PluginMisconfigured;
+
+impl crate::middleware::Middleware for PluginMisconfigured {
+    fn handle(&self, _request: &Request, _conn: &ConnectionInfo, _next: &dyn Application) -> Result<Response, String> {
+        Ok(Response::text(
+            STATUS_CODE_REASON_PHRASE.n503_service_unavailable,
+            "503 Service Unavailable: this route's plugin is misconfigured",
+        ))
+    }
+}
 
 impl crate::middleware::Middleware for AuthMisconfigured {
     fn handle(

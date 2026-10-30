@@ -1,0 +1,4 @@
+set x-a: 1
+add x-b: 2
+remove x-c
+uri /new

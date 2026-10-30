@@ -509,7 +509,15 @@ token_env = "API_TOKEN"     # env var name holding the expected token (bearer)
 [route.middleware.ip_filter]
 allow = ["10.0.0.0/8", "192.168.1.0/24"]
 deny  = ["10.0.0.5"]
+
+[route.middleware.wasm]             # a WebAssembly plugin (feature wasm-plugins, 18.10.0)
+module    = "plugins/tag.wasm"
+fuel      = 50000000                # CPU per hook call
+memory_mb = 16
+config    = "region=eu"             # passed to the plugin's rws_init
 ```
+
+See [WebAssembly plugins](/features/wasm-plugins/) for the plugin ABI and sandbox.
 
 A top-level `[middleware]` table (same keys and sub-tables as
 `[route.middleware]`) wraps every route and the static fallback.

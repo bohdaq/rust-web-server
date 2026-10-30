@@ -339,6 +339,23 @@ pub(crate) fn apply_middleware(
         app = arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer));
     }
 
+    // ── WebAssembly plugin (inside auth: it sees authenticated requests) ──
+    if let Some(ref wasm) = mw.wasm {
+        #[cfg(feature = "wasm-plugins")]
+        let layer = crate::wasm_plugin::WasmLayer::from_file(&wasm.module)
+            .map(|l| l.fuel(wasm.fuel).memory_mb(wasm.memory_mb).config(wasm.config.clone()));
+        #[cfg(not(feature = "wasm-plugins"))]
+        let layer: Result<crate::proxy_config::PluginMisconfigured, String> =
+            Err(format!("plugin {}: this rws binary was built without the wasm-plugins feature", wasm.module));
+        app = match layer {
+            Ok(layer) => arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer)),
+            Err(e) => {
+                eprintln!("[proxy_config] ERROR: {e} — this route answers 503 until the plugin is fixed.");
+                arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(crate::proxy_config::PluginMisconfigured))
+            }
+        };
+    }
+
     // ── Auth ───────────────────────────────────────────────────────────────
     // Fails closed: an auth setting that can't be honoured (secret unset,
     // htpasswd missing, feature not compiled in) puts AuthMisconfigured in

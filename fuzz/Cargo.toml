@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2", "acme"] }
+rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2", "acme", "wasm-plugins"] }
 
 # Separate workspace: the root workspace excludes fuzz/.
 [workspace]
@@ -215,6 +215,13 @@ bench = false
 [[bin]]
 name = "llm_usage"
 path = "fuzz_targets/llm_usage.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wasm_plugin_output"
+path = "fuzz_targets/wasm_plugin_output.rs"
 test = false
 doc = false
 bench = false

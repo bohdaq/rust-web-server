@@ -1,0 +1,15 @@
+[package]
+name = "rws-wasm-plugin-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "An rws WebAssembly plugin: tags requests, refuses one header, and stamps responses."
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true

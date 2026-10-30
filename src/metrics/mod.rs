@@ -251,6 +251,15 @@ fn prometheus_text_without_http() -> String {
         out.push_str(&upstream_text);
     }
 
+    #[cfg(feature = "wasm-plugins")]
+    {
+        let wasm_text = crate::wasm_plugin::metrics::prometheus_text();
+        if !wasm_text.is_empty() {
+            out.push('\n');
+            out.push_str(&wasm_text);
+        }
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     {
         let llm_text = llm::prometheus_text();
@@ -329,7 +338,7 @@ fn route_prometheus_text() -> String {
     out.push_str("# HELP rws_route_requests_total Total requests handled per route\n");
     out.push_str("# TYPE rws_route_requests_total counter\n");
     for key in &keys {
-        let entry = &guard.entries[key];
+        let entry = &guard.entries[*key];
         let (method, path) = key;
         let mut statuses: Vec<i16> = entry.counts.keys().cloned().collect();
         statuses.sort();
@@ -347,7 +356,7 @@ fn route_prometheus_text() -> String {
     out.push_str("# HELP rws_route_duration_seconds Request duration in seconds per route\n");
     out.push_str("# TYPE rws_route_duration_seconds histogram\n");
     for key in &keys {
-        let entry = &guard.entries[key];
+        let entry = &guard.entries[*key];
         let (method, path) = key;
         let lat = &entry.latency;
 

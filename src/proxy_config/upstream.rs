@@ -321,7 +321,7 @@ pub(crate) fn prometheus_text() -> String {
         out.push_str("# HELP rws_upstream_requests_total Requests sent to each upstream backend, by response status (\"error\": no response)\n");
         out.push_str("# TYPE rws_upstream_requests_total counter\n");
         for key in &keys {
-            let entry = &stats.backends[key];
+            let entry = &stats.backends[*key];
             let mut codes: Vec<&String> = entry.requests.keys().collect();
             codes.sort();
             for code in codes {
@@ -334,7 +334,7 @@ pub(crate) fn prometheus_text() -> String {
         out.push_str("# HELP rws_upstream_request_duration_seconds Time from sending a request to an upstream backend to its response head\n");
         out.push_str("# TYPE rws_upstream_request_duration_seconds histogram\n");
         for key in &keys {
-            let entry = &stats.backends[key];
+            let entry = &stats.backends[*key];
             let labels = format!("upstream=\"{}\",backend=\"{}\"", label(&key.0), label(&key.1));
             for (i, upper) in BUCKETS.iter().enumerate() {
                 out.push_str(&format!("rws_upstream_request_duration_seconds_bucket{{{labels},le=\"{upper}\"}} {}\n", entry.buckets[i]));
