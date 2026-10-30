@@ -5,7 +5,7 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
+## 18.10.2 — 2026-10-30
 
 ### Added
 
@@ -14,9 +14,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Changed
 
-- Faster header writing and upstream-response parsing: byte searches
+- Header writing and upstream-response parsing use byte searches
   (`memchr`) for CR/LF checks and line splits, and a cheaper blank-line
-  test. Output is unchanged.
+  test. Output is unchanged; a same-run benchmark showed no measurable
+  throughput change.
 
 ## 18.10.1 — 2026-10-30
 
