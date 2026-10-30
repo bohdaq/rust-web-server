@@ -1,7 +1,6 @@
 import { LitElement, html, nothing } from "lit";
 import { api, ApiError, followLogs, setToken, token } from "./api.js";
 import { icon } from "./icons.js";
-import { requestChart } from "./chart.js";
 
 const VIEWS = [
   { id: "overview", label: "Overview", icon: "gauge" },
@@ -26,9 +25,45 @@ function duration(secs) {
   return `${m}m ${secs % 60}s`;
 }
 
-function status(kind, label, name) {
-  return html`<span class="status ${kind}"><span class="icon">${icon(name)}</span>${label}</span>`;
-}
+const status = (kind, label) => html`<lit-material-status status=${kind}>${label}</lit-material-status>`;
+const time = (ms) => new Date(ms).toLocaleTimeString();
+const logLevel = (line) => (/"status":5\d\d/.test(line) ? "error" : /"status":4\d\d/.test(line) ? "warning" : null);
+
+const BACKEND_COLUMNS = (self, upstream) => [
+  { key: "url", label: "Backend", mono: true },
+  { key: "weight", label: "Weight", numeric: true },
+  { key: "healthy", label: "Health", render: (b) => (b.healthy ? status("ok", "Healthy") : status("error", "Failing checks")) },
+  {
+    key: "breaker",
+    label: "Breaker",
+    render: (b) =>
+      b.breaker === null ? status("neutral", "None")
+      : b.breaker === "closed" ? status("ok", "Closed")
+      : b.breaker === "half_open" ? status("warning", "Probing")
+      : status("error", "Open"),
+  },
+  {
+    key: "rotation",
+    label: "In rotation",
+    render: (b) => html`<div class="row">
+      <lit-material-switch aria-label="${b.url} in rotation" .checked=${!b.drained} ?disabled=${self.busy === `drain:${b.url}`}
+        @change=${(e) => self.drain(upstream, b.url, !e.target.checked)}></lit-material-switch>
+      ${b.drained ? status("warning", "Drained") : nothing}
+    </div>`,
+  },
+];
+
+const CERT_COLUMNS = [
+  { key: "name", label: "Name", mono: true },
+  { key: "expires", label: "Expires" },
+  {
+    key: "days_left",
+    label: "Days left",
+    numeric: true,
+    render: (x) => (x.days_left < 7 ? status("error", String(x.days_left)) : x.days_left < 21 ? status("warning", String(x.days_left)) : x.days_left),
+  },
+  { key: "source", label: "Source", render: (x) => (x.source === "on_demand" ? "On demand" : "Configured") },
+];
 
 /** The whole app, rendered into the light DOM so the theme's classes apply. */
 export class RwsAdmin extends LitElement {
@@ -39,7 +74,6 @@ export class RwsAdmin extends LitElement {
     data: { state: true },
     error: { state: true },
     samples: { state: true },
-    lines: { state: true },
     paused: { state: true },
     filter: { state: true },
     busy: { state: true },
@@ -51,7 +85,6 @@ export class RwsAdmin extends LitElement {
     this.view = viewFromHash();
     this.data = {};
     this.samples = [];
-    this.lines = [];
     this.paused = false;
     this.filter = "";
     this.busy = "";
@@ -127,10 +160,7 @@ export class RwsAdmin extends LitElement {
   }
 
   toast(message) {
-    const bar = this.querySelector("#toast");
-    if (!bar) return;
-    bar.textContent = message;
-    bar.show?.();
+    this.querySelector("#toast")?.show(message);
   }
 
   // ── views and their polling ───────────────────────────────────────────
@@ -142,7 +172,7 @@ export class RwsAdmin extends LitElement {
     const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000 }[view];
     this.load(view);
     if (every) this.timer = setInterval(() => this.load(view), every);
-    if (view === "logs") this.follow();
+    if (view === "logs") this.updateComplete.then(() => this.follow());
     queueMicrotask(() => this.querySelector("main")?.focus({ preventScroll: true }));
   }
 
@@ -169,7 +199,7 @@ export class RwsAdmin extends LitElement {
         const now = Date.now();
         if (this.lastTotal) {
           const rate = Math.max(0, (total - this.lastTotal.total) / ((now - this.lastTotal.at) / 1000));
-          this.samples = [...this.samples, { at: now, rate }].slice(-SAMPLES);
+          this.samples = [...this.samples, { x: now, y: Math.round(rate * 100) / 100 }].slice(-SAMPLES);
         }
         this.lastTotal = { total, at: now };
       }
@@ -195,17 +225,12 @@ export class RwsAdmin extends LitElement {
 
   async follow() {
     this.abort = new AbortController();
+    const log = this.querySelector("lit-material-log-viewer");
+    if (!log) return;
+    log.highlight = logLevel;
     try {
-      const recent = await this.call("/logs?n=200");
-      this.lines = recent.map((text) => ({ text }));
-      await followLogs((text) => {
-        if (this.paused) return;
-        this.lines = [...this.lines, { text }].slice(-1000);
-        this.updateComplete.then(() => {
-          const box = this.querySelector(".log");
-          if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 80) box.scrollTop = box.scrollHeight;
-        });
-      }, this.abort.signal);
+      log.lines = await this.call("/logs?n=200");
+      await followLogs((line) => log.appendLines(line), this.abort.signal);
     } catch (e) {
       if (e.name !== "AbortError" && !this.error) this.error = `The live log stopped: ${e.message}`;
     }
@@ -249,29 +274,23 @@ export class RwsAdmin extends LitElement {
   render() {
     if (!this.authed) return this.renderLogin();
     const info = this.data.status;
+    const destinations = VIEWS.map((v) => ({ label: v.label, icon: icon(v.icon) }));
     return html`
       <div class="shell">
         <header class="top">
           <span class="brand"><span class="brand-mark" aria-hidden="true"></span>rws admin</span>
-          ${info ? (info.ready ? status("ok", "Ready", "check-circle") : status("bad", "Not ready", "x-circle")) : nothing}
+          ${info ? (info.ready ? status("ok", "Ready") : status("error", "Not ready")) : nothing}
           <span class="spacer"></span>
           ${info ? html`<span class="meta">${info.version} · ${info.listeners?.main?.address ?? ""}</span>` : nothing}
           <lit-material-button variant="text" @click=${() => this.logout()}><span slot="icon" class="icon">${icon("sign-out")}</span>Sign out</lit-material-button>
         </header>
-        <nav class="side" aria-label="Sections">
-          <lit-material-navigation-drawer .selected=${VIEWS.findIndex((v) => v.id === this.view)} @change=${(e) => this.show(VIEWS[e.target.selected].id)}>
-            ${VIEWS.map((v) => html`<lit-material-navigation-drawer-item ?selected=${v.id === this.view}><span slot="icon">${icon(v.icon)}</span>${v.label}</lit-material-navigation-drawer-item>`)}
-          </lit-material-navigation-drawer>
-        </nav>
+        <lit-material-adaptive-navigation class="nav" label="Sections" .destinations=${destinations}
+          .selected=${VIEWS.findIndex((v) => v.id === this.view)}
+          @change=${(e) => this.show(VIEWS[e.target.selected].id)}></lit-material-adaptive-navigation>
         <main id="main" tabindex="-1">
-          ${this.error ? html`<lit-material-alert variant="error" class="section-alert"><span slot="title">Something failed</span>${this.error}</lit-material-alert>` : nothing}
+          ${this.error ? html`<lit-material-alert variant="error"><span slot="title">Something failed</span>${this.error}</lit-material-alert>` : nothing}
           ${this.renderView()}
         </main>
-        <nav class="bottom-nav" aria-label="Sections">
-          <lit-material-navigation-bar .selected=${VIEWS.findIndex((v) => v.id === this.view)} @change=${(e) => this.show(VIEWS[e.target.selected].id)}>
-            ${VIEWS.map((v) => html`<lit-material-navigation-bar-item ?selected=${v.id === this.view}><span slot="icon">${icon(v.icon)}</span>${v.label}</lit-material-navigation-bar-item>`)}
-          </lit-material-navigation-bar>
-        </nav>
       </div>
       <lit-material-snackbar id="toast"></lit-material-snackbar>
     `;
@@ -285,9 +304,8 @@ export class RwsAdmin extends LitElement {
           <p>Paste the admin token: the value of <code>RWS_ADMIN_TOKEN</code> (or the variable your <code>[admin] token_env</code> names). It stays in this tab only.</p>
           <form @submit=${(e) => this.login(e)} novalidate>
             <lit-material-text-field id="token" variant="outlined" label="Admin token" type="password" autocomplete="current-password" required
-              @keydown=${(e) => e.key === "Enter" && this.login(e)}
               ?error=${Boolean(this.loginError)} error-text=${this.loginError ?? ""}></lit-material-text-field>
-            <lit-material-button type="submit" @click=${(e) => this.login(e)}>Sign in</lit-material-button>
+            <lit-material-button type="submit">Sign in</lit-material-button>
           </form>
         </section>
       </div>
@@ -313,27 +331,31 @@ export class RwsAdmin extends LitElement {
     const s = this.data.status, m = this.data.metrics;
     if (!s || !m) return html`<h1>Overview</h1>${this.skeleton(4)}`;
     const errorRate = m.requests_total ? ((m.errors_total / m.requests_total) * 100).toFixed(2) : "0.00";
+    const rates = this.samples.map((p) => p.y);
     return html`
       <h1>Overview</h1>
       <p class="lede">Up ${duration(s.uptime_secs)}, process ${s.pid}. Counters refresh every 2 seconds.</p>
       <div class="grid">
-        <div class="tile"><div class="label">Requests served</div><div class="value">${m.requests_total.toLocaleString()}</div></div>
-        <div class="tile"><div class="label">Errors</div><div class="value">${m.errors_total.toLocaleString()}</div><div class="label">${errorRate}% of requests</div></div>
-        <div class="tile"><div class="label">Open connections</div><div class="value">${m.active_connections}</div></div>
-        <div class="tile"><div class="label">Queued for a worker</div><div class="value">${m.thread_pool_queued}</div></div>
+        <lit-material-stat label="Requests served" value=${m.requests_total.toLocaleString()}>
+          ${rates.length > 1 ? html`<lit-material-sparkline slot="caption" label="Requests per second" .values=${rates}></lit-material-sparkline>` : nothing}
+        </lit-material-stat>
+        <lit-material-stat label="Errors" value=${m.errors_total.toLocaleString()} caption="${errorRate}% of requests"></lit-material-stat>
+        <lit-material-stat label="Open connections" value=${String(m.active_connections)}></lit-material-stat>
+        <lit-material-stat label="Queued for a worker" value=${String(m.thread_pool_queued)}></lit-material-stat>
       </div>
       <section class="section" aria-labelledby="rate-title">
         <h2 id="rate-title">Requests per second</h2>
         ${this.samples.length < 2
-          ? html`<div class="empty"><strong>Collecting samples</strong>The chart fills in as this page stays open.</div>`
-          : requestChart(this.samples)}
+          ? html`<lit-material-empty-state size="compact" headline="Collecting samples">The chart fills in as this page stays open.</lit-material-empty-state>`
+          : html`<lit-material-line-chart label="Requests per second, last ${Math.round((this.samples.at(-1).x - this.samples[0].x) / 1000)} seconds"
+              unit="req/s" height="200" .formatX=${time} .series=${[{ name: "Requests per second", points: this.samples }]}></lit-material-line-chart>`}
       </section>
       <section class="section" aria-labelledby="listen-title">
         <h2 id="listen-title">Listeners</h2>
         <div class="grid">
-          <div class="tile"><div class="label">Main</div><div class="value mono">${s.listeners.main.address}</div><div class="label">${s.listeners.main.tls ? "HTTPS, HTTP/2, HTTP/3" : "Plain HTTP"}</div></div>
-          <div class="tile"><div class="label">HTTP redirect</div><div class="value mono">${s.listeners.redirect ?? "off"}</div></div>
-          <div class="tile"><div class="label">Admin</div><div class="value mono">${s.listeners.admin}</div></div>
+          <lit-material-stat class="mono" label="Main" value=${s.listeners.main.address} caption=${s.listeners.main.tls ? "HTTPS, HTTP/2, HTTP/3" : "Plain HTTP"}></lit-material-stat>
+          <lit-material-stat class="mono" label="HTTP redirect" value=${s.listeners.redirect ?? "off"}></lit-material-stat>
+          <lit-material-stat class="mono" label="Admin" value=${s.listeners.admin}></lit-material-stat>
         </div>
       </section>
       <section class="section" aria-labelledby="build-title">
@@ -350,27 +372,11 @@ export class RwsAdmin extends LitElement {
       <h1>Upstreams</h1>
       <p class="lede">Drain a backend before deploying it: new requests go elsewhere, requests already on it finish, and its health checks keep running.</p>
       ${ups.length === 0
-        ? html`<div class="empty"><strong>No upstreams configured</strong>Upstreams come from <code>[[upstream]]</code> sections in <code>rws.config.toml</code>. Add one, then reload from Controls.</div>`
+        ? html`<lit-material-empty-state size="compact" headline="No upstreams configured">Upstreams come from <code>[[upstream]]</code> sections in <code>rws.config.toml</code>. Add one, then reload from Controls.</lit-material-empty-state>`
         : ups.map((u) => html`
           <section class="section" aria-labelledby="up-${u.name}">
             <h2 id="up-${u.name}">${u.name}</h2>
-            <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Backend</th><th scope="col" class="num">Weight</th><th scope="col">Health</th><th scope="col">Breaker</th><th scope="col">In rotation</th></tr></thead>
-              <tbody>${u.backends.map((b) => html`<tr>
-                <td class="mono">${b.url}</td>
-                <td class="num">${b.weight}</td>
-                <td>${b.healthy ? status("ok", "Healthy", "check-circle") : status("bad", "Failing checks", "x-circle")}</td>
-                <td>${b.breaker === null ? status("muted", "None", "list-bullets")
-                  : b.breaker === "closed" ? status("ok", "Closed", "check-circle")
-                  : b.breaker === "half_open" ? status("warn", "Probing", "warning-circle")
-                  : status("bad", "Open", "x-circle")}</td>
-                <td><div class="row">
-                  <lit-material-switch aria-label="${b.url} in rotation" .checked=${!b.drained} ?disabled=${this.busy === `drain:${b.url}`}
-                    @change=${(e) => this.drain(u.name, b.url, !e.target.checked)}></lit-material-switch>
-                  ${b.drained ? status("warn", "Drained", "pause") : nothing}
-                </div></td>
-              </tr>`)}</tbody>
-            </table></div>
+            <lit-material-table caption="Backends of ${u.name}" caption-hidden .columns=${BACKEND_COLUMNS(this, u.name)} .rows=${u.backends}></lit-material-table>
           </section>`)}
     `;
   }
@@ -383,16 +389,8 @@ export class RwsAdmin extends LitElement {
       <h1>Certificates</h1>
       <p class="lede">Every certificate this server presents, soonest expiry first.</p>
       ${c.certificates.length === 0
-        ? html`<div class="empty"><strong>No TLS certificates</strong>This server speaks plain HTTP. Set <code>tls_cert_file</code> and <code>tls_key_file</code>, or <code>[acme] domains</code>, to serve HTTPS.</div>`
-        : html`<div class="table-wrap"><table>
-            <thead><tr><th scope="col">Name</th><th scope="col">Expires</th><th scope="col" class="num">Days left</th><th scope="col">Source</th></tr></thead>
-            <tbody>${c.certificates.map((x) => html`<tr>
-              <td class="mono">${x.name}</td>
-              <td>${x.expires}</td>
-              <td class="num">${x.days_left < 7 ? status("bad", String(x.days_left), "warning-circle") : x.days_left < 21 ? status("warn", String(x.days_left), "warning-circle") : x.days_left}</td>
-              <td>${x.source === "on_demand" ? "On demand" : "Configured"}</td>
-            </tr>`)}</tbody>
-          </table></div>`}
+        ? html`<lit-material-empty-state size="compact" headline="No TLS certificates">This server speaks plain HTTP. Set <code>tls_cert_file</code> and <code>tls_key_file</code>, or <code>[acme] domains</code>, to serve HTTPS.</lit-material-empty-state>`
+        : html`<lit-material-table caption="Certificates" caption-hidden .columns=${CERT_COLUMNS} .rows=${c.certificates}></lit-material-table>`}
       <section class="section" aria-labelledby="acme-title">
         <h2 id="acme-title">ACME</h2>
         ${acme.running
@@ -400,7 +398,7 @@ export class RwsAdmin extends LitElement {
               <lit-material-button variant="outlined" ?disabled=${this.busy === "renew"}
                 @click=${() => this.act("renew", "/certificates/renew", { method: "POST" }, () => "Renewal requested: the new certificate is swapped in when it's issued")}>
                 <span slot="icon" class="icon">${icon("arrow-clockwise")}</span>Renew now</lit-material-button>`
-          : html`<div class="empty"><strong>ACME is off</strong>Set <code>[acme] domains</code> to have rws obtain and renew certificates itself.</div>`}
+          : html`<lit-material-empty-state size="compact" headline="ACME is off">Set <code>[acme] domains</code> to have rws obtain and renew certificates itself.</lit-material-empty-state>`}
       </section>
     `;
   }
@@ -408,6 +406,24 @@ export class RwsAdmin extends LitElement {
   renderControls() {
     const d = this.data;
     if (!d.maintenance || !d.blocklist || !d.flags) return html`<h1>Controls</h1>${this.skeleton(3)}`;
+    const blockColumns = [
+      { key: "ip", label: "Address", mono: true },
+      {
+        key: "action",
+        label: "Action",
+        hiddenLabel: true,
+        render: (r) => html`<lit-material-button variant="text" @click=${() => this.act(`unblock:${r.ip}`, `/blocklist/${encodeURIComponent(r.ip)}`, { method: "DELETE" }, () => `${r.ip} unblocked`)}>Unblock</lit-material-button>`,
+      },
+    ];
+    const flagColumns = [
+      { key: "name", label: "Flag", mono: true },
+      {
+        key: "enabled",
+        label: "Enabled",
+        render: (f) => html`<lit-material-switch aria-label="${f.name}" .checked=${f.enabled}
+          @change=${(e) => this.act(`flag:${f.name}`, `/flags/${encodeURIComponent(f.name)}`, { method: "PUT", body: { enabled: e.target.checked } }, (r) => `${r.name} ${r.enabled ? "on" : "off"}`)}></lit-material-switch>`,
+      },
+    ];
     return html`
       <h1>Controls</h1>
       <p class="lede">Changes here apply at once and last until the server restarts.</p>
@@ -417,7 +433,7 @@ export class RwsAdmin extends LitElement {
           <div class="row" style="margin-top: var(--space-75)">
             <lit-material-switch aria-label="Maintenance mode" .checked=${d.maintenance.active} ?disabled=${this.busy === "maintenance"}
               @change=${(e) => this.act("maintenance", "/maintenance", { method: "PUT", body: { active: e.target.checked } }, (r) => (r.active ? "Maintenance on: visitors get 503" : "Maintenance off"))}></lit-material-switch>
-            ${d.maintenance.active ? status("warn", "On: 503 for visitors", "warning-circle") : status("ok", "Off", "check-circle")}
+            ${d.maintenance.active ? status("warning", "On: 503 for visitors") : status("ok", "Off")}
           </div>
         </div>
         <div class="tile">
@@ -425,47 +441,30 @@ export class RwsAdmin extends LitElement {
           <p class="label" style="margin: var(--space-50) 0 var(--space-100)">Re-read rws.config.toml and the certificates.</p>
           <lit-material-button variant="tonal" ?disabled=${this.busy === "reload"} @click=${() => this.reload()}><span slot="icon" class="icon">${icon("arrow-clockwise")}</span>Reload</lit-material-button>
         </div>
-        <div class="tile">
-          <div class="label">Response cache</div>
-          ${d.cache
-            ? html`<div class="value">${d.cache.size}</div><div class="label">${d.cache.hits} hits, ${d.cache.misses} misses</div>
-                <lit-material-button variant="text" ?disabled=${this.busy === "cache"} @click=${() => this.act("cache", "/cache", { method: "DELETE" }, () => "Cache cleared")}><span slot="icon" class="icon">${icon("trash")}</span>Clear</lit-material-button>`
-            : html`<div class="value mono">None</div><div class="label">This server has no response cache.</div>`}
-        </div>
-        <div class="tile">
-          <div class="label">Global rate limit</div>
-          <div class="value mono">${d.rateLimit?.configured ? `${d.rateLimit.max_requests} per ${d.rateLimit.window_secs}s` : "Off"}</div>
-        </div>
+        <lit-material-stat label="Response cache" value=${d.cache ? String(d.cache.size) : "None"}
+          caption=${d.cache ? `${d.cache.hits} hits, ${d.cache.misses} misses` : "This server has no response cache."}>
+          ${d.cache ? html`<lit-material-button slot="caption" variant="text" ?disabled=${this.busy === "cache"} @click=${() => this.act("cache", "/cache", { method: "DELETE" }, () => "Cache cleared")}><span slot="icon" class="icon">${icon("trash")}</span>Clear</lit-material-button>` : nothing}
+        </lit-material-stat>
+        <lit-material-stat label="Global rate limit" value=${d.rateLimit?.configured ? `${d.rateLimit.max_requests} per ${d.rateLimit.window_secs}s` : "Off"}></lit-material-stat>
       </div>
 
       <section class="section" aria-labelledby="block-title">
         <h2 id="block-title">Blocked addresses</h2>
         <form class="row" @submit=${(e) => this.block(e)} novalidate>
-          <lit-material-text-field id="block-ip" variant="outlined" label="IP address" supporting-text="IPv4 or IPv6, e.g. 203.0.113.7"
-            @keydown=${(e) => e.key === "Enter" && this.block(e)}></lit-material-text-field>
-          <lit-material-button type="submit" ?disabled=${this.busy === "block"} @click=${(e) => this.block(e)}><span slot="icon" class="icon">${icon("plus")}</span>Block</lit-material-button>
+          <lit-material-text-field id="block-ip" variant="outlined" label="IP address" supporting-text="IPv4 or IPv6, e.g. 203.0.113.7"></lit-material-text-field>
+          <lit-material-button type="submit" ?disabled=${this.busy === "block"}><span slot="icon" class="icon">${icon("plus")}</span>Block</lit-material-button>
         </form>
         ${d.blocklist.length === 0
           ? html`<p class="lede" style="margin-top: var(--space-200)">Nobody is blocked.</p>`
-          : html`<div class="table-wrap section" style="margin-top: var(--space-200)"><table>
-              <thead><tr><th scope="col">Address</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
-              <tbody>${d.blocklist.map((ip) => html`<tr><td class="mono">${ip}</td><td>
-                <lit-material-button variant="text" @click=${() => this.act(`unblock:${ip}`, `/blocklist/${encodeURIComponent(ip)}`, { method: "DELETE" }, () => `${ip} unblocked`)}>Unblock</lit-material-button>
-              </td></tr>`)}</tbody>
-            </table></div>`}
+          : html`<lit-material-table style="margin-top: var(--space-200)" caption="Blocked addresses" caption-hidden density="compact"
+              .columns=${blockColumns} .rows=${d.blocklist.map((ip) => ({ ip }))}></lit-material-table>`}
       </section>
 
       <section class="section" aria-labelledby="flags-title">
         <h2 id="flags-title">Feature flags</h2>
         ${d.flags.length === 0
-          ? html`<div class="empty"><strong>No feature flags</strong>Applications register flags with <code>feature::global()</code>; they appear here to switch at runtime.</div>`
-          : html`<div class="table-wrap"><table>
-              <thead><tr><th scope="col">Flag</th><th scope="col">Enabled</th></tr></thead>
-              <tbody>${d.flags.map((f) => html`<tr><td class="mono">${f.name}</td><td>
-                <lit-material-switch aria-label="${f.name}" .checked=${f.enabled}
-                  @change=${(e) => this.act(`flag:${f.name}`, `/flags/${encodeURIComponent(f.name)}`, { method: "PUT", body: { enabled: e.target.checked } }, (r) => `${r.name} ${r.enabled ? "on" : "off"}`)}></lit-material-switch>
-              </td></tr>`)}</tbody>
-            </table></div>`}
+          ? html`<lit-material-empty-state size="compact" headline="No feature flags">Applications register flags with <code>feature::global()</code>; they appear here to switch at runtime.</lit-material-empty-state>`
+          : html`<lit-material-table caption="Feature flags" caption-hidden density="compact" .columns=${flagColumns} .rows=${d.flags}></lit-material-table>`}
       </section>
     `;
   }
@@ -474,17 +473,20 @@ export class RwsAdmin extends LitElement {
     const config = this.data.config;
     if (!config) return html`<h1>Config</h1>${this.skeleton(2)}`;
     const needle = this.filter.toLowerCase();
-    const rows = Object.entries(config).filter(([k, v]) => !needle || k.toLowerCase().includes(needle) || v.toLowerCase().includes(needle));
+    const rows = Object.entries(config)
+      .filter(([k, v]) => !needle || k.toLowerCase().includes(needle) || v.toLowerCase().includes(needle))
+      .map(([setting, value]) => ({ setting, value }));
+    const columns = [
+      { key: "setting", label: "Setting", mono: true },
+      { key: "value", label: "Value", mono: true, render: (r) => (r.value === "" ? status("neutral", "empty") : r.value) },
+    ];
     return html`
       <h1>Config</h1>
       <p class="lede">Every setting in effect. Secrets read (hidden). Change them in rws.config.toml or the environment, then reload from Controls.</p>
       <lit-material-text-field class="filter" variant="outlined" label="Filter settings" .value=${this.filter} @input=${(e) => (this.filter = e.target.value)}></lit-material-text-field>
       ${rows.length === 0
-        ? html`<div class="empty"><strong>No setting matches "${this.filter}"</strong>Clear the filter to see all ${Object.keys(config).length}.</div>`
-        : html`<div class="table-wrap"><table>
-            <thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
-            <tbody>${rows.map(([k, v]) => html`<tr><td class="mono">${k}</td><td class="mono">${v === "" ? html`<span class="status muted">empty</span>` : v}</td></tr>`)}</tbody>
-          </table></div>`}
+        ? html`<lit-material-empty-state size="compact" headline="No setting matches “${this.filter}”">Clear the filter to see all ${Object.keys(config).length}.</lit-material-empty-state>`
+        : html`<lit-material-table caption="Settings in effect" caption-hidden density="compact" .columns=${columns} .rows=${rows}></lit-material-table>`}
     `;
   }
 
@@ -492,13 +494,11 @@ export class RwsAdmin extends LitElement {
     return html`
       <h1>Logs</h1>
       <div class="row" style="margin-bottom: var(--space-200)">
-        <p class="lede" style="margin: 0; flex: 1">The access log as it's written, newest at the bottom.</p>
+        <p class="lede" style="margin: 0; flex: 1">The access log as it's written, newest at the bottom. Scroll up to read; it stops following until you're back at the bottom.</p>
         <lit-material-button variant="outlined" @click=${() => (this.paused = !this.paused)}>
           <span slot="icon" class="icon">${icon(this.paused ? "play" : "pause")}</span>${this.paused ? "Resume" : "Pause"}</lit-material-button>
       </div>
-      ${this.lines.length === 0
-        ? html`<div class="empty"><strong>Waiting for requests</strong>Lines appear as the server handles requests. With <code>log_format = "off"</code> there are none.</div>`
-        : html`<div class="log" role="log" aria-live="off">${this.lines.map((l) => html`<div class=${/"status":[45]\d\d/.test(l.text) ? "err" : ""}>${l.text}</div>`)}</div>`}
+      <lit-material-log-viewer label="Access log" max-lines="1000" ?paused=${this.paused}></lit-material-log-viewer>
     `;
   }
 }
