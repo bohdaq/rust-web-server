@@ -1,4 +1,6 @@
-# rws 19.0.0 — Proxy response pass-through
+# rws 19.0.0 — Proxy response pass-through (shelved)
+
+**Shelved 2026-10-30** (user): measured, not worth a major version. See Status.
 
 Written 2026-10-30. Roadmap item #63 ([ROADMAP.md](ROADMAP.md)), built
 tranche by tranche; this file is updated as each lands.
@@ -58,9 +60,6 @@ and `http1`-only test runs before pushing.
 | # | State |
 |---|---|
 | 0 | **done 2026-10-30**: Benchmark run 41057365457 (main, profile): proxy-1k rws 37,887 req/s vs nginx 36,872; CPU 45.4 vs 43.0 µs/req (+5.6%). rws userspace 26.9% of samples, kernel 61%. Pass-through-relevant: `parse_upstream` 1.37%, `Header::single_line` 1.12% (char-wise CR/LF scan on every header written), `from_utf8` 0.81%, `generate_response_coalesced` 0.54%, `str::trim` 0.54%, plus a share of mimalloc (~1.3%): about 4–5% at most |
-| 0b | **done 2026-10-30**, non-breaking: `memchr` (byte searches) in `Header::single_line`, `without_cr_lf`, `split_name_value` and the parsers' line splits; `is_blank` (first-byte decision) instead of `trim().is_empty()`. `Response::with_status` and `impl Default for Response` added (additive). Tests: reference-parser equivalence + `is_blank` vs `trim` cases; 2150 default / 1974 http1. A/B vs 18.10.1: pending |
-| 1 | on hold: `#[non_exhaustive]` tried and reverted pending the A/B (examples and `tests/` had no literals; docs neither) |
-| 2 | — |
-| 3 | — |
-| 4 | — |
-| 5 | — |
+| 0b | **done 2026-10-30**, non-breaking: `memchr` (byte searches) in `Header::single_line`, `without_cr_lf`, `split_name_value` and the parsers' line splits; `is_blank` (first-byte decision) instead of `trim().is_empty()`. `Response::with_status` and `impl Default for Response` added (additive). Tests: reference-parser equivalence + `is_blank` vs `trim` cases; 2150 default / 1974 http1. A/B vs 18.10.1 (run 41060252417, same runner): proxy-1k 24.9 vs 25.0 µs CPU/request, 64,820 vs 65,658 req/s — noise; nginx 23.8 µs, 65,329 req/s. The profile overstated these symbols. Changes kept (harmless, tested) |
+| 1 | shelved: `#[non_exhaustive]` tried and reverted pending the A/B (examples and `tests/` had no literals; docs neither) |
+| 2–5 | **shelved 2026-10-30** (user): with rws level with nginx on proxy-1k throughput and ~4.6% above it on CPU/request, and the cheap part of the parse cost measuring as noise, a breaking 19.0 for at most a few percent isn't worth it. Revisit with a profile that shows parse+serialize as a clear share, or together with other breaking changes |
