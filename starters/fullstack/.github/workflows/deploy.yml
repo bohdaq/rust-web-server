@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write   # keyless sign-in to kube-dc
   packages: write
 
 concurrency:
@@ -50,10 +51,13 @@ jobs:
         env:
           KUBE_DC_API_SERVER: ${{ vars.KUBE_DC_API_SERVER }}
           KUBE_DC_TOKEN_URL: ${{ vars.KUBE_DC_TOKEN_URL }}
-          KUBE_DC_CLIENT_ID: ${{ secrets.KUBE_DC_CLIENT_ID }}
+          # Keyless when vars.KUBE_DC_AUDIENCE is set (machine identity with spec.github),
+          # otherwise the client secret.
+          KUBE_DC_AUDIENCE: ${{ vars.KUBE_DC_AUDIENCE }}
+          KUBE_DC_CLIENT_ID: ${{ vars.KUBE_DC_CLIENT_ID || secrets.KUBE_DC_CLIENT_ID }}
           KUBE_DC_CLIENT_SECRET: ${{ secrets.KUBE_DC_CLIENT_SECRET }}
           KUBE_DC_CA_CERT: ${{ secrets.KUBE_DC_CA_CERT }}
-        run: echo "KUBECONFIG=$(deploy/kubeconfig.sh)" >> "$GITHUB_ENV"
+        run: deploy/kubeconfig.sh
       - id: deploy
         env:
           PULL_USER: ${{ github.repository_owner }}

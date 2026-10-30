@@ -39,6 +39,14 @@ in another (http://127.0.0.1:5173, `/api` proxied to the app).
    | Secret | `KUBE_DC_CA_CERT` | Only if the API server's certificate is not publicly trusted |
    | Secret | `GHCR_PULL_TOKEN` | Only for a private package: a token with `read:packages` |
 
+   **Keyless instead of a stored secret:** give each identity `spec.github.subject`
+   (production: `repo:<owner>/<repo>:environment:production`, previews:
+   `...:environment:preview`; newer repositories carry ids, see the kube-dc
+   [machine identities](https://kube-dc.com/docs/cloud/machine-identities) page),
+   then set variables `KUBE_DC_AUDIENCE` (the identity's `status.audience`),
+   `KUBE_DC_CLIENT_ID` and `KUBE_DC_PREVIEW_CLIENT_ID`, and drop the
+   `KUBE_DC_CLIENT_*` secrets.
+
 5. **Push to `main`.** `deploy` tests, builds the image into GHCR, deploys
    and prints the HTTPS URL. Each pull request gets a preview at its own
    URL (`preview`), removed when the PR closes.

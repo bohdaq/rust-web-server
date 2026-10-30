@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write   # keyless sign-in to kube-dc
   packages: write
   deployments: write
 
@@ -21,8 +22,10 @@ jobs:
     # Pull requests from forks get no secrets.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # One environment for every PR: keyless sign-in matches its name exactly
+    # (subject ...:environment:preview); each run still reports its own URL.
     environment:
-      name: preview-pr-${{ github.event.pull_request.number }}
+      name: preview
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
@@ -35,10 +38,13 @@ jobs:
         env:
           KUBE_DC_API_SERVER: ${{ vars.KUBE_DC_API_SERVER }}
           KUBE_DC_TOKEN_URL: ${{ vars.KUBE_DC_TOKEN_URL }}
-          KUBE_DC_CLIENT_ID: ${{ secrets.KUBE_DC_CLIENT_ID }}
+          # Keyless when vars.KUBE_DC_AUDIENCE is set (machine identity with spec.github),
+          # otherwise the client secret.
+          KUBE_DC_AUDIENCE: ${{ vars.KUBE_DC_AUDIENCE }}
+          KUBE_DC_CLIENT_ID: ${{ vars.KUBE_DC_PREVIEW_CLIENT_ID || secrets.KUBE_DC_CLIENT_ID }}
           KUBE_DC_CLIENT_SECRET: ${{ secrets.KUBE_DC_CLIENT_SECRET }}
           KUBE_DC_CA_CERT: ${{ secrets.KUBE_DC_CA_CERT }}
-        run: echo "KUBECONFIG=$(deploy/kubeconfig.sh)" >> "$GITHUB_ENV"
+        run: deploy/kubeconfig.sh
       - name: Remove the preview
         if: github.event.action == 'closed'
         env:
