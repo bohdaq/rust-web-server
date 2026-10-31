@@ -74,6 +74,11 @@ PY
 python3 provider.py 9441 busy & PIDS+=($!)
 python3 provider.py 9442 openai & PIDS+=($!)
 python3 provider.py 9443 anthropic & PIDS+=($!)
+# The providers must listen before the first request (else the fallback
+# skips one that hasn't started yet).
+for port in 9441 9442 9443; do
+  for _ in $(seq 1 100); do (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break; sleep 0.1; done
+done
 
 export BUSY_KEY="sk-busy" OPENAI_KEY="sk-openai" ANTHROPIC_KEY="sk-ant" ALICE_KEY="vk-alice" BOB_KEY="vk-bob"
 config() { # <port> [redis line]
