@@ -350,6 +350,16 @@ pub mod fuzz_api {
         }
     }
 
+    /// An `Available-Dictionary` header value, and dictionary-compressed
+    /// bodies through both decoders (#38).
+    pub fn available_dictionary(data: &[u8]) {
+        use crate::compression::dictionary::{decode, parse_available_dictionary, DictionaryEncoding};
+        let _ = parse_available_dictionary(&String::from_utf8_lossy(data));
+        for encoding in [DictionaryEncoding::Dcz, DictionaryEncoding::Dcb] {
+            let _ = decode(encoding, data, b"dictionary", 1 << 16);
+        }
+    }
+
     /// Provider responses as the LLM proxy reads them (#41): usage from a
     /// JSON body or an event stream fed in pieces, and chunked framing.
     /// Must never panic.

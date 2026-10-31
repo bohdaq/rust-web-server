@@ -112,6 +112,39 @@ Byte-range requests (`Range: bytes=N-M`) are answered with the slice,
 uncompressed: compressing a slice would describe bytes that don't exist.
 :::
 
+## Dictionary compression
+
+With a dictionary (RFC 9842), a new version of a file is sent as the
+difference from a version the browser already has. In rws's tests a 36 KiB
+bundle with one changed version string goes out in 397 bytes as `dcz`,
+against 965 for plain `zstd` and 2.2 KiB for `gzip`; the less repetitive
+the file, the bigger the gap.
+The browser names the dictionary it holds in `Available-Dictionary` (its
+SHA-256) and accepts `dcz` (zstd) or `dcb` (brotli). Since 18.12.0.
+
+`compression::dictionary` has the codec:
+
+```rust
+use rust_web_server::compression::{dictionary, Level};
+use rust_web_server::request::Request;
+
+/// `new` as a delta against `old`, when the client holds `old` and accepts
+/// a dictionary coding. Send it with `dictionary::mark_encoded`.
+fn delta(request: &Request, old: &[u8], new: &[u8]) -> Option<(dictionary::DictionaryEncoding, Vec<u8>)> {
+    let coding = dictionary::negotiate(request)?;
+    if dictionary::available_dictionary(request)? != dictionary::hash(old) {
+        return None;
+    }
+    Some((coding, dictionary::encode(coding, new, old, Level::Static)?)) // magic + hash + stream
+}
+```
+
+`negotiate` picks `dcz` over `dcb` on equal weight and only when the
+client lists the coding by name (`*` doesn't count). Dictionaries and bodies
+are limited to 1 MiB each (`dictionary::MAX_SIZE`), which keeps the window
+inside the 8 MiB browsers support. `decode` reverses `encode`, checking the
+magic and the dictionary's hash, with a cap on the decoded size.
+
 ## Checking it
 
 ```bash

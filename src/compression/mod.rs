@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests;
 
+pub mod dictionary;
+
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use std::io::Write;

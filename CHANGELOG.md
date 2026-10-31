@@ -19,6 +19,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   async forwarder), and proxies pass a backend's own `103` on (its `Link`
   values) instead of dropping it. `rws --check` checks the values;
   `rws_early_hints_total{source}` on `/metrics`; `ci/e2e/early_hints.sh`.
+- Dictionary compression codec (RFC 9842): `compression::dictionary` encodes
+  and decodes `dcz` (zstd, the dictionary as a raw prefix) and `dcb` (brotli
+  custom dictionary), parses `Available-Dictionary` and negotiates the
+  coding. Output checked against the `zstd` CLI. Fuzz target
+  `available_dictionary`.
 
 ## 18.11.0 — 2026-10-31
 

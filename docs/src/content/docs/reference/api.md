@@ -194,6 +194,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
+| `DictionaryEncoding` / `dictionary::{encode, decode, negotiate, available_dictionary}` | `compression::dictionary` | `dcz` / `dcb` dictionary compression (RFC 9842) and `Available-Dictionary` parsing (18.12.0). See [Dictionary compression](/features/compression/#dictionary-compression) |
 | `Encoding` / `Level` | `compression` | Content codings (`gzip`, `br`, `zstd`) and levels; `negotiate(request, preference)`, `encode`, `apply_compression` (18.1.0). See [Compression](/features/compression/) |
 | `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
 | `McpGateway` / `Upstream` | `mcp::gateway` | One MCP endpoint federating upstream MCP servers: `prefix__tool` names, per-caller `allow` rules, upstream credentials kept server-side (18.0.0). See [MCP gateway](/mcp/gateway/) |

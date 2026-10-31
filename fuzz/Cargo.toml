@@ -227,6 +227,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "available_dictionary"
+path = "fuzz_targets/available_dictionary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "cache_entry"
 path = "fuzz_targets/cache_entry.rs"
 test = false
