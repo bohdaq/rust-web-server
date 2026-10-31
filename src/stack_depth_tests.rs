@@ -205,3 +205,13 @@ fn i18n_catalog_and_accept_language_of_any_length() {
         assert_eq!(crate::i18n::MAX_LANGUAGE_RANGES, crate::i18n::AcceptLanguage::parse(&header).0.len());
     });
 }
+
+#[test]
+fn json_lite_refuses_deep_nesting() {
+    on_small_stack(|| {
+        let deep = "[".repeat(100_000) + &"]".repeat(100_000);
+        assert!(crate::service_discovery::json_lite::parse(&deep).unwrap_err().contains("nested deeper"));
+        let ok = "[".repeat(100) + &"]".repeat(100);
+        assert!(crate::service_discovery::json_lite::parse(&ok).is_ok());
+    });
+}

@@ -32,6 +32,7 @@ cargo install cargo-fuzz
 | `cookie_header` | `CookieJar::parse` | any client |
 | `otel_baggage` | the W3C `baggage` header parser (`otel::Baggage::parse`) | any client, with tracing on |
 | `accept_encoding` | `Accept-Encoding` negotiation for gzip / br / zstd (via `fuzz_api`) | any client |
+| `a2a_request` | A2A JSON-RPC requests: parsing, messages, parts, tasks (via `fuzz_api`) | any A2A client |
 | `accept_language` | `Accept-Language` parsing and language negotiation (via `fuzz_api`) | any client |
 | `i18n_catalog` | i18n catalog files and message formatting (via `fuzz_api`) | catalog authors |
 | `proxy_protocol` | the PROXY protocol v1/v2 header parser (`server::proxy_protocol::parse`) | L4 load balancers, or anyone when it's enabled |

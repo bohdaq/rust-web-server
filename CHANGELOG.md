@@ -5,6 +5,23 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- `a2a::A2aServer` (#65): an agent other AI agents call over A2A 1.0
+  (JSON-RPC binding): the Agent Card at `/.well-known/agent-card.json`,
+  `SendMessage` (a direct message or a stored task; continuing a task that
+  waits for input), `GetTask`, `ListTasks`, `CancelTask`, `A2A-Version`
+  checks and the A2A error codes. Fuzz target `a2a_request`. Streaming and
+  push notifications follow.
+
+### Fixed
+
+- `service_discovery::json_lite` (used for Vault, AWS Secrets Manager,
+  Consul, etcd, Docker and GCS responses) refuses JSON nested deeper than
+  128 levels instead of recursing until the stack overflows.
+
 ## 18.17.0 — 2026-10-31
 
 ### Changed

@@ -75,6 +75,10 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Query` | `extract` | Parsed query string as `HashMap<String, String>` |
 | `RequestHeaders` | `extract` | All request headers with case-insensitive `.get(name)` |
 | `RequestId` | `extract` / `request_id` | The ID `RequestIdLayer` put on the request; empty string without it (never fails) |
+| `A2aServer` | `a2a` | A2A 1.0 agent (JSON-RPC): Agent Card, `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`; `on_message`, `at`, `wrap`. See [A2A agents](/mcp/a2a/) |
+| `AgentCard` / `Skill` | `a2a` | The agent's card at `/.well-known/agent-card.json` and the skills on it |
+| `A2aContext` / `A2aReply` | `a2a` | What a message handler gets (task, context, the continued task) and returns (a message or a task) |
+| `Message` / `Part` / `Task` / `Artifact` / `TaskState` | `a2a` | The A2A 1.0 data model |
 | `AcceptLanguage` | `i18n` | `Accept-Language` preferences (also an extractor); `parse`, `negotiate(&available)` (RFC 4647 lookup). See [Translations](/building-apps/i18n/) |
 | `Catalogs` | `i18n` | Message catalogs per language plus a default; `from_dir`, `add`, `for_request`, `for_language`, `negotiate` |
 | `Catalog` | `i18n` | One language's messages (flat TOML subset); `parse`, `get` |

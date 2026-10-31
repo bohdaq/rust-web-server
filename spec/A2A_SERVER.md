@@ -89,7 +89,7 @@ MCP gateway's audit log. Its own tranche, after the server.
 
 | # | Scope | Status |
 |---|---|---|
-| 1 | Data model + JSON (de)serialization, Agent Card, `GET /.well-known/agent-card.json`, `SendMessage` (direct message replies), `GetTask`, errors, `A2A-Version`; unit tests; fuzz target for the request parser | — |
+| 1 | **done 2026-10-31**: `src/a2a/` — model (`Message`, `Part` exactly-one-of text/raw/url/data, `Task`, `TaskStatus`, `Artifact`, `TaskState`, ProtoJSON out, parse in via `json_lite`, now depth-capped at 128), `AgentCard`/`Skill` (card URL from Host or `.url`), `A2aServer` (`on_message`, `at`, `wrap`), `SendMessage` (message or stored task, continuing interrupted tasks, terminal → -32004, panic → failed task), `GetTask` (`historyLength`), and pulled forward from tranche 2: `ListTasks` (filters, paging), `CancelTask`; `A2A-Version` header or query (major.minor = 1.0, else -32009), errors -32001…-32009 + JSON-RPC codes with ErrorInfo data; streaming/push/extended card answer -32004/-32003. Tests: 6 (card, message/task/GetTask, input-required flow, list/cancel, errors/versions, parts round trip + fallthrough); fuzz `a2a_request`; docs `mcp/a2a.md` | done |
 | 2 | Tasks: blocking/`returnImmediately`, `CancelTask`, `ListTasks`, history; streaming (`SendStreamingMessage`, `SubscribeToTask`); auth + per-identity tasks; limits | — |
 | 3 | Push notifications (configs, webhook delivery, SSRF allow-list, retries); `GetExtendedAgentCard` | — |
 | 4 | Conformance: `ci/e2e/a2a_tck.sh` runs a2aproject/a2a-tck (pinned commit) against `examples/a2a_tck.rs` in CI, baseline file like MCP's; a Python `a2a-sdk` client e2e | — |

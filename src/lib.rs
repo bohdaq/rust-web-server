@@ -60,6 +60,7 @@ pub mod cookie;
 pub mod error;
 pub mod extract;
 pub mod i18n;
+pub mod a2a;
 pub mod ip_filter;
 pub mod macros;
 pub mod blocklist;
@@ -305,6 +306,33 @@ pub mod fuzz_api {
         if let Ok(fs_path) = crate::app::controller::static_resource::static_fs_path(path) {
             let relative = &fs_path[crate::app::controller::static_resource::working_directory().len()..];
             assert!(!relative.split(['/', '\\']).any(|segment| segment == ".."), "{:?} -> {:?}", path, fs_path);
+        }
+    }
+
+    /// An A2A JSON-RPC request body (#65): any bytes. Must never panic, and
+    /// the answer is always a JSON-RPC response (or a 413).
+    pub fn a2a_request(data: &[u8]) {
+        use crate::application::Application;
+        thread_local! {
+            static AGENT: crate::a2a::A2aServer = crate::a2a::A2aServer::new(crate::a2a::AgentCard::new("fuzz", "fuzz", "1"))
+                .on_message(|ctx, message| match message.text().len() % 3 {
+                    0 => crate::a2a::A2aReply::Message(crate::a2a::Message::agent_text(message.text())),
+                    1 => crate::a2a::A2aReply::Task(ctx.input_required("more?")),
+                    _ => crate::a2a::A2aReply::Task(ctx.complete(vec![crate::a2a::Artifact::text("a", message.text())])),
+                });
+        }
+        let request = crate::request::Request {
+            method: "POST".to_string(),
+            request_uri: "/a2a".to_string(),
+            http_version: "HTTP/1.1".to_string(),
+            headers: vec![crate::header::Header::new("A2A-Version", "1.0".to_string())],
+            body: data.to_vec().into(),
+        };
+        let connection = crate::server::ConnectionInfo::default();
+        let response = AGENT.with(|agent| agent.execute(&request, &connection)).expect("A2A never errs");
+        if response.status_code == 200 {
+            let body = String::from_utf8(response.content_range_list[0].body.clone()).expect("UTF-8");
+            assert!(crate::service_discovery::json_lite::parse(&body).is_ok(), "not JSON: {body}");
         }
     }
 

@@ -420,6 +420,10 @@
       {
         "label": "Gateway",
         "link": "/mcp/gateway/"
+      },
+      {
+        "label": "A2A agents",
+        "link": "/mcp/a2a/"
       }
     ]
   },
