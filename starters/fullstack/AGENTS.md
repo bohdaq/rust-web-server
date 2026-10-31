@@ -57,3 +57,19 @@ Docs: https://rws8.tech, one file: https://rws8.tech/llms-full.txt.
   `get_logs`, `list kind=events`; create the database with
   `create_managed_service` (show the price before confirming).
 - Pod exec is not available on kube-dc; one-off tasks run as Jobs.
+- Shipping normally goes through CI: push to `main` (or open a pull request
+  for a preview) and the workflows deploy and report the result to GitHub.
+- When you deploy directly with the MCP tool `deploy_app` instead, report the
+  result to GitHub yourself, so the commit shows it like a CI deploy. After
+  `rollout_status` answers `ready` (or `failed`), with the GitHub CLI:
+
+  ```sh
+  id=$(gh api repos/{owner}/{repo}/deployments -f ref="$(git rev-parse HEAD)" \
+    -f environment=production -F auto_merge=false -F required_contexts[] --jq .id)
+  gh api repos/{owner}/{repo}/deployments/$id/statuses \
+    -f state=success -f environment_url="https://<hostname from rollout_status>"
+  ```
+
+  Use `state=failure` (and no URL) when the rollout failed, and the
+  environment the workflows use (`production`, or `preview` for a pull
+  request). Skip this when GitHub access is not available, and say so.
