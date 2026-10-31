@@ -308,3 +308,101 @@ fn bearer_tokens_and_per_caller_tasks() {
     assert_eq!("Bearer", s(&card, &["securitySchemes", "bearer", "httpAuthSecurityScheme", "scheme"]));
     assert!(card.get("securityRequirements").and_then(|r| r.as_array()).is_some_and(|r| r.len() == 1));
 }
+
+/// A webhook receiver: records each request's headers and body, answers 200.
+fn webhook() -> (String, std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://127.0.0.1:{}/hooks/", listener.local_addr().unwrap().port());
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = std::sync::Arc::clone(&seen);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let mut data = Vec::new();
+            let mut buf = [0u8; 8192];
+            let head_end = loop {
+                let n = stream.read(&mut buf).unwrap_or(0);
+                if n == 0 {
+                    break None;
+                }
+                data.extend_from_slice(&buf[..n]);
+                if let Some(p) = data.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break Some(p + 4);
+                }
+            };
+            let Some(head_end) = head_end else { continue };
+            let head = String::from_utf8_lossy(&data[..head_end]).to_string();
+            let length: usize = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse().unwrap_or(0))).unwrap_or(0);
+            while data.len() < head_end + length {
+                let n = stream.read(&mut buf).unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                data.extend_from_slice(&buf[..n]);
+            }
+            log.lock().unwrap().push((head, String::from_utf8_lossy(&data[head_end..]).to_string()));
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        }
+    });
+    (base, seen)
+}
+
+#[test]
+fn push_notifications_reach_allowed_webhooks() {
+    let (base, seen) = webhook();
+    let client = TestClient::new(agent().push_notifications([base.as_str()]));
+    let config = format!(r#","configuration":{{"taskPushNotificationConfig":{{"url":"{base}task","token":"tok-1","authentication":{{"scheme":"Bearer","credentials":"s3cret"}}}}}}"#);
+    let reply = call(&client, "SendMessage", &message_params("slow", &config));
+    let id = s(reply.get("result").unwrap().get("task").unwrap(), &["id"]).to_string();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while seen.lock().unwrap().len() < 4 && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let seen = seen.lock().unwrap().clone();
+    let kinds: Vec<String> = seen.iter().map(|(_, body)| match json_lite::parse(body).unwrap() {
+        json_lite::JsonValue::Object(pairs) => pairs[0].0.clone(),
+        _ => String::new(),
+    }).collect();
+    assert_eq!(vec!["task", "statusUpdate", "artifactUpdate", "statusUpdate"], kinds, "{seen:?}");
+    let (head, body) = &seen[3];
+    assert!(head.starts_with("POST /hooks/task "), "{head}");
+    assert!(head.contains("Authorization: Bearer s3cret") && head.contains("X-A2A-Notification-Token: tok-1") && head.contains("Content-Type: application/a2a+json"), "{head}");
+    assert_eq!("TASK_STATE_COMPLETED", s(&json_lite::parse(body).unwrap(), &["statusUpdate", "status", "state"]));
+
+    // CRUD; credentials never come back.
+    let created = call(&client, "CreateTaskPushNotificationConfig", &format!(r#"{{"taskId":"{id}","id":"c2","url":"{base}two","authentication":{{"scheme":"Basic","credentials":"x"}}}}"#));
+    let created = created.get("result").unwrap();
+    assert_eq!(("c2", "Basic"), (s(created, &["id"]), s(created, &["authentication", "scheme"])));
+    assert!(created.get("authentication").unwrap().get("credentials").is_none());
+    assert_eq!("c2", s(call(&client, "GetTaskPushNotificationConfig", &format!(r#"{{"taskId":"{id}","id":"c2"}}"#)).get("result").unwrap(), &["id"]));
+    assert_eq!(2, call(&client, "ListTaskPushNotificationConfigs", &format!(r#"{{"taskId":"{id}"}}"#)).get("result").unwrap().get("configs").unwrap().as_array().unwrap().len());
+    call(&client, "DeleteTaskPushNotificationConfig", &format!(r#"{{"taskId":"{id}","id":"c2"}}"#));
+    call(&client, "DeleteTaskPushNotificationConfig", &format!(r#"{{"taskId":"{id}","id":"c2"}}"#));
+    assert_eq!(1, call(&client, "ListTaskPushNotificationConfigs", &format!(r#"{{"taskId":"{id}"}}"#)).get("result").unwrap().get("configs").unwrap().as_array().unwrap().len(), "delete is idempotent");
+
+    // Only listed destinations.
+    assert_eq!(-32602, error_code(&call(&client, "CreateTaskPushNotificationConfig", &format!(r#"{{"taskId":"{id}","url":"http://169.254.169.254/latest"}}"#))));
+    assert_eq!(-32602, error_code(&call(&client, "SendMessage", &message_params("hi", r#","configuration":{"taskPushNotificationConfig":{"url":"http://10.0.0.1/x"}}"#))));
+    assert_eq!(-32001, error_code(&call(&client, "CreateTaskPushNotificationConfig", &format!(r#"{{"taskId":"nope","url":"{base}x"}}"#))));
+    let card = json_lite::parse(client.get(AGENT_CARD_PATH).send().body_text()).unwrap();
+    assert_eq!(Some(&json_lite::JsonValue::Bool(true)), card.get("capabilities").unwrap().get("pushNotifications"));
+
+    let off = TestClient::new(agent());
+    assert_eq!(-32003, error_code(&call(&off, "CreateTaskPushNotificationConfig", r#"{"taskId":"t","url":"https://x/"}"#)));
+    assert!(!push::allowed("http://127.0.0.1:1/hooks/x\r\nX: y", &[base.clone()]));
+}
+
+#[test]
+fn the_extended_card_is_for_authenticated_callers() {
+    use crate::application::Application;
+    let conn = crate::server::ConnectionInfo::default();
+    let agent = agent().require_bearer("t").extended_card(AgentCard::new("Echo agent", "Plus the internal skills", "1.2.0").skill(Skill::new("audit", "Audit", "Internal")));
+    let reply = agent.execute(&rpc_request("GetExtendedAgentCard", "{}", Some("t")), &conn).unwrap();
+    let reply = json_lite::parse(std::str::from_utf8(&reply.content_range_list[0].body).unwrap()).unwrap();
+    assert_eq!("audit", s(&reply.get("result").unwrap().get("skills").unwrap().as_array().unwrap()[0], &["id"]));
+    assert_eq!(401, agent.execute(&rpc_request("GetExtendedAgentCard", "{}", None), &conn).unwrap().status_code);
+    let card = json_lite::parse(TestClient::new(agent).get(AGENT_CARD_PATH).send().body_text()).unwrap();
+    assert_eq!(Some(&json_lite::JsonValue::Bool(true)), card.get("capabilities").unwrap().get("extendedAgentCard"));
+    assert_eq!(-32004, error_code(&call(&TestClient::new(super::tests::agent()), "GetExtendedAgentCard", "{}")), "not on the card: unsupported");
+}

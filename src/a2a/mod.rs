@@ -23,6 +23,7 @@
 //! on.
 
 mod model;
+mod push;
 mod tasks;
 
 pub use model::{Artifact, Message, Part, PartContent, Role, Task, TaskState, TaskStatus};
@@ -177,9 +178,10 @@ impl AgentCard {
         self
     }
 
-    pub(crate) fn to_json(&self, url: &str, bearer: bool) -> String {
+    pub(crate) fn to_json(&self, url: &str, (bearer, push, extended): (bool, bool, bool)) -> String {
         let interface = Obj::new().str("url", url).str("protocolBinding", "JSONRPC").str("protocolVersion", PROTOCOL_VERSION).done();
-        let capabilities = r#"{"streaming":true,"pushNotifications":false,"extendedAgentCard":false}"#;
+        let capabilities = format!(r#"{{"streaming":true,"pushNotifications":{push},"extendedAgentCard":{extended}}}"#);
+        let capabilities = capabilities.as_str();
         let skills: Vec<String> = self.skills.iter().map(Skill::to_json).collect();
         let provider = self.provider.as_ref().map(|(org, url)| Obj::new().str("organization", org).str("url", url).done());
         Obj::new()
@@ -316,6 +318,9 @@ pub struct A2aServer {
     /// Bearer tokens and the identity each stands for; empty: no auth.
     tokens: Arc<Vec<(String, String)>>,
     blocking_timeout: Duration,
+    /// URL prefixes webhooks may point to; empty: push notifications off.
+    push_allow: Arc<Vec<String>>,
+    extended_card: Option<Arc<AgentCard>>,
 }
 
 impl A2aServer {
@@ -330,6 +335,8 @@ impl A2aServer {
             fallback: None,
             tokens: Arc::new(Vec::new()),
             blocking_timeout: Duration::from_secs(300),
+            push_allow: Arc::new(Vec::new()),
+            extended_card: None,
         }
     }
 
@@ -368,10 +375,33 @@ impl A2aServer {
         self
     }
 
+    /// Turn push notifications on: clients may register webhooks whose URL
+    /// starts with one of `prefixes` (`https://hooks.example.com/`). They
+    /// come from clients, so only listed destinations are called (SSRF).
+    pub fn push_notifications<'a>(mut self, prefixes: impl IntoIterator<Item = &'a str>) -> A2aServer {
+        self.push_allow = Arc::new(prefixes.into_iter().filter(|p| !p.is_empty()).map(str::to_string).collect());
+        if !self.push_allow.is_empty() {
+            let _ = self.tasks.push.set(push::start());
+        }
+        self
+    }
+
+    /// A fuller card for authenticated callers (`GetExtendedAgentCard`):
+    /// skills you don't advertise publicly, say. Needs bearer tokens.
+    pub fn extended_card(mut self, card: AgentCard) -> A2aServer {
+        self.extended_card = Some(Arc::new(card));
+        self
+    }
+
     /// Requests that aren't A2A go to `app`.
     pub fn wrap(mut self, app: impl Application + Send + Sync + 'static) -> A2aServer {
         self.fallback = Some(Arc::new(app));
         self
+    }
+
+    /// `(bearer auth, push notifications, extended card)` for the card.
+    fn capabilities(&self) -> (bool, bool, bool) {
+        (!self.tokens.is_empty(), !self.push_allow.is_empty(), self.extended_card.is_some() && !self.tokens.is_empty())
     }
 
     /// The caller's identity: `""` without auth, the token's identity with
@@ -393,7 +423,7 @@ impl A2aServer {
     }
 
     fn card_response(&self, request: &Request, connection: &ConnectionInfo) -> Response {
-        let mut response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, self.card.to_json(&self.endpoint_url(request, connection), !self.tokens.is_empty()).into_bytes());
+        let mut response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, self.card.to_json(&self.endpoint_url(request, connection), self.capabilities()).into_bytes());
         response.headers.push(crate::header::Header::new("Cache-Control", "public, max-age=300".to_string()));
         response
     }
@@ -451,9 +481,14 @@ impl A2aServer {
                 }
                 Ok(self.tasks.lock().get(owner, id).map(|t| t.to_json(None)).unwrap_or_default())
             }
-            "GetExtendedAgentCard" => Err(RpcError::UnsupportedOperation("this agent has no extended card".into())),
+            "GetExtendedAgentCard" => match (&self.extended_card, self.tokens.is_empty()) {
+                (Some(card), false) => Ok(card.to_json(&self.card.url.clone().unwrap_or_else(|| self.path.clone()), self.capabilities())),
+                (Some(_), true) => Err(RpcError::UnsupportedOperation("the extended card needs bearer auth configured".into())),
+                // Not declared on the card: unsupported (A2A 1.0 §3.1.11).
+                (None, _) => Err(RpcError::UnsupportedOperation("this agent has no extended card".into())),
+            },
             "CreateTaskPushNotificationConfig" | "GetTaskPushNotificationConfig" | "ListTaskPushNotificationConfigs" | "DeleteTaskPushNotificationConfig" => {
-                Err(RpcError::PushNotificationNotSupported)
+                self.push_config(method, params, owner)
             }
             _ => Err(RpcError::MethodNotFound(method.to_string())),
         }
@@ -468,6 +503,12 @@ impl A2aServer {
             .and_then(JsonValue::as_array)
             .map(|a| a.iter().filter_map(|m| m.as_str().map(str::to_string)).collect())
             .unwrap_or_default();
+        // A webhook for this message's task, checked before the handler runs.
+        let webhook = match configuration.and_then(|c| c.get("taskPushNotificationConfig")) {
+            Some(_) if self.push_allow.is_empty() => return Err(RpcError::PushNotificationNotSupported),
+            Some(config) => Some(self.checked_config(config, "pending")?),
+            None => None,
+        };
         let existing = match &message.task_id {
             Some(id) => {
                 let task = self.tasks.lock().get(owner, id).cloned().ok_or(RpcError::TaskNotFound)?;
@@ -493,7 +534,7 @@ impl A2aServer {
         };
         let handler = Arc::clone(&self.handler);
         let reply = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&ctx, message))).unwrap_or_else(|_| A2aReply::Task(ctx.fail("the agent failed")));
-        Ok(match reply {
+        let outcome = match reply {
             A2aReply::Message(mut m) => {
                 m.context_id.get_or_insert(context_id);
                 Outcome::Message(m)
@@ -504,7 +545,20 @@ impl A2aServer {
                 Outcome::Task(id, false)
             }
             A2aReply::Running(handle) => Outcome::Task(handle.id, true),
-        })
+        };
+        if let (Some(mut config), Outcome::Task(id, _)) = (webhook, &outcome) {
+            config.task_id = id.clone();
+            let mut store = self.tasks.lock();
+            if let Some(stored) = store.get_mut(owner, id) {
+                // The task as it is now, then every update.
+                if let Some(queue) = self.tasks.push.get() {
+                    push::enqueue(queue, &config, "task", &stored.task.to_json(None));
+                }
+                stored.push.retain(|c| c.id != config.id);
+                stored.push.push(config);
+            }
+        }
+        Ok(outcome)
     }
 
     fn send_message(&self, params: &JsonValue, owner: &str) -> Result<String, RpcError> {
@@ -569,6 +623,50 @@ impl A2aServer {
             stored.subscribers.push(tasks::Subscriber { sender, rpc_id: rpc_id.to_string() });
         }
         Ok(response)
+    }
+
+    fn push_config(&self, method: &str, params: &JsonValue, owner: &str) -> Result<String, RpcError> {
+        if self.push_allow.is_empty() {
+            return Err(RpcError::PushNotificationNotSupported);
+        }
+        let task_id = params.get("taskId").and_then(JsonValue::as_str).ok_or_else(|| RpcError::InvalidParams("taskId is required".into()))?.to_string();
+        let mut store = self.tasks.lock();
+        let stored = store.get_mut(owner, &task_id).ok_or(RpcError::TaskNotFound)?;
+        let id = params.get("id").and_then(JsonValue::as_str);
+        match method {
+            "CreateTaskPushNotificationConfig" => {
+                let config = self.checked_config(params, &task_id)?;
+                stored.push.retain(|c| c.id != config.id);
+                if stored.push.len() >= push::MAX_CONFIGS {
+                    return Err(RpcError::InvalidParams(format!("at most {} push notification configs per task", push::MAX_CONFIGS)));
+                }
+                let json = config.to_json();
+                stored.push.push(config);
+                Ok(json)
+            }
+            "GetTaskPushNotificationConfig" => {
+                let id = id.ok_or_else(|| RpcError::InvalidParams("id is required".into()))?;
+                stored.push.iter().find(|c| c.id == id).map(push::PushConfig::to_json).ok_or_else(|| RpcError::InvalidParams(format!("no push notification config {id}")))
+            }
+            "ListTaskPushNotificationConfigs" => {
+                let configs: Vec<String> = stored.push.iter().map(push::PushConfig::to_json).collect();
+                Ok(Obj::new().list("configs", &configs).str("nextPageToken", "").done())
+            }
+            _ => {
+                let id = id.ok_or_else(|| RpcError::InvalidParams("id is required".into()))?;
+                stored.push.retain(|c| c.id != id);
+                Ok("{}".to_string())
+            }
+        }
+    }
+
+    /// A webhook config whose URL the operator allows.
+    fn checked_config(&self, value: &JsonValue, task_id: &str) -> Result<push::PushConfig, RpcError> {
+        let config = push::PushConfig::from_json(value, Some(task_id)).map_err(RpcError::InvalidParams)?;
+        if !push::allowed(&config.url, &self.push_allow) {
+            return Err(RpcError::InvalidParams(format!("push notification URL {} isn't allowed by this agent", config.url)));
+        }
+        Ok(config)
     }
 
     fn list_tasks(&self, params: &JsonValue, owner: &str) -> Result<String, RpcError> {

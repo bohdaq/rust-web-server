@@ -7,7 +7,10 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use super::model::{self, Obj};
 use super::{Artifact, Message, Task, TaskState, TaskStatus, MAX_TASKS};
+use super::push::{self, PushConfig};
 use crate::sse::{SseEvent, SseSender};
+use std::sync::mpsc::SyncSender;
+use std::sync::OnceLock;
 
 /// Streams per task; more subscribers are refused.
 pub(crate) const MAX_SUBSCRIBERS: usize = 16;
@@ -23,6 +26,7 @@ pub(crate) struct Stored {
     pub(crate) task: Task,
     pub(crate) subscribers: Vec<Subscriber>,
     pub(crate) canceled: Arc<AtomicBool>,
+    pub(crate) push: Vec<PushConfig>,
 }
 
 #[derive(Default)]
@@ -39,7 +43,7 @@ impl TaskStore {
             Some(stored) => stored.task = task,
             None => {
                 self.order.push_back(task.id.clone());
-                self.tasks.insert(task.id.clone(), Stored { owner: owner.to_string(), task, subscribers: Vec::new(), canceled: Arc::new(AtomicBool::new(false)) });
+                self.tasks.insert(task.id.clone(), Stored { owner: owner.to_string(), task, subscribers: Vec::new(), canceled: Arc::new(AtomicBool::new(false)), push: Vec::new() });
             }
         }
         while self.tasks.len() > MAX_TASKS {
@@ -67,6 +71,8 @@ impl TaskStore {
 pub(crate) struct Shared {
     pub(crate) store: Mutex<TaskStore>,
     pub(crate) changed: Condvar,
+    /// The push delivery queue, once push notifications are on.
+    pub(crate) push: OnceLock<SyncSender<push::Delivery>>,
 }
 
 impl Shared {
@@ -81,10 +87,16 @@ pub(crate) fn event(rpc_id: &str, kind: &str, json: &str) -> SseEvent {
     SseEvent::data(format!(r#"{{"jsonrpc":"2.0","id":{rpc_id},"result":{{"{kind}":{json}}}}}"#))
 }
 
-/// Send to every subscriber; one whose buffer is full or who left is
-/// dropped (it can subscribe again and gets the whole task first).
-pub(crate) fn publish(stored: &mut Stored, kind: &str, json: &str) {
+/// Send to every subscriber (one whose buffer is full or who left is
+/// dropped: it can subscribe again and gets the whole task first) and queue
+/// the task's webhooks.
+pub(crate) fn publish(stored: &mut Stored, queue: Option<&SyncSender<push::Delivery>>, kind: &str, json: &str) {
     stored.subscribers.retain(|s| matches!(s.sender.try_send(event(&s.rpc_id, kind, json)), Ok(true)));
+    if let Some(queue) = queue {
+        for config in &stored.push {
+            push::enqueue(queue, config, kind, json);
+        }
+    }
 }
 
 /// Update a stored task to `state` (unless it already finished), tell its
@@ -107,7 +119,7 @@ pub(crate) fn set_state(shared: &Shared, owner: &str, id: &str, state: TaskState
     }
     stored.task.status = TaskStatus { state, message, timestamp: model::timestamp() };
     let update = Obj::new().str("taskId", &stored.task.id).str("contextId", &stored.task.context_id).raw("status", &stored.task.status.to_json()).done();
-    publish(stored, "statusUpdate", &update);
+    publish(stored, shared.push.get(), "statusUpdate", &update);
     if state.is_terminal() || state.is_interrupted() {
         stored.subscribers.clear();
     }
@@ -155,7 +167,7 @@ impl TaskHandle {
             .raw("lastChunk", "true")
             .done();
         stored.task.artifacts.push(artifact);
-        publish(stored, "artifactUpdate", &update);
+        publish(stored, self.shared.push.get(), "artifactUpdate", &update);
     }
 
     /// Done.
