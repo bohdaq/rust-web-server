@@ -300,3 +300,24 @@ fn the_library_proxy_forwards_over_http3_and_falls_back_to_tcp() {
     assert_eq!(client.get("/x").send().body_text(), "tcp");
     assert!(crate::proxy_config::upstream::prometheus_text().contains("rws_upstream_h3_fallbacks_total{upstream=\"library-fallback-test\"} 1"));
 }
+
+#[test]
+fn every_resolved_address_is_tried_at_once() {
+    // Where `localhost` resolves to both families, listen only on the one
+    // that comes second: trying addresses in turn would spend the whole
+    // connect timeout on the silent first one (CI runners resolve ::1
+    // first; QUIC to a port nobody answers on just stays quiet).
+    use std::net::ToSocketAddrs;
+    let resolved: Vec<SocketAddr> = ("localhost", 0).to_socket_addrs().map(|a| a.collect()).unwrap_or_default();
+    let Some(first) = resolved.first() else { return };
+    let Some(second) = resolved.iter().find(|a| a.is_ipv6() != first.is_ipv6()) else {
+        eprintln!("localhost has one address family here ({resolved:?}); skipped");
+        return;
+    };
+    let bind = SocketAddr::new(second.ip(), 0);
+    let (endpoint, tls) = start_backend_on(bind, None);
+    let started = std::time::Instant::now();
+    let mut hello = forward(&request("GET /hello HTTP/1.1\r\nHost: x\r\n\r\n"), peer(), &target(endpoint.local_addr().unwrap().port(), &tls)).unwrap();
+    assert_eq!(body(&mut hello), b"hello over h3");
+    assert!(started.elapsed() < Duration::from_millis(1000), "didn't wait out the silent address: {:?}", started.elapsed());
+}

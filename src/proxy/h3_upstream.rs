@@ -264,18 +264,47 @@ impl Exchange {
 
     async fn connect(&self) -> Result<SendRequest, H3Error> {
         let connect_error = |e: String| H3Error::Connect(format!("h3 proxy: connect to {} failed: {e}", self.addr));
-        let remote = tokio::time::timeout(self.connect_timeout, tokio::net::lookup_host(&self.addr))
+        let remotes: Vec<SocketAddr> = tokio::time::timeout(self.connect_timeout, tokio::net::lookup_host(&self.addr))
             .await
             .map_err(|_| connect_error("name lookup timed out".to_string()))?
             .map_err(|e| connect_error(e.to_string()))?
-            .next()
-            .ok_or_else(|| connect_error("no address".to_string()))?;
-        let endpoint = endpoint(remote.is_ipv6()).map_err(H3Error::Connect)?;
-        let connecting = endpoint.connect_with(self.quic.clone(), remote, &self.host).map_err(|e| connect_error(e.to_string()))?;
-        let connection = tokio::time::timeout(self.connect_timeout, connecting)
+            .collect();
+        // Every address at once, first handshake wins: over UDP an address
+        // nobody answers on (`localhost` as ::1 when the backend listens on
+        // IPv4 only) just stays silent, so trying them in turn would spend
+        // the whole timeout on the first.
+        let mut attempts = tokio::task::JoinSet::new();
+        let mut last = "no address".to_string();
+        for remote in remotes {
+            let endpoint = match endpoint(remote.is_ipv6()) {
+                Ok(endpoint) => endpoint,
+                Err(e) => {
+                    last = e;
+                    continue;
+                }
+            };
+            let (config, host) = (self.quic.clone(), self.host.clone());
+            attempts.spawn(async move {
+                match endpoint.connect_with(config, remote, &host) {
+                    Ok(connecting) => connecting.await.map_err(|e| e.to_string()),
+                    Err(e) => Err(e.to_string()),
+                }
+            });
+        }
+        let first = async {
+            while let Some(joined) = attempts.join_next().await {
+                match joined {
+                    Ok(Ok(connection)) => return Ok(connection),
+                    Ok(Err(e)) => last = e,
+                    Err(e) => last = e.to_string(),
+                }
+            }
+            Err(last)
+        };
+        let connection = tokio::time::timeout(self.connect_timeout, first)
             .await
             .map_err(|_| H3Error::Connect(format!("h3 proxy: no QUIC handshake with {} within {} ms", self.addr, self.connect_timeout.as_millis())))?
-            .map_err(|e| connect_error(e.to_string()))?;
+            .map_err(connect_error)?;
         let (mut driver, sender) = tokio::time::timeout(self.connect_timeout, h3::client::new(h3_quinn::Connection::new(connection)))
             .await
             .map_err(|_| connect_error("HTTP/3 setup timed out".to_string()))?
