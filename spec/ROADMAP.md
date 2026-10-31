@@ -195,7 +195,7 @@ Change a running server without editing files, and extend it without recompiling
 - **#34** (part) — the `wasm32-wasip2` build compiles again and CI serves the component under `wasmtime serve` (`wasm-shim`). Done 2026-10-31.
 - **#33** **i18n** — `i18n::Catalogs` (flat-TOML catalogs per language), `AcceptLanguage` extractor + RFC 4647 negotiation, placeholders, CLDR plural categories for the common families, `Translator::localize`. Done 2026-10-31.
 
-## 18.17.0 — Standard status headers and errors
+## 18.17.0 — Standard status headers and errors (released 2026-10-31)
 
 - **#64** **`Proxy-Status`, `Cache-Status`, problem+json** (RFC 9209, 9211, 9457) — why a proxied request failed, whether a cache answered, rws-made errors as `application/problem+json` for clients that ask for JSON. Plan: [PROXY_STATUS_PROBLEM_JSON.md](PROXY_STATUS_PROBLEM_JSON.md) (2026-10-31).
 
