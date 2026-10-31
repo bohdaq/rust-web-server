@@ -154,6 +154,12 @@ impl TaskHandle {
 
     /// Add an output; subscribers get it at once.
     pub fn artifact(&self, artifact: Artifact) {
+        self.artifact_chunk(artifact, false, true);
+    }
+
+    /// Stream an output in pieces: `append` adds these parts to the
+    /// artifact with the same id (sent earlier), `last_chunk` marks the end.
+    pub fn artifact_chunk(&self, artifact: Artifact, append: bool, last_chunk: bool) {
         let mut store = self.shared.lock();
         let Some(stored) = store.get_mut(&self.owner, &self.id) else { return };
         if stored.task.status.state.is_terminal() {
@@ -163,10 +169,14 @@ impl TaskHandle {
             .str("taskId", &stored.task.id)
             .str("contextId", &stored.task.context_id)
             .raw("artifact", &artifact.to_json())
-            .raw("append", "false")
-            .raw("lastChunk", "true")
+            .raw("append", if append { "true" } else { "false" })
+            .raw("lastChunk", if last_chunk { "true" } else { "false" })
             .done();
-        stored.task.artifacts.push(artifact);
+        match stored.task.artifacts.iter_mut().find(|a| a.artifact_id == artifact.artifact_id) {
+            Some(existing) if append => existing.parts.extend(artifact.parts),
+            Some(existing) => *existing = artifact,
+            None => stored.task.artifacts.push(artifact),
+        }
         publish(stored, self.shared.push.get(), "artifactUpdate", &update);
     }
 

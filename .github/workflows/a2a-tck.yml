@@ -1,0 +1,32 @@
+name: A2A TCK
+
+# The official A2A compatibility kit (a2aproject/a2a-tck) over JSON-RPC
+# against examples/a2a_tck.rs (ci/e2e/a2a_tck.sh). Known failures:
+# ci/a2a-tck-baseline.txt.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  jsonrpc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: a2a-tck
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: cargo build --example a2a_tck
+      - env:
+          RESULTS_DIR: ${{ runner.temp }}/a2a-tck
+        run: ci/e2e/a2a_tck.sh target/debug/examples/a2a_tck ci/a2a-tck-baseline.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a2a-tck-reports
+          path: ${{ runner.temp }}/a2a-tck

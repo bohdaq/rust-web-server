@@ -1,0 +1,3 @@
+# A2A TCK tests rws fails today, one per line (classname::name from the
+# JUnit report). ci/e2e/a2a_tck.sh fails on any other failure and on a
+# listed test that passes.

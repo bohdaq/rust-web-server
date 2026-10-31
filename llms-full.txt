@@ -18892,6 +18892,10 @@ update it from any thread; return `A2aReply::Running(handle)`:
 })
 ```
 
+`worker.artifact_chunk(artifact, append, last_chunk)` streams an output in
+pieces: chunks with `append` add their parts to the artifact with the same
+id.
+
 `SendMessage` waits until the task finishes or asks for input (A2A's
 default), up to `.blocking_timeout(…)` (300 s), then answers with its state;
 a client that sends `configuration.returnImmediately: true` gets the task at
@@ -18942,6 +18946,13 @@ let agent = A2aServer::new(public_card)
 
 Authenticated callers get the fuller card from `GetExtendedAgentCard`; the
 public card says one exists (`capabilities.extendedAgentCard`).
+
+## Conformance
+
+CI runs the official A2A compatibility kit
+([a2aproject/a2a-tck](https://github.com/a2aproject/a2a-tck), pinned) over
+JSON-RPC against `examples/a2a_tck.rs`, which implements the kit's
+scenarios; `ci/a2a-tck-baseline.txt` lists what fails today.
 
 ## History and limits
 

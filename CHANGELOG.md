@@ -14,7 +14,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   update as `application/a2a+json`, with the config's `Authorization` and
   `X-A2A-Notification-Token`; only URLs under the prefixes given to
   `A2aServer::push_notifications` are called, without redirects, three
-  attempts each. `A2aServer::extended_card` serves `GetExtendedAgentCard` to
+  attempts each. `TaskHandle::artifact_chunk` streams an artifact in
+  pieces. CI runs the official A2A compatibility kit (a2a-tck) against
+  `examples/a2a_tck.rs`. `A2aServer::extended_card` serves `GetExtendedAgentCard` to
   authenticated callers.
 
 ## 18.17.0 — 2026-10-31
