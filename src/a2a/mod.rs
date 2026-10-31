@@ -321,6 +321,8 @@ pub struct A2aServer {
     /// URL prefixes webhooks may point to; empty: push notifications off.
     push_allow: Arc<Vec<String>>,
     extended_card: Option<Arc<AgentCard>>,
+    /// When this server was made, as an HTTP date (the card's Last-Modified).
+    started: String,
 }
 
 impl A2aServer {
@@ -337,6 +339,7 @@ impl A2aServer {
             blocking_timeout: Duration::from_secs(300),
             push_allow: Arc::new(Vec::new()),
             extended_card: None,
+            started: crate::http::date::now(),
         }
     }
 
@@ -422,9 +425,23 @@ impl A2aServer {
         format!("{}://{host}{}", if connection.tls { "https" } else { "http" }, self.path)
     }
 
+    /// The card with `Cache-Control`, an `ETag` (its content's hash) and
+    /// `Last-Modified` (when the server started); `304` for a matching
+    /// `If-None-Match` (A2A 1.0 §8.6.1).
     fn card_response(&self, request: &Request, connection: &ConnectionInfo) -> Response {
-        let mut response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, self.card.to_json(&self.endpoint_url(request, connection), self.capabilities()).into_bytes());
-        response.headers.push(crate::header::Header::new("Cache-Control", "public, max-age=300".to_string()));
+        use crate::header::Header;
+        let json = self.card.to_json(&self.endpoint_url(request, connection), self.capabilities());
+        let digest = crate::core::sha256::sha256(json.as_bytes());
+        let etag = format!("\"{}\"", digest[..8].iter().map(|b| format!("{b:02x}")).collect::<String>());
+        let fresh = request.header(Header::_IF_NONE_MATCH).is_some_and(|h| h.value.split(',').any(|t| t.trim().trim_start_matches("W/") == etag || t.trim() == "*"));
+        let mut response = if fresh {
+            Response::get_response(STATUS_CODE_REASON_PHRASE.n304_not_modified, None, None)
+        } else {
+            Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, json.into_bytes())
+        };
+        response.headers.push(Header::new("Cache-Control", "public, max-age=300".to_string()));
+        response.headers.push(Header::new("ETag", etag));
+        response.headers.push(Header::new("Last-Modified", self.started.clone()));
         response
     }
 
@@ -685,16 +702,32 @@ impl A2aServer {
             None => 0,
         };
         let history = history_length(params)?.or(Some(0));
+        let include_artifacts = params.get("includeArtifacts") == Some(&JsonValue::Bool(true));
         let tasks = self.tasks.lock();
-        // Newest first.
-        let matching: Vec<&Task> = tasks
+        // Most recently updated first (status timestamps are ISO 8601 UTC,
+        // so they sort as strings), newest-created first among equals.
+        let mut matching: Vec<&Task> = tasks
             .order
             .iter()
             .rev()
             .filter_map(|id| tasks.get(owner, id))
             .filter(|t| state.is_none_or(|s| t.status.state == s) && context.is_none_or(|c| t.context_id == c))
             .collect();
-        let page: Vec<String> = matching.iter().skip(offset).take(page_size).map(|t| t.to_json(history)).collect();
+        matching.sort_by(|a, b| b.status.timestamp.cmp(&a.status.timestamp));
+        let page: Vec<String> = matching
+            .iter()
+            .skip(offset)
+            .take(page_size)
+            .map(|t| {
+                if include_artifacts {
+                    t.to_json(history)
+                } else {
+                    let mut bare = (*t).clone();
+                    bare.artifacts.clear();
+                    bare.to_json(history)
+                }
+            })
+            .collect();
         let next = if offset + page_size < matching.len() { (offset + page_size).to_string() } else { String::new() };
         Ok(Obj::new()
             .list("tasks", &page)
@@ -777,7 +810,7 @@ impl Application for A2aServer {
         if path == AGENT_CARD_PATH && (request.method == "GET" || request.method == "HEAD") {
             return Ok(self.card_response(request, connection));
         }
-        if path == self.path {
+        if path == self.path || path.strip_suffix('/') == Some(self.path.as_str()) {
             if request.method == "POST" {
                 let owner = match self.caller(request) {
                     Some(owner) => owner,

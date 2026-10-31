@@ -406,3 +406,29 @@ fn the_extended_card_is_for_authenticated_callers() {
     assert_eq!(Some(&json_lite::JsonValue::Bool(true)), card.get("capabilities").unwrap().get("extendedAgentCard"));
     assert_eq!(-32004, error_code(&call(&TestClient::new(super::tests::agent()), "GetExtendedAgentCard", "{}")), "not on the card: unsupported");
 }
+
+#[test]
+fn trailing_slash_card_caching_and_list_shape() {
+    let client = TestClient::new(agent());
+    // Clients join "/" to the card's URL: /a2a/ is the endpoint too.
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"GetTask","params":{"id":"x"}}"#;
+    let slashed = client.post("/a2a/").header("A2A-Version", "1.0").body_json(body).send();
+    assert_eq!((200, Some("application/json")), (slashed.status(), slashed.header("Content-Type").map(|c| c.split(';').next().unwrap())));
+    assert_eq!(-32001, error_code(&json_lite::parse(slashed.body_text()).unwrap()));
+
+    let card = client.get(AGENT_CARD_PATH).send();
+    let etag = card.header("ETag").expect("ETag").to_string();
+    assert!(etag.starts_with('"') && card.header("Last-Modified").is_some_and(|d| d.ends_with("GMT")));
+    let again = client.get(AGENT_CARD_PATH).header("If-None-Match", &etag).send();
+    assert_eq!((304, ""), (again.status(), again.body_text()));
+
+    send(&client, "hello", r#","contextId":"ctx-shape""#);
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    send(&client, "later", r#","contextId":"ctx-shape""#);
+    let listed = call(&client, "ListTasks", r#"{"contextId":"ctx-shape"}"#);
+    let tasks = listed.get("result").unwrap().get("tasks").unwrap().as_array().unwrap();
+    assert!(tasks.iter().all(|t| t.get("artifacts").is_none()), "no artifacts without includeArtifacts");
+    assert!(s(&tasks[0], &["status", "timestamp"]) >= s(&tasks[1], &["status", "timestamp"]), "newest update first");
+    let full = call(&client, "ListTasks", r#"{"contextId":"ctx-shape","includeArtifacts":true}"#);
+    assert!(full.get("result").unwrap().get("tasks").unwrap().as_array().unwrap()[0].get("artifacts").is_some());
+}
