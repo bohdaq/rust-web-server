@@ -39,8 +39,11 @@ where
             // The caller's span (an `OtelLayer` request) stays the parent of
             // spans started on the isolated thread.
             let context = crate::otel::Context::current();
+            // …and so does the caller (`Identity::current()` in the handler).
+            let identity = crate::authz::Identity::current();
             s.spawn(move || {
                 let _context = context.attach();
+                let _identity = identity.map(crate::authz::identity::enter);
                 tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()

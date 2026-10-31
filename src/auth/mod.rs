@@ -486,7 +486,10 @@ impl<F: Fn(&str, &str) -> bool + Send + Sync + 'static> Middleware for BasicAuth
         };
 
         if (self.validate)(user, pass) {
-            crate::authz::with_identity(crate::authz::Identity::new(user, "basic"), || next.execute(request, connection))
+            match crate::authz::Identity::user(user, "basic") {
+                Some(identity) => crate::authz::with_identity(identity, || next.execute(request, connection)),
+                None => next.execute(request, connection),
+            }
         } else {
             Ok(AppError::Unauthorized.into_response())
         }

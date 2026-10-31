@@ -24,6 +24,11 @@ fn identities_come_from_top_level_string_claims() {
     assert_eq!(identity.claim("email").as_deref(), Some("a@example.com"));
     assert_eq!(identity.claims(), Some(claims));
     assert_eq!(Identity::from_claims(claims, "email", "jwt").unwrap().subject(), "user:a@example.com");
+    // A claim can't name a set or another type: it's always a user id.
+    assert!(Identity::from_claims(r#"{"sub":"group:eng#member"}"#, "sub", "jwt").is_none(), "'#' can't be in an id");
+    let typed = Identity::from_claims(r#"{"sub":"service:billing"}"#, "sub", "jwt").unwrap();
+    assert_eq!((typed.subject_type(), typed.subject_id()), ("user", "service:billing"));
+    assert!(Identity::user("has space", "basic").is_none() && Identity::user("", "basic").is_none());
     assert!(Identity::from_claims(claims, "n", "jwt").is_none(), "not a string");
     assert!(Identity::from_claims(claims, "missing", "jwt").is_none());
     assert!(Identity::from_claims(r#"{"sub":""}"#, "sub", "jwt").is_none(), "empty");
@@ -108,7 +113,14 @@ fn object_templates_read_path_query_and_headers() {
     let q = ObjectTemplate::parse("org:{header:X-Org}-{query:team}").unwrap();
     assert_eq!(q.render(&request("GET /?a=b&team=core HTTP/1.1\r\nHost: x\r\nX-Org: acme\r\n\r\n")).unwrap().to_string(), "org:acme-core");
     assert!(q.render(&request("GET /?team=core HTTP/1.1\r\nHost: x\r\n\r\n")).is_none(), "missing header");
-    assert!(t.render(&request("GET /docs/a%23b HTTP/1.1\r\nHost: x\r\n\r\n")).is_some_and(|o| o.id == "a%23b"), "raw segment, still a valid id");
+    assert_eq!(t.render(&request("GET /docs/a%20b%40c HTTP/1.1\r\nHost: x\r\n\r\n")), None, "decoded once: a space isn't an id");
+    assert_eq!(t.render(&request("GET /docs/alice%40example.com HTTP/1.1\r\nHost: x\r\n\r\n")).unwrap().id, "alice@example.com");
+    assert_eq!(t.render(&request("GET /docs/a%23b HTTP/1.1\r\nHost: x\r\n\r\n")), None, "'#' after decoding");
+    // Dot segments anywhere (raw or encoded) and encoded slashes name nothing:
+    // a backend could resolve them to another document than the one checked.
+    for path in ["/docs/42/../7", "/docs/42/%2e%2e/7", "/docs/42/%2E%2E/7", "/docs/./42", "/docs/42%2F..%2F7", "/docs/42%5C..%5C7"] {
+        assert_eq!(t.render(&request(&format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n"))), None, "{path}");
+    }
     for bad in ["doc:{path:0}", "doc:{path:x}", "doc:{cookie:a}", "doc:{path:1", "{path:1}", "doc:42}", ""] {
         assert!(ObjectTemplate::parse(bad).is_err(), "{bad:?}");
     }
@@ -177,6 +189,9 @@ fn config_routes_check_relations_and_runtime_tuples_survive_a_reload() {
     assert_eq!(client.get("/docs/42").header("Authorization", &token("alice")).send().status(), 200);
     assert_eq!(client.get("/docs/42").header("Authorization", &token("bob")).send().status(), 403);
     assert_eq!(client.get("/docs/42").send().status(), 401, "jwt layer: no token");
+    // Path confusion: the check must not see doc 42 while a backend serves 7.
+    assert_eq!(client.get("/docs/42/../7").header("Authorization", &token("alice")).send().status(), 403);
+    assert_eq!(client.get("/docs/42/%2e%2e/7").header("Authorization", &token("alice")).send().status(), 403);
     // A tuple written at runtime (as the admin API will) survives a reload.
     let authorizer = crate::authz::config::current().unwrap().unwrap();
     authorizer.write_str("doc:42#viewer@user:bob").unwrap();
@@ -184,6 +199,43 @@ fn config_routes_check_relations_and_runtime_tuples_survive_a_reload() {
     let response = client.get("/docs/42").header("Authorization", &token("bob")).send();
     assert_eq!((response.status(), response.body_text()), (200, "the doc, v2"));
     std::env::remove_var("RWS_TEST_AUTHZ_JWT");
+}
+
+#[cfg(feature = "auth")]
+#[test]
+fn a_token_cannot_claim_to_be_a_group() {
+    use crate::middleware::WithMiddleware;
+    let schema = Schema::new()
+        .relation("group", "member", "user").unwrap()
+        .relation("doc", "editor", "user | group#member").unwrap();
+    let authz = Authorizer::new(schema, MemoryStore::new()).unwrap();
+    authz.write_str("doc:42#editor@group:eng#member").unwrap();
+    authz.write_str("doc:42#editor@user:group:eng").unwrap(); // a user literally named "group:eng"
+    // The first layer pushed is the outermost: the authenticator first.
+    let app = WithMiddleware::new(WhoAmI)
+        .wrap(crate::auth::JwtLayer::new(b"secret"))
+        .wrap(AuthzLayer::new(authz, "editor", "doc:{path:2}").unwrap());
+    let client = crate::test_client::TestClient::new(app);
+    let call = |sub: &str| {
+        let token = crate::auth::build_jwt(&format!(r#"{{"sub":"{sub}"}}"#), b"secret");
+        let response = client.get("/docs/42").header("Authorization", &format!("Bearer {token}")).send();
+        (response.status(), response.body_text().to_string())
+    };
+    assert_eq!(call("group:eng#member").0, 401, "not a usable id: no caller");
+    assert_eq!(call("group:eng"), (200, "user:group:eng via jwt".to_string()), "only the user of that name");
+    assert_eq!(call("group:other").0, 403);
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn async_handlers_on_another_thread_see_the_caller() {
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let seen = runtime.block_on(async {
+        with_identity(Identity::new("alice", "test"), || {
+            crate::async_bridge::block_on_isolated(|| async { Identity::current().map(|i| i.subject().to_string()) })
+        })
+    });
+    assert_eq!(seen.as_deref(), Some("user:alice"));
 }
 
 #[test]
@@ -199,6 +251,8 @@ fn rws_check_reports_authz_mistakes() {
     assert!(errors(&AUTHZ_TOML.replace("[authz]\n", "[authz]\nstore = \"redis\"\n")).contains("isn't supported"));
     let no_auth = AUTHZ_TOML.replace("[route.middleware.auth]\ntype = \"jwt\"\nsecret_env = \"RWS_TEST_AUTHZ_JWT\"\n", "");
     assert!(warnings(&no_auth).contains("every request gets 401"));
+    let global = AUTHZ_TOML.replace("[[route]]", "[middleware.authz]\nrelation = \"viewer\"\nobject = \"doc:{path:2}\"\n\n[[route]]");
+    assert!(warnings(&global).contains("/healthz, /readyz and /metrics included"), "{}", warnings(&global));
 }
 
 #[test]

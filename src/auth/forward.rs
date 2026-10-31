@@ -97,8 +97,8 @@ impl ForwardAuthLayer {
 
     /// The auth service's response header naming the caller (e.g.
     /// `X-User-Id`): on a 2xx with that header the rest of the request runs
-    /// as that [`Identity`](crate::authz::Identity) (`user:<value>`, or the
-    /// value as is when it has a `type:` prefix). Since 18.14.0.
+    /// as that user ([`Identity::user`](crate::authz::Identity::user)).
+    /// Since 18.14.0.
     pub fn identity_header(mut self, name: impl Into<String>) -> Self {
         self.identity_header = Some(name.into());
         self
@@ -159,8 +159,7 @@ impl Middleware for ForwardAuthLayer {
             .as_deref()
             .and_then(|name| auth_response.header(name))
             .map(str::trim)
-            .filter(|value| !value.is_empty() && !value.bytes().any(|b| b.is_ascii_control()))
-            .map(|value| crate::authz::Identity::new(value, "forward"));
+            .and_then(|value| crate::authz::Identity::user(value, "forward"));
         match identity {
             Some(identity) => crate::authz::with_identity(identity, || next.execute(&forwarded, connection)),
             None => next.execute(&forwarded, connection),

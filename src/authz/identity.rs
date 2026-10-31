@@ -1,22 +1,40 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-/// The authenticated caller of the current request.
+/// The authenticated caller of the current request: an object (a type and
+/// an id) — never a set like `group:eng#member`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Identity {
+    kind: Arc<str>,
+    id: Arc<str>,
     subject: Arc<str>,
     source: &'static str,
     claims: Option<Arc<str>>,
 }
 
 impl Identity {
-    /// A caller named `subject` (`"user:alice"` — a type, `:`, an id; a
-    /// bare id gets the type `user`), authenticated by `source` (`"jwt"`,
-    /// `"oidc"`, `"saml"`, `"basic"`, `"forward"`, `"mcp"`, or your own).
+    /// A caller you name in code: `"service:billing"` (a type, `:`, an id)
+    /// or a bare id, which gets the type `user`. `source` says who vouched
+    /// (`"jwt"`, `"oidc"`, `"saml"`, `"basic"`, `"forward"`, `"mcp"`, or your
+    /// own). For a value that came from outside, use [`Identity::user`].
     pub fn new(subject: impl AsRef<str>, source: &'static str) -> Identity {
         let subject = subject.as_ref();
-        let subject: Arc<str> = if subject.contains(':') { Arc::from(subject) } else { Arc::from(format!("user:{subject}")) };
-        Identity { subject, source, claims: None }
+        let (kind, id) = subject.split_once(':').unwrap_or(("user", subject));
+        Identity::typed(kind, id, source)
+    }
+
+    fn typed(kind: &str, id: &str, source: &'static str) -> Identity {
+        Identity { kind: Arc::from(kind), id: Arc::from(id), subject: Arc::from(format!("{kind}:{id}")), source, claims: None }
+    }
+
+    /// The user whose id is `id` exactly — what authenticators use for a
+    /// value from a token, a header or a login. A `:` stays part of the id
+    /// (`user:a:b`). `None` when `id` can't name an object: empty, over 256
+    /// characters, or holding `#`, `@`, a space or a control character —
+    /// so a token whose `sub` is `group:eng#member` can't pass as that group.
+    pub fn user(id: &str, source: &'static str) -> Option<Identity> {
+        crate::authz::rebac::ObjectRef::parse(&format!("user:{id}")).ok()?;
+        Some(Identity::typed("user", id, source))
     }
 
     /// The same, carrying the token's or assertion's claims (a JSON object).
@@ -28,8 +46,7 @@ impl Identity {
     /// An identity from a JSON claims object: its `claim` (`"sub"` usually) as
     /// the subject id. `None` when the claim is missing or not a string.
     pub fn from_claims(claims: &str, claim: &str, source: &'static str) -> Option<Identity> {
-        let value = claim_value(claims, claim)?;
-        (!value.is_empty()).then(|| Identity::new(value, source).with_claims(claims))
+        Some(Identity::user(&claim_value(claims, claim)?, source)?.with_claims(claims))
     }
 
     /// The caller of the request being served on this thread or task.
@@ -48,12 +65,17 @@ impl Identity {
 
     /// The type part of the subject (`user`).
     pub fn subject_type(&self) -> &str {
-        self.subject.split_once(':').map_or("user", |(t, _)| t)
+        &self.kind
     }
 
     /// The id part of the subject (`alice`).
     pub fn subject_id(&self) -> &str {
-        self.subject.split_once(':').map_or(&self.subject, |(_, id)| id)
+        &self.id
+    }
+
+    /// The caller as a tuple subject: an object, never a set.
+    pub fn as_subject(&self) -> crate::authz::Subject {
+        crate::authz::Subject { object: crate::authz::ObjectRef { kind: self.kind.to_string(), id: self.id.to_string() }, relation: None }
     }
 
     /// Which authenticator vouched for it.

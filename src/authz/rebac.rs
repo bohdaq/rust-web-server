@@ -81,12 +81,15 @@ fn name(text: &str, what: &str) -> Result<String, AuthzError> {
     }
 }
 
+/// An id: anything but `#` (it ends an object), spaces and control
+/// characters — `@` is fine (`user:alice@example.com`): a tuple's object
+/// ends at its `#` and the relation, a name, at the next `@`.
 fn id(text: &str) -> Result<String, AuthzError> {
-    let ok = !text.is_empty() && text.len() <= MAX_NAME && !text.bytes().any(|b| matches!(b, b'#' | b'@' | b' ') || b.is_ascii_control());
+    let ok = !text.is_empty() && text.len() <= MAX_NAME && !text.bytes().any(|b| b == b'#' || b == b' ' || b.is_ascii_control());
     if ok {
         Ok(text.to_string())
     } else {
-        Err(AuthzError::Parse(format!("id {text:?}: 1–{MAX_NAME} characters, no '#', '@', spaces or control characters")))
+        Err(AuthzError::Parse(format!("id {text:?}: 1–{MAX_NAME} characters, no '#', spaces or control characters")))
     }
 }
 
@@ -146,8 +149,9 @@ pub struct Tuple {
 impl Tuple {
     pub fn parse(text: &str) -> Result<Tuple, AuthzError> {
         let text = text.trim();
-        let (left, subject) = text.split_once('@').ok_or_else(|| AuthzError::Parse(format!("tuple {text:?}: expected object#relation@subject")))?;
-        let (object, relation) = left.split_once('#').ok_or_else(|| AuthzError::Parse(format!("tuple {text:?}: expected object#relation@subject")))?;
+        let malformed = || AuthzError::Parse(format!("tuple {text:?}: expected object#relation@subject"));
+        let (object, rest) = text.split_once('#').ok_or_else(malformed)?;
+        let (relation, subject) = rest.split_once('@').ok_or_else(malformed)?;
         Ok(Tuple { object: ObjectRef::parse(object)?, relation: name(relation, "relation")?, subject: Subject::parse(subject)? })
     }
 }
@@ -465,12 +469,21 @@ impl Authorizer {
     /// Like [`check`](Self::check), with the path that granted it: each step
     /// `object#relation`, ending with the tuple that named the subject.
     pub fn explain(&self, subject: &str, relation: &str, object: &str) -> Result<Option<Vec<String>>, AuthzError> {
-        let subject = Subject::parse(subject)?;
-        let object = ObjectRef::parse(object)?;
+        self.explain_subject(&Subject::parse(subject)?, relation, &ObjectRef::parse(object)?)
+    }
+
+    /// [`check`](Self::check) with a subject and object already parsed —
+    /// for a caller, so an id is never re-read as text.
+    pub fn check_subject(&self, subject: &Subject, relation: &str, object: &ObjectRef) -> Result<bool, AuthzError> {
+        Ok(self.explain_subject(subject, relation, object)?.is_some())
+    }
+
+    /// [`explain`](Self::explain) with parsed parts.
+    pub fn explain_subject(&self, subject: &Subject, relation: &str, object: &ObjectRef) -> Result<Option<Vec<String>>, AuthzError> {
         if !self.schema.has_relation(&object.kind, relation) {
             return Err(AuthzError::Schema(format!("{}#{relation} isn't defined", object.kind)));
         }
-        Walk::new(self).run(&subject, object, relation.to_string())
+        Walk::new(self).run(subject, object.clone(), relation.to_string())
     }
 }
 

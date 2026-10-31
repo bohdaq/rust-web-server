@@ -14,7 +14,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `SamlSp`, `BasicAuthLayer`, `ForwardAuthLayer` (`.identity_header(..)`)
   and MCP bearer / OAuth tokens. Read it with `Identity::current()`; set
   your own with `authz::with_identity` / `scope_identity`. Not a header, so
-  clients can't forge it.
+  clients can't forge it. A value from a token, header or login is always a
+  user id (`Identity::user`): it can't name another type or a set such as
+  `group:eng#member`. Async handlers see the caller too.
 - Relationship-based access control (Zanzibar style): `authz::Schema`
   (relations as unions of `user`, `group#member`, another relation,
   `parent->viewer`), tuples (`doc:42#editor@user:alice`), `TupleStore` with
@@ -22,7 +24,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   with a visited set, 25 relations deep and 1000 reads at most. Fuzz target
   `authz_parse`.
 - `AuthzLayer` (`401` without a caller, `403` when not allowed) with object
-  templates (`doc:{path:2}`, `{query:k}`, `{header:H}`), and in the config
+  templates (`doc:{path:2}`, `{query:k}`, `{header:H}`; path segments
+  percent-decoded, and a path with `.`/`..` or an encoded `/` names nothing,
+  so `/docs/42/../7` can't pass a check on doc 42), and in the config
   file `[authz]` (schema per `[authz.type.<name>]`, seed `tuples`) plus
   `[route.middleware.authz] relation / object`; `rws --check` validates
   them; runtime tuples survive a reload. `ci/e2e/authz.sh`.

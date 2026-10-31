@@ -315,6 +315,9 @@ impl ProxyConfig {
         }
 
         validate_middleware("[middleware]", &self.global_middleware, authz.as_ref(), self.global_middleware.auth.is_some(), report);
+        if self.global_middleware.authz.is_some() {
+            report.warn("[middleware.authz]: applies to every request, /healthz, /readyz and /metrics included — probes without a caller get 401".to_string());
+        }
 
         let listeners = self.tcp_proxies.iter().map(|p| ("tcp_proxy", &p.name, &p.listen, &p.backends))
             .chain(self.udp_proxies.iter().map(|p| ("udp_proxy", &p.name, &p.listen, &p.backends)))

@@ -11,8 +11,10 @@ use crate::response::Response;
 use crate::server::ConnectionInfo;
 
 /// An object name built from the request: literal text with `{path:N}`
-/// (the Nth path segment, from 1), `{query:name}` and `{header:Name}`.
-/// `doc:{path:2}` on `/docs/42/edit` is `doc:42`.
+/// (the Nth path segment, from 1, percent-decoded), `{query:name}` and
+/// `{header:Name}`. `doc:{path:2}` on `/docs/42/edit` is `doc:42`. Query
+/// parameters and headers come from the client as sent — use a header only
+/// when something in front (forward auth's `copy_header`) sets it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectTemplate {
     parts: Vec<Part>,
@@ -70,13 +72,27 @@ impl ObjectTemplate {
 
     /// The object for `request`; `None` when a placeholder has no value or
     /// the result isn't a valid object name.
+    ///
+    /// Path segments are percent-decoded once. A path with a `.` or `..`
+    /// segment (raw or encoded), or a segment that decodes to something with
+    /// a `/`, names nothing: a proxy passes the path on as it came, and a
+    /// backend that resolves `/docs/42/../7` would serve doc 7 after a check
+    /// on doc 42.
     pub fn render(&self, request: &Request) -> Option<ObjectRef> {
-        let path = crate::url::URL::request_target_path(&request.request_uri).unwrap_or("/");
+        let raw = crate::url::URL::request_target_path(&request.request_uri).unwrap_or("/");
+        let mut segments = Vec::new();
+        for segment in raw.split('/').filter(|s| !s.is_empty()) {
+            let decoded = crate::app::controller::static_resource::percent_decode_path(segment).ok()?.into_owned();
+            if decoded == "." || decoded == ".." || decoded.contains('/') || decoded.contains('\\') {
+                return None;
+            }
+            segments.push(decoded);
+        }
         let mut out = String::new();
         for part in &self.parts {
             match part {
                 Part::Literal(text) => out.push_str(text),
-                Part::Path(n) => out.push_str(path.split('/').filter(|s| !s.is_empty()).nth(n - 1)?),
+                Part::Path(n) => out.push_str(segments.get(n - 1)?),
                 Part::Query(name) => {
                     let query = request.request_uri.split_once('?')?.1;
                     let value = query.split('&').find_map(|pair| pair.split_once('=').filter(|(k, _)| k == name).map(|(_, v)| v))?;
@@ -95,7 +111,8 @@ impl ObjectTemplate {
 type Pick = Arc<dyn Fn(&Request) -> Option<(String, ObjectRef)> + Send + Sync>;
 
 /// Middleware that lets a request through when its caller
-/// ([`Identity::current`], set by an authenticator outside this layer) has
+/// ([`Identity::current`], set by an authenticator wrapped before — outside —
+/// this layer) has
 /// a relation to an object: `401` without a caller, `403` when the answer
 /// is no, the object can't be named, or the check fails (logged).
 ///
@@ -106,9 +123,10 @@ type Pick = Arc<dyn Fn(&Request) -> Option<(String, ObjectRef)> + Send + Sync>;
 ///
 /// let schema = Schema::new().relation("doc", "viewer", "user").unwrap();
 /// let authz = Authorizer::new(schema, MemoryStore::new()).unwrap();
+/// // The first layer wrapped is the outermost: wrap the authenticator first —
+/// // e.g. `.wrap(JwtLayer::new(secret))` (the `auth` feature) — so it has set
+/// // the caller by the time this layer checks.
 /// let app = App::new().wrap(AuthzLayer::new(authz, "viewer", "doc:{path:2}").unwrap()); // /docs/42 → doc:42
-/// // …then wrap an authenticator outside it, e.g. `.wrap(JwtLayer::new(secret))`
-/// // (the `auth` feature): it sets the caller this layer checks.
 /// ```
 #[derive(Clone)]
 pub struct AuthzLayer {
@@ -150,7 +168,7 @@ impl Middleware for AuthzLayer {
         let Some((relation, object)) = (self.pick)(request) else {
             return Ok(denied(crate::response::STATUS_CODE_REASON_PHRASE.n403_forbidden, "forbidden"));
         };
-        match self.authz.check(caller.subject(), &relation, &object.to_string()) {
+        match self.authz.check_subject(&caller.as_subject(), &relation, &object) {
             Ok(true) => next.execute(request, connection),
             Ok(false) => Ok(denied(crate::response::STATUS_CODE_REASON_PHRASE.n403_forbidden, "forbidden")),
             Err(e) => {

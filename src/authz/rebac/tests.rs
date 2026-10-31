@@ -21,12 +21,10 @@ fn authz(tuples: &[&str]) -> Authorizer {
 
 #[test]
 fn tuples_parse_and_print_back() {
-    for text in ["doc:42#editor@user:alice", "doc:42#viewer@group:eng#member", "folder:a-b.c#owner@user:x_1", "doc:p/q#viewer@user:a.b@c"] {
-        match Tuple::parse(text) {
-            Ok(t) => assert_eq!(t.to_string(), text),
-            Err(e) => assert_eq!(text, "doc:p/q#viewer@user:a.b@c", "{e}"),
-        }
+    for text in ["doc:42#editor@user:alice", "doc:42#viewer@group:eng#member", "folder:a-b.c#owner@user:x_1", "doc:p/q#viewer@user:alice@example.com", "doc:a@b#owner@user:c"] {
+        assert_eq!(Tuple::parse(text).unwrap().to_string(), text);
     }
+    assert_eq!(Tuple::parse("doc:a@b#owner@user:c").unwrap().object.id, "a@b", "the object ends at '#'");
     for bad in ["", "doc:42#editor", "doc#editor@user:a", "doc:#editor@user:a", "doc:42#@user:a", "doc:42#ed itor@user:a", "doc:42#editor@user", "d oc:1#r@user:a", "doc:4\n2#r@user:a"] {
         assert!(Tuple::parse(bad).is_err(), "{bad:?}");
     }

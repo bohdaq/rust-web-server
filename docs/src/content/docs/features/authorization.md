@@ -21,8 +21,12 @@ authenticated:
 | `ForwardAuthLayer` | `user:<value>` | `.identity_header("X-User-Id")`: a header in the auth service's 2xx answer |
 | MCP (`require_bearer_tokens`, `require_oauth`) | `user:<sub>` | tool handlers included |
 
-A value that already has a `type:` prefix (`service:billing`) keeps it.
-Handlers read the caller with `Identity::current()`:
+A value from a token, header or login is always a **user id**, taken as
+is (`user:alice@example.com`, `user:service:billing`) — it can't name
+another type or a set like `group:eng#member`; a value with `#`, a space or
+a control character, empty or over 256 characters, gives no identity.
+`Identity::new("service:billing", …)` in your own code can name another
+type. Handlers read the caller with `Identity::current()`:
 
 ```rust
 use rust_web_server::app::App;
@@ -56,8 +60,9 @@ use rust_web_server::authz::{with_identity, Identity};
 with_identity(Identity::new("service:billing", "api-key"), || next.execute(request, connection))
 ```
 
-Work handed to another thread (a spawned thread, an MCP task) doesn't carry
-the identity along; pass it explicitly.
+Async handlers (`App::with_async_state`) see the caller too. Work you hand
+to another thread yourself (a spawned thread, an MCP task) doesn't carry it
+along; pass it explicitly.
 
 ## Relationships
 
@@ -108,8 +113,9 @@ authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allow
 - A check walks the graph without recursion, ignores cycles, and stops with
   `AuthzError::Limit` after 25 relations deep or 1000 tuple reads — treat
   that as a "no".
-- Names are letters, digits, `_`, `-` and `.`; ids anything but `#`, `@`,
-  spaces and control characters; both up to 256 characters.
+- Names are letters, digits, `_`, `-` and `.`; ids anything but `#`,
+  spaces and control characters (`@` and `:` are fine); both up to 256
+  characters.
 
 Tuples live in a `TupleStore`: `MemoryStore` (lost on restart) or
 `SqlStore` (below).
@@ -145,9 +151,10 @@ the schema and tuples without connecting.
 ## Protecting routes
 
 `AuthzLayer` lets a request through when its caller has a relation to an
-object named from the request: `{path:N}` (the Nth path segment),
-`{query:name}`, `{header:Name}`. Put the authenticator outside it — it sets
-the caller:
+object named from the request: `{path:N}` (the Nth path segment,
+percent-decoded), `{query:name}`, `{header:Name}`. The first layer wrapped
+is the outermost, so wrap the authenticator **first** — it sets the caller
+this layer checks:
 
 ```rust
 use rust_web_server::app::App;
@@ -156,9 +163,15 @@ use rust_web_server::authz::AuthzLayer;
 use rust_web_server::core::New;
 
 let app = App::new()
-    .wrap(AuthzLayer::new(authz.clone(), "viewer", "doc:{path:2}")?) // /docs/42 → doc:42
-    .wrap(JwtLayer::new(b"secret"));
+    .wrap(JwtLayer::new(b"secret"))                                   // outermost: who is calling
+    .wrap(AuthzLayer::new(authz.clone(), "viewer", "doc:{path:2}")?); // then: may they? /docs/42 → doc:42
 ```
+
+A path with a `.` or `..` segment (raw or percent-encoded) or an encoded `/`
+names no object, so it's refused: a proxied backend that resolves
+`/docs/42/../7` would otherwise serve doc 7 after a check on doc 42.
+`{query:…}` and `{header:…}` are whatever the client sent — use a header
+only when something in front (forward auth's `copy_header`) sets it.
 
 No caller → `401`; not allowed, an object the request doesn't name, or a
 check that hit a limit (logged) → `403`. `AuthzLayer::with(authz, |request|
