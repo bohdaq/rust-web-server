@@ -241,6 +241,31 @@ fn my_handler(_req: &_, _params: &_, _conn: &_, _state: &_) -> Response {
 }
 ```
 
+## HTTP/3 backends
+
+`H3ReverseProxy` forwards to `https://` backends over HTTP/3 (QUIC), with the
+same builder methods as `ReverseProxy` (since 18.13.0, `http3` feature —
+the default):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::H3ReverseProxy;
+
+let proxy = H3ReverseProxy::new(["https://edge1.internal:443", "https://edge2.internal:443"])
+    .path_prefix("/api")
+    .tls_ca_file("/etc/rws/internal-ca.pem")?  // or the WebPKI roots by default
+    .name("edge");                            // the fallback metric's upstream label
+let app = App::new().wrap(proxy);
+```
+
+One multiplexed QUIC connection per backend is reused across requests;
+bodies stream both ways and trailers are kept. A backend QUIC can't reach is
+sent the request over HTTPS on TCP and stays on TCP for 5 minutes,
+counted by `rws_upstream_h3_fallbacks_total{upstream="edge"}`. In the config
+file the same is `[[upstream]] protocol = "h3"` — see
+[HTTP/3 upstreams](/proxy/config-driven/#http3-upstreams).
+
 ## 502 Bad Gateway
 
 `ReverseProxy` returns `502 Bad Gateway` with `Content-Type: text/plain` when:

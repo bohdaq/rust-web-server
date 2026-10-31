@@ -1510,6 +1510,179 @@ impl crate::middleware::Middleware for H2ReverseProxy {
     }
 }
 
+// ── HTTP/3 reverse proxy ──────────────────────────────────────────────────────
+
+/// Reverse proxy that forwards requests to `https://` backends over HTTP/3
+/// (QUIC). Since 18.13.0; requires the `http3` feature (default).
+///
+/// A backend QUIC can't reach (UDP blocked, no handshake within the connect
+/// timeout, a TLS failure) is sent the request over HTTPS on TCP instead,
+/// and stays on TCP for five minutes; `rws_upstream_h3_fallbacks_total`
+/// counts it under the proxy's [`name`](Self::name).
+///
+/// ```rust,no_run
+/// use rust_web_server::app::App;
+/// use rust_web_server::core::New;
+/// use rust_web_server::proxy::H3ReverseProxy;
+///
+/// let proxy = H3ReverseProxy::new(["https://edge1.internal:443", "https://edge2.internal:443"])
+///     .path_prefix("/api")
+///     .tls_ca_file("/etc/rws/internal-ca.pem")
+///     .unwrap();
+/// let app = App::new().wrap(proxy);
+/// ```
+#[cfg(feature = "http3")]
+pub struct H3ReverseProxy {
+    inner: ReverseProxy,
+    name: String,
+    /// Backends on TCP until the time kept here.
+    tcp_until: std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
+}
+
+#[cfg(feature = "http3")]
+impl H3ReverseProxy {
+    /// A proxy distributing requests across `backends` (`https://host:port`,
+    /// port 443 by default) in round-robin order. Certificates are checked
+    /// against the WebPKI roots unless [`tls_ca_file`](Self::tls_ca_file)
+    /// says otherwise. A backend that isn't `https://` is reached over
+    /// HTTP/1.1 on TCP.
+    pub fn new<I, S>(backends: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        H3ReverseProxy { inner: ReverseProxy::new(backends), name: "h3-reverse-proxy".to_string(), tcp_until: std::sync::Mutex::default() }
+    }
+
+    /// The `upstream` label of this proxy's fallback metric.
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    /// Only proxy requests whose URI starts with `prefix`; pass others through.
+    pub fn path_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.inner = self.inner.path_prefix(prefix);
+        self
+    }
+
+    /// QUIC handshake (and TCP connect) timeout (default: 5 s).
+    pub fn connect_timeout_ms(mut self, ms: u64) -> Self {
+        self.inner = self.inner.connect_timeout_ms(ms);
+        self
+    }
+
+    /// Longest wait for the backend — the response head and each body
+    /// chunk (default: 30 s).
+    pub fn read_timeout_ms(mut self, ms: u64) -> Self {
+        self.inner = self.inner.read_timeout_ms(ms);
+        self
+    }
+
+    /// Trust the CA certificates in the PEM file `path` instead of the
+    /// WebPKI roots.
+    pub fn tls_ca_file(mut self, path: &str) -> Result<Self, String> {
+        self.inner = self.inner.tls_ca_file(path)?;
+        Ok(self)
+    }
+
+    /// Present a client certificate to backends that require one.
+    pub fn tls_client_cert(mut self, cert: &str, key: &str) -> Result<Self, String> {
+        self.inner = self.inner.tls_client_cert(cert, key)?;
+        Ok(self)
+    }
+
+    fn matches(&self, request: &Request) -> bool {
+        self.inner.path_prefix.as_ref().is_none_or(|prefix| request.request_uri.starts_with(prefix.as_str()))
+    }
+
+    fn on_tcp(&self, key: &str) -> bool {
+        let mut tcp_until = self.tcp_until.lock().unwrap_or_else(|e| e.into_inner());
+        match tcp_until.get(key) {
+            Some(until) if std::time::Instant::now() < *until => true,
+            Some(_) => {
+                tcp_until.remove(key);
+                false
+            }
+            None => false,
+        }
+    }
+
+    /// One attempt at `backend`: HTTP/3 unless it's on TCP, TCP when QUIC
+    /// can't connect.
+    fn attempt(&self, backend: &Backend, request: &Request, connection: &crate::server::ConnectionInfo) -> Result<Response, String> {
+        let key = format!("{}:{}", backend.host, backend.port);
+        if backend.tls && !self.on_tcp(&key) {
+            let config = match &self.inner.trust {
+                Some(trust) => trust.client_config(),
+                None => tls_client_config(),
+            };
+            let target = h3_upstream::Target {
+                host: &backend.host,
+                port: backend.port,
+                tls: &config,
+                connect_timeout: self.inner.connect_timeout,
+                read_timeout: self.inner.read_timeout,
+            };
+            match h3_upstream::forward(request, Peer::of(connection), &target) {
+                Err(h3_upstream::H3Error::Connect(e)) => {
+                    self.tcp_until.lock().unwrap_or_else(|e| e.into_inner()).insert(key.clone(), std::time::Instant::now() + crate::proxy_config::H3_FALLBACK);
+                    crate::proxy_config::upstream::observe_h3_fallback(&self.name);
+                    eprintln!("{}: HTTP/3 to {key} failed ({e}); using TCP for {} s", self.name, crate::proxy_config::H3_FALLBACK.as_secs());
+                }
+                result => return result.map_err(|e| e.to_string()),
+            }
+        }
+        forward_upstream_trusting(
+            &self.inner.pool,
+            request,
+            Peer::of(connection),
+            &backend.host,
+            backend.port,
+            backend.tls,
+            self.inner.trust.as_deref(),
+            self.inner.connect_timeout,
+            self.inner.read_timeout,
+        )
+    }
+}
+
+#[cfg(feature = "http3")]
+impl crate::middleware::Middleware for H3ReverseProxy {
+    fn handle(
+        &self,
+        request: &crate::request::Request,
+        connection: &crate::server::ConnectionInfo,
+        next: &dyn crate::application::Application,
+    ) -> Result<crate::response::Response, String> {
+        if !self.matches(request) {
+            return next.execute(request, connection);
+        }
+        if self.inner.backends.is_empty() {
+            return Ok(bad_gateway());
+        }
+        // A streamed request body can be sent once: no second backend then.
+        let attempts = if matches!(request.body, crate::request::Body::Stream(_)) { 1 } else { self.inner.backends.len() };
+        let n = self.inner.backends.len();
+        let start = self.inner.counter.fetch_add(1, Ordering::Relaxed);
+        for attempt in 0..attempts {
+            if let Ok(response) = self.attempt(&self.inner.backends[(start + attempt) % n], request, connection) {
+                return Ok(response);
+            }
+        }
+        Ok(bad_gateway())
+    }
+
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &crate::server::ConnectionInfo) -> bool {
+        true
+    }
+
+    /// Requests this proxy forwards are sent as their body arrives.
+    fn answers_streamed_body(&self, request: &Request, _connection: &crate::server::ConnectionInfo) -> bool {
+        self.matches(request)
+    }
+}
+
 /// Forward `request` over HTTP/2 to `url` (`h2://`, `grpc://`, `h2s://`,
 /// `grpcs://`, `https://` or `host:port`) — the config file's `grpc` action.
 /// `tls` forces TLS for a bare `host:port` (`[[upstream]] tls = true`).

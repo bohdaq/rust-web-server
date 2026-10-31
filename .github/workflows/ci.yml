@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -153,6 +153,9 @@ jobs:
       - name: Request mirroring from the config file (copies, share, slow and down mirrors)
         if: matrix.check == 'mirror'
         run: ci/e2e/mirror.sh target/debug/rws
+      - name: HTTP/3 upstreams (rws to rws over QUIC, TCP fallback)
+        if: matrix.check == 'h3-upstream'
+        run: ci/e2e/h3_upstream.sh target/debug/rws
       - name: 103 Early Hints from config routes and backends (h2c, HTTP/1.1 opt-in)
         if: matrix.check == 'early-hints'
         run: ci/e2e/early_hints.sh target/debug/rws

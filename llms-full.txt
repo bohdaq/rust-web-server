@@ -12924,6 +12924,31 @@ fn my_handler(_req: &_, _params: &_, _conn: &_, _state: &_) -> Response {
 }
 ```
 
+## HTTP/3 backends
+
+`H3ReverseProxy` forwards to `https://` backends over HTTP/3 (QUIC), with the
+same builder methods as `ReverseProxy` (since 18.13.0, `http3` feature —
+the default):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::H3ReverseProxy;
+
+let proxy = H3ReverseProxy::new(["https://edge1.internal:443", "https://edge2.internal:443"])
+    .path_prefix("/api")
+    .tls_ca_file("/etc/rws/internal-ca.pem")?  // or the WebPKI roots by default
+    .name("edge");                            // the fallback metric's upstream label
+let app = App::new().wrap(proxy);
+```
+
+One multiplexed QUIC connection per backend is reused across requests;
+bodies stream both ways and trailers are kept. A backend QUIC can't reach is
+sent the request over HTTPS on TCP and stays on TCP for 5 minutes,
+counted by `rws_upstream_h3_fallbacks_total{upstream="edge"}`. In the config
+file the same is `[[upstream]] protocol = "h3"` — see
+[HTTP/3 upstreams](/proxy/config-driven/#http3-upstreams).
+
 ## 502 Bad Gateway
 
 `ReverseProxy` returns `502 Bad Gateway` with `Content-Type: text/plain` when:
@@ -20112,6 +20137,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `LoadBalancing` | `proxy` | Strategy enum passed to `ReverseProxy::strategy()` |
 | `ConnPool` / `Pool` | `proxy` | Per-backend idle-connection pool (`ConnPool = Pool`); `ConnPool::new(max_idle, idle_timeout)`, share with `ReverseProxy::with_pool`. A stale pooled connection is retried once only for idempotent methods |
 | `UpstreamTls` | `proxy` | TLS settings for upstreams: a PEM CA file instead of WebPKI and/or a client certificate (`UpstreamTls::new(ca, client)`; `tls_ca_file`, `tls_client_cert` on `ReverseProxy`/`H2ReverseProxy`/`GrpcProxy`, `[[upstream]] tls_ca_file`/`tls_client_cert_file`/`tls_client_key_file`); unloadable → 502 |
+| `H3ReverseProxy` | `proxy` (`http3`) | HTTP/3 (QUIC) upstream proxy for `https://` backends: pooled multiplexed connections, bodies streamed both ways, trailers; falls back to TCP for a backend QUIC can't reach (`rws_upstream_h3_fallbacks_total`) (18.13.0). See [HTTP/3 backends](/proxy/reverse-proxy/#http3-backends) |
 | `H2ReverseProxy` | `proxy` (`http2`) | HTTP/2 upstream proxy: `h2://` plain, `h2s://`/`https://` TLS; pooled connections, bodies streamed both ways, trailers kept (18.3.0) |
 | `Trailers` | `response` | Trailer fields sent after a body (`Response::trailers`, HTTP/2 and HTTP/3): a shared slot a streamed body's producer fills before it ends (18.3.0) |
 | `GrpcWebLayer` | `proxy` (`http2`) | Translates gRPC-web (`application/grpc-web[-text]`) to gRPC for the layers after it and the response back, trailers as the body's last frame (18.3.0). See [gRPC-web](/proxy/grpc-proxy/#grpc-web-from-browsers) |

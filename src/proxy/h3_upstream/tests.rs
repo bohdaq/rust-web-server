@@ -268,3 +268,35 @@ fn rws_check_reports_protocol_mistakes() {
     assert!(errors(base("h3", "http://10.0.0.5:80")).contains("needs https:// backends"));
     assert!(errors(base("quic", "https://10.0.0.5:443")).contains("protocol must be"));
 }
+
+// ── H3ReverseProxy ──────────────────────────────────────────────────────────────
+
+#[test]
+fn the_library_proxy_forwards_over_http3_and_falls_back_to_tcp() {
+    use crate::middleware::WithMiddleware;
+    let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+    let ca = TempPath::new("h3_reverse_proxy_ca.pem");
+    std::fs::write(ca.as_str(), certified.cert.pem()).unwrap();
+    let (endpoint, _) = start_backend_on("127.0.0.1:0".parse().unwrap(), Some((certified.cert.pem(), certified.signing_key.serialize_pem(), certified.cert.der().to_vec())));
+    let proxy = crate::proxy::H3ReverseProxy::new([format!("https://localhost:{}", endpoint.local_addr().unwrap().port())])
+        .path_prefix("/headers")
+        .tls_ca_file(ca.as_str())
+        .unwrap();
+    let app = WithMiddleware::new(crate::app::App::with_state(()).get("/local", |_, _, _, _| Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "local"))).wrap(proxy);
+    let client = crate::test_client::TestClient::new(app);
+    assert!(client.get("/headers").send().body_text().starts_with("HTTP/3.0 via=3 rws"));
+    assert_eq!(client.get("/local").send().body_text(), "local", "outside the prefix: passed through");
+
+    let (port, _, _, pem) = crate::proxy::tests::tls_backend_with_pem(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ntcp", 100);
+    let tcp_ca = TempPath::new("h3_reverse_proxy_tcp_ca.pem");
+    std::fs::write(tcp_ca.as_str(), pem).unwrap();
+    let fallback = crate::proxy::H3ReverseProxy::new([format!("https://localhost:{port}")])
+        .name("library-fallback-test")
+        .connect_timeout_ms(1000)
+        .tls_ca_file(tcp_ca.as_str())
+        .unwrap();
+    let client = crate::test_client::TestClient::new(WithMiddleware::new(crate::app::App::new()).wrap(fallback));
+    assert_eq!(client.get("/x").send().body_text(), "tcp");
+    assert_eq!(client.get("/x").send().body_text(), "tcp");
+    assert!(crate::proxy_config::upstream::prometheus_text().contains("rws_upstream_h3_fallbacks_total{upstream=\"library-fallback-test\"} 1"));
+}

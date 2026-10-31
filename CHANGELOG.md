@@ -14,7 +14,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   streaming both ways, trailers), on both forwarding paths. A backend QUIC
   can't reach is served over TCP and kept there for 5 minutes,
   counted by `rws_upstream_h3_fallbacks_total`. `rws --check` validates
-  `protocol`.
+  `protocol`. `proxy::H3ReverseProxy` does the same in code.
+  `ci/e2e/h3_upstream.sh`: rws to rws over QUIC, and the TCP fallback.
 
 ## 18.12.0 — 2026-10-31
 
