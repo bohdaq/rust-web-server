@@ -30,11 +30,21 @@ let layer = CacheLayer::memory(500);
 
 ### `.ttl(secs)`
 
-Overrides the time-to-live for all cached entries.
+The longest an entry is kept. A response can ask for less with `Cache-Control`: `s-maxage` (meant for shared caches like this one), else `max-age`, is used when it's shorter than the `ttl`; a response that says neither is kept for the `ttl`. `max-age=0` isn't stored at all.
 
 ```rust
-let layer = CacheLayer::memory(500).ttl(300); // 5 minutes
+let layer = CacheLayer::memory(500).ttl(300); // 5 minutes at most
 ```
+
+| Response says | Kept for (with `ttl(300)`) |
+|---|---|
+| nothing | 300 s |
+| `Cache-Control: max-age=60` | 60 s |
+| `Cache-Control: max-age=60, s-maxage=120` | 120 s |
+| `Cache-Control: max-age=3600` | 300 s |
+| `Cache-Control: max-age=0` | not stored |
+
+Since 18.11.0. Before, every cacheable response was kept for the full `ttl` whatever its `max-age`.
 
 ### `.vary_by_header(name)`
 

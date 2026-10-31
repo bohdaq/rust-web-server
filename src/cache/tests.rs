@@ -407,3 +407,39 @@ fn cookie_setting_partial_and_streamed_responses_are_not_stored() {
     let plain = cache.handle(&get("/part"), &conn(), &WhoAmI).unwrap();
     assert!(plain.headers.iter().all(|h| h.name != "Age"), "a Range response filled the cache");
 }
+
+#[test]
+fn freshness_follows_s_maxage_then_max_age_capped_by_ttl() {
+    use super::freshness;
+    use std::time::Duration;
+    let cap = Duration::from_secs(60);
+    let f = |cc: &str| freshness(&response_with_cache_control(cc), cap).as_secs();
+    assert_eq!(freshness(&ok_response(), cap).as_secs(), 60, "no Cache-Control: the layer's ttl");
+    assert_eq!(f("max-age=10"), 10);
+    assert_eq!(f("public, max-age=10, s-maxage=30"), 30, "s-maxage wins for a shared cache");
+    assert_eq!(f("max-age=3600"), 60, "capped by the ttl");
+    assert_eq!(f("max-age=0"), 0);
+    assert_eq!(f("MAX-AGE = 5"), 5);
+    assert_eq!(f("max-age=\"7\""), 7);
+    assert_eq!(f("max-age=soon"), 60, "a bad value is ignored");
+    assert_eq!(f("max-age=20, max-age=5"), 5, "repeated: the smaller");
+    assert_eq!(f("stale-while-revalidate=99"), 60, "other directives don't count");
+}
+
+#[test]
+fn max_age_zero_is_not_cached_and_max_age_expires_entries() {
+    let zero = CountingApp::new(response_with_cache_control("max-age=0"));
+    let layer = CacheLayer::memory(100).ttl(60);
+    layer.handle(&get("/z"), &conn(), &zero).unwrap();
+    layer.handle(&get("/z"), &conn(), &zero).unwrap();
+    assert_eq!(2, zero.call_count());
+
+    let short = CountingApp::new(response_with_cache_control("max-age=1"));
+    let layer = CacheLayer::memory(100).ttl(60);
+    layer.handle(&get("/s"), &conn(), &short).unwrap();
+    layer.handle(&get("/s"), &conn(), &short).unwrap();
+    assert_eq!(1, short.call_count(), "fresh for a second");
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    layer.handle(&get("/s"), &conn(), &short).unwrap();
+    assert_eq!(2, short.call_count(), "stale after max-age, though the ttl is 60");
+}

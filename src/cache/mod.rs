@@ -17,6 +17,10 @@
 //!   (`stream_file` / `stream_pipe`, not held in memory) are **not** cached.
 //! - Request `Cache-Control: no-cache` — cache is bypassed, handler is called,
 //!   but the fresh response **is** stored (revalidation).
+//! - How long: the response's `Cache-Control: s-maxage`, else `max-age`,
+//!   capped by the layer's [`ttl`](CacheLayer::ttl); the `ttl` when it says
+//!   neither. `max-age=0` is not stored (since 18.11.0; before, every
+//!   response was kept for the `ttl`). Hits carry an `Age` header.
 //!
 //! # Example
 //!
@@ -49,6 +53,9 @@ use crate::server::ConnectionInfo;
 struct CachedEntry {
     response: Response,
     inserted_at: Instant,
+    /// How long this entry is fresh: the layer's `ttl`, or less when the
+    /// response's `Cache-Control` said so.
+    ttl: Duration,
 }
 
 struct CacheStore {
@@ -62,8 +69,8 @@ impl CacheStore {
         CacheStore { entries: HashMap::new(), order: VecDeque::new() }
     }
 
-    fn get(&self, key: &str, ttl: Duration) -> Option<&CachedEntry> {
-        self.entries.get(key).filter(|e| e.inserted_at.elapsed() < ttl)
+    fn get(&self, key: &str) -> Option<&CachedEntry> {
+        self.entries.get(key).filter(|e| e.inserted_at.elapsed() < e.ttl)
     }
 
     fn insert(&mut self, key: String, entry: CachedEntry, capacity: usize) {
@@ -83,15 +90,39 @@ impl CacheStore {
         self.entries.insert(key, entry);
     }
 
-    fn purge_expired(&mut self, ttl: Duration) {
+    fn purge_expired(&mut self) {
         let expired: Vec<String> = self.entries.iter()
-            .filter(|(_, e)| e.inserted_at.elapsed() >= ttl)
+            .filter(|(_, e)| e.inserted_at.elapsed() >= e.ttl)
             .map(|(k, _)| k.clone())
             .collect();
         for k in &expired {
             self.entries.remove(k);
             self.order.retain(|o| o != k);
         }
+    }
+}
+
+/// How long `response` may be served from a shared cache: its
+/// `Cache-Control: s-maxage`, else `max-age` (RFC 9111 §5.2.2), capped by
+/// `cap`, the layer's `ttl`; `cap` when it says neither. Zero: don't store
+/// (`max-age=0`). A directive whose value isn't a number is ignored.
+pub(crate) fn freshness(response: &Response, cap: Duration) -> Duration {
+    let mut s_maxage = None;
+    let mut max_age = None;
+    for h in response.headers.iter().filter(|h| h.name.eq_ignore_ascii_case(Header::_CACHE_CONTROL)) {
+        for directive in h.value.split(',') {
+            let Some((name, value)) = directive.split_once('=') else { continue };
+            let Ok(secs) = value.trim().trim_matches('"').parse::<u64>() else { continue };
+            match name.trim().to_ascii_lowercase().as_str() {
+                "s-maxage" => s_maxage = Some(s_maxage.map_or(secs, |v: u64| v.min(secs))),
+                "max-age" => max_age = Some(max_age.map_or(secs, |v: u64| v.min(secs))),
+                _ => {}
+            }
+        }
+    }
+    match s_maxage.or(max_age) {
+        Some(secs) => cap.min(Duration::from_secs(secs)),
+        None => cap,
     }
 }
 
@@ -311,7 +342,7 @@ impl Middleware for CacheLayer {
             // Check for a valid cache hit.
             let key = self.cache_key(request);
             let guard = self.store().lock().unwrap();
-            if let Some(entry) = guard.get(&key, self.ttl) {
+            if let Some(entry) = guard.get(&key) {
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 return Ok(Self::cached_response(entry));
             }
@@ -321,13 +352,14 @@ impl Middleware for CacheLayer {
         // Cache miss (or bypass): call the handler.
         let response = next.execute(request, connection)?;
 
-        if self.response_is_cacheable(request, &response) {
+        let ttl = freshness(&response, self.ttl);
+        if !ttl.is_zero() && self.response_is_cacheable(request, &response) {
             let key = self.cache_key(request);
             let mut guard = self.store().lock().unwrap();
-            guard.purge_expired(self.ttl);
+            guard.purge_expired();
             guard.insert(
                 key,
-                CachedEntry { response: response.clone(), inserted_at: Instant::now() },
+                CachedEntry { response: response.clone(), inserted_at: Instant::now(), ttl },
                 self.capacity,
             );
             self.stored.store(guard.entries.len(), Ordering::Relaxed);

@@ -16,6 +16,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `MirrorLayer` in code, `rws_mirror_requests_total` on `/metrics`,
   `ci/e2e/mirror.sh`.
 
+### Changed
+
+- The response cache honours the response's `Cache-Control: s-maxage`, else
+  `max-age`, when shorter than the layer's `ttl`; `max-age=0` responses are
+  no longer stored. Before, every cacheable response was kept for the full
+  `ttl`.
+
 ## 18.10.2 — 2026-10-30
 
 ### Added
