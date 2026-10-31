@@ -132,6 +132,34 @@ Evicts all entries immediately:
 cache_handle.clear();
 ```
 
+## Purging
+
+`purge` removes part of a cache (memory or disk) and returns how many entries went. A target matches the request path and query as cached, every `Vary` variant included:
+
+```rust
+use rust_web_server::cache::Purge;
+
+cache_handle.purge(&Purge::Exact("/products/42".into()));
+cache_handle.purge(&Purge::Prefix("/products/".into()));
+cache_handle.purge(&Purge::All); // same as clear()
+```
+
+### HTTP `PURGE`
+
+`.purge_token(token)` makes the layer answer the `PURGE` method itself, nginx/Varnish style (config file: `purge_token_env`):
+
+```bash
+curl -X PURGE -H "Authorization: Bearer $TOKEN" https://example.com/products/42
+curl -X PURGE -H "Authorization: Bearer $TOKEN" 'https://example.com/products/*'
+# {"purged":3}
+```
+
+A trailing `*` purges a prefix. A wrong or missing token gets `401`; the request never reaches the application. Without a token set, `PURGE` passes through to the application like any other method. rws accepts `PURGE` as a request method since 18.11.0 (before, it was a `400`).
+
+### Admin API and MCP
+
+Named caches go in `cache::registry`: the binary registers its own as `app`, and every config route's cache as `route:<name>` (rebuilt on each reload). The admin API lists them at `GET /admin/api/v1/caches` and purges with `DELETE /admin/api/v1/caches/<name>?path=…` or `?prefix=…` (see [Admin API](/deployment/admin/)); the admin UI has a purge field on its Controls page. The `cache_clear` MCP tool takes the same optional `path` / `prefix`. Library apps call `cache::registry::register(name, layer.clone())` to add theirs.
+
 ## Full example
 
 ```rust

@@ -66,7 +66,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.llm.key" => super::llm::KEY_KEYS.to_vec(),
         "route.middleware" => vec!["timeout_ms", "max_body_size"],
         "route.middleware.rate_limit" => vec!["max_requests", "window_secs"],
-        "route.middleware.cache" => vec!["ttl_secs", "vary_by", "dir", "max_size"],
+        "route.middleware.cache" => vec!["ttl_secs", "vary_by", "dir", "max_size", "purge_token_env"],
         "route.middleware.auth" => vec!["type", "token_env", "secret_env", "htpasswd_file"],
         "route.middleware.ip_filter" => vec!["allow", "deny"],
         "route.middleware.mirror" => vec!["upstream", "backends", "percent"],
@@ -380,6 +380,9 @@ fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigRe
     if let Some(cache) = &mw.cache {
         if crate::proxy_config::cache_max_bytes(&cache.max_size).is_none() {
             report.error(format!("{label}: cache max_size {:?} is not a size (e.g. \"512M\")", cache.max_size));
+        }
+        if !cache.purge_token_env.is_empty() && !crate::config_check::offline() && std::env::var(&cache.purge_token_env).unwrap_or_default().trim().is_empty() {
+            report.error(format!("{label}: cache purge_token_env {} is unset or empty; PURGE is refused", cache.purge_token_env));
         }
         if !cache.max_size.is_empty() && cache.dir.is_empty() {
             report.warn(format!("{label}: cache max_size only applies with `dir` (the memory cache is bounded by entries)"));

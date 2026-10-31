@@ -235,11 +235,20 @@ fn rws_mcp_tools(
         )
         .tool(
             "cache_clear",
-            "Evict all entries from the response cache",
-            r#"{"type":"object"}"#,
-            move |_| {
-                cache3.clear();
-                Ok(McpContent::text("cache cleared"))
+            "Evict entries from the response cache: all of them, one request target (`path`, e.g. /products/42) or every target under a `prefix`",
+            r#"{"type":"object","properties":{"path":{"type":"string","description":"One request target to purge"},"prefix":{"type":"string","description":"Purge every target starting with this"}}}"#,
+            move |args| {
+                let path = extract_arg(args, "path").filter(|p| !p.is_empty());
+                let prefix = extract_arg(args, "prefix").filter(|p| !p.is_empty());
+                if path.is_none() && prefix.is_none() {
+                    cache3.clear();
+                    return Ok(McpContent::text("cache cleared"));
+                }
+                let target = match path {
+                    Some(p) => rust_web_server::cache::Purge::Exact(p),
+                    None => rust_web_server::cache::Purge::Prefix(prefix.unwrap_or_default()),
+                };
+                Ok(McpContent::text(format!("{} entries purged", cache3.purge(&target))))
             },
         )
         // ── rate limiting ────────────────────────────────────────────────────

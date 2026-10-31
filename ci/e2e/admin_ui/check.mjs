@@ -1,10 +1,10 @@
 // The admin UI in headless Chromium against a running rws (ci/e2e/admin_ui.sh):
 // no CSP violations or script errors, a wrong token refused, then drain a
-// backend and switch maintenance mode through the UI and see the API agree,
-// and a request appear in the live log.
+// backend, switch maintenance mode and purge a cache through the UI and see
+// the API agree, PURGE over HTTP, and a request appear in the live log.
 import { chromium } from "playwright";
 
-const [admin, token, publicUrl] = process.argv.slice(2);
+const [admin, token, publicUrl, purgeToken] = process.argv.slice(2);
 const api = (path) => fetch(`${admin}/admin/api/v1${path}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json());
 const fail = (message) => { console.error(`FAIL: ${message}`); process.exit(1); };
 
@@ -55,6 +55,21 @@ await maintenance.click();
 await page.waitForTimeout(500);
 if ((await api("/maintenance")).active) fail("maintenance didn't switch off");
 console.log("ok: maintenance mode from the UI");
+
+const entries = async () => (await api("/caches")).find((c) => c.name === "route:pages")?.entries;
+for (const path of ["cached/a", "cached/b", "cached/c/1"]) await fetch(`${publicUrl}${path}`);
+if ((await entries()) !== 3) fail(`expected 3 cached pages, got ${await entries()}`);
+await page.reload();
+await page.locator("#purge-path input").fill("/cached/c/*");
+await page.getByRole("button", { name: "Purge" }).first().click();
+await page.getByText("1 entry purged from route:pages").waitFor({ timeout: 5000 }).catch(() => fail("no purge confirmation in the UI"));
+if ((await entries()) !== 2) fail(`the prefix purge left ${await entries()} entries`);
+const purge = (auth) => fetch(`${publicUrl}cached/a`, { method: "PURGE", headers: auth ? { Authorization: `Bearer ${auth}` } : {} });
+if ((await purge("wrong")).status !== 401) fail("PURGE with a wrong token wasn't refused");
+const purged = await purge(purgeToken);
+if (purged.status !== 200 || (await purged.text()) !== '{"purged":1}') fail("PURGE with the token didn't purge one entry");
+if ((await entries()) !== 1) fail(`PURGE left ${await entries()} entries`);
+console.log("ok: purge a cache from the UI and with HTTP PURGE");
 
 await page.goto(`${admin}/admin/#/logs`);
 await page.waitForTimeout(800);

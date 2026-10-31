@@ -225,6 +225,9 @@ pub struct CacheConfig {
     pub dir: String,
     /// Bound on the disk store's total size, e.g. `"512M"` (default 256 MiB).
     pub max_size: String,
+    /// Environment variable with the bearer token `PURGE` requests need;
+    /// empty = no `PURGE` (18.11.0).
+    pub purge_token_env: String,
 }
 
 #[derive(Debug, Clone)]
@@ -600,6 +603,7 @@ fn parse_middleware_config(
             vary_by: get_array(map, &c_sec, "vary_by"),
             dir: get_str(map, &c_sec, "dir"),
             max_size: get_str(map, &c_sec, "max_size"),
+            purge_token_env: get_str(map, &c_sec, "purge_token_env"),
         })
     } else {
         None

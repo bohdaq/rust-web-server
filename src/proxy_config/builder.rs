@@ -104,12 +104,14 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
     crate::proxy_config::upstream::register(upstream_policies.values().cloned().collect());
 
     // ── 2. Build compiled routes ───────────────────────────────────────────
+    let mut caches: Vec<(String, crate::cache::CacheLayer)> = Vec::new();
     let mut compiled: Vec<CompiledRoute> = Vec::new();
 
     for route in &config.routes {
         let matcher = RouteMatcher::from_match_config(&route.match_);
 
         let mut async_proxy: Option<Arc<DynamicProxy>> = None;
+        let cache_name = format!("route:{}", if route.name.is_empty() { format!("#{}", compiled.len() + 1) } else { route.name.clone() });
         let mirror = route.middleware.mirror.as_ref().map(|m| build_mirror(&route.name, m, &upstream_lives));
 
         // Build the action handler (base application)
@@ -212,14 +214,15 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
         // its mirror copies itself (so it keeps the async forwarder); any
         // other action gets a MirrorLayer.
         let handler = if matches!(route.action, ActionConfig::Proxy { .. }) || mirror.is_none() {
-            apply_middleware(base_handler, &route.middleware)
+            apply_middleware_named(base_handler, &route.middleware, &cache_name, &mut caches)
         } else {
-            let handler = apply_middleware(base_handler, &route.middleware);
+            let handler = apply_middleware_named(base_handler, &route.middleware, &cache_name, &mut caches);
             arc_app(WithMiddleware::new(ArcApp(handler)).wrap(crate::proxy::mirror::MirrorLayer::new(mirror.clone().expect("checked"))))
         };
 
         compiled.push(CompiledRoute { matcher, handler, async_proxy });
     }
+    crate::cache::registry::replace_group("route:", caches);
     compiled
 }
 
@@ -334,6 +337,17 @@ pub(crate) fn apply_middleware(
     handler: Arc<dyn crate::application::Application + Send + Sync>,
     mw: &MiddlewareConfig,
 ) -> Arc<dyn crate::application::Application + Send + Sync> {
+    apply_middleware_named(handler, mw, "middleware", &mut Vec::new())
+}
+
+/// [`apply_middleware`], recording the route's cache (if any) as `name`
+/// in `caches` for the admin API's registry.
+pub(crate) fn apply_middleware_named(
+    handler: Arc<dyn crate::application::Application + Send + Sync>,
+    mw: &MiddlewareConfig,
+    name: &str,
+    caches: &mut Vec<(String, crate::cache::CacheLayer)>,
+) -> Arc<dyn crate::application::Application + Send + Sync> {
     // Wrap the Arc<dyn Application> in an ArcApp adapter so it implements
     // Application itself (needed for WithMiddleware::new).
     let mut app: Arc<dyn crate::application::Application + Send + Sync> = handler;
@@ -350,6 +364,10 @@ pub(crate) fn apply_middleware(
             })
         }
         .ttl(cache_cfg.ttl_secs);
+        if !cache_cfg.purge_token_env.is_empty() {
+            layer = layer.purge_token(std::env::var(&cache_cfg.purge_token_env).unwrap_or_default().trim());
+        }
+        caches.push((name.to_string(), layer.clone()));
         for vh in &cache_cfg.vary_by {
             layer = layer.vary_by_header(vh.as_str());
         }

@@ -71,7 +71,7 @@ pub(crate) fn scan_head(buf: &[u8]) -> HeadScan {
 /// same bytes differently.
 pub(crate) fn validate_head(head: &[u8], request: &Request) -> Result<(), String> {
     use crate::request::METHOD;
-    let methods = [METHOD.get, METHOD.head, METHOD.post, METHOD.put, METHOD.delete, METHOD.connect, METHOD.options, METHOD.trace, METHOD.patch];
+    let methods = [METHOD.get, METHOD.head, METHOD.post, METHOD.put, METHOD.delete, METHOD.connect, METHOD.options, METHOD.trace, METHOD.patch, Request::PURGE];
     if !methods.contains(&request.method.as_str()) {
         return Err(format!("unknown method {:?} (methods are case-sensitive)", request.method));
     }
@@ -495,6 +495,8 @@ mod tests {
     #[test]
     fn methods_are_case_sensitive_and_versions_are_http_1() {
         assert!(check(b"get / HTTP/1.1\r\nHost: x\r\n\r\n").is_err());
+        assert!(check(b"PURGE /a/* HTTP/1.1\r\nHost: x\r\n\r\n").is_ok(), "the cache purge method");
+        assert!(check(b"purge / HTTP/1.1\r\nHost: x\r\n\r\n").is_err());
         assert!(check(b"Post / HTTP/1.1\r\nHost: x\r\n\r\n").is_err());
         assert!(check(b"GET / HTTP/2.0\r\nHost: x\r\n\r\n").is_err());
         assert!(check(b"GET / HTTP/0.9\r\nHost: x\r\n\r\n").is_err());

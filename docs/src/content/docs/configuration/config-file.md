@@ -501,6 +501,7 @@ ttl_secs = 300
 vary_by  = ["Accept-Encoding", "Authorization"]
 # dir      = "/var/cache/rws/api"   # on disk instead of in memory (18.11.0)
 # max_size = "512M"                 # disk bound, default 256M
+# purge_token_env = "RWS_PURGE_TOKEN"  # accept HTTP PURGE with this bearer token (18.11.0)
 
 [route.middleware.auth]
 type      = "bearer"        # "bearer" | "jwt" | "basic"

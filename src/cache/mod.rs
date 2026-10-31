@@ -128,6 +128,80 @@ pub(crate) fn freshness(response: &Response, cap: Duration) -> Duration {
     }
 }
 
+// ── purge ─────────────────────────────────────────────────────────────────────
+
+/// What [`CacheLayer::purge`] removes. A cache key is the request target
+/// (path and query) plus the values of `vary_by_header`s, so `Exact` removes
+/// every variant of one target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Purge {
+    /// Everything.
+    All,
+    /// One request target, e.g. `/products/42` or `/search?q=lamp`.
+    Exact(String),
+    /// Every target starting with this, e.g. `/products/`.
+    Prefix(String),
+}
+
+impl Purge {
+    fn matches(&self, key: &str) -> bool {
+        let target = key.split('\x00').next().unwrap_or(key);
+        match self {
+            Purge::All => true,
+            Purge::Exact(t) => target == t,
+            Purge::Prefix(p) => target.starts_with(p.as_str()),
+        }
+    }
+
+    /// A `PURGE` request's target: a trailing `*` makes it a prefix.
+    pub fn from_target(target: &str) -> Purge {
+        match target.strip_suffix('*') {
+            Some(prefix) => Purge::Prefix(prefix.to_string()),
+            None => Purge::Exact(target.to_string()),
+        }
+    }
+}
+
+/// Equal, in time that depends only on the lengths.
+fn same_bytes(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// Named caches for the admin API: the binary's own and one per
+/// config-file route that has `[route.middleware.cache]`.
+pub mod registry {
+    use super::CacheLayer;
+    use std::collections::BTreeMap;
+    use std::sync::{Mutex, OnceLock};
+
+    fn caches() -> &'static Mutex<BTreeMap<String, CacheLayer>> {
+        static CACHES: OnceLock<Mutex<BTreeMap<String, CacheLayer>>> = OnceLock::new();
+        CACHES.get_or_init(Mutex::default)
+    }
+
+    /// Make `cache` reachable as `name` (a clone: it shares the store).
+    pub fn register(name: impl Into<String>, cache: CacheLayer) {
+        caches().lock().unwrap_or_else(|e| e.into_inner()).insert(name.into(), cache);
+    }
+
+    /// Replace every cache whose name starts with `group` by `caches` (a new
+    /// config generation's routes).
+    pub(crate) fn replace_group(group: &str, new: Vec<(String, CacheLayer)>) {
+        let mut map = caches().lock().unwrap_or_else(|e| e.into_inner());
+        map.retain(|name, _| !name.starts_with(group));
+        map.extend(new);
+    }
+
+    /// Every registered cache, by name.
+    pub fn list() -> Vec<(String, CacheLayer)> {
+        caches().lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(n, c)| (n.clone(), c.clone())).collect()
+    }
+
+    pub fn get(name: &str) -> Option<CacheLayer> {
+        caches().lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
+    }
+}
+
 // ── CacheLayer ────────────────────────────────────────────────────────────────
 
 /// An in-memory response cache middleware.
@@ -154,6 +228,8 @@ pub struct CacheLayer {
     /// [`CacheLayer::disk`]: entries in files instead of `store`.
     #[cfg(not(target_arch = "wasm32"))]
     disk: Option<Arc<disk::DiskStore>>,
+    /// [`CacheLayer::purge_token`]: accept `PURGE` with this bearer token.
+    purge_token: Option<Arc<String>>,
 }
 
 impl CacheLayer {
@@ -171,7 +247,60 @@ impl CacheLayer {
             vary_headers: vec![],
             #[cfg(not(target_arch = "wasm32"))]
             disk: None,
+            purge_token: None,
         }
+    }
+
+    /// Accept the HTTP `PURGE` method on the routes behind this layer,
+    /// authenticated by `Authorization: Bearer <token>` (since 18.11.0).
+    /// `PURGE /products/42` removes that target (every `Vary` variant);
+    /// `PURGE /products/*` removes the prefix. The answer is
+    /// `{"purged":<n>}`; a missing or wrong token gets `401`. Without a
+    /// token, `PURGE` passes through to the application as before.
+    pub fn purge_token(mut self, token: impl Into<String>) -> Self {
+        let token = token.into();
+        self.purge_token = (!token.is_empty()).then(|| Arc::new(token));
+        self
+    }
+
+    /// Remove the entries `target` names; how many.
+    pub fn purge(&self, target: &Purge) -> usize {
+        if let Some(disk) = self.disk_store() {
+            let n = disk.remove_where(|key| target.matches(key));
+            self.stored.store(disk.len(), Ordering::Relaxed);
+            return n;
+        }
+        let mut guard = self.store.lock().unwrap_or_else(|e| e.into_inner());
+        let keys: Vec<String> = guard.entries.keys().filter(|k| target.matches(k)).cloned().collect();
+        for key in &keys {
+            guard.entries.remove(key);
+        }
+        guard.order.retain(|k| !keys.contains(k));
+        self.stored.store(guard.entries.len(), Ordering::Relaxed);
+        keys.len()
+    }
+
+    /// `"memory"` or `"disk"`.
+    pub fn kind(&self) -> &'static str {
+        if self.disk_store().is_some() { "disk" } else { "memory" }
+    }
+
+    /// The `PURGE` answer, when this request is one and a token is set.
+    fn answer_purge(&self, request: &Request) -> Option<Response> {
+        let token = self.purge_token.as_ref()?;
+        if !request.method.eq_ignore_ascii_case("PURGE") {
+            return None;
+        }
+        use crate::response::STATUS_CODE_REASON_PHRASE;
+        let sent = request.header(Header::_AUTHORIZATION).and_then(|h| h.value.strip_prefix("Bearer ").map(str::trim));
+        let authorized = sent.is_some_and(|s| same_bytes(s.as_bytes(), token.as_bytes()));
+        if !authorized {
+            let mut response = Response::json(STATUS_CODE_REASON_PHRASE.n401_unauthorized, br#"{"error":"PURGE needs the purge token"}"#.to_vec());
+            response.headers.push(Header::new("WWW-Authenticate", r#"Bearer realm="cache purge""#));
+            return Some(response);
+        }
+        let n = self.purge(&Purge::from_target(&request.request_uri));
+        Some(Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, format!(r#"{{"purged":{n}}}"#).into_bytes()))
     }
 
     /// A cache kept in files under `dir` (created if missing), bounded to
@@ -386,6 +515,9 @@ impl Middleware for CacheLayer {
         connection: &ConnectionInfo,
         next: &dyn Application,
     ) -> Result<Response, String> {
+        if let Some(answer) = self.answer_purge(request) {
+            return Ok(answer);
+        }
         // Only cache GET requests, and never private or partial ones.
         if request.method != METHOD.get || Self::request_is_private(request) {
             return next.execute(request, connection);

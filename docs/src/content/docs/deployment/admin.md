@@ -31,7 +31,7 @@ Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) an
 - **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
 - **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
-- **Controls**: maintenance mode, reload, the response cache, the IP blocklist and feature flags.
+- **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), the IP blocklist and feature flags.
 - **Config**: every setting in effect, filterable, secrets hidden.
 - **Logs**: the access log as it's written, with pause.
 
@@ -62,6 +62,8 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /blocklist`, `POST /blocklist` `{"ip":"…"}`, `DELETE /blocklist/<ip>` | The runtime IP blocklist (`403`). Addresses are checked; the admin listener isn't behind the blocklist |
 | `GET /flags`, `PUT /flags/<name>` `{"enabled":true}` | Runtime feature flags |
 | `GET /cache`, `DELETE /cache` | Response-cache hits, misses and size; clear it. `404` when the server has no cache |
+| `GET /caches` | Every response cache (18.11.0): `name` (`app` for the binary's own, `route:<name>` per config route, `route:#N` for unnamed ones), `kind` (`memory` or `disk`), `entries`, `bytes` (disk only, else `null`), `hits`, `misses` |
+| `DELETE /caches/<name>?path=/p` or `?prefix=/p/` | Purge one target (every `Vary` variant) or a prefix; without either, everything. Answers `{"name":…,"purged":n}`; `404` for an unknown name |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |

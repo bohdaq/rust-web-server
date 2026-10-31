@@ -9,6 +9,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- Cache purge: `CacheLayer::purge(&Purge::{All, Exact, Prefix})` for memory
+  and disk caches; HTTP `PURGE` (a trailing `*` purges a prefix) with a
+  bearer token from `.purge_token()` / `[route.middleware.cache]
+  purge_token_env`; `cache::registry` of named caches (`app`,
+  `route:<name>`); admin API `GET /caches` and `DELETE
+  /caches/<name>?path=&prefix=` (`/cache` unchanged), a purge field in the
+  admin UI, and `path` / `prefix` on the `cache_clear` MCP tool. `PURGE` is
+  now an accepted request method (it was a `400`).
+
 - Request mirroring: `[route.middleware.mirror]` (`upstream` or `backends`,
   `percent`) copies a share of a route's requests to other backends and
   drops their answers; fire-and-forget through a bounded queue, so a slow or

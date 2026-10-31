@@ -155,6 +155,7 @@ fn routes_slot() -> &'static RwLock<Vec<(String, String)>> {
 /// The response cache the admin API reports on and clears (a clone shares
 /// the store).
 pub fn register_cache(cache: CacheLayer) {
+    crate::cache::registry::register("app", cache.clone());
     *cache_slot().write().unwrap_or_else(|e| e.into_inner()) = Some(cache);
 }
 
@@ -277,4 +278,37 @@ pub fn request_renewal() -> bool {
 pub fn logs_json(n: usize) -> String {
     let lines: Vec<String> = crate::log::tail::recent(n).iter().map(|l| quoted(l)).collect();
     format!("[{}]", lines.join(","))
+}
+
+/// Every named cache (the binary's `app`, `route:<name>` for config-file
+/// routes): kind, entries, bytes on disk, hits, misses.
+pub fn caches_json() -> String {
+    let caches: Vec<String> = crate::cache::registry::list()
+        .iter()
+        .map(|(name, c)| {
+            format!(
+                r#"{{"name":{},"kind":"{}","entries":{},"bytes":{},"hits":{},"misses":{}}}"#,
+                quoted(name),
+                c.kind(),
+                c.size(),
+                c.stored_bytes().map_or("null".to_string(), |b| b.to_string()),
+                c.hits(),
+                c.misses()
+            )
+        })
+        .collect();
+    format!("[{}]", caches.join(","))
+}
+
+/// Purge `name`: everything, one target (`path`) or a `prefix`; `None` for
+/// an unknown cache.
+pub fn purge_cache(name: &str, path: Option<&str>, prefix: Option<&str>) -> Option<String> {
+    let cache = crate::cache::registry::get(name)?;
+    let target = match (path, prefix) {
+        (Some(p), _) if !p.is_empty() => crate::cache::Purge::Exact(p.to_string()),
+        (_, Some(p)) if !p.is_empty() => crate::cache::Purge::Prefix(p.to_string()),
+        _ => crate::cache::Purge::All,
+    };
+    let n = cache.purge(&target);
+    Some(format!(r#"{{"name":{},"purged":{n}}}"#, quoted(name)))
 }

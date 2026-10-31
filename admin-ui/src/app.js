@@ -2,6 +2,8 @@ import { LitElement, html, nothing } from "lit";
 import { api, ApiError, followLogs, setToken, token } from "./api.js";
 import { icon } from "./icons.js";
 
+const bytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KiB` : `${(n / 1048576).toFixed(1)} MiB`);
+
 const VIEWS = [
   { id: "overview", label: "Overview", icon: "gauge" },
   { id: "upstreams", label: "Upstreams", icon: "tree-structure" },
@@ -208,18 +210,9 @@ export class RwsAdmin extends LitElement {
     } else if (view === "certificates") {
       await get("certificates", "/certificates");
     } else if (view === "controls") {
-      await Promise.all([get("maintenance", "/maintenance"), get("blocklist", "/blocklist"), get("flags", "/flags"), get("rateLimit", "/rate-limit"), this.loadCache()]);
+      await Promise.all([get("maintenance", "/maintenance"), get("blocklist", "/blocklist"), get("flags", "/flags"), get("rateLimit", "/rate-limit"), get("caches", "/caches")]);
     } else if (view === "config") {
       await get("config", "/config");
-    }
-  }
-
-  async loadCache() {
-    try {
-      const cache = await api("/cache");
-      this.data = { ...this.data, cache };
-    } catch (e) {
-      this.data = { ...this.data, cache: e instanceof ApiError && e.status === 404 ? null : this.data.cache };
     }
   }
 
@@ -268,6 +261,13 @@ export class RwsAdmin extends LitElement {
     this.act("block", "/blocklist", { method: "POST", body: { ip } }, (r) => `${r.blocked} blocked`).then(() => {
       if (!this.error && field) field.value = "";
     });
+  }
+
+  purge(name) {
+    const path = (this.querySelector("#purge-path")?.value ?? "").trim();
+    const query = !path ? "" : path.endsWith("*") ? `?prefix=${encodeURIComponent(path.slice(0, -1))}` : `?path=${encodeURIComponent(path)}`;
+    return this.act(`purge:${name}`, `/caches/${encodeURIComponent(name)}${query}`, { method: "DELETE" },
+      (r) => `${r.purged} ${r.purged === 1 ? "entry" : "entries"} purged from ${r.name}`);
   }
 
   // ── rendering ─────────────────────────────────────────────────────────
@@ -415,6 +415,19 @@ export class RwsAdmin extends LitElement {
         render: (r) => html`<lit-material-button variant="text" @click=${() => this.act(`unblock:${r.ip}`, `/blocklist/${encodeURIComponent(r.ip)}`, { method: "DELETE" }, () => `${r.ip} unblocked`)}>Unblock</lit-material-button>`,
       },
     ];
+    const cacheColumns = [
+      { key: "name", label: "Cache", mono: true },
+      { key: "kind", label: "Store" },
+      { key: "entries", label: "Entries", numeric: true },
+      { key: "bytes", label: "On disk", numeric: true, render: (c) => (c.bytes === null ? "—" : bytes(c.bytes)) },
+      { key: "hits", label: "Hits / misses", numeric: true, render: (c) => `${c.hits} / ${c.misses}` },
+      {
+        key: "action",
+        label: "Action",
+        hiddenLabel: true,
+        render: (c) => html`<lit-material-button variant="text" ?disabled=${this.busy === `purge:${c.name}`} @click=${() => this.purge(c.name)}><span slot="icon" class="icon">${icon("trash")}</span>Purge</lit-material-button>`,
+      },
+    ];
     const flagColumns = [
       { key: "name", label: "Flag", mono: true },
       {
@@ -441,10 +454,6 @@ export class RwsAdmin extends LitElement {
           <p class="label" style="margin: var(--space-50) 0 var(--space-100)">Re-read rws.config.toml and the certificates.</p>
           <lit-material-button variant="tonal" ?disabled=${this.busy === "reload"} @click=${() => this.reload()}><span slot="icon" class="icon">${icon("arrow-clockwise")}</span>Reload</lit-material-button>
         </div>
-        <lit-material-stat label="Response cache" value=${d.cache ? String(d.cache.size) : "None"}
-          caption=${d.cache ? `${d.cache.hits} hits, ${d.cache.misses} misses` : "This server has no response cache."}>
-          ${d.cache ? html`<lit-material-button slot="caption" variant="text" ?disabled=${this.busy === "cache"} @click=${() => this.act("cache", "/cache", { method: "DELETE" }, () => "Cache cleared")}><span slot="icon" class="icon">${icon("trash")}</span>Clear</lit-material-button>` : nothing}
-        </lit-material-stat>
         <lit-material-stat label="Global rate limit" value=${d.rateLimit?.configured ? `${d.rateLimit.max_requests} per ${d.rateLimit.window_secs}s` : "Off"}></lit-material-stat>
       </div>
 
@@ -458,6 +467,14 @@ export class RwsAdmin extends LitElement {
           ? html`<p class="lede" style="margin-top: var(--space-200)">Nobody is blocked.</p>`
           : html`<lit-material-table style="margin-top: var(--space-200)" caption="Blocked addresses" caption-hidden density="compact"
               .columns=${blockColumns} .rows=${d.blocklist.map((ip) => ({ ip }))}></lit-material-table>`}
+      </section>
+
+      <section class="section" aria-labelledby="caches-title">
+        <h2 id="caches-title">Response caches</h2>
+        ${!d.caches || d.caches.length === 0
+          ? html`<lit-material-empty-state size="compact" headline="No response cache">Add <code>[route.middleware.cache]</code> to a route; its cache appears here to purge.</lit-material-empty-state>`
+          : html`<lit-material-text-field id="purge-path" variant="outlined" label="Path to purge" supporting-text="Empty purges everything; /products/* purges a prefix"></lit-material-text-field>
+              <lit-material-table style="margin-top: var(--space-200)" caption="Response caches" caption-hidden density="compact" .columns=${cacheColumns} .rows=${d.caches}></lit-material-table>`}
       </section>
 
       <section class="section" aria-labelledby="flags-title">

@@ -297,7 +297,20 @@ impl AdminApi {
                 _ => wrong_method("PUT"),
             };
         }
+        if let Some(name) = route.strip_prefix("/caches/") {
+            let name = crate::url::URL::percent_decode(name);
+            let decoded = |key: &str| query(request, key).map(|v| crate::url::URL::percent_decode(&v));
+            return match method {
+                "DELETE" => match ops::purge_cache(&name, decoded("path").as_deref(), decoded("prefix").as_deref()) {
+                    Some(body) => ok(body),
+                    None => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &format!("no cache named {name:?}")),
+                },
+                _ => wrong_method("DELETE"),
+            };
+        }
         match (method, route) {
+            ("GET", "/caches") => ok(ops::caches_json()),
+            (_, "/caches") => wrong_method("GET"),
             ("GET", "/logs") => {
                 let n = query(request, "n").and_then(|n| n.parse().ok()).unwrap_or(100);
                 ok(ops::logs_json(n))

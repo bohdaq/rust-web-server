@@ -826,6 +826,8 @@ fn header_values_keep_colons_and_tolerate_missing_spaces() {
 fn method_and_version_checks_ignore_case() {
     assert!(Request::is_supported_method("get") && Request::is_supported_method("PATCH"));
     assert!(!Request::is_supported_method("BREW"));
+    assert!(Request::is_supported_method("PURGE"));
+    assert_eq!(Request::parse(b"PURGE /a/* HTTP/1.1\r\nHost: x\r\n\r\n").unwrap().method, "PURGE");
     assert!(crate::http::HTTP::is_supported_version("http/1.1"));
     assert!(!crate::http::HTTP::is_supported_version("HTTP/4.0"));
 }

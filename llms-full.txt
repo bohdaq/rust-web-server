@@ -1787,6 +1787,7 @@ ttl_secs = 300
 vary_by  = ["Accept-Encoding", "Authorization"]
 # dir      = "/var/cache/rws/api"   # on disk instead of in memory (18.11.0)
 # max_size = "512M"                 # disk bound, default 256M
+# purge_token_env = "RWS_PURGE_TOKEN"  # accept HTTP PURGE with this bearer token (18.11.0)
 
 [route.middleware.auth]
 type      = "bearer"        # "bearer" | "jwt" | "basic"
@@ -9470,6 +9471,34 @@ Evicts all entries immediately:
 cache_handle.clear();
 ```
 
+## Purging
+
+`purge` removes part of a cache (memory or disk) and returns how many entries went. A target matches the request path and query as cached, every `Vary` variant included:
+
+```rust
+use rust_web_server::cache::Purge;
+
+cache_handle.purge(&Purge::Exact("/products/42".into()));
+cache_handle.purge(&Purge::Prefix("/products/".into()));
+cache_handle.purge(&Purge::All); // same as clear()
+```
+
+### HTTP `PURGE`
+
+`.purge_token(token)` makes the layer answer the `PURGE` method itself, nginx/Varnish style (config file: `purge_token_env`):
+
+```bash
+curl -X PURGE -H "Authorization: Bearer $TOKEN" https://example.com/products/42
+curl -X PURGE -H "Authorization: Bearer $TOKEN" 'https://example.com/products/*'
+# {"purged":3}
+```
+
+A trailing `*` purges a prefix. A wrong or missing token gets `401`; the request never reaches the application. Without a token set, `PURGE` passes through to the application like any other method. rws accepts `PURGE` as a request method since 18.11.0 (before, it was a `400`).
+
+### Admin API and MCP
+
+Named caches go in `cache::registry`: the binary registers its own as `app`, and every config route's cache as `route:<name>` (rebuilt on each reload). The admin API lists them at `GET /admin/api/v1/caches` and purges with `DELETE /admin/api/v1/caches/<name>?path=…` or `?prefix=…` (see [Admin API](/deployment/admin/)); the admin UI has a purge field on its Controls page. The `cache_clear` MCP tool takes the same optional `path` / `prefix`. Library apps call `cache::registry::register(name, layer.clone())` to add theirs.
+
 ## Full example
 
 ```rust
@@ -12242,9 +12271,12 @@ ttl_secs = 60                 # default: 60
 vary_by  = ["Accept-Language"] # request headers added to the cache key (optional)
 # dir      = "/var/cache/rws/api"   # keep entries on disk (survive restarts)
 # max_size = "512M"                 # disk cache bound (default 256M)
+# purge_token_env = "RWS_PURGE_TOKEN"  # env var holding the PURGE token
 ```
 
 Wraps the route in a [`CacheLayer`](/features/caching/): in memory (up to 1000 entries), or with `dir` on disk, bounded by `max_size` (since 18.11.0). `ttl_secs` is the longest an entry is kept; a response's `Cache-Control: s-maxage` / `max-age` can make it shorter, and `max-age=0` isn't cached. `rws --check` reports a `max_size` that isn't a size and a `dir` it can't write to (the route then caches in memory). It is the innermost route middleware, so cached responses still pass through rewrite, auth, rate limit and IP filter.
+
+With `purge_token_env`, `PURGE /path` (or `PURGE /prefix/*`) with `Authorization: Bearer <token>` removes cached entries; `rws --check` fails when the variable is unset. The admin API lists every route's cache as `route:<name>` and purges it too. See [Purging](/features/caching/#purging).
 
 #### Per-route timeout
 
@@ -17748,7 +17780,7 @@ client that asks before acting asks for those.
 | `server_config` — every active `RWS_CONFIG_*` value, secrets hidden | `reload_config` — re-read config and certificates |
 | `server_metrics` — request, error, connection counters | `set_maintenance` `{"enabled": true}` — `503` for everything but health checks |
 | `recent_requests` `{"n": 50}` — last requests (max 100) | `block_ip` / `unblock_ip` `{"ip": "…"}` — runtime blocklist (`403`) |
-| `recent_errors` `{"n": 50}` — last 4xx/5xx | `cache_clear` — empty the response cache |
+| `recent_errors` `{"n": 50}` — last 4xx/5xx | `cache_clear` — empty the response cache, or `{"path": "/p"}` / `{"prefix": "/p/"}` to purge part of it |
 | `list_blocked_ips`, `maintenance_status` | `feature_set` `{"name": "…", "enabled": false}` |
 | `cache_stats`, `rate_limit_config`, `check_rate_limit` `{"ip": "…"}` | |
 | `cors_config`, `list_routes`, `list_static_files` | |
@@ -19316,7 +19348,7 @@ Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) an
 - **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
 - **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
-- **Controls**: maintenance mode, reload, the response cache, the IP blocklist and feature flags.
+- **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), the IP blocklist and feature flags.
 - **Config**: every setting in effect, filterable, secrets hidden.
 - **Logs**: the access log as it's written, with pause.
 
@@ -19347,6 +19379,8 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /blocklist`, `POST /blocklist` `{"ip":"…"}`, `DELETE /blocklist/<ip>` | The runtime IP blocklist (`403`). Addresses are checked; the admin listener isn't behind the blocklist |
 | `GET /flags`, `PUT /flags/<name>` `{"enabled":true}` | Runtime feature flags |
 | `GET /cache`, `DELETE /cache` | Response-cache hits, misses and size; clear it. `404` when the server has no cache |
+| `GET /caches` | Every response cache (18.11.0): `name` (`app` for the binary's own, `route:<name>` per config route, `route:#N` for unnamed ones), `kind` (`memory` or `disk`), `entries`, `bytes` (disk only, else `null`), `hits`, `misses` |
+| `DELETE /caches/<name>?path=/p` or `?prefix=/p/` | Purge one target (every `Vary` variant) or a prefix; without either, everything. Answers `{"name":…,"purged":n}`; `404` for an unknown name |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |
@@ -19795,6 +19829,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `RedisRateLimiter` | `rate_limit` | Fixed-window limiter shared across instances through Redis; `from_env()` |
 | `RateLimitLayer` | `middleware` | Enforces the global rate limiter per client IP; `429` with `Retry-After` |
 | `CacheLayer` | `cache` | In-memory TTL response cache for GET (`CacheLayer::memory(n).ttl(s).vary_by_header(h)`); skips `no-store`/`private`/`no-cache`, `Range` and out-of-key `Vary` responses. See [Caching](/features/caching/) |
+| `Purge` / `cache::registry` | `cache` | What `CacheLayer::purge` removes (`All`, `Exact(target)`, `Prefix(target)`), and the named caches the admin API lists and purges (18.11.0). See [Purging](/features/caching/#purging) |
 | `MetricsLayer` | `metrics` | Per-route Prometheus counters and latency histograms. See [Metrics](/features/metrics/) |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, body, and status rewriting; `.request_uri_regex_rewrite` needs `rewrite-regex`. See [Rewrite](/features/rewrite/) |
 | `BasicAuthLayer` | `auth` (`auth`) | HTTP Basic authentication via a closure or `from_htpasswd_file` (plain or rws's `{SHA256}` scheme — not Apache `{SHA}`/`$apr1$`/bcrypt). See [Auth](/features/auth/) |

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The admin UI (admin-ui/, embedded in src/admin/ui/) in headless Chromium
 # against the rws binary: sign-in, drain from the upstreams page, maintenance
-# mode, the live log, and no CSP violations.
+# mode, purging a response cache (from the page and with HTTP PURGE), the live
+# log, and no CSP violations.
 #
 #   ci/e2e/admin_ui.sh <path-to-rws>
 # Needs node and `npm install playwright@1.64.0` + `npx playwright install chromium`
@@ -38,6 +39,16 @@ path = "/"
 interval_secs = 1
 
 [[route]]
+name = "pages"
+[route.match]
+path = "/cached/*"
+[route.action]
+type = "respond"
+body = "cached page"
+[route.middleware.cache]
+purge_token_env = "UI_E2E_PURGE_TOKEN"
+
+[[route]]
 [route.match]
 path = "/"
 [route.action]
@@ -45,7 +56,8 @@ type = "proxy"
 upstream = "web"
 TOML
 export UI_E2E_ADMIN_TOKEN="ui-e2e-$RANDOM"
+export UI_E2E_PURGE_TOKEN="purge-$RANDOM"
 (cd www && exec env RWS_CONFIG_FILE=../rws.config.toml "$RWS" >../rws.log 2>&1) & PIDS+=($!)
 for _ in $(seq 1 100); do curl -s -o /dev/null http://127.0.0.1:18489/admin/ && break; sleep 0.1; done
-node "$HERE/check.mjs" http://127.0.0.1:18489 "$UI_E2E_ADMIN_TOKEN" http://127.0.0.1:18480/ || { tail -20 rws.log; exit 1; }
+node "$HERE/check.mjs" http://127.0.0.1:18489 "$UI_E2E_ADMIN_TOKEN" http://127.0.0.1:18480/ "$UI_E2E_PURGE_TOKEN" || { tail -20 rws.log; exit 1; }
 echo "all admin UI end-to-end checks passed"

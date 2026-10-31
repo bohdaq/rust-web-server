@@ -593,3 +593,92 @@ mod disk {
         assert!(crate::config_check::check_str(&unwritable).errors.iter().any(|e| e.contains("isn't writable")));
     }
 }
+
+// ── purge ─────────────────────────────────────────────────────────────────────
+
+fn request(method: &str, uri: &str, headers: &str) -> Request {
+    Request::parse(format!("{method} {uri} HTTP/1.1\r\nHost: x\r\n{headers}\r\n").as_bytes()).unwrap()
+}
+
+#[test]
+fn purge_exact_prefix_and_all_cover_vary_variants() {
+    use super::Purge;
+    let app = CountingApp::new(ok_response());
+    let layer = CacheLayer::memory(100).vary_by_header("Accept-Language");
+    for (path, lang) in [("/p/1", "en"), ("/p/1", "uk"), ("/p/2", "en"), ("/q/1", "en")] {
+        layer.handle(&get_with_header(path, "Accept-Language", lang), &conn(), &app).unwrap();
+    }
+    assert_eq!(layer.size(), 4);
+    assert_eq!(layer.purge(&Purge::Exact("/p/1".into())), 2, "both language variants");
+    assert_eq!(layer.purge(&Purge::Prefix("/p/".into())), 1);
+    assert_eq!(layer.purge(&Purge::Exact("/nothing".into())), 0);
+    assert_eq!(layer.purge(&Purge::All), 1);
+    assert_eq!(layer.size(), 0);
+    assert_eq!(Purge::from_target("/p/*"), Purge::Prefix("/p/".into()));
+    assert_eq!(Purge::from_target("/p/1?x=2"), Purge::Exact("/p/1?x=2".into()));
+}
+
+#[test]
+fn purge_method_needs_the_token_and_otherwise_passes_through() {
+    let app = CountingApp::new(ok_response());
+    let open = CacheLayer::memory(100);
+    open.handle(&request("PURGE", "/a", ""), &conn(), &app).unwrap();
+    assert_eq!(app.call_count(), 1, "without a token PURGE goes to the app");
+
+    let app = CountingApp::new(ok_response());
+    let layer = CacheLayer::memory(100).purge_token("s3cret");
+    layer.handle(&get("/a"), &conn(), &app).unwrap();
+    layer.handle(&get("/a/b"), &conn(), &app).unwrap();
+    let refused = layer.handle(&request("PURGE", "/a", "Authorization: Bearer nope\r\n"), &conn(), &app).unwrap();
+    assert_eq!(refused.status_code, 401);
+    assert!(refused.header("WWW-Authenticate").is_some());
+    assert_eq!(layer.size(), 2);
+    let done = layer.handle(&request("PURGE", "/a/*", "Authorization: Bearer s3cret\r\n"), &conn(), &app).unwrap();
+    assert_eq!(done.status_code, 200);
+    assert_eq!(String::from_utf8_lossy(&done.content_range_list[0].body), r#"{"purged":1}"#, "/a/* is /a/b, not /a");
+    assert_eq!(layer.size(), 1);
+    assert_eq!(app.call_count(), 2, "PURGE never reaches the app");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn disk_caches_purge_their_files() {
+    let tmp = crate::test_env::TempPath::new("rws-cache-disk-purge");
+    let app = CountingApp::new(ok_response());
+    let layer = CacheLayer::disk(&*tmp, 1 << 20).unwrap();
+    layer.handle(&get("/x/1"), &conn(), &app).unwrap();
+    layer.handle(&get("/y/1"), &conn(), &app).unwrap();
+    assert_eq!(layer.purge(&super::Purge::Prefix("/x/".into())), 1);
+    assert_eq!((layer.size(), std::fs::read_dir(&*tmp).unwrap().count()), (1, 1));
+    assert_eq!(layer.kind(), "disk");
+}
+
+#[test]
+fn config_routes_register_their_caches_and_admin_purges_them() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_TEST_PURGE_TOKEN", "tok");
+    let toml = "[[route]]\nname = \"catalog\"\n[route.match]\npath = \"/c/*\"\n[route.action]\ntype = \"respond\"\nbody = \"hi\"\n[route.middleware.cache]\npurge_token_env = \"RWS_TEST_PURGE_TOKEN\"\n";
+    assert!(crate::config_check::check_str(toml).errors.is_empty(), "{:?}", crate::config_check::check_str(toml).errors);
+    let (app, _h) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(toml));
+    app.execute(&get("/c/1"), &conn()).unwrap();
+    app.execute(&get("/c/2"), &conn()).unwrap();
+    let cache = super::registry::get("route:catalog").expect("registered");
+    assert_eq!(cache.size(), 2);
+    let api = crate::admin::AdminApi::new("t");
+    let call = |method: &str, path: &str| {
+        let raw = format!("{method} {path} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer t\r\n\r\n");
+        let r = api.execute(&Request::parse(raw.as_bytes()).unwrap(), &conn()).unwrap();
+        (r.status_code, String::from_utf8_lossy(&r.content_range_list[0].body).to_string())
+    };
+    let (status, list) = call("GET", "/admin/api/v1/caches");
+    assert_eq!(status, 200);
+    assert!(list.contains(r#"{"name":"route:catalog","kind":"memory","entries":2,"bytes":null,"hits":0,"misses":2}"#), "{list}");
+    assert_eq!(call("DELETE", "/admin/api/v1/caches/route%3Acatalog?path=/c/1"), (200, r#"{"name":"route:catalog","purged":1}"#.to_string()));
+    assert_eq!(call("DELETE", "/admin/api/v1/caches/route:catalog").1, r#"{"name":"route:catalog","purged":1}"#);
+    assert_eq!(call("DELETE", "/admin/api/v1/caches/nope").0, 404);
+    let purge = Request::parse(b"PURGE /c/1 HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer tok\r\n\r\n").unwrap();
+    assert_eq!(app.execute(&purge, &conn()).unwrap().status_code, 200, "PURGE through the config route");
+    std::env::remove_var("RWS_TEST_PURGE_TOKEN");
+    let unset = crate::config_check::check_str(toml).errors.join("\n");
+    assert!(unset.contains("RWS_TEST_PURGE_TOKEN is unset"), "{unset}");
+}

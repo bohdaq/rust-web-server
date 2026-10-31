@@ -169,13 +169,19 @@ impl Request {
         Ok(boxed_url_components.unwrap().path)
     }
 
-    /// `true` if `method` (any case) is one of [`Request::method_list`],
-    /// without building that list — it's checked on every request.
+    /// `true` if `method` (any case) is one of [`Request::method_list`] or
+    /// [`PURGE`](Request::PURGE), without building that list — it's checked
+    /// on every request.
     pub fn is_supported_method(method: &str) -> bool {
-        [METHOD.get, METHOD.head, METHOD.post, METHOD.put, METHOD.delete, METHOD.connect, METHOD.options, METHOD.trace, METHOD.patch]
+        [METHOD.get, METHOD.head, METHOD.post, METHOD.put, METHOD.delete, METHOD.connect, METHOD.options, METHOD.trace, METHOD.patch, Request::PURGE]
             .iter()
             .any(|m| m.eq_ignore_ascii_case(method))
     }
+
+    /// The cache purge method (nginx/Varnish), accepted since 18.11.0 so a
+    /// [`CacheLayer`](crate::cache::CacheLayer) with a purge token can answer
+    /// it; anything else treats it like any unrouted method.
+    pub const PURGE: &'static str = "PURGE";
 
     pub fn method_list() -> Vec<String> {
         let method_get = METHOD.get.to_string();
