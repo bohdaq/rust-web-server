@@ -31,7 +31,7 @@ impl PushConfig {
     /// From a `TaskPushNotificationConfig` object; `task_id` when the object
     /// has none (a `SendMessage` configuration).
     pub(crate) fn from_json(value: &JsonValue, task_id: Option<&str>) -> Result<PushConfig, String> {
-        let s = |key: &str| value.get(key).and_then(JsonValue::as_str).filter(|v| !v.is_empty()).map(str::to_string);
+        let s = |key: &str| super::model::field(value, key).and_then(JsonValue::as_str).filter(|v| !v.is_empty()).map(str::to_string);
         let url = s("url").ok_or("url is required")?;
         let task_id = s("taskId").or_else(|| task_id.map(str::to_string)).ok_or("taskId is required")?;
         let authentication = match value.get("authentication") {

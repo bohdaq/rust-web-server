@@ -370,16 +370,33 @@ pub(crate) fn to_json(value: &JsonValue) -> String {
 
 // ── JSON in ──────────────────────────────────────────────────────────────────
 
+/// A field by its lowerCamelCase name or its proto (snake_case) name:
+/// ProtoJSON parsers accept both, and clients send either.
+pub(crate) fn field<'a>(value: &'a JsonValue, camel: &str) -> Option<&'a JsonValue> {
+    value.get(camel).or_else(|| {
+        let mut snake = String::with_capacity(camel.len() + 4);
+        for c in camel.chars() {
+            if c.is_ascii_uppercase() {
+                snake.push('_');
+                snake.push(c.to_ascii_lowercase());
+            } else {
+                snake.push(c);
+            }
+        }
+        (snake != camel).then(|| value.get(&snake)).flatten()
+    })
+}
+
 fn string_field(value: &JsonValue, key: &str) -> Option<String> {
-    value.get(key).and_then(JsonValue::as_str).map(str::to_string)
+    field(value, key).and_then(JsonValue::as_str).map(str::to_string)
 }
 
 fn object_field(value: &JsonValue, key: &str) -> Option<String> {
-    value.get(key).filter(|v| matches!(v, JsonValue::Object(_))).map(to_json)
+    field(value, key).filter(|v| matches!(v, JsonValue::Object(_))).map(to_json)
 }
 
 fn strings(value: &JsonValue, key: &str) -> Vec<String> {
-    value.get(key).and_then(JsonValue::as_array).map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect()).unwrap_or_default()
+    field(value, key).and_then(JsonValue::as_array).map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect()).unwrap_or_default()
 }
 
 impl Part {

@@ -432,3 +432,15 @@ fn trailing_slash_card_caching_and_list_shape() {
     let full = call(&client, "ListTasks", r#"{"contextId":"ctx-shape","includeArtifacts":true}"#);
     assert!(full.get("result").unwrap().get("tasks").unwrap().as_array().unwrap()[0].get("artifacts").is_some());
 }
+
+#[test]
+fn proto_field_names_work_like_camel_case() {
+    let client = TestClient::new(agent());
+    let reply = send(&client, "ask", "");
+    let id = s(reply.get("result").unwrap().get("task").unwrap(), &["id"]).to_string();
+    send(&client, "blue", &format!(r#","task_id":"{id}""#));
+    let got = call(&client, "GetTask", &format!(r#"{{"id":"{id}","history_length":1}}"#));
+    assert_eq!(1, got.get("result").unwrap().get("history").unwrap().as_array().unwrap().len(), "history_length = historyLength");
+    let listed = call(&client, "ListTasks", r#"{"page_size":1}"#);
+    assert_eq!(1, listed.get("result").unwrap().get("tasks").unwrap().as_array().unwrap().len());
+}

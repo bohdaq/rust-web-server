@@ -516,12 +516,12 @@ impl A2aServer {
         let message = Message::from_json(params.get("message").ok_or_else(|| RpcError::InvalidParams("message is required".into()))?).map_err(RpcError::InvalidParams)?;
         let configuration = params.get("configuration");
         let accepted_output_modes = configuration
-            .and_then(|c| c.get("acceptedOutputModes"))
+            .and_then(|c| model::field(c, "acceptedOutputModes"))
             .and_then(JsonValue::as_array)
             .map(|a| a.iter().filter_map(|m| m.as_str().map(str::to_string)).collect())
             .unwrap_or_default();
         // A webhook for this message's task, checked before the handler runs.
-        let webhook = match configuration.and_then(|c| c.get("taskPushNotificationConfig")) {
+        let webhook = match configuration.and_then(|c| model::field(c, "taskPushNotificationConfig")) {
             Some(_) if self.push_allow.is_empty() => return Err(RpcError::PushNotificationNotSupported),
             Some(config) => Some(self.checked_config(config, "pending")?),
             None => None,
@@ -584,7 +584,7 @@ impl A2aServer {
             Some(c) => history_length(c)?,
             None => None,
         };
-        let return_immediately = configuration.and_then(|c| c.get("returnImmediately")) == Some(&JsonValue::Bool(true));
+        let return_immediately = configuration.and_then(|c| model::field(c, "returnImmediately")) == Some(&JsonValue::Bool(true));
         match self.handle_message(params, owner)? {
             Outcome::Message(m) => Ok(format!(r#"{{"message":{}}}"#, m.to_json())),
             Outcome::Task(id, running) => {
@@ -646,7 +646,7 @@ impl A2aServer {
         if self.push_allow.is_empty() {
             return Err(RpcError::PushNotificationNotSupported);
         }
-        let task_id = params.get("taskId").and_then(JsonValue::as_str).ok_or_else(|| RpcError::InvalidParams("taskId is required".into()))?.to_string();
+        let task_id = model::field(params, "taskId").and_then(JsonValue::as_str).ok_or_else(|| RpcError::InvalidParams("taskId is required".into()))?.to_string();
         let mut store = self.tasks.lock();
         let stored = store.get_mut(owner, &task_id).ok_or(RpcError::TaskNotFound)?;
         let id = params.get("id").and_then(JsonValue::as_str);
@@ -687,7 +687,7 @@ impl A2aServer {
     }
 
     fn list_tasks(&self, params: &JsonValue, owner: &str) -> Result<String, RpcError> {
-        let page_size = match params.get("pageSize").and_then(JsonValue::as_f64) {
+        let page_size = match model::field(params, "pageSize").and_then(JsonValue::as_f64) {
             Some(n) if (1.0..=100.0).contains(&n) && n.fract() == 0.0 => n as usize,
             Some(_) => return Err(RpcError::InvalidParams("pageSize must be 1 to 100".into())),
             None => 50,
@@ -696,13 +696,13 @@ impl A2aServer {
             Some(s) => Some(TaskState::parse(s).ok_or_else(|| RpcError::InvalidParams(format!("unknown status {s}")))?),
             None => None,
         };
-        let context = params.get("contextId").and_then(JsonValue::as_str);
-        let offset: usize = match params.get("pageToken").and_then(JsonValue::as_str).filter(|t| !t.is_empty()) {
+        let context = model::field(params, "contextId").and_then(JsonValue::as_str);
+        let offset: usize = match model::field(params, "pageToken").and_then(JsonValue::as_str).filter(|t| !t.is_empty()) {
             Some(t) => t.parse().map_err(|_| RpcError::InvalidParams("bad pageToken".into()))?,
             None => 0,
         };
         let history = history_length(params)?.or(Some(0));
-        let include_artifacts = params.get("includeArtifacts") == Some(&JsonValue::Bool(true));
+        let include_artifacts = model::field(params, "includeArtifacts") == Some(&JsonValue::Bool(true));
         let tasks = self.tasks.lock();
         // Most recently updated first (status timestamps are ISO 8601 UTC,
         // so they sort as strings), newest-created first among equals.
@@ -746,7 +746,7 @@ enum Outcome {
 }
 
 fn history_length(params: &JsonValue) -> Result<Option<usize>, RpcError> {
-    match params.get("historyLength") {
+    match model::field(params, "historyLength") {
         None | Some(JsonValue::Null) => Ok(None),
         Some(JsonValue::Number(n)) if *n >= 0.0 && n.fract() == 0.0 => Ok(Some(*n as usize)),
         Some(_) => Err(RpcError::InvalidParams("historyLength must be a non-negative integer".into())),
