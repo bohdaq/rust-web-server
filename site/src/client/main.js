@@ -9,7 +9,6 @@ import "../site.css";
 
 import "../components.js";
 import { initThemeToggle } from "./theme-toggle.js";
-import { initTabPanels } from "./tab-panels.js";
 import { initMenu } from "./menu.js";
 import { initSearch } from "./search.js";
 import { initInstall } from "./install.js";
@@ -21,7 +20,6 @@ import { initChartTooltip } from "./chart-tooltip.js";
 import { initPlayground } from "./playground.js";
 
 initThemeToggle();
-initTabPanels();
 initMenu();
 initSearch();
 initInstall();

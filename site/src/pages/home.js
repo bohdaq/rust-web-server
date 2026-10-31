@@ -153,16 +153,16 @@ async function code(md) {
 async function tabGroup(label, items, id) {
   const panels = await Promise.all(items.map((item) => code(item.code)));
   return html`
-    <div data-tab-group id=${id}>
+    <div id=${id}>
       <lit-material-tabs aria-label=${label}>
         ${items.map((item) => html`<lit-material-tab data-os=${item.os ?? ""}>${item.tab}</lit-material-tab>`)}
       </lit-material-tabs>
       ${items.map(
         (item, i) => html`
-          <div data-tab-panel class="tab-panel">
+          <lit-material-tab-panel class="tab-panel" ?selected=${i === 0}>
             ${panels[i]}
             <p class="tab-note">${item.result ?? item.note}${item.link ? html` <a href=${item.link[0]}>${item.link[1]}</a>.` : ""}</p>
-          </div>`,
+          </lit-material-tab-panel>`,
       )}
     </div>`;
 }

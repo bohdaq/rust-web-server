@@ -139,6 +139,16 @@
   --lit-material-button-height: 40px;
   --lit-material-button-padding-inline: var(--space-100);
   --lit-material-button-text-padding-inline: var(--space-100);
+  --lit-material-button-pressed-scale: 0.98;
+
+  /* Code blocks and alerts: large corners, mono text */
+  --lit-material-code-block-shape: var(--md-sys-shape-corner-large);
+  --lit-material-code-block-container-color: var(--md-sys-color-surface-container-low);
+  --lit-material-code-block-font: var(--font-mono);
+  --lit-material-code-block-font-size: var(--text-sm);
+  --lit-material-code-block-line-height: var(--leading-sm);
+  --lit-material-code-block-label-font: var(--font-mono);
+  --lit-material-alert-shape: var(--md-sys-shape-corner-large);
 
   /* Flat: no elevation shadows anywhere */
   --md-sys-elevation-level0: none;
@@ -181,26 +191,8 @@ a:hover { text-decoration-thickness: 2px; }
   outline-offset: 2px;
 }
 
-/* Components: values lit-material doesn't expose as tokens, via ::part */
-lit-material-button::part(button) {
-  transition:
-    background-color var(--duration-color) var(--ease),
-    transform var(--duration-color) var(--ease);
-}
-lit-material-button:active::part(button) { transform: scale(0.98); }
-
-lit-material-code-block::part(code-block) {
-  border-radius: var(--md-sys-shape-corner-large);
-  background: var(--md-sys-color-surface-container-low);
-}
-lit-material-code-block::part(pre),
-lit-material-code-block::part(code) {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  line-height: var(--leading-sm);
-}
+/* The label's size has no token: the header is label-medium, a step larger here. */
 lit-material-code-block::part(label) {
-  font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: var(--leading-xs);
 }
@@ -208,7 +200,6 @@ lit-material-code-block::part(label) {
 [slot="icon"] { display: inline-flex; }
 [slot="icon"] svg { width: 100%; height: 100%; display: block; }
 
-lit-material-alert::part(alert) { border-radius: var(--md-sys-shape-corner-large); }
 
 .skip-link {
   position: absolute;

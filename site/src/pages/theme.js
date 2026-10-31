@@ -67,17 +67,17 @@ export function render() {
 
       <section>
         <h2>Three modes</h2>
-        <div data-tab-group>
+        <div>
           <lit-material-tabs aria-label="Configuration examples">
             <lit-material-tab>Static server</lit-material-tab>
             <lit-material-tab>Automatic HTTPS</lit-material-tab>
             <lit-material-tab>Reverse proxy</lit-material-tab>
           </lit-material-tabs>
           ${[STATIC, HTTPS, PROXY].map(
-            (code) => html`
-              <div data-tab-panel>
+            (code, i) => html`
+              <lit-material-tab-panel ?selected=${i === 0}>
                 <lit-material-code-block label="rws.config.toml" copyable><pre><code>${code}</code></pre></lit-material-code-block>
-              </div>`,
+              </lit-material-tab-panel>`,
           )}
         </div>
       </section>
