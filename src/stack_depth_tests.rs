@@ -177,3 +177,18 @@ fn wasm_plugin_output_with_hundreds_of_thousands_of_lines() {
         assert!(crate::wasm_plugin::parse_response_output("status 200\n".repeat(200_000).as_bytes()).is_ok());
     });
 }
+
+#[test]
+fn authz_check_through_a_long_cycle_of_groups() {
+    on_small_stack(|| {
+        use crate::authz::{Authorizer, MemoryStore, Schema};
+        let schema = Schema::new().relation("group", "member", "user | group#member").unwrap();
+        let authz = Authorizer::new(schema, MemoryStore::new()).unwrap();
+        for i in 0..5000 {
+            authz.write_str(&format!("group:g{i}#member@group:g{}#member", (i + 1) % 5000)).unwrap();
+        }
+        let _ = authz.check("user:x", "member", "group:g0");
+        let long = "user | ".repeat(500) + "user";
+        let _ = crate::authz::rebac::parse_expression(&long);
+    });
+}

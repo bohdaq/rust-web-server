@@ -351,6 +351,18 @@ pub mod fuzz_api {
         }
     }
 
+    /// Authorization text as the admin API and config file read it (#32):
+    /// a tuple, a subject, and a relation definition.
+    pub fn authz_parse(data: &[u8]) {
+        let text = String::from_utf8_lossy(data);
+        let _ = crate::authz::Tuple::parse(&text);
+        let _ = crate::authz::Subject::parse(&text);
+        if let Ok(terms) = crate::authz::rebac::parse_expression(&text) {
+            let _ = terms.len();
+            let _ = crate::authz::Schema::new().relation("t", "r", &text).and_then(|s| s.validate());
+        }
+    }
+
     /// An `Available-Dictionary` header value, and dictionary-compressed
     /// bodies through both decoders (#38).
     pub fn available_dictionary(data: &[u8]) {

@@ -15,6 +15,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   and MCP bearer / OAuth tokens. Read it with `Identity::current()`; set
   your own with `authz::with_identity` / `scope_identity`. Not a header, so
   clients can't forge it.
+- Relationship-based access control (Zanzibar style): `authz::Schema`
+  (relations as unions of `user`, `group#member`, another relation,
+  `parent->viewer`), tuples (`doc:42#editor@user:alice`), `TupleStore` with
+  `MemoryStore`, and `Authorizer::check` / `explain` — an iterative walk
+  with a visited set, 25 relations deep and 1000 reads at most. Fuzz target
+  `authz_parse`.
 
 ## 18.13.0 — 2026-10-31
 

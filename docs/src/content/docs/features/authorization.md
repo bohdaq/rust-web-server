@@ -58,3 +58,59 @@ with_identity(Identity::new("service:billing", "api-key"), || next.execute(reque
 
 Work handed to another thread (a spawned thread, an MCP task) doesn't carry
 the identity along; pass it explicitly.
+
+## Relationships
+
+What a caller may do is answered from **relationship tuples** and a
+**schema**, Zanzibar style. A tuple says a subject has a relation to an
+object:
+
+```text
+doc:42#owner@user:olga                 olga owns doc 42
+group:eng#member@user:gina             gina is in eng
+doc:42#editor@group:eng#member         every member of eng edits doc 42
+doc:42#parent@folder:specs             doc 42 is in folder specs
+```
+
+The schema says, per object type, what each relation is made of — terms
+joined by `|`:
+
+| Term | Means |
+|---|---|
+| `user` | tuples naming a `user:…` directly |
+| `group#member` | tuples naming `group:…#member`: those members |
+| `owner` | whoever has `owner` on the same object |
+| `parent->viewer` | the viewers of whatever this object's `parent` is |
+
+```rust
+use rust_web_server::authz::{Authorizer, MemoryStore, Schema};
+
+let schema = Schema::new()
+    .relation("group", "member", "user | group#member")?   // groups in groups
+    .relation("folder", "viewer", "user | group#member")?
+    .relation("doc", "parent", "folder")?
+    .relation("doc", "owner", "user")?
+    .relation("doc", "editor", "user | group#member | owner")?
+    .relation("doc", "viewer", "user | editor | parent->viewer")?;
+let authz = Authorizer::new(schema, MemoryStore::new())?;
+
+authz.write_str("doc:42#owner@user:olga")?;
+authz.check("user:olga", "viewer", "doc:42")?;            // true: owner → editor → viewer
+authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allowed it
+```
+
+- A bare name is a type when no relation of that type has it, otherwise a
+  relation on the same object. Types used only as subjects (`user`) need no
+  definition. `Authorizer::new` validates the schema: every `group#member`,
+  `parent->viewer` and relation must exist.
+- Writes are checked against it: `doc:42#viewer@folder:x` is refused when
+  `viewer` doesn't take folders.
+- A check walks the graph without recursion, ignores cycles, and stops with
+  `AuthzError::Limit` after 25 relations deep or 1000 tuple reads — treat
+  that as a "no".
+- Names are letters, digits, `_`, `-` and `.`; ids anything but `#`, `@`,
+  spaces and control characters; both up to 256 characters.
+
+Tuples live in a `TupleStore`: `MemoryStore` here (lost on restart); a SQL
+store, config-file routes and admin API endpoints follow in later 18.14
+work.

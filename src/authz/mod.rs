@@ -24,8 +24,10 @@
 //! the request inside [`with_identity`], so a client can't send one.
 
 pub(crate) mod identity;
+pub mod rebac;
 
 pub use identity::{with_identity, Identity};
+pub use rebac::{AuthzError, Authorizer, MemoryStore, ObjectRef, Schema, Subject, Tuple, TupleFilter, TupleStore};
 #[cfg(feature = "http2")]
 pub use identity::scope_identity;
 
