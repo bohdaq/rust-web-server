@@ -65,7 +65,7 @@ pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
 
 /// Tables (and their sub-tables) read by `proxy_config`'s own parser, not
 /// mapped to `RWS_CONFIG_*` variables.
-const PROXY_TABLES: &[&str] = &["route", "upstream", "tcp_proxy", "udp_proxy", "ws_proxy", "middleware"];
+const PROXY_TABLES: &[&str] = &["route", "upstream", "tcp_proxy", "udp_proxy", "ws_proxy", "middleware", "authz"];
 
 /// `[[virtual_host]]` fields, set as `RWS_CONFIG_VIRTUAL_HOST_<n>_<FIELD>`.
 const VIRTUAL_HOST_FIELDS: &[&str] = &["DOMAIN", "CERT_FILE", "KEY_FILE"];

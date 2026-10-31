@@ -29,9 +29,7 @@ pub fn parse(toml: &str) -> SectionMap {
     // Current section path (where key-value pairs are written)
     let mut current_section: String = String::new();
 
-    for raw_line in toml.lines() {
-        // Strip inline comments (naive: first # not inside a string)
-        let line = strip_comment(raw_line).trim().to_string();
+    for line in logical_lines(toml) {
 
         if line.is_empty() {
             continue;
@@ -126,6 +124,67 @@ fn outer_section_base(name: &str, idx: usize) -> String {
 }
 
 /// Strip an inline TOML comment (first `#` not inside a quoted string).
+/// The lines of `toml` with comments removed and trimmed, a multi-line
+/// array (`key = [` … `]`) joined into one line — the rest of the parser
+/// reads one `key = value` per line. A bracket inside a string doesn't
+/// count; an array left open at the end is returned as it is.
+pub(crate) fn logical_lines(toml: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut pending: Option<(String, i64)> = None;
+    for raw in toml.lines() {
+        let line = strip_comment(raw).trim();
+        if let Some((joined, depth)) = pending.as_mut() {
+            if !line.is_empty() {
+                joined.push(' ');
+                joined.push_str(line);
+                *depth += bracket_depth(line);
+            }
+            if *depth <= 0 {
+                out.push(pending.take().expect("pending").0);
+            }
+            continue;
+        }
+        let opens_array = line.split_once('=').is_some_and(|(key, value)| !key.trim().starts_with('[') && value.trim_start().starts_with('['));
+        let depth = if opens_array { bracket_depth(line) } else { 0 };
+        if depth > 0 {
+            pending = Some((line.to_string(), depth));
+        } else {
+            out.push(line.to_string());
+        }
+    }
+    if let Some((joined, _)) = pending {
+        out.push(joined);
+    }
+    out
+}
+
+/// `[` minus `]` outside quoted strings.
+fn bracket_depth(line: &str) -> i64 {
+    let mut depth = 0;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for c in line.chars() {
+        match quote {
+            Some(q) => {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '"' | '\'' => quote = Some(c),
+                '[' => depth += 1,
+                ']' => depth -= 1,
+                _ => {}
+            },
+        }
+    }
+    depth
+}
+
 pub(crate) fn strip_comment(line: &str) -> &str {
     let bytes = line.as_bytes();
     let mut in_quote = false;
@@ -409,6 +468,16 @@ connect_timeout_ms = 3000
             get_array(&map, "tcp_proxy[0]", "backends"),
             vec!["db1:5432", "db2:5432"]
         );
+    }
+
+    #[test]
+    fn multi_line_arrays_are_joined() {
+        let toml = "[authz]\ntuples = [\n  \"doc:1#owner@user:a\",  # first\n  \"doc:2#owner@user:[b]\",\n]\nstore = \"memory\"\n";
+        let map = parse(toml);
+        assert_eq!(get_array(&map, "authz", "tuples"), ["doc:1#owner@user:a", "doc:2#owner@user:[b]"]);
+        assert_eq!(get_str(&map, "authz", "store"), "memory");
+        assert_eq!(logical_lines("a = [1,\n2]\n[t]\nb = []"), ["a = [1, 2]", "[t]", "b = []"]);
+        assert_eq!(logical_lines("a = [1,\n2"), ["a = [1, 2"], "an unclosed array ends with the file");
     }
 
     #[test]

@@ -21,6 +21,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `MemoryStore`, and `Authorizer::check` / `explain` — an iterative walk
   with a visited set, 25 relations deep and 1000 reads at most. Fuzz target
   `authz_parse`.
+- `AuthzLayer` (`401` without a caller, `403` when not allowed) with object
+  templates (`doc:{path:2}`, `{query:k}`, `{header:H}`), and in the config
+  file `[authz]` (schema per `[authz.type.<name>]`, seed `tuples`) plus
+  `[route.middleware.authz] relation / object`; `rws --check` validates
+  them; runtime tuples survive a reload. `ci/e2e/authz.sh`.
+- The proxy config parser accepts arrays spanning several lines (comments
+  and a trailing comma allowed).
 
 ## 18.13.0 — 2026-10-31
 

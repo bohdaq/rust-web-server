@@ -92,3 +92,111 @@ fn mcp_bearer_tokens_name_the_caller() {
         .send();
     assert!(response.body_text().contains("user:alice via mcp"), "{}", response.body_text());
 }
+
+// ── AuthzLayer and object templates ──────────────────────────────────────────
+
+fn request(raw: &str) -> Request {
+    Request::parse(raw.as_bytes()).unwrap()
+}
+
+#[test]
+fn object_templates_read_path_query_and_headers() {
+    let t = ObjectTemplate::parse("doc:{path:2}").unwrap();
+    assert_eq!(t.object_type(), Some("doc"));
+    assert_eq!(t.render(&request("GET /docs/42/edit?x=1 HTTP/1.1\r\nHost: x\r\n\r\n")).unwrap().to_string(), "doc:42");
+    assert!(t.render(&request("GET /docs HTTP/1.1\r\nHost: x\r\n\r\n")).is_none(), "no second segment");
+    let q = ObjectTemplate::parse("org:{header:X-Org}-{query:team}").unwrap();
+    assert_eq!(q.render(&request("GET /?a=b&team=core HTTP/1.1\r\nHost: x\r\nX-Org: acme\r\n\r\n")).unwrap().to_string(), "org:acme-core");
+    assert!(q.render(&request("GET /?team=core HTTP/1.1\r\nHost: x\r\n\r\n")).is_none(), "missing header");
+    assert!(t.render(&request("GET /docs/a%23b HTTP/1.1\r\nHost: x\r\n\r\n")).is_some_and(|o| o.id == "a%23b"), "raw segment, still a valid id");
+    for bad in ["doc:{path:0}", "doc:{path:x}", "doc:{cookie:a}", "doc:{path:1", "{path:1}", "doc:42}", ""] {
+        assert!(ObjectTemplate::parse(bad).is_err(), "{bad:?}");
+    }
+}
+
+fn docs_authz() -> Authorizer {
+    let schema = Schema::new().relation("doc", "owner", "user").unwrap().relation("doc", "viewer", "user | owner").unwrap();
+    let authz = Authorizer::new(schema, MemoryStore::new()).unwrap();
+    authz.write_str("doc:42#owner@user:alice").unwrap();
+    authz
+}
+
+#[test]
+fn the_layer_answers_401_403_or_lets_through() {
+    use crate::middleware::Middleware;
+    let layer = AuthzLayer::new(docs_authz(), "viewer", "doc:{path:2}").unwrap();
+    let get = |path: &str| request(&format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n"));
+    let run = |who: Option<&str>, path: &str| {
+        let call = || layer.handle(&get(path), &ConnectionInfo::default(), &WhoAmI).unwrap();
+        let response = match who {
+            Some(subject) => with_identity(Identity::new(subject, "test"), call),
+            None => call(),
+        };
+        (response.status_code, body(&response))
+    };
+    assert_eq!(run(Some("alice"), "/docs/42"), (200, "user:alice via test".to_string()));
+    assert_eq!(run(Some("bob"), "/docs/42").0, 403);
+    assert_eq!(run(Some("alice"), "/docs/7").0, 403);
+    assert_eq!(run(Some("alice"), "/docs").0, 403, "no object");
+    assert_eq!(run(None, "/docs/42").0, 401);
+    assert!(AuthzLayer::new(docs_authz(), "editor", "doc:{path:2}").unwrap_err().contains("doc#editor isn't defined"));
+}
+
+const AUTHZ_TOML: &str = r#"
+[authz]
+tuples = ["doc:42#owner@user:alice"]
+[authz.type.doc]
+owner = "user"
+viewer = "user | owner"
+
+[[route]]
+name = "docs"
+[route.match]
+path = "/docs/*"
+[route.action]
+type = "respond"
+body = "the doc"
+[route.middleware.auth]
+type = "jwt"
+secret_env = "RWS_TEST_AUTHZ_JWT"
+[route.middleware.authz]
+relation = "viewer"
+object = "doc:{path:2}"
+"#;
+
+#[cfg(feature = "auth")]
+#[test]
+fn config_routes_check_relations_and_runtime_tuples_survive_a_reload() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_TEST_AUTHZ_JWT", "secret");
+    let report = crate::config_check::check_str(AUTHZ_TOML);
+    assert!(report.errors.is_empty() && report.warnings.is_empty(), "{:?} {:?}", report.errors, report.warnings);
+    let (app, _handles) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(AUTHZ_TOML));
+    let client = crate::test_client::TestClient::new(app.clone());
+    let token = |sub: &str| format!("Bearer {}", crate::auth::build_jwt(&format!(r#"{{"sub":"{sub}"}}"#), b"secret"));
+    assert_eq!(client.get("/docs/42").header("Authorization", &token("alice")).send().status(), 200);
+    assert_eq!(client.get("/docs/42").header("Authorization", &token("bob")).send().status(), 403);
+    assert_eq!(client.get("/docs/42").send().status(), 401, "jwt layer: no token");
+    // A tuple written at runtime (as the admin API will) survives a reload.
+    let authorizer = crate::authz::config::current().unwrap().unwrap();
+    authorizer.write_str("doc:42#viewer@user:bob").unwrap();
+    app.reload_from_str(&AUTHZ_TOML.replace("the doc", "the doc, v2")).unwrap();
+    let response = client.get("/docs/42").header("Authorization", &token("bob")).send();
+    assert_eq!((response.status(), response.body_text()), (200, "the doc, v2"));
+    std::env::remove_var("RWS_TEST_AUTHZ_JWT");
+}
+
+#[test]
+fn rws_check_reports_authz_mistakes() {
+    let errors = |toml: &str| crate::config_check::check_str_offline(toml).errors.join("\n");
+    let warnings = |toml: &str| crate::config_check::check_str_offline(toml).warnings.join("\n");
+    assert!(errors(&AUTHZ_TOML.replace("[authz]\n", "[nothing]\n").replace("[authz.type.doc]", "[nothing.type.doc]")).contains("needs an [authz] section"));
+    assert!(errors(&AUTHZ_TOML.replace(r#"relation = "viewer""#, r#"relation = "editor""#)).contains("doc#editor isn't defined"));
+    assert!(errors(&AUTHZ_TOML.replace("doc:{path:2}", "doc:{path:x}")).contains("{path:N} needs N"));
+    assert!(errors(&AUTHZ_TOML.replace(r#"viewer = "user | owner""#, r#"viewer = "user | team#member""#)).contains("[authz]: "));
+    assert!(errors(&AUTHZ_TOML.replace("doc:42#owner@user:alice", "doc:42#owner@group:x")).contains("tuple"));
+    assert!(errors(&AUTHZ_TOML.replace(r#"object = "doc:{path:2}""#, "object = \"doc:{path:2}\"\nrole = \"x\"")).contains("role: unknown key"));
+    assert!(errors(&AUTHZ_TOML.replace("[authz]\n", "[authz]\nstore = \"redis\"\n")).contains("isn't supported"));
+    let no_auth = AUTHZ_TOML.replace("[route.middleware.auth]\ntype = \"jwt\"\nsecret_env = \"RWS_TEST_AUTHZ_JWT\"\n", "");
+    assert!(warnings(&no_auth).contains("every request gets 401"));
+}

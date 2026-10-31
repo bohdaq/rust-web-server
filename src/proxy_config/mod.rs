@@ -60,6 +60,27 @@ pub struct ProxyConfig {
     pub udp_proxies: Vec<UdpProxyConfig>,
     pub ws_proxies: Vec<WsProxyConfig>,
     pub global_middleware: MiddlewareConfig,
+    /// `[authz]`: the relationship schema and seed tuples. Since 18.14.0.
+    pub authz: Option<AuthzConfig>,
+}
+
+/// `[authz]` and its `[authz.type.<name>]` tables.
+#[derive(Debug, Clone, Default)]
+pub struct AuthzConfig {
+    /// `store`: `"memory"` (default).
+    pub store: String,
+    /// `tuples`: `object#relation@subject` written at every (re)load.
+    pub tuples: Vec<String>,
+    /// `(type, [(relation, definition)])`, from `[authz.type.<type>]`.
+    pub types: Vec<(String, Vec<(String, String)>)>,
+}
+
+/// `[route.middleware.authz]`.
+#[derive(Debug, Clone)]
+pub struct RouteAuthzConfig {
+    pub relation: String,
+    /// An object template, e.g. `doc:{path:2}`.
+    pub object: String,
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +213,9 @@ pub struct MiddlewareConfig {
     /// `early_hints = ["</app.css>; rel=preload; as=style", …]`: `Link`
     /// values sent as a `103 Early Hints` before the route answers (18.12.0).
     pub early_hints: Vec<String>,
+    /// `[route.middleware.authz]`: the caller needs `relation` on `object`.
+    /// Since 18.14.0.
+    pub authz: Option<RouteAuthzConfig>,
     /// `[route.middleware.mirror]`: copy a share of requests to other
     /// backends (18.11.0).
     pub mirror: Option<MirrorConfig>,
@@ -575,6 +599,23 @@ impl ProxyConfig {
         // ── global middleware ──────────────────────────────────────────────────
         let global_middleware = parse_middleware_config(&map, "middleware", usize::MAX);
 
+        // ── [authz] ───────────────────────────────────────────────────────────
+        let authz = map.keys().any(|k| k == "authz" || k.starts_with("authz.")).then(|| {
+            let mut type_sections: Vec<&String> = map.keys().filter(|k| k.starts_with("authz.type.")).collect();
+            type_sections.sort();
+            AuthzConfig {
+                store: get_str(&map, "authz", "store"),
+                tuples: get_array(&map, "authz", "tuples"),
+                types: type_sections
+                    .into_iter()
+                    .map(|sec| {
+                        let relations = map[sec].iter().map(|(k, _)| (k.clone(), get_str(&map, sec, k))).collect();
+                        (sec["authz.type.".len()..].to_string(), relations)
+                    })
+                    .collect(),
+            }
+        });
+
         ProxyConfig {
             upstreams,
             routes,
@@ -582,6 +623,7 @@ impl ProxyConfig {
             udp_proxies,
             ws_proxies,
             global_middleware,
+            authz,
         }
     }
 }
@@ -697,6 +739,10 @@ fn parse_middleware_config(
         rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny,
         timeout_ms, max_body_size, wasm, mirror,
         early_hints: get_array(map, mw_sec, "early_hints"),
+        authz: section_exists(map, &format!("{mw_sec}.authz")).then(|| RouteAuthzConfig {
+            relation: get_str(map, &format!("{mw_sec}.authz"), "relation"),
+            object: get_str(map, &format!("{mw_sec}.authz"), "object"),
+        }),
     }
 }
 
@@ -949,6 +995,7 @@ impl MiddlewareConfig {
             && self.rewrite_request.is_empty() && self.rewrite_response.is_empty()
             && self.ip_allow.is_empty() && self.ip_deny.is_empty()
             && self.timeout_ms.is_none() && self.max_body_size.is_none() && self.wasm.is_none()
+            && self.authz.is_none()
     }
 }
 

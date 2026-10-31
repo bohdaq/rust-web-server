@@ -1609,6 +1609,21 @@ unhealthy_threshold = 3          # Consecutive failures before marking unhealthy
 When the health checker removes all backends, the route returns `502 Bad Gateway`
 until at least one backend recovers.
 
+## `[authz]`
+
+Relationship-based authorization for routes with `[route.middleware.authz]`
+(since 18.14.0) — see [Authorization](/features/authorization/#in-the-config-file).
+
+```toml
+[authz]
+store  = "memory"                        # the default
+tuples = ["doc:42#owner@user:olga"]      # written at start and on reload; may span lines
+
+[authz.type.doc]                         # one table per object type
+owner  = "user"
+viewer = "user | group#member | owner"   # terms: type, type#relation, relation, rel->rel
+```
+
 ## `[[route]]`
 
 Each `[[route]]` entry maps a set of match criteria to an action and an optional
@@ -1794,6 +1809,10 @@ vary_by  = ["Accept-Encoding", "Authorization"]
 # dir      = "/var/cache/rws/api"   # on disk instead of in memory (18.11.0)
 # max_size = "512M"                 # disk bound, default 256M
 # purge_token_env = "RWS_PURGE_TOKEN"  # accept HTTP PURGE with this bearer token (18.11.0)
+
+[route.middleware.authz]                 # caller needs relation on object (18.14.0)
+relation = "viewer"
+object   = "doc:{path:2}"
 
 [route.middleware.auth]
 type      = "bearer"        # "bearer" | "jwt" | "basic"
@@ -8151,8 +8170,69 @@ authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allow
   spaces and control characters; both up to 256 characters.
 
 Tuples live in a `TupleStore`: `MemoryStore` here (lost on restart); a SQL
-store, config-file routes and admin API endpoints follow in later 18.14
-work.
+store and admin API endpoints follow in later 18.14 work.
+
+## Protecting routes
+
+`AuthzLayer` lets a request through when its caller has a relation to an
+object named from the request: `{path:N}` (the Nth path segment),
+`{query:name}`, `{header:Name}`. Put the authenticator outside it — it sets
+the caller:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::JwtLayer;
+use rust_web_server::authz::AuthzLayer;
+use rust_web_server::core::New;
+
+let app = App::new()
+    .wrap(AuthzLayer::new(authz.clone(), "viewer", "doc:{path:2}")?) // /docs/42 → doc:42
+    .wrap(JwtLayer::new(b"secret"));
+```
+
+No caller → `401`; not allowed, an object the request doesn't name, or a
+check that hit a limit (logged) → `403`. `AuthzLayer::with(authz, |request|
+…)` picks the relation and object in code instead.
+
+### In the config file
+
+```toml
+[authz]
+tuples = [                               # written at every start and reload
+  "group:eng#member@user:gina",
+  "doc:42#editor@group:eng#member",
+]
+[authz.type.group]
+member = "user | group#member"
+[authz.type.doc]
+owner  = "user"
+editor = "user | group#member | owner"
+viewer = "user | editor"
+
+[[route]]
+[route.match]
+path = "/docs/*"
+[route.action]
+type = "proxy"
+upstream = "docs"
+[route.middleware.auth]
+type = "jwt"
+secret_env = "JWT_SECRET"
+[route.middleware.authz]
+relation = "viewer"
+object   = "doc:{path:2}"
+```
+
+- `[authz]` is read at start and on every reload; `rws --check` validates
+  the schema, every seed tuple, and each route's relation and template
+  against it, and warns about an `authz` route with no `auth` (here or in
+  `[middleware]`) — every request would be `401`.
+- The tuple store (memory) lives as long as the process: tuples written at
+  runtime survive a reload; removing a seed tuple from the file doesn't
+  delete it.
+- An `[authz]` that can't be built makes `authz` routes answer `503`
+  (logged), never lets them through.
+- `[middleware.authz]` in the global table applies to every request.
 
 ---
 
@@ -12596,6 +12676,19 @@ early_hints = ["</app.css>; rel=preload; as=style", "<https://cdn.example.com>; 
 Sends these `Link` values as a [`103 Early Hints`](/features/early-hints/) before the route answers, so the browser fetches them while the backend works (since 18.12.0). On every action; a proxy route keeps the non-blocking forwarder. A proxy route also passes a backend's own `103` on (its `Link` values only), with or without this key. Sent over HTTP/2 and HTTP/3; over HTTP/1.1 only with `early_hints_http1 = true`. `rws --check` fails on an empty value or one with a line break, and warns when a value doesn't start with ``. `/metrics`: `rws_early_hints_total{source}` (`configured`, `upstream`, `handler`).
 
 `early_hints` in the top-level `[middleware]` table sends those hints for every request — routes, static files and health checks — ahead of any route's own. Like any global middleware, it takes proxy routes off the non-blocking forwarder.
+
+#### Authorization
+
+```toml
+[route.middleware.authz]
+relation = "viewer"          # needed on…
+object   = "doc:{path:2}"    # …this object: {path:N}, {query:name}, {header:Name}
+```
+
+The caller (set by `[route.middleware.auth]` or the global `[middleware]`
+auth) needs `relation` on `object` under the top-level `[authz]` schema —
+relationship-based access control, since 18.14.0. `401` without a caller,
+`403` when not allowed. See [Authorization](/features/authorization/#in-the-config-file).
 
 #### Per-route max body size
 
@@ -20171,6 +20264,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `JwtLayer` | `auth` (`auth`) | HS256 Bearer JWT validation; `::rs256`/`::es256` verify against a static public key (`auth-asymmetric`) |
 | `Identity` / `with_identity` / `scope_identity` | `authz` | The authenticated caller (`user:alice`), set by every authenticator for the rest of the request — not a header; `Identity::current()` (18.14.0). See [Authorization](/features/authorization/) |
 | `Authorizer` / `Schema` / `Tuple` / `TupleStore` / `MemoryStore` | `authz` | Relationship-based access control: a schema of relations (`user \| group#member \| owner \| parent->viewer`), tuples (`doc:42#editor@user:alice`), `check` / `explain` with depth and read limits (18.14.0). See [Authorization](/features/authorization/#relationships) |
+| `AuthzLayer` / `ObjectTemplate` | `authz` | Middleware: the caller needs a relation on an object named from the request (`doc:{path:2}`, `{query:k}`, `{header:H}`); 401 / 403 (18.14.0). See [Authorization](/features/authorization/#protecting-routes) |
 | `ForwardAuthLayer` | `auth::forward` (`auth`) | Delegates allow/deny to an external HTTP service; verbatim pass-through on non-2xx, 502 if unreachable |
 | `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry. See [IP filter](/features/ip-filter/) |
 | `Blocklist` | `blocklist` | Runtime IP blocklist: `blocklist::global().block(ip)` / `.unblock` / `.is_blocked` / `.list` / `.clear` |

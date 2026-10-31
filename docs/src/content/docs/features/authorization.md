@@ -112,5 +112,66 @@ authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allow
   spaces and control characters; both up to 256 characters.
 
 Tuples live in a `TupleStore`: `MemoryStore` here (lost on restart); a SQL
-store, config-file routes and admin API endpoints follow in later 18.14
-work.
+store and admin API endpoints follow in later 18.14 work.
+
+## Protecting routes
+
+`AuthzLayer` lets a request through when its caller has a relation to an
+object named from the request: `{path:N}` (the Nth path segment),
+`{query:name}`, `{header:Name}`. Put the authenticator outside it — it sets
+the caller:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::JwtLayer;
+use rust_web_server::authz::AuthzLayer;
+use rust_web_server::core::New;
+
+let app = App::new()
+    .wrap(AuthzLayer::new(authz.clone(), "viewer", "doc:{path:2}")?) // /docs/42 → doc:42
+    .wrap(JwtLayer::new(b"secret"));
+```
+
+No caller → `401`; not allowed, an object the request doesn't name, or a
+check that hit a limit (logged) → `403`. `AuthzLayer::with(authz, |request|
+…)` picks the relation and object in code instead.
+
+### In the config file
+
+```toml
+[authz]
+tuples = [                               # written at every start and reload
+  "group:eng#member@user:gina",
+  "doc:42#editor@group:eng#member",
+]
+[authz.type.group]
+member = "user | group#member"
+[authz.type.doc]
+owner  = "user"
+editor = "user | group#member | owner"
+viewer = "user | editor"
+
+[[route]]
+[route.match]
+path = "/docs/*"
+[route.action]
+type = "proxy"
+upstream = "docs"
+[route.middleware.auth]
+type = "jwt"
+secret_env = "JWT_SECRET"
+[route.middleware.authz]
+relation = "viewer"
+object   = "doc:{path:2}"
+```
+
+- `[authz]` is read at start and on every reload; `rws --check` validates
+  the schema, every seed tuple, and each route's relation and template
+  against it, and warns about an `authz` route with no `auth` (here or in
+  `[middleware]`) — every request would be `401`.
+- The tuple store (memory) lives as long as the process: tuples written at
+  runtime survive a reload; removing a seed tuple from the file doesn't
+  delete it.
+- An `[authz]` that can't be built makes `authz` routes answer `503`
+  (logged), never lets them through.
+- `[middleware.authz]` in the global table applies to every request.

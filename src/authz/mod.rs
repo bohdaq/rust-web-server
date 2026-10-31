@@ -23,10 +23,13 @@
 //! The identity is not a request header: the authenticator runs the rest of
 //! the request inside [`with_identity`], so a client can't send one.
 
+pub(crate) mod config;
 pub(crate) mod identity;
+mod layer;
 pub mod rebac;
 
 pub use identity::{with_identity, Identity};
+pub use layer::{AuthzLayer, ObjectTemplate};
 pub use rebac::{AuthzError, Authorizer, MemoryStore, ObjectRef, Schema, Subject, Tuple, TupleFilter, TupleStore};
 #[cfg(feature = "http2")]
 pub use identity::scope_identity;

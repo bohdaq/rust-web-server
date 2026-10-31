@@ -321,6 +321,21 @@ unhealthy_threshold = 3          # Consecutive failures before marking unhealthy
 When the health checker removes all backends, the route returns `502 Bad Gateway`
 until at least one backend recovers.
 
+## `[authz]`
+
+Relationship-based authorization for routes with `[route.middleware.authz]`
+(since 18.14.0) — see [Authorization](/features/authorization/#in-the-config-file).
+
+```toml
+[authz]
+store  = "memory"                        # the default
+tuples = ["doc:42#owner@user:olga"]      # written at start and on reload; may span lines
+
+[authz.type.doc]                         # one table per object type
+owner  = "user"
+viewer = "user | group#member | owner"   # terms: type, type#relation, relation, rel->rel
+```
+
 ## `[[route]]`
 
 Each `[[route]]` entry maps a set of match criteria to an action and an optional
@@ -506,6 +521,10 @@ vary_by  = ["Accept-Encoding", "Authorization"]
 # dir      = "/var/cache/rws/api"   # on disk instead of in memory (18.11.0)
 # max_size = "512M"                 # disk bound, default 256M
 # purge_token_env = "RWS_PURGE_TOKEN"  # accept HTTP PURGE with this bearer token (18.11.0)
+
+[route.middleware.authz]                 # caller needs relation on object (18.14.0)
+relation = "viewer"
+object   = "doc:{path:2}"
 
 [route.middleware.auth]
 type      = "bearer"        # "bearer" | "jwt" | "basic"

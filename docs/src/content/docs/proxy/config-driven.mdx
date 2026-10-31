@@ -428,6 +428,19 @@ Sends these `Link` values as a [`103 Early Hints`](/features/early-hints/) befor
 
 `early_hints` in the top-level `[middleware]` table sends those hints for every request — routes, static files and health checks — ahead of any route's own. Like any global middleware, it takes proxy routes off the non-blocking forwarder.
 
+#### Authorization
+
+```toml
+[route.middleware.authz]
+relation = "viewer"          # needed on…
+object   = "doc:{path:2}"    # …this object: {path:N}, {query:name}, {header:Name}
+```
+
+The caller (set by `[route.middleware.auth]` or the global `[middleware]`
+auth) needs `relation` on `object` under the top-level `[authz]` schema —
+relationship-based access control, since 18.14.0. `401` without a caller,
+`403` when not allowed. See [Authorization](/features/authorization/#in-the-config-file).
+
 #### Per-route max body size
 
 ```toml

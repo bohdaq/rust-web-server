@@ -51,6 +51,12 @@ fn build_with_source(config: ProxyConfig, source: Option<String>) -> (ConfigDriv
 /// the checkers stop when `health_stop` is set. Used at startup and on every
 /// hot reload.
 pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>) -> Vec<CompiledRoute> {
+    // ── 0. The [authz] authorizer, for routes' authz middleware ─────────────
+    let authorizer = config_authorizer(config);
+    if let Some(Err(e)) = &authorizer {
+        eprintln!("[proxy_config] ERROR: [authz]: {e} — routes with authz answer 503 until it's fixed.");
+    }
+    crate::authz::config::set_current(authorizer);
     // ── 1. Build upstream name → live backends map ─────────────────────────
     let mut upstream_lives: HashMap<String, Arc<RwLock<Vec<String>>>> = HashMap::new();
     // tls_ca_file trust settings per upstream, loaded once per compile (so a
@@ -409,6 +415,22 @@ pub(crate) fn apply_middleware_named(
         };
     }
 
+    // ── Authorization (inside auth, which sets the caller) ─────────────────
+    if let Some(ref rule) = mw.authz {
+        let layer = match crate::authz::config::current() {
+            Some(Ok(authorizer)) => crate::authz::AuthzLayer::new(authorizer, &rule.relation, &rule.object),
+            Some(Err(e)) => Err(format!("[authz] couldn't be built: {e}")),
+            None => Err("the route has [route.middleware.authz] but there's no [authz] section".to_string()),
+        };
+        app = match layer {
+            Ok(layer) => arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer)),
+            Err(e) => {
+                eprintln!("[proxy_config] ERROR: authz: {e} — this route answers 503 until it's fixed.");
+                arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(AuthMisconfigured))
+            }
+        };
+    }
+
     // ── Auth ───────────────────────────────────────────────────────────────
     // Fails closed: an auth setting that can't be honoured (secret unset,
     // htpasswd missing, feature not compiled in) puts AuthMisconfigured in
@@ -592,4 +614,36 @@ impl Clone for ArcApp {
     fn clone(&self) -> Self {
         ArcApp(Arc::clone(&self.0))
     }
+}
+
+/// The authorizer `[authz]` describes: its schema, the process-wide tuple
+/// store, the seed tuples written. `None` without `[authz]`.
+pub(crate) fn config_authorizer(config: &ProxyConfig) -> Option<Result<crate::authz::Authorizer, String>> {
+    config_authorizer_with(config, crate::authz::config::memory_store())
+}
+
+/// [`config_authorizer`] over `store` (a throwaway one for `rws --check`).
+pub(crate) fn config_authorizer_with(
+    config: &ProxyConfig,
+    memory: Arc<dyn crate::authz::TupleStore>,
+) -> Option<Result<crate::authz::Authorizer, String>> {
+    let authz = config.authz.as_ref()?;
+    Some((|| {
+        let mut schema = crate::authz::Schema::new();
+        for (kind, relations) in &authz.types {
+            schema = if relations.is_empty() { schema.object_type(kind) } else { Ok(schema) }.map_err(|e| e.to_string())?;
+            for (relation, definition) in relations {
+                schema = schema.relation(kind, relation, definition).map_err(|e| format!("type {kind}, relation {relation}: {e}"))?;
+            }
+        }
+        let store = match authz.store.as_str() {
+            "" | "memory" => memory,
+            other => return Err(format!("store = \"{other}\" isn't supported (memory)")),
+        };
+        let authorizer = crate::authz::Authorizer::with_store(schema, store).map_err(|e| e.to_string())?;
+        for tuple in &authz.tuples {
+            authorizer.write_str(tuple).map_err(|e| format!("tuple {tuple:?}: {e}"))?;
+        }
+        Ok(authorizer)
+    })())
 }

@@ -70,6 +70,8 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.middleware.auth" => vec!["type", "token_env", "secret_env", "htpasswd_file"],
         "route.middleware.ip_filter" => vec!["allow", "deny"],
         "route.middleware.mirror" => vec!["upstream", "backends", "percent"],
+        "route.middleware.authz" => vec!["relation", "object"],
+        "authz" => vec!["store", "tuples"],
         "route.middleware.wasm" => vec!["module", "fuel", "memory_mb", "config"],
         "route.middleware.rewrite.request" | "route.middleware.rewrite.response" => REWRITE_RULE_KEYS.to_vec(),
         "tcp_proxy" => vec!["name", "listen", "backends", "connect_timeout_ms"],
@@ -102,12 +104,12 @@ pub fn check_unknown_keys(toml: &str, report: &mut ConfigReport) {
     sections.sort();
     for section in sections {
         let root = section.split(['.', '[']).next().unwrap_or("");
-        if !["route", "upstream", "tcp_proxy", "udp_proxy", "ws_proxy", "middleware"].contains(&root) {
+        if !["route", "upstream", "tcp_proxy", "udp_proxy", "ws_proxy", "middleware", "authz"].contains(&root) {
             continue;
         }
         let shape = strip_indices(section);
-        // Header names: any key.
-        if shape == "route.action.mcp.upstream.headers_env" {
+        // Header names, relation names: any key.
+        if shape == "route.action.mcp.upstream.headers_env" || shape.starts_with("authz.type.") {
             continue;
         }
         match known_keys(&shape) {
@@ -148,6 +150,11 @@ impl ProxyConfig {
     /// the auth secrets' environment variables and htpasswd files, so run it
     /// in the environment the server will run in.
     pub fn validate(&self, report: &mut ConfigReport) {
+        // [authz], built over a throwaway store (nothing is written).
+        let authz = super::builder::config_authorizer_with(self, std::sync::Arc::new(crate::authz::MemoryStore::new()));
+        if let Some(Err(e)) = &authz {
+            report.error(format!("[authz]: {e}"));
+        }
         let mut names = HashSet::new();
         for (i, upstream) in self.upstreams.iter().enumerate() {
             let label = if upstream.name.is_empty() { format!("[[upstream]] #{}", i + 1) } else { format!("upstream '{}'", upstream.name) };
@@ -293,7 +300,8 @@ impl ProxyConfig {
                     report.error(format!("{label}: unknown action type '{kind}' (expected proxy, grpc, static, redirect, respond, mcp or llm)"));
                 }
             }
-            validate_middleware(&label, &route.middleware, report);
+            let has_auth = route.middleware.auth.is_some() || self.global_middleware.auth.is_some();
+            validate_middleware(&label, &route.middleware, authz.as_ref(), has_auth, report);
 
             let m = &route.match_;
             if m.host.is_none() && m.path.is_none() && m.method.is_none() && m.content_type.is_none() && i + 1 < self.routes.len() {
@@ -301,7 +309,7 @@ impl ProxyConfig {
             }
         }
 
-        validate_middleware("[middleware]", &self.global_middleware, report);
+        validate_middleware("[middleware]", &self.global_middleware, authz.as_ref(), self.global_middleware.auth.is_some(), report);
 
         let listeners = self.tcp_proxies.iter().map(|p| ("tcp_proxy", &p.name, &p.listen, &p.backends))
             .chain(self.udp_proxies.iter().map(|p| ("udp_proxy", &p.name, &p.listen, &p.backends)))
@@ -323,12 +331,38 @@ impl ProxyConfig {
     }
 }
 
-fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigReport) {
+fn validate_middleware(
+    label: &str,
+    mw: &MiddlewareConfig,
+    authz: Option<&Result<crate::authz::Authorizer, String>>,
+    has_auth: bool,
+    report: &mut ConfigReport,
+) {
     for link in &mw.early_hints {
         if !crate::early_hints::valid(link) {
             report.error(format!("{label}: early_hints value {link:?} is empty or holds a line break"));
         } else if !link.trim_start().starts_with('<') {
             report.warn(format!("{label}: early_hints value {link:?} doesn't start with <URL>; browsers will ignore it"));
+        }
+    }
+    if let Some(rule) = &mw.authz {
+        let schema = authz.and_then(|a| a.as_ref().ok()).map(|a| a.schema());
+        match (authz, crate::authz::ObjectTemplate::parse(&rule.object)) {
+            (None, _) => report.error(format!("{label}: [middleware.authz] needs an [authz] section")),
+            (_, Err(e)) => report.error(format!("{label}: [middleware.authz] {e}")),
+            (Some(_), Ok(template)) => {
+                let kind = template.object_type().unwrap_or_default();
+                if rule.relation.is_empty() {
+                    report.error(format!("{label}: [middleware.authz] needs `relation`"));
+                } else if let Some(schema) = schema {
+                    if !schema.has_relation(kind, &rule.relation) {
+                        report.error(format!("{label}: [middleware.authz] {kind}#{} isn't defined in [authz]", rule.relation));
+                    }
+                }
+            }
+        }
+        if !has_auth {
+            report.warn(format!("{label}: [middleware.authz] without auth here or in [middleware]: no caller is known, every request gets 401"));
         }
     }
     if let Some(m) = &mw.mirror {
