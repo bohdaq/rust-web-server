@@ -82,6 +82,7 @@ pub struct ForwardAuthLayer {
     auth_url: String,
     copy_headers: Vec<String>,
     timeout_ms: u64,
+    identity_header: Option<String>,
 }
 
 impl ForwardAuthLayer {
@@ -91,7 +92,16 @@ impl ForwardAuthLayer {
     /// Default timeout: 5000ms. HTTPS URLs require the `http-client` or
     /// `http2` feature (same requirement as the outbound HTTP client itself).
     pub fn new(auth_url: impl Into<String>) -> Self {
-        ForwardAuthLayer { auth_url: auth_url.into(), copy_headers: Vec::new(), timeout_ms: 5000 }
+        ForwardAuthLayer { auth_url: auth_url.into(), copy_headers: Vec::new(), timeout_ms: 5000, identity_header: None }
+    }
+
+    /// The auth service's response header naming the caller (e.g.
+    /// `X-User-Id`): on a 2xx with that header the rest of the request runs
+    /// as that [`Identity`](crate::authz::Identity) (`user:<value>`, or the
+    /// value as is when it has a `type:` prefix). Since 18.14.0.
+    pub fn identity_header(mut self, name: impl Into<String>) -> Self {
+        self.identity_header = Some(name.into());
+        self
     }
 
     /// Copy `name` from the auth service's response onto the forwarded
@@ -144,7 +154,17 @@ impl Middleware for ForwardAuthLayer {
             }
         }
 
-        next.execute(&forwarded, connection)
+        let identity = self
+            .identity_header
+            .as_deref()
+            .and_then(|name| auth_response.header(name))
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && !value.bytes().any(|b| b.is_ascii_control()))
+            .map(|value| crate::authz::Identity::new(value, "forward"));
+        match identity {
+            Some(identity) => crate::authz::with_identity(identity, || next.execute(&forwarded, connection)),
+            None => next.execute(&forwarded, connection),
+        }
     }
 }
 

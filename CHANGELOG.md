@@ -5,6 +5,17 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- `authz::Identity`: every authenticator hands its caller to the rest of
+  the request — `JwtLayer` (`sub`, or `.identity_claim(..)`), `OidcAuth`,
+  `SamlSp`, `BasicAuthLayer`, `ForwardAuthLayer` (`.identity_header(..)`)
+  and MCP bearer / OAuth tokens. Read it with `Identity::current()`; set
+  your own with `authz::with_identity` / `scope_identity`. Not a header, so
+  clients can't forge it.
+
 ## 18.13.0 — 2026-10-31
 
 ### Added

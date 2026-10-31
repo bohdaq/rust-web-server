@@ -72,6 +72,7 @@ Use it as:
 - [WebSocket](https://rws8.tech/features/websocket/): WebSocket routes with whole messages, pings and the closing handshake handled, plus RFC 6455 frame-level I/O — no third-party WebSocket crates.
 - [Server-Sent Events](https://rws8.tech/features/sse/): Stream events to browsers as they happen with Sse::stream, or send a known sequence with the Sse builder.
 - [Authentication](https://rws8.tech/features/auth/): HTTP Basic Auth, HS256/RS256/ES256 JWT, and forward-auth middleware with helper functions for issuing and verifying tokens.
+- [Authorization](https://rws8.tech/features/authorization/): Who the caller is, from any authenticator — and, as relationship-based access control, what they may do.
 - [OAuth2 / OIDC SSO](https://rws8.tech/features/sso/): Authorization code flow with PKCE, session management, RS256/ES256 JWT verification via JWKS, and rws as its own OAuth 2.0 Authorization Server.
 - [SAML 2.0 SSO](https://rws8.tech/features/saml/): SAML 2.0 Service Provider — ACS handler, XML signature verification, and attribute mapping, for enterprise IdPs that don't speak OIDC.
 - [CSRF Protection](https://rws8.tech/features/csrf/): Double-submit cookie pattern with constant-time comparison and automatic SameSite=Strict enforcement.

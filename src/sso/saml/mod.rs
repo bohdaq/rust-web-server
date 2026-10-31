@@ -423,7 +423,10 @@ impl Middleware for SamlSp {
                 if let Some(claims_json) = session.get("_saml_claims") {
                     let mut req = request.clone();
                     req.headers.push(Header { name: CLAIMS_HEADER.to_string().into(), value: claims_json.to_string().into() });
-                    return next.execute(&req, connection);
+                    return match crate::authz::Identity::from_claims(claims_json, "name_id", "saml") {
+                        Some(identity) => crate::authz::with_identity(identity, || next.execute(&req, connection)),
+                        None => next.execute(&req, connection),
+                    };
                 }
             }
         }

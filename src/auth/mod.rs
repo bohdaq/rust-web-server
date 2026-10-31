@@ -486,7 +486,7 @@ impl<F: Fn(&str, &str) -> bool + Send + Sync + 'static> Middleware for BasicAuth
         };
 
         if (self.validate)(user, pass) {
-            next.execute(request, connection)
+            crate::authz::with_identity(crate::authz::Identity::new(user, "basic"), || next.execute(request, connection))
         } else {
             Ok(AppError::Unauthorized.into_response())
         }
@@ -520,6 +520,8 @@ impl<F: Fn(&str, &str) -> bool + Send + Sync + 'static> Middleware for BasicAuth
 /// ```
 pub struct JwtLayer {
     verifier: JwtVerifier,
+    /// The claim naming the caller's [`Identity`](crate::authz::Identity).
+    identity_claim: String,
 }
 
 enum JwtVerifier {
@@ -533,7 +535,7 @@ enum JwtVerifier {
 impl JwtLayer {
     /// Create a layer that verifies HS256 JWTs signed with `secret`.
     pub fn new(secret: impl Into<Vec<u8>>) -> Self {
-        JwtLayer { verifier: JwtVerifier::Hs256(secret.into()) }
+        JwtLayer { verifier: JwtVerifier::Hs256(secret.into()), identity_claim: "sub".to_string() }
     }
 
     /// Create a layer that verifies RS256 JWTs against an RSA public key.
@@ -551,7 +553,7 @@ impl JwtLayer {
     pub fn rs256(public_key_pem: &str) -> Result<Self, String> {
         let key = crate::rsa_key::RsaPublicKey::from_public_key_pem(public_key_pem)
             .map_err(|e| format!("invalid RSA public key: {e}"))?;
-        Ok(JwtLayer { verifier: JwtVerifier::Rs256(Box::new(key)) })
+        Ok(JwtLayer { verifier: JwtVerifier::Rs256(Box::new(key)), identity_claim: "sub".to_string() })
     }
 
     /// Create a layer that verifies ES256 JWTs against a P-256 public key.
@@ -569,7 +571,17 @@ impl JwtLayer {
         use p256::pkcs8::DecodePublicKey;
         let key = p256::ecdsa::VerifyingKey::from_public_key_pem(public_key_pem)
             .map_err(|e| format!("invalid P-256 public key: {e}"))?;
-        Ok(JwtLayer { verifier: JwtVerifier::Es256(Box::new(key)) })
+        Ok(JwtLayer { verifier: JwtVerifier::Es256(Box::new(key)), identity_claim: "sub".to_string() })
+    }
+}
+
+impl JwtLayer {
+    /// The claim that names the caller's
+    /// [`Identity`](crate::authz::Identity) (default `sub`; e.g. `email`).
+    /// A token without it is still accepted, with no identity.
+    pub fn identity_claim(mut self, claim: impl Into<String>) -> Self {
+        self.identity_claim = claim.into();
+        self
     }
 }
 
@@ -594,7 +606,10 @@ impl Middleware for JwtLayer {
             JwtVerifier::Es256(key) => verify_jwt_es256(&t, key),
         });
         match claims {
-            Some(_) => next.execute(request, connection),
+            Some(claims) => match crate::authz::Identity::from_claims(&claims.raw, &self.identity_claim, "jwt") {
+                Some(identity) => crate::authz::with_identity(identity, || next.execute(request, connection)),
+                None => next.execute(request, connection),
+            },
             None => Ok(AppError::Unauthorized.into_response()),
         }
     }

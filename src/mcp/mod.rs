@@ -3357,6 +3357,12 @@ impl Application for McpServer {
                     Err(response) => return Ok(response),
                 }
             }
+            // The caller for authorization and `Identity::current()`, for
+            // the rest of this request (tool handlers included).
+            let _identity = auth_claims_json
+                .as_deref()
+                .and_then(|claims| crate::authz::Identity::from_claims(claims, "sub", "mcp"))
+                .map(crate::authz::identity::enter);
 
             // MCP 2026-07-28: stateless, every request self-contained (no
             // session lookup, `Mcp-Session-Id` ignored).

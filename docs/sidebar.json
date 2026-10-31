@@ -184,6 +184,10 @@
         "link": "/features/auth/"
       },
       {
+        "label": "Authorization",
+        "link": "/features/authorization/"
+      },
+      {
         "label": "OAuth2 / OIDC SSO",
         "link": "/features/sso/"
       },

@@ -114,6 +114,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `RewriteLayer` | `rewrite` | Request/response header, URI, body, and status rewriting; `.request_uri_regex_rewrite` needs `rewrite-regex`. See [Rewrite](/features/rewrite/) |
 | `BasicAuthLayer` | `auth` (`auth`) | HTTP Basic authentication via a closure or `from_htpasswd_file` (plain or rws's `{SHA256}` scheme — not Apache `{SHA}`/`$apr1$`/bcrypt). See [Auth](/features/auth/) |
 | `JwtLayer` | `auth` (`auth`) | HS256 Bearer JWT validation; `::rs256`/`::es256` verify against a static public key (`auth-asymmetric`) |
+| `Identity` / `with_identity` / `scope_identity` | `authz` | The authenticated caller (`user:alice`), set by every authenticator for the rest of the request — not a header; `Identity::current()` (18.14.0). See [Authorization](/features/authorization/) |
 | `ForwardAuthLayer` | `auth::forward` (`auth`) | Delegates allow/deny to an external HTTP service; verbatim pass-through on non-2xx, 502 if unreachable |
 | `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry. See [IP filter](/features/ip-filter/) |
 | `Blocklist` | `blocklist` | Runtime IP blocklist: `blocklist::global().block(ip)` / `.unblock` / `.is_blocked` / `.list` / `.clear` |

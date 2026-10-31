@@ -102,7 +102,7 @@ and `http1`-only test runs before pushing.
 
 | # | State |
 |---|---|
-| 1 | — |
+| 1 | **done 2026-10-31**: `authz::Identity` (`subject` `type:id`, a bare id → `user:`; `source`; raw `claims`; `claim()`; `from_claims` reads a top-level string member via `json_rpc::object_members`), `with_identity` / crate-private `enter` guard (thread-local, restored on drop/panic) and `scope_identity` (task-local, http2), `Identity::current()` (task first). Set by `JwtLayer` (`sub`, `.identity_claim()`; a valid token without the claim → no identity), `BasicAuthLayer` (user), `OidcAuth` (`sub`), `SamlSp` (`name_id`), `ForwardAuthLayer` (`.identity_header()`, only on 2xx, control chars refused), MCP (`require_bearer_tokens` / `require_oauth` claims `sub`, a guard over the rest of `execute`). Config-file auth: `jwt` and `basic` get it through those layers; `bearer` (one shared token) has none. Tests: 7 in `authz` (typing, claims, restore on panic, async scope, spoofed headers ignored, JWT/Basic, MCP tool sees `user:alice via mcp`) + forward, OIDC, SAML. Docs: new `features/authorization.md` (Identity section; sidebar), auth page notes, api.md row, CHANGELOG. 2215 default / 2423 auth+sso / 2023 http1 |
 | 2 | — |
 | 3 | — |
 | 4 | — |

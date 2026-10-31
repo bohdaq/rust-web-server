@@ -1232,6 +1232,17 @@ mod oidc_auth_tests {
         assert!(claims_header.value.contains("user1@example.com"));
     }
 
+    #[test]
+    fn an_oidc_session_names_the_caller() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut session = sessions.create();
+        session.set("_oidc_claims", r#"{"sub":"user1","iss":"i","aud":[],"exp":0,"iat":0}"#);
+        sessions.save(&session);
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let response = oidc.handle(&with_cookie(get("/dashboard"), SID_COOKIE, &session.id), &conn(), &crate::authz::test_support::WhoAmI).unwrap();
+        assert_eq!(crate::authz::test_support::body(&response), "user:user1 via oidc");
+    }
+
     // ── /auth/logout ─────────────────────────────────────────────────────────
 
     #[test]

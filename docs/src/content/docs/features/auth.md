@@ -108,6 +108,13 @@ fn login_handler(/* ... */) -> String {
 
 `build_jwt(claims_json, secret)` always produces an HS256 JWT with the `alg` and `typ` header set. The `claims_json` argument is any valid JSON object string.
 
+### The caller as an identity
+
+`JwtLayer` runs the rest of the request as the token's `sub`
+(`Identity::current()` — see [Authorization](/features/authorization/));
+`.identity_claim("email")` picks another claim. `BasicAuthLayer` does the
+same with the user name. Since 18.14.0.
+
 ### Verifying tokens and reading claims
 
 Call `verify_jwt` directly inside a handler when you also need the decoded claims. The verification is cheap (~1 µs) so double-calling is fine.
@@ -286,6 +293,10 @@ No new Cargo dependency — `ForwardAuthLayer` reuses the existing `crate::http_
 | `.copy_header(name)` | none | Copy `name` from the auth response onto the forwarded request on `2xx`; call multiple times for multiple headers |
 | `.timeout_ms(ms)` | `5000` | Auth service call timeout |
 :::
+
+`.identity_header("X-User-Id")` also makes the request run as that user for
+[authorization](/features/authorization/) — `Identity::current()` — when the
+auth service's 2xx answer carries the header (since 18.14.0).
 
 ## No-code auth in the config-driven proxy
 

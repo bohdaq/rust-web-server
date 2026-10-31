@@ -319,7 +319,10 @@ impl Middleware for OidcAuth {
                         name:  CLAIMS_HEADER.to_string().into(),
                         value: claims_json.to_string().into(),
                     });
-                    return next.execute(&req, connection);
+                    return match crate::authz::Identity::from_claims(claims_json, "sub", "oidc") {
+                        Some(identity) => crate::authz::with_identity(identity, || next.execute(&req, connection)),
+                        None => next.execute(&req, connection),
+                    };
                 }
             }
         }

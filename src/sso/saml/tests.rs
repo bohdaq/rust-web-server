@@ -660,3 +660,14 @@ fn saml_sp_authenticated_request_injects_claims_header() {
     let claims_header = captured.headers.iter().find(|h| h.name == super::CLAIMS_HEADER).unwrap();
     assert!(claims_header.value.contains("alice"));
 }
+
+#[test]
+fn a_saml_session_names_the_caller() {
+    let sessions = Arc::new(SessionStore::new(3600));
+    let sp = test_sp(sessions.clone());
+    let mut session = sessions.create();
+    session.set("_saml_claims", r#"{"name_id":"alice@corp.example","attributes":{}}"#);
+    sessions.save(&session);
+    let response = sp.handle(&with_cookie(get("/dashboard"), "_rws_saml_sid", &session.id), &conn(), &crate::authz::test_support::WhoAmI).unwrap();
+    assert_eq!(crate::authz::test_support::body(&response), "user:alice@corp.example via saml");
+}

@@ -254,3 +254,16 @@ fn full_request_headers_are_forwarded_to_auth_service() {
     assert_eq!(200, resp.status_code);
     assert!(handle.join().unwrap(), "expected the auth service to receive the client's Cookie header");
 }
+
+#[test]
+fn identity_header_names_the_caller_and_needs_a_2xx() {
+    use crate::authz::test_support::{body, WhoAmI};
+    let port = spawn_mock_auth_server(http_response(200, "OK", &[("X-User-Id", "alice")], ""));
+    let layer = ForwardAuthLayer::new(format!("http://127.0.0.1:{}/verify", port)).identity_header("X-User-Id");
+    // A client-sent X-User-Id doesn't matter: the identity comes from the auth service.
+    let response = layer.handle(&with_header(get("/"), "X-User-Id", "mallory"), &conn(), &WhoAmI).unwrap();
+    assert_eq!(body(&response), "user:alice via forward");
+    let port = spawn_mock_auth_server(http_response(200, "OK", &[], ""));
+    let layer = ForwardAuthLayer::new(format!("http://127.0.0.1:{}/verify", port)).identity_header("X-User-Id");
+    assert_eq!(body(&layer.handle(&get("/"), &conn(), &WhoAmI).unwrap()), "anonymous", "no header: no identity");
+}

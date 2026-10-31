@@ -7789,6 +7789,13 @@ fn login_handler(/* ... */) -> String {
 
 `build_jwt(claims_json, secret)` always produces an HS256 JWT with the `alg` and `typ` header set. The `claims_json` argument is any valid JSON object string.
 
+### The caller as an identity
+
+`JwtLayer` runs the rest of the request as the token's `sub`
+(`Identity::current()` — see [Authorization](/features/authorization/));
+`.identity_claim("email")` picks another claim. `BasicAuthLayer` does the
+same with the user name. Since 18.14.0.
+
 ### Verifying tokens and reading claims
 
 Call `verify_jwt` directly inside a handler when you also need the decoded claims. The verification is cheap (~1 µs) so double-calling is fine.
@@ -7968,6 +7975,10 @@ No new Cargo dependency — `ForwardAuthLayer` reuses the existing `crate::http_
 | `.timeout_ms(ms)` | `5000` | Auth service call timeout |
 :::
 
+`.identity_header("X-User-Id")` also makes the request run as that user for
+[authorization](/features/authorization/) — `Identity::current()` — when the
+auth service's 2xx answer carries the header (since 18.14.0).
+
 ## No-code auth in the config-driven proxy
 
 `rws.config.toml`'s `[route.middleware.auth]` wires directly into `JwtLayer` and `BasicAuthLayer` — no Rust code required. Both need the `auth` feature enabled at build time (`cargo build --features auth`; the default build doesn't include it).
@@ -8024,6 +8035,68 @@ let reset_token = generate_token(32); // 32 random bytes -> 64-char lowercase he
 ```
 
 All three live in `rust_web_server::crypto`; errors are `CryptoError`. Use at least 16 bytes for tokens and 32 bytes for high-value secrets such as API keys.
+
+---
+
+# Authorization
+
+<https://rws8.tech/features/authorization/>
+
+Authentication says a request is allowed in; authorization says what its
+caller may do. rws gives every authenticator's caller one shape,
+`authz::Identity`, which the rest of the request can read. Since 18.14.0.
+
+## Identity
+
+Each authenticator runs the rest of the request as the caller it
+authenticated:
+
+| Authenticator | Subject | Notes |
+|---|---|---|
+| `JwtLayer` | `user:<sub>` | `.identity_claim("email")` to use another claim; a valid token without it has no identity |
+| `OidcAuth` | `user:<sub>` | from the session's ID token claims |
+| `SamlSp` | `user:` | |
+| `BasicAuthLayer` | `user:<name>` | also from an htpasswd file |
+| `ForwardAuthLayer` | `user:<value>` | `.identity_header("X-User-Id")`: a header in the auth service's 2xx answer |
+| MCP (`require_bearer_tokens`, `require_oauth`) | `user:<sub>` | tool handlers included |
+
+A value that already has a `type:` prefix (`service:billing`) keeps it.
+Handlers read the caller with `Identity::current()`:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::JwtLayer;
+use rust_web_server::authz::Identity;
+use rust_web_server::core::New;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+let app = App::with_state(())
+    .get("/me", |_, _, _, _| match Identity::current() {
+        Some(me) => Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, me.subject()),
+        None => Response::text(STATUS_CODE_REASON_PHRASE.n401_unauthorized, "who are you?"),
+    })
+    .wrap(JwtLayer::new(b"secret"));
+```
+
+`Identity` has `subject()` (`user:alice`), `subject_type()`, `subject_id()`,
+`source()` (`jwt`, `oidc`, `saml`, `basic`, `forward`, `mcp`), `claims()`
+(the raw JSON, when there were claims) and `claim(name)`.
+
+**It is not a header.** The authenticator runs the rest of the request
+inside `authz::with_identity(identity, || …)` — a value tied to the thread
+(or, with `authz::scope_identity`, to the async task) for that call — so a
+client can't send one, and nothing leaks into the next request. Your own
+authenticator can do the same:
+
+```rust
+use rust_web_server::authz::{with_identity, Identity};
+
+// inside a Middleware::handle, after checking credentials
+with_identity(Identity::new("service:billing", "api-key"), || next.execute(request, connection))
+```
+
+Work handed to another thread (a spawned thread, an MCP task) doesn't carry
+the identity along; pass it explicitly.
 
 ---
 
@@ -20040,6 +20113,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `RewriteLayer` | `rewrite` | Request/response header, URI, body, and status rewriting; `.request_uri_regex_rewrite` needs `rewrite-regex`. See [Rewrite](/features/rewrite/) |
 | `BasicAuthLayer` | `auth` (`auth`) | HTTP Basic authentication via a closure or `from_htpasswd_file` (plain or rws's `{SHA256}` scheme — not Apache `{SHA}`/`$apr1$`/bcrypt). See [Auth](/features/auth/) |
 | `JwtLayer` | `auth` (`auth`) | HS256 Bearer JWT validation; `::rs256`/`::es256` verify against a static public key (`auth-asymmetric`) |
+| `Identity` / `with_identity` / `scope_identity` | `authz` | The authenticated caller (`user:alice`), set by every authenticator for the rest of the request — not a header; `Identity::current()` (18.14.0). See [Authorization](/features/authorization/) |
 | `ForwardAuthLayer` | `auth::forward` (`auth`) | Delegates allow/deny to an external HTTP service; verbatim pass-through on non-2xx, 502 if unreachable |
 | `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry. See [IP filter](/features/ip-filter/) |
 | `Blocklist` | `blocklist` | Runtime IP blocklist: `blocklist::global().block(ip)` / `.unblock` / `.is_blocked` / `.list` / `.clear` |
