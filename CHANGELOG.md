@@ -5,7 +5,7 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
+## 18.12.0 — 2026-10-31
 
 ### Added
 
