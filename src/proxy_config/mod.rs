@@ -217,10 +217,14 @@ pub struct RateLimitConfig {
     pub window_secs: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CacheConfig {
     pub ttl_secs: u64,
     pub vary_by: Vec<String>,
+    /// Keep entries in files under this directory (18.11.0); empty = memory.
+    pub dir: String,
+    /// Bound on the disk store's total size, e.g. `"512M"` (default 256 MiB).
+    pub max_size: String,
 }
 
 #[derive(Debug, Clone)]
@@ -594,6 +598,8 @@ fn parse_middleware_config(
         Some(CacheConfig {
             ttl_secs: get_u64(map, &c_sec, "ttl_secs", 60),
             vary_by: get_array(map, &c_sec, "vary_by"),
+            dir: get_str(map, &c_sec, "dir"),
+            max_size: get_str(map, &c_sec, "max_size"),
         })
     } else {
         None
@@ -2035,6 +2041,15 @@ pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// Stands in for an auth layer whose configuration can't be honoured (see
 /// `builder::apply_middleware`): every request gets `503`, never the route.
 pub(crate) struct AuthMisconfigured;
+
+/// A disk cache's `max_size`, or the default.
+pub(crate) fn cache_max_bytes(max_size: &str) -> Option<u64> {
+    if max_size.trim().is_empty() {
+        Some(256 * 1024 * 1024)
+    } else {
+        crate::log::access_sink::parse_size(max_size.trim()).filter(|n| *n > 0)
+    }
+}
 
 /// A `[route.middleware.wasm]` plugin that couldn't be loaded: the route
 /// fails closed.

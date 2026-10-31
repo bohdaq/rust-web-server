@@ -341,6 +341,14 @@ pub mod fuzz_api {
         let _ = crate::wasm_plugin::parse_response_output(data);
     }
 
+    /// A disk-cache entry file as the cache reads it back (#39): the header
+    /// line and key, then the stored response. Must never panic.
+    pub fn cache_entry(data: &[u8]) {
+        if let Some((_, _, _, offset)) = crate::cache::disk::parse_entry_header(data) {
+            let _ = crate::response::Response::parse_upstream(&data[offset..], crate::proxy::REGENERATED_OR_HOP_BY_HOP);
+        }
+    }
+
     /// Provider responses as the LLM proxy reads them (#41): usage from a
     /// JSON body or an event stream fed in pieces, and chunked framing.
     /// Must never panic.

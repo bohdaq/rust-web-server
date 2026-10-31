@@ -1,0 +1,7 @@
+RWSCACHE1 1700000000000 60 3
+/ab
+HTTP/1.1 200 OK
+Content-Type: text/plain
+Content-Length: 2
+
+hi

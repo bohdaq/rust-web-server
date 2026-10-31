@@ -362,9 +362,11 @@ Response rule types: `header_set` (`name`, `value`), `header_remove` (`name`), `
 [route.middleware.cache]
 ttl_secs = 60                 # default: 60
 vary_by  = ["Accept-Language"] # request headers added to the cache key (optional)
+# dir      = "/var/cache/rws/api"   # keep entries on disk (survive restarts)
+# max_size = "512M"                 # disk cache bound (default 256M)
 ```
 
-Wraps the route in an in-memory [`CacheLayer`](/features/caching/) (up to 1000 entries). It is the innermost route middleware, so cached responses still pass through rewrite, auth, rate limit and IP filter.
+Wraps the route in a [`CacheLayer`](/features/caching/): in memory (up to 1000 entries), or with `dir` on disk, bounded by `max_size` (since 18.11.0). `ttl_secs` is the longest an entry is kept; a response's `Cache-Control: s-maxage` / `max-age` can make it shorter, and `max-age=0` isn't cached. `rws --check` reports a `max_size` that isn't a size and a `dir` it can't write to (the route then caches in memory). It is the innermost route middleware, so cached responses still pass through rewrite, auth, rate limit and IP filter.
 
 #### Per-route timeout
 

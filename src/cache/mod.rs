@@ -35,6 +35,8 @@
 
 #[cfg(test)]
 mod tests;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod disk;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -149,6 +151,9 @@ pub struct CacheLayer {
     capacity: usize,
     ttl: Duration,
     vary_headers: Vec<String>,
+    /// [`CacheLayer::disk`]: entries in files instead of `store`.
+    #[cfg(not(target_arch = "wasm32"))]
+    disk: Option<Arc<disk::DiskStore>>,
 }
 
 impl CacheLayer {
@@ -164,7 +169,41 @@ impl CacheLayer {
             capacity,
             ttl: Duration::from_secs(60),
             vary_headers: vec![],
+            #[cfg(not(target_arch = "wasm32"))]
+            disk: None,
         }
+    }
+
+    /// A cache kept in files under `dir` (created if missing), bounded to
+    /// `max_bytes` in total, oldest dropped first (since 18.11.0). Entries
+    /// survive a restart: the directory is indexed when the layer is built,
+    /// expired and unreadable files removed. Same rules as
+    /// [`memory`](CacheLayer::memory) for what is cached and for how long.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::cache::CacheLayer;
+    ///
+    /// let layer = CacheLayer::disk("/var/cache/rws/api", 512 * 1024 * 1024)?.ttl(600);
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn disk(dir: impl Into<std::path::PathBuf>, max_bytes: u64) -> std::io::Result<Self> {
+        let store = disk::DiskStore::open(dir, max_bytes)?;
+        let mut layer = CacheLayer::memory(0);
+        layer.stored.store(store.len(), Ordering::Relaxed);
+        layer.disk = Some(Arc::new(store));
+        Ok(layer)
+    }
+
+    /// The disk store, when this layer has one.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn disk_store(&self) -> Option<&disk::DiskStore> {
+        self.disk.as_deref()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn disk_store(&self) -> Option<&NoDisk> {
+        None
     }
 
     /// Number of cache hits since the cache was created.
@@ -180,11 +219,27 @@ impl CacheLayer {
     /// Current number of entries in the store (including potentially expired ones
     /// that haven't been purged yet).
     pub fn size(&self) -> usize {
+        if let Some(disk) = self.disk_store() {
+            return disk.len();
+        }
         self.store.lock().unwrap().entries.len()
+    }
+
+    /// Bytes held by a disk cache's files; `None` for a memory cache.
+    pub fn stored_bytes(&self) -> Option<u64> {
+        #[cfg(not(target_arch = "wasm32"))]
+        return self.disk_store().map(disk::DiskStore::bytes);
+        #[cfg(target_arch = "wasm32")]
+        None
     }
 
     /// Remove all entries from the cache.
     pub fn clear(&self) {
+        if let Some(disk) = self.disk_store() {
+            disk.remove_where(|_| true);
+            self.stored.store(0, Ordering::Relaxed);
+            return;
+        }
         let mut guard = self.store.lock().unwrap();
         guard.entries.clear();
         guard.order.clear();
@@ -338,6 +393,26 @@ impl Middleware for CacheLayer {
 
         let bypass = Self::request_bypasses_cache(request);
 
+        if let Some(disk) = self.disk_store() {
+            if !bypass && !disk.is_empty() {
+                let key = self.cache_key(request);
+                if let Some((mut response, age)) = disk.get(&key) {
+                    self.hits.fetch_add(1, Ordering::Relaxed);
+                    response.headers.retain(|h| !h.name.eq_ignore_ascii_case("Age"));
+                    response.headers.push(Header { name: "Age".into(), value: age.as_secs().to_string().into() });
+                    return Ok(response);
+                }
+            }
+            self.misses.fetch_add(1, Ordering::Relaxed);
+            let response = next.execute(request, connection)?;
+            let ttl = freshness(&response, self.ttl);
+            if !ttl.is_zero() && self.response_is_cacheable(request, &response) {
+                disk.put(&self.cache_key(request), &response, ttl);
+                self.stored.store(disk.len(), Ordering::Relaxed);
+            }
+            return Ok(response);
+        }
+
         if !bypass && self.stored.load(Ordering::Relaxed) > 0 {
             // Check for a valid cache hit.
             let key = self.cache_key(request);
@@ -368,8 +443,22 @@ impl Middleware for CacheLayer {
         Ok(response)
     }
 
-    /// In-memory only: safe on the event loop.
+    /// In-memory: safe on the event loop. A disk store reads and writes
+    /// files, so it runs on the blocking pool.
     fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
-        true
+        self.disk_store().is_none()
     }
+}
+
+/// Stand-in for the disk store where there is none (wasm32).
+#[cfg(target_arch = "wasm32")]
+struct NoDisk;
+
+#[cfg(target_arch = "wasm32")]
+impl NoDisk {
+    fn len(&self) -> usize { 0 }
+    fn is_empty(&self) -> bool { true }
+    fn remove_where(&self, _matches: impl Fn(&str) -> bool) -> usize { 0 }
+    fn get(&self, _key: &str) -> Option<(Response, Duration)> { None }
+    fn put(&self, _key: &str, _response: &Response, _ttl: Duration) {}
 }

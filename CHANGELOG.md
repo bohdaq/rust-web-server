@@ -16,6 +16,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `MirrorLayer` in code, `rws_mirror_requests_total` on `/metrics`,
   `ci/e2e/mirror.sh`.
 
+- Disk cache: `CacheLayer::disk(dir, max_bytes)` and `[route.middleware.cache]
+  dir` / `max_size` keep cached responses in files, bounded by total size
+  and kept across restarts. Fuzz target `cache_entry`.
+
 ### Changed
 
 - The response cache honours the response's `Cache-Control: s-maxage`, else

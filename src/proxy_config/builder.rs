@@ -340,7 +340,16 @@ pub(crate) fn apply_middleware(
 
     // ── Cache (applied first so it's the innermost middleware) ─────────────
     if let Some(ref cache_cfg) = mw.cache {
-        let mut layer = crate::cache::CacheLayer::memory(1000).ttl(cache_cfg.ttl_secs);
+        let mut layer = if cache_cfg.dir.is_empty() {
+            crate::cache::CacheLayer::memory(1000)
+        } else {
+            let max = crate::proxy_config::cache_max_bytes(&cache_cfg.max_size).unwrap_or(256 * 1024 * 1024);
+            crate::cache::CacheLayer::disk(&cache_cfg.dir, max).unwrap_or_else(|e| {
+                eprintln!("[proxy_config] ERROR: cache dir {}: {e} — this route caches in memory instead", cache_cfg.dir);
+                crate::cache::CacheLayer::memory(1000)
+            })
+        }
+        .ttl(cache_cfg.ttl_secs);
         for vh in &cache_cfg.vary_by {
             layer = layer.vary_by_header(vh.as_str());
         }

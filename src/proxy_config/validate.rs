@@ -66,7 +66,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.llm.key" => super::llm::KEY_KEYS.to_vec(),
         "route.middleware" => vec!["timeout_ms", "max_body_size"],
         "route.middleware.rate_limit" => vec!["max_requests", "window_secs"],
-        "route.middleware.cache" => vec!["ttl_secs", "vary_by"],
+        "route.middleware.cache" => vec!["ttl_secs", "vary_by", "dir", "max_size"],
         "route.middleware.auth" => vec!["type", "token_env", "secret_env", "htpasswd_file"],
         "route.middleware.ip_filter" => vec!["allow", "deny"],
         "route.middleware.mirror" => vec!["upstream", "backends", "percent"],
@@ -376,6 +376,22 @@ fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigRe
     }
     if !mw.ip_allow.is_empty() && !mw.ip_deny.is_empty() {
         report.warn(format!("{label}: ip_filter has both `allow` and `deny`; only `allow` is used"));
+    }
+    if let Some(cache) = &mw.cache {
+        if crate::proxy_config::cache_max_bytes(&cache.max_size).is_none() {
+            report.error(format!("{label}: cache max_size {:?} is not a size (e.g. \"512M\")", cache.max_size));
+        }
+        if !cache.max_size.is_empty() && cache.dir.is_empty() {
+            report.warn(format!("{label}: cache max_size only applies with `dir` (the memory cache is bounded by entries)"));
+        }
+        if !cache.dir.is_empty() && !crate::config_check::offline() {
+            let probe = std::path::Path::new(&cache.dir).join(format!(".rws-check-{}", std::process::id()));
+            let writable = std::fs::create_dir_all(&cache.dir).and_then(|_| std::fs::write(&probe, b"")).is_ok();
+            let _ = std::fs::remove_file(&probe);
+            if !writable {
+                report.error(format!("{label}: cache dir {:?} isn't writable; the route caches in memory instead", cache.dir));
+            }
+        }
     }
     if let Some(rl) = &mw.rate_limit {
         if rl.max_requests == 0 || rl.window_secs == 0 {

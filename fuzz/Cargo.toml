@@ -225,3 +225,10 @@ path = "fuzz_targets/wasm_plugin_output.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "cache_entry"
+path = "fuzz_targets/cache_entry.rs"
+test = false
+doc = false
+bench = false

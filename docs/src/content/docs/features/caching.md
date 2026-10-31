@@ -28,6 +28,19 @@ Creates a new in-memory cache bounded to `capacity` entries. The default TTL is 
 let layer = CacheLayer::memory(500);
 ```
 
+### `CacheLayer::disk(dir, max_bytes)`
+
+Keeps entries in files under `dir` (created if missing), bounded to `max_bytes` in total, oldest dropped first (since 18.11.0). Entries survive a restart: when the layer is built it indexes the directory and removes expired, unreadable and half-written files. Everything else (what is cached, for how long, `Age`, `Vary`) is the same as the memory cache.
+
+```rust
+let layer = CacheLayer::disk("/var/cache/rws/api", 512 * 1024 * 1024)?.ttl(600);
+```
+
+- One file per entry, named by a hash of the cache key; it is written to a temporary file and renamed, so a reader never sees a half-written entry.
+- Reads and writes are file I/O, so a disk-cached route runs on the blocking pool rather than the event loop. Use it for responses that are expensive to produce, not for ones a memory cache would serve in microseconds.
+- A disk error (full disk, permissions) is logged and the response is simply not cached.
+- In a container, put `dir` on a writable volume (the image's `/srv` is read-only).
+
 ### `.ttl(secs)`
 
 The longest an entry is kept. A response can ask for less with `Cache-Control`: `s-maxage` (meant for shared caches like this one), else `max-age`, is used when it's shorter than the `ttl`; a response that says neither is kept for the `ttl`. `max-age=0` isn't stored at all.
@@ -91,7 +104,9 @@ If the response already carries an `Age` header, its value is replaced.
 
 ## Eviction
 
-When the store is at capacity and a new entry must be inserted, the **oldest** entry (by insertion time) is evicted. Expired entries are purged before every insert, so a full store of expired entries makes room before falling back to oldest-first eviction.
+A disk cache evicts by total size instead: expired entries first, then the oldest, until the files fit in `max_bytes`; an entry bigger than `max_bytes` on its own isn't stored.
+
+When the memory store is at capacity and a new entry must be inserted, the **oldest** entry (by insertion time) is evicted. Expired entries are purged before every insert, so a full store of expired entries makes room before falling back to oldest-first eviction.
 
 ## Cache statistics
 

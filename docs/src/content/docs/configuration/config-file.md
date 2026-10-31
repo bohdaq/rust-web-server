@@ -499,6 +499,8 @@ window_secs  = 60
 [route.middleware.cache]
 ttl_secs = 300
 vary_by  = ["Accept-Encoding", "Authorization"]
+# dir      = "/var/cache/rws/api"   # on disk instead of in memory (18.11.0)
+# max_size = "512M"                 # disk bound, default 256M
 
 [route.middleware.auth]
 type      = "bearer"        # "bearer" | "jwt" | "basic"
