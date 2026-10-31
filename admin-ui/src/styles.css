@@ -40,7 +40,7 @@ body { min-height: 100dvh; }
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: var(--space-75); font-weight: 600; font-size: var(--text-base); line-height: var(--leading-base); }
-.brand-mark { width: 24px; height: 24px; border-radius: var(--md-sys-shape-corner-small); background: var(--rws-orange); }
+.brand-mark { width: 24px; height: 24px; flex: none; display: block; }
 .top .spacer { flex: 1; }
 .top .meta { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); font-family: var(--font-mono); }
 .nav { border-right: 1px solid var(--line); padding: var(--space-200) var(--space-75); }

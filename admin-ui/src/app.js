@@ -27,6 +27,10 @@ function duration(secs) {
   return `${m}m ${secs % 60}s`;
 }
 
+// The rws app icon (site/dist/brand/icon-orange.svg), inline: the admin
+// page's CSP allows no images from elsewhere.
+const brandMark = html`<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#D2551E"/><g transform="translate(4 3.5)"><rect x="2" y="5" width="20" height="4" rx="1.5" fill="#16120F"/><rect x="2" y="10.5" width="20" height="4" rx="1.5" fill="#16120F"/><path d="M3.5 16H15L14 17L15 18L14 19L15 20H3.5A1.5 1.5 0 0 1 2 18.5V17.5A1.5 1.5 0 0 1 3.5 16Z" fill="#F2EBE3"/><rect x="16.5" y="16.5" width="2" height="2" fill="#F2EBE3"/><rect x="19.5" y="15" width="1.4" height="1.4" fill="#F2EBE3"/></g></svg>`;
+
 const status = (kind, label) => html`<lit-material-status status=${kind}>${label}</lit-material-status>`;
 const time = (ms) => new Date(ms).toLocaleTimeString();
 const logLevel = (line) => (/"status":5\d\d/.test(line) ? "error" : /"status":4\d\d/.test(line) ? "warning" : null);
@@ -311,7 +315,7 @@ export class RwsAdmin extends LitElement {
     return html`
       <div class="shell">
         <header class="top">
-          <span class="brand"><span class="brand-mark" aria-hidden="true"></span>rws admin</span>
+          <span class="brand">${brandMark}rws admin</span>
           ${info ? (info.ready ? status("ok", "Ready") : status("error", "Not ready")) : nothing}
           <span class="spacer"></span>
           ${info ? html`<span class="meta">${info.version} · ${info.listeners?.main?.address ?? ""}</span>` : nothing}
