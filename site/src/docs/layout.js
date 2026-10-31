@@ -43,15 +43,12 @@ function sidebarNav(sidebar, current, base, version) {
     </nav>`;
 }
 
+// Server-rendered anchors that highlight the section being read once hydrated.
+// links goes in as a JSON attribute so the markup carries it into hydration;
+// offset matches the headings' scroll-margin-top (--space-900).
 function tocNav(toc) {
   if (toc.length < 2) return nothing;
-  return html`
-    <nav class="docs-toc" aria-label="On this page">
-      <p class="docs-toc-title">On this page</p>
-      <ul>
-        ${toc.map((t) => html`<li class=${`depth-${t.depth}`}><a href=${`#${t.id}`}>${t.text}</a></li>`)}
-      </ul>
-    </nav>`;
+  return html`<lit-material-jump-links class="docs-toc" offset="96" links=${JSON.stringify(toc.map(({ id, text, depth }) => ({ id, text, depth })))}></lit-material-jump-links>`;
 }
 
 function pager(prev, next) {

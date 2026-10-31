@@ -4,5 +4,6 @@
 import "@lit-material/alert";
 import "@lit-material/button";
 import "@lit-material/code-block";
+import "@lit-material/jump-links";
 import "@lit-material/navigation";
 import "@lit-material/tabs";

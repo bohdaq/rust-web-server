@@ -249,6 +249,7 @@ lit-material-navigation-rail-item [slot="icon"] { width: 24px; height: 24px; }
 .docs-toc li a { display: block; padding: var(--space-25) 0; color: var(--md-sys-color-on-surface-variant); text-decoration: none; }
 .docs-toc li a:hover { color: var(--md-sys-color-primary); }
 .docs-toc li.depth-3 a { padding-left: var(--space-100); }
+lit-material-jump-links.docs-toc::part(title) { font-weight: 600; }
 
 .docs-main { min-width: 0; max-width: 780px; }
 .docs-article h1 { font-size: var(--text-4xl); line-height: var(--leading-4xl); }
