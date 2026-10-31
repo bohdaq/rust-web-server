@@ -177,3 +177,23 @@ fn both_syntaxes_list_the_same_route_entry() {
     let patterns: Vec<String> = router.route_entries().into_iter().map(|r| r.pattern).collect();
     assert_eq!(vec!["/a/:id".to_string(), "/b/:id".to_string()], patterns);
 }
+
+#[test]
+fn with_host_matches_the_host_header_before_sni() {
+    let router = Router::new().with_host("git.example.com").get("/", |_, _, _| Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "git"));
+    let mut c = conn();
+    // A browser reusing its git.example.com connection for www.example.com.
+    c.sni_hostname = Some("git.example.com".to_string());
+    let mut req = get("/");
+    req.headers.push(crate::header::Header { name: "Host".into(), value: "www.example.com".to_string().into() });
+    assert!(router.handle(&req, &c).is_none());
+
+    // The other way round, and the port and case don't matter.
+    c.sni_hostname = Some("www.example.com".to_string());
+    req.headers[0].value = "GIT.example.com:443".to_string().into();
+    assert!(router.handle(&req, &c).is_some());
+
+    // Without a Host header, SNI decides.
+    c.sni_hostname = Some("git.example.com".to_string());
+    assert!(router.handle(&get("/"), &c).is_some());
+}

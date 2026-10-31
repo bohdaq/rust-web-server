@@ -20,6 +20,26 @@ const FORBIDDEN_H3_RESPONSE_HEADERS: &[&str] = &[
     "te",
 ];
 
+/// The request's headers, plus `Host` from `:authority` when it has none
+/// (RFC 9114 §4.3.1), as `h2_server` does: host routing reads `Host`.
+fn request_headers(request: &http::Request<()>) -> Vec<Header> {
+    let mut headers: Vec<Header> = Vec::new();
+    for (name, value) in request.headers() {
+        if let Ok(v) = value.to_str() {
+            headers.push(Header {
+                name: name.as_str().to_string().into(),
+                value: v.to_string().into(),
+            });
+        }
+    }
+    if let Some(authority) = request.uri().authority().map(|a| a.as_str()).filter(|a| !a.is_empty()) {
+        if !headers.iter().any(|h| h.name.eq_ignore_ascii_case("host")) {
+            headers.push(Header { name: Header::_HOST.into(), value: authority.to_string().into() });
+        }
+    }
+    headers
+}
+
 pub async fn handle_connection(
     conn: quinn::Connection,
     peer_addr: std::net::SocketAddr,
@@ -91,15 +111,7 @@ async fn handle_stream(
         .map(|pq| pq.as_str().to_string())
         .unwrap_or_else(|| "/".to_string());
 
-    let mut headers: Vec<Header> = Vec::new();
-    for (name, value) in request.headers() {
-        if let Ok(v) = value.to_str() {
-            headers.push(Header {
-                name: name.as_str().to_string().into(),
-                value: v.to_string().into(),
-            });
-        }
-    }
+    let headers = request_headers(&request);
 
     let max_body_size = crate::entry_point::get_max_body_size();
     let mut body: Vec<u8> = Vec::new();

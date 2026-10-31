@@ -47,6 +47,7 @@ use crate::core::New;
 use crate::request::Request;
 use crate::header::Header;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::router::{host_matches, request_host};
 use crate::server::ConnectionInfo;
 use crate::server_config::ServerConfig;
 
@@ -857,20 +858,9 @@ impl RouteMatcher {
 
     /// Returns `true` if `request` and `conn` match all configured criteria.
     pub(crate) fn matches(&self, request: &Request, conn: &ConnectionInfo) -> bool {
-        // Host matching: SNI first, then Host header
+        // Host matching: the Host header (HTTP/2 and HTTP/3 :authority), then SNI
         if let Some(ref expected_host) = self.host {
-            let actual_host = conn
-                .sni_hostname
-                .as_deref()
-                .or_else(|| {
-                    request
-                        .headers
-                        .iter()
-                        .find(|h| h.name.eq_ignore_ascii_case("host"))
-                        .map(|h| h.value.as_ref())
-                })
-                .unwrap_or("");
-            if !host_matches(expected_host, actual_host) {
+            if !host_matches(expected_host, request_host(request, conn)) {
                 return false;
             }
         }
@@ -1218,21 +1208,6 @@ pub(crate) fn normalize_request_target(target: &str) -> std::borrow::Cow<'_, str
     } else {
         std::borrow::Cow::Owned(out)
     }
-}
-
-/// A route's `host` against the request's (SNI or `Host`): ignoring ASCII
-/// case, and ignoring a port the route doesn't name (#50).
-fn host_matches(expected: &str, actual: &str) -> bool {
-    let actual = if expected.contains(':') {
-        actual
-    } else if let Some(rest) = actual.strip_prefix('[') {
-        // [IPv6]:port
-        rest.split(']').next().unwrap_or(rest)
-    } else {
-        actual.rsplit_once(':').map_or(actual, |(host, port)| if port.bytes().all(|b| b.is_ascii_digit()) { host } else { actual })
-    };
-    let expected = expected.trim_start_matches('[').trim_end_matches(']');
-    actual.eq_ignore_ascii_case(expected)
 }
 
 impl Application for ConfigDrivenApp {

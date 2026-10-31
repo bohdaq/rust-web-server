@@ -7169,7 +7169,12 @@ fn process(&self, request: &Request, response: Response, connection: &Connection
 ## Host-restricted routing with `Router`
 
 Call `.with_host("hostname")` before registering routes to restrict a `Router`
-to requests whose SNI hostname (TLS) or `Host` header (plain HTTP) matches:
+to requests for that host: their `Host` header (`:authority` over HTTP/2 and
+HTTP/3), or the SNI hostname when there is none. Case and a port the hostname
+doesn't name are ignored. The `Host` header wins because browsers reuse one TLS
+connection for every name its certificate covers, so the SNI hostname is the
+connection's first request's host, not necessarily this one's. Config-file
+routes match `[route.match] host` the same way.
 
 ```rust
 use rust_web_server::router::Router;

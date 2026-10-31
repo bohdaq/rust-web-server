@@ -36,6 +36,34 @@ impl PathParams {
     }
 }
 
+/// The host a request asked for: its `Host` header (HTTP/2 and HTTP/3 turn
+/// `:authority` into one), else the TLS SNI name, else `""`. Host comes first
+/// because browsers reuse one connection for every name its certificate covers
+/// (RFC 9113 §9.1.1), so SNI names the connection's first request, not this one.
+pub(crate) fn request_host<'a>(request: &'a Request, connection: &'a ConnectionInfo) -> &'a str {
+    request.headers.iter()
+        .find(|h| h.name.eq_ignore_ascii_case("host"))
+        .map(|h| h.value.as_ref())
+        .filter(|v: &&str| !v.is_empty())
+        .or(connection.sni_hostname.as_deref())
+        .unwrap_or("")
+}
+
+/// A route's `host` against the request's ([`request_host`]): ignoring ASCII
+/// case, and ignoring a port the route doesn't name (#50).
+pub(crate) fn host_matches(expected: &str, actual: &str) -> bool {
+    let actual = if expected.contains(':') {
+        actual
+    } else if let Some(rest) = actual.strip_prefix('[') {
+        // [IPv6]:port
+        rest.split(']').next().unwrap_or(rest)
+    } else {
+        actual.rsplit_once(':').map_or(actual, |(host, port)| if port.bytes().all(|b| b.is_ascii_digit()) { host } else { actual })
+    };
+    let expected = expected.trim_start_matches('[').trim_end_matches(']');
+    actual.eq_ignore_ascii_case(expected)
+}
+
 type HandlerFn =
     Arc<dyn Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static>;
 
@@ -104,8 +132,9 @@ impl Router {
         Router { routes: Vec::new(), host: None }
     }
 
-    /// Restrict this router to requests whose SNI hostname (TLS) or `Host`
-    /// header (plain HTTP) matches `host`.  Call before registering routes.
+    /// Restrict this router to requests for `host`: their `Host` header
+    /// (`:authority` over HTTP/2 and HTTP/3), else the TLS SNI name, ignoring
+    /// case and a port `host` doesn't name.  Call before registering routes.
     pub fn with_host(mut self, host: &str) -> Self {
         self.host = Some(host.to_string());
         self
@@ -196,7 +225,7 @@ impl Router {
     /// The query string is stripped before matching; only the path is used.
     ///
     /// When `.with_host()` is set, this returns `None` immediately unless the
-    /// request's SNI hostname (TLS) or `Host` header (plain HTTP) matches.
+    /// request's host (`Host` header, else SNI) matches.
     pub fn handle(&self, request: &Request, connection: &ConnectionInfo) -> Option<Response> {
         let (route, params) = self.find(request, connection)?;
         Some((route.handler)(request, &params, connection))
@@ -210,12 +239,7 @@ impl Router {
 
     fn find(&self, request: &Request, connection: &ConnectionInfo) -> Option<(&Route, PathParams)> {
         if let Some(required_host) = &self.host {
-            let actual = connection.sni_hostname.as_deref().or_else(|| {
-                request.headers.iter()
-                    .find(|h| h.name.eq_ignore_ascii_case("host"))
-                    .map(|h| h.value.as_ref())
-            });
-            if actual != Some(required_host.as_str()) {
+            if !host_matches(required_host, request_host(request, connection)) {
                 return None;
             }
         }

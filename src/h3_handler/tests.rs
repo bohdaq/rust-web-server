@@ -217,3 +217,18 @@ async fn early_hints_come_before_the_http3_response() {
     assert_eq!(body, b"hinted");
     endpoint.close(0u32.into(), b"done");
 }
+
+#[test]
+fn authority_becomes_the_host_header() {
+    let request = http::Request::get("https://git.example.com/repo").body(()).unwrap();
+    let headers = super::request_headers(&request);
+    assert_eq!(headers.iter().filter(|h| h.name.eq_ignore_ascii_case("host")).map(|h| h.value.as_ref()).collect::<Vec<_>>(), ["git.example.com"]);
+
+    // A Host header the client sent is kept, not duplicated.
+    let request = http::Request::get("https://git.example.com/").header("host", "git.example.com").body(()).unwrap();
+    assert_eq!(super::request_headers(&request).iter().filter(|h| h.name.eq_ignore_ascii_case("host")).count(), 1);
+
+    // No authority, no Host.
+    let request = http::Request::get("/").body(()).unwrap();
+    assert!(super::request_headers(&request).iter().all(|h| !h.name.eq_ignore_ascii_case("host")));
+}

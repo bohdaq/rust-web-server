@@ -24,6 +24,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `service_discovery::json_lite` (used for Vault, AWS Secrets Manager,
   Consul, etcd, Docker and GCS responses) refuses JSON nested deeper than
   128 levels instead of recursing until the stack overflows.
+- Host routing (`[route.match] host` and `Router::with_host`) goes by the
+  request's `Host` header (`:authority` over HTTP/2 and HTTP/3), falling back
+  to SNI only without one. It went by SNI first, so a browser reusing its
+  connection to one name on a shared certificate for another name got the
+  first name's routes (seen on rws8.tech: the site served Gitea after a visit
+  to git.rws8.tech). HTTP/3 requests now carry `:authority` as `Host`, as
+  HTTP/2 ones did. `Router::with_host` also ignores case and a port it doesn't
+  name, as config routes already did.
 
 ## 18.17.0 — 2026-10-31
 

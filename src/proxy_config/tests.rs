@@ -2291,3 +2291,21 @@ fn pick(dp: &DynamicProxy, client_ip: &str) -> String {
     };
     dp.next_backend(&request, client_ip, &[]).expect("a backend")
 }
+
+#[test]
+fn route_matcher_prefers_the_host_header_over_sni() {
+    // Browsers reuse one TLS connection for every name its certificate covers,
+    // so a request for rws8.tech can arrive on a connection whose SNI was git.
+    let git = RouteMatcher::from_match_config(&MatchConfig { host: Some("git.example.com".to_string()), ..Default::default() });
+    let site = RouteMatcher::from_match_config(&MatchConfig { host: Some("example.com".to_string()), ..Default::default() });
+    let mut conn = make_conn("127.0.0.1");
+    conn.sni_hostname = Some("git.example.com".to_string());
+    let mut req = make_request("GET", "/");
+    req.headers.push(Header { name: "Host".into(), value: "example.com".to_string().into() });
+    assert!(!git.matches(&req, &conn));
+    assert!(site.matches(&req, &conn));
+
+    // An empty Host header falls back to SNI.
+    req.headers[0].value = "".to_string().into();
+    assert!(git.matches(&req, &conn));
+}
