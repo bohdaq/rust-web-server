@@ -39,6 +39,11 @@ PY
 python3 backend.py 18501 fast & PIDS+=($!)
 python3 backend.py 18502 fast & PIDS+=($!)
 python3 backend.py 18503 slow & PIDS+=($!)
+# Ready when each port accepts a connection (a TCP connect, not a request:
+# the backends log every request they get).
+for port in 18501 18502 18503; do
+  for _ in $(seq 1 100); do (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break; sleep 0.1; done
+done
 
 cat > rws.config.toml <<'TOML'
 port = 18500
