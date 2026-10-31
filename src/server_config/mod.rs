@@ -132,6 +132,9 @@ pub struct ServerConfig {
     /// `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` — add the backend address
     /// (`next-hop`) and failure text (`details`). Default `false`.
     pub proxy_status_next_hop: bool,
+    /// `RWS_CONFIG_CACHE_STATUS` — `CacheLayer` responses carry
+    /// `Cache-Status` (RFC 9211). Default `true`.
+    pub cache_status: bool,
     /// `RWS_CONFIG_EARLY_HINTS_HTTP1` — also send `103 Early Hints` to
     /// HTTP/1.1 clients. Default `false`: browsers use them only over HTTP/2
     /// and HTTP/3, and some old HTTP/1.1 clients mishandle extra `1xx`
@@ -175,6 +178,7 @@ impl Default for ServerConfig {
             proxy_status: "always".to_string(),
             proxy_name: "rws".to_string(),
             proxy_status_next_hop: false,
+            cache_status: true,
             early_hints_http1: false,
             compression_dictionaries: Vec::new(),
             directory_listing: true,
@@ -221,6 +225,7 @@ impl ServerConfig {
             },
             proxy_name: Some(read("RWS_CONFIG_PROXY_NAME").trim().to_string()).filter(|n| !n.is_empty()).unwrap_or_else(|| "rws".to_string()),
             proxy_status_next_hop: read("RWS_CONFIG_PROXY_STATUS_NEXT_HOP").eq_ignore_ascii_case("true"),
+            cache_status: !read("RWS_CONFIG_CACHE_STATUS").trim().eq_ignore_ascii_case("false"),
             early_hints_http1: read("RWS_CONFIG_EARLY_HINTS_HTTP1").eq_ignore_ascii_case("true"),
             compression_dictionaries: read("RWS_CONFIG_COMPRESSION_DICTIONARIES")
                 .split(',')

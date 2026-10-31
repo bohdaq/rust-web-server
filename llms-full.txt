@@ -1077,6 +1077,7 @@ order.
 | `RWS_CONFIG_PROXY_STATUS` | `always` | string | `Proxy-Status` (RFC 9209) on proxied responses (since 18.17.0): `always`, `errors` (failures only) or `off`. See [Proxy-Status](/proxy/reverse-proxy/#when-a-backend-fails-proxy-status). |
 | `RWS_CONFIG_PROXY_NAME` | `rws` | string | This hop's name in `Proxy-Status` and `Cache-Status`. |
 | `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` | `false` | boolean | Add the backend address (`next-hop`) and the failure's text (`details`) to `Proxy-Status`; they reveal internal addresses. |
+| `RWS_CONFIG_CACHE_STATUS` | `true` | boolean | `Cache-Status` (RFC 9211) on responses that pass through a response cache: `hit; ttl=…`, `fwd=uri-miss; stored`, … (since 18.17.0). See [Caching](/features/caching/#cache-status-header). |
 | `RWS_CONFIG_COMPRESSION_DICTIONARIES` | (empty) | string | Comma-separated URL patterns (`/js/app.*.js`) of static files offered as compression dictionaries; later versions go out as `dcz` / `dcb` deltas (since 18.12.0). See [Dictionary compression](/features/compression/#dictionary-compression). |
 | `RWS_CONFIG_EARLY_HINTS_HTTP1` | `false` | boolean | Also send `103 Early Hints` to HTTP/1.1 clients (since 18.12.0). HTTP/2 and HTTP/3 always get them; see [Early Hints](/features/early-hints/). |
 | `RWS_CONFIG_DIRECTORY_LISTING` | `true` | boolean | List a directory that has no `index.html` (since 18.8.4). `false` answers `404 Not Found` instead; directories with an `index.html` and files are unaffected. |
@@ -1540,6 +1541,7 @@ error_format            = "problem"  # RWS_CONFIG_ERROR_FORMAT: rws-made errors 
 proxy_status            = "always"   # RWS_CONFIG_PROXY_STATUS: Proxy-Status on proxied responses; "errors" or "off"
 proxy_name              = "rws"      # RWS_CONFIG_PROXY_NAME: this hop's name in Proxy-Status / Cache-Status
 proxy_status_next_hop   = false      # RWS_CONFIG_PROXY_STATUS_NEXT_HOP: add the backend address and error text
+cache_status            = true       # RWS_CONFIG_CACHE_STATUS: Cache-Status on responses through a response cache
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas
 early_hints_http1       = true       # RWS_CONFIG_EARLY_HINTS_HTTP1: also send 103 Early Hints over HTTP/1.1 (default false)
 directory_listing       = false      # RWS_CONFIG_DIRECTORY_LISTING: 404 instead of listing a directory without index.html (default true)
@@ -10024,6 +10026,29 @@ Age: 42
 ```
 
 If the response already carries an `Age` header, its value is replaced.
+
+## `Cache-Status` header
+
+Every response that passes through a `CacheLayer` says what the cache did
+([RFC 9211](https://www.rfc-editor.org/rfc/rfc9211), since 18.17.0):
+
+| Value | Meaning |
+|---|---|
+| `rws; hit; ttl=42` | Served from the cache; fresh for 42 more seconds |
+| `rws; fwd=uri-miss; stored` | Not in the cache; fetched and kept |
+| `rws; fwd=uri-miss` | Not in the cache; fetched, not storable (`Set-Cookie`, `no-store`, a `Vary` outside the key, not a 2xx, streamed) |
+| `rws; fwd=stale` | An expired copy; fetched again |
+| `rws; fwd=request` | The client sent `Cache-Control: no-cache` |
+| `rws; fwd=method` | Not a `GET` |
+| `rws; fwd=bypass; detail=private` | The request carries `Authorization`, `Cookie` or `Range` |
+
+A `Cache-Status` from further upstream is kept, with this cache's member
+after it. `proxy_name` (`RWS_CONFIG_PROXY_NAME`) renames `rws`;
+`cache_status = false` (`RWS_CONFIG_CACHE_STATUS`) leaves the header out.
+
+```sh
+curl -sI https://example.com/products | grep -i cache-status
+```
 
 ## Eviction
 

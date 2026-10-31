@@ -682,3 +682,46 @@ fn config_routes_register_their_caches_and_admin_purges_them() {
     let unset = crate::config_check::check_str(toml).errors.join("\n");
     assert!(unset.contains("RWS_TEST_PURGE_TOKEN is unset"), "{unset}");
 }
+
+fn cache_status_of(response: &Response) -> String {
+    response.header("Cache-Status").map(|h| h.value.to_string()).unwrap_or_default()
+}
+
+#[test]
+fn cache_status_says_hit_miss_and_why() {
+    let app = CountingApp::new(response_with_cache_control("max-age=120"));
+    let layer = CacheLayer::memory(100).ttl(60);
+    assert_eq!("rws; fwd=uri-miss; stored", cache_status_of(&layer.handle(&get("/a"), &conn(), &app).unwrap()));
+    let hit = layer.handle(&get("/a"), &conn(), &app).unwrap();
+    assert!(cache_status_of(&hit).starts_with("rws; hit; ttl="), "{}", cache_status_of(&hit));
+    let ttl: u64 = cache_status_of(&hit).rsplit('=').next().unwrap().parse().unwrap();
+    assert!((59..=60).contains(&ttl), "the layer's 60 s cap: {ttl}");
+    assert_eq!("rws; fwd=request; stored", cache_status_of(&layer.handle(&get_with_header("/a", "Cache-Control", "no-cache"), &conn(), &app).unwrap()));
+    assert_eq!("rws; fwd=method", cache_status_of(&layer.handle(&post("/a"), &conn(), &app).unwrap()));
+    assert_eq!("rws; fwd=bypass; detail=private", cache_status_of(&layer.handle(&get_with_header("/a", "Authorization", "Bearer x"), &conn(), &app).unwrap()));
+
+    let mut uncacheable = ok_response();
+    uncacheable.headers.push(Header::new("Set-Cookie", "s=1"));
+    uncacheable.headers.push(Header::new("Cache-Status", "origin-cache; hit"));
+    let app = CountingApp::new(uncacheable);
+    assert_eq!("origin-cache; hit, rws; fwd=uri-miss", cache_status_of(&layer.handle(&get("/b"), &conn(), &app).unwrap()), "not stored; appended after the upstream's");
+}
+
+#[test]
+fn cache_status_from_the_disk_store_and_switched_off() {
+    let _g = crate::test_env::lock();
+    let tmp = crate::test_env::TempPath::new("rws-cache-status-disk");
+    let app = CountingApp::new(response_with_body("on disk"));
+    let layer = CacheLayer::disk(&*tmp, 1 << 20).unwrap().ttl(60);
+    let first = layer.handle(&get("/d"), &conn(), &app).unwrap();
+    assert_eq!("rws; fwd=uri-miss; stored", cache_status_of(&first));
+    let hit = layer.handle(&get("/d"), &conn(), &app).unwrap();
+    assert!(cache_status_of(&hit).starts_with("rws; hit; ttl="), "{}", cache_status_of(&hit));
+    assert_eq!(1, hit.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("cache-status")).count(), "the stored copy has none of its own");
+
+    std::env::set_var("RWS_CONFIG_CACHE_STATUS", "false");
+    crate::server_config::invalidate();
+    assert_eq!("", cache_status_of(&layer.handle(&get("/d"), &conn(), &app).unwrap()));
+    std::env::remove_var("RWS_CONFIG_CACHE_STATUS");
+    crate::server_config::invalidate();
+}

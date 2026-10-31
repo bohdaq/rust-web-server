@@ -21,6 +21,8 @@ use crate::symbol::SYMBOL;
 #[cfg(test)]
 mod tests;
 
+pub(crate) mod sf;
+
 pub mod content_disposition;
 
 #[cfg(test)]

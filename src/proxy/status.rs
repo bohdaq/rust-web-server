@@ -118,13 +118,13 @@ pub fn failed_with(response: &mut Response, failure: &str, next_hop: Option<&str
 
 fn add(response: &mut Response, parameter: &str, next_hop: Option<&str>, details: Option<&str>) {
     let config = crate::server_config::ServerConfig::current();
-    let mut member = format!("{}; {parameter}", sf_item(&config.proxy_name));
+    let mut member = format!("{}; {parameter}", crate::header::sf::item(&config.proxy_name));
     if config.proxy_status_next_hop {
         if let Some(hop) = next_hop.filter(|h| !h.is_empty()) {
-            member.push_str(&format!("; next-hop={}", sf_string(hop)));
+            member.push_str(&format!("; next-hop={}", crate::header::sf::string(hop)));
         }
         if let Some(details) = details.filter(|d| !d.is_empty()) {
-            member.push_str(&format!("; details={}", sf_string(details)));
+            member.push_str(&format!("; details={}", crate::header::sf::string(details)));
         }
     }
     // RFC 9209 §2: the last member is the hop closest to the client.
@@ -132,37 +132,6 @@ fn add(response: &mut Response, parameter: &str, next_hop: Option<&str>, details
         Some(existing) => existing.value = format!("{}, {member}", existing.value).into(),
         None => response.headers.push(Header::new("Proxy-Status", member)),
     }
-}
-
-/// A token as is, anything else as a string (RFC 8941).
-fn sf_item(name: &str) -> String {
-    let token = !name.is_empty()
-        && name.as_bytes()[0].is_ascii_alphabetic()
-        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b":/!#$%&'*+-.^_`|~".contains(&b));
-    if token {
-        name.to_string()
-    } else {
-        sf_string(name)
-    }
-}
-
-/// An RFC 8941 string: printable ASCII, `"` and `\` escaped, the rest
-/// dropped (header values must stay one safe line).
-fn sf_string(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    for c in s.chars().take(256) {
-        match c {
-            '"' | '\\' => {
-                out.push('\\');
-                out.push(c);
-            }
-            ' '..='~' => out.push(c),
-            _ => {}
-        }
-    }
-    out.push('"');
-    out
 }
 
 #[cfg(test)]

@@ -65,6 +65,13 @@ export UI_E2E_ADMIN_TOKEN="ui-e2e-$RANDOM"
 export UI_E2E_PURGE_TOKEN="purge-$RANDOM"
 (cd www && exec env RWS_CONFIG_FILE=../rws.config.toml "$RWS" >../rws.log 2>&1) & PIDS+=($!)
 for _ in $(seq 1 100); do curl -s -o /dev/null http://127.0.0.1:18489/admin/ && break; sleep 0.1; done
+# Cache-Status (RFC 9211) from the cached route, through the binary.
+first=$(curl -s -D - -o /dev/null http://127.0.0.1:18480/cached/status | tr -d '\r' | grep -i '^cache-status:')
+[ "$first" = "Cache-Status: rws; fwd=uri-miss; stored" ] || { echo "FAIL: first Cache-Status: $first"; exit 1; }
+again=$(curl -s -D - -o /dev/null http://127.0.0.1:18480/cached/status | tr -d '\r' | grep -i '^cache-status:')
+case "$again" in "Cache-Status: rws; hit; ttl="*) ;; *) echo "FAIL: second Cache-Status: $again"; exit 1 ;; esac
+curl -s -o /dev/null -X PURGE -H "Authorization: Bearer $UI_E2E_PURGE_TOKEN" http://127.0.0.1:18480/cached/status
+echo "ok: Cache-Status miss + stored, then hit"
 # Traffic from this machine's own non-loopback address counts as a visitor
 # (loopback is "internal" and not counted).
 EXTERNAL="http://$(hostname -I | awk '{print $1}'):18480/"

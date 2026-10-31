@@ -102,6 +102,29 @@ Age: 42
 
 If the response already carries an `Age` header, its value is replaced.
 
+## `Cache-Status` header
+
+Every response that passes through a `CacheLayer` says what the cache did
+([RFC 9211](https://www.rfc-editor.org/rfc/rfc9211), since 18.17.0):
+
+| Value | Meaning |
+|---|---|
+| `rws; hit; ttl=42` | Served from the cache; fresh for 42 more seconds |
+| `rws; fwd=uri-miss; stored` | Not in the cache; fetched and kept |
+| `rws; fwd=uri-miss` | Not in the cache; fetched, not storable (`Set-Cookie`, `no-store`, a `Vary` outside the key, not a 2xx, streamed) |
+| `rws; fwd=stale` | An expired copy; fetched again |
+| `rws; fwd=request` | The client sent `Cache-Control: no-cache` |
+| `rws; fwd=method` | Not a `GET` |
+| `rws; fwd=bypass; detail=private` | The request carries `Authorization`, `Cookie` or `Range` |
+
+A `Cache-Status` from further upstream is kept, with this cache's member
+after it. `proxy_name` (`RWS_CONFIG_PROXY_NAME`) renames `rws`;
+`cache_status = false` (`RWS_CONFIG_CACHE_STATUS`) leaves the header out.
+
+```sh
+curl -sI https://example.com/products | grep -i cache-status
+```
+
 ## Eviction
 
 A disk cache evicts by total size instead: expired entries first, then the oldest, until the files fit in `max_bytes`; an entry bigger than `max_bytes` on its own isn't stored.

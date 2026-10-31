@@ -14,6 +14,7 @@ mod tests;
 /// taken from `CommandLineArgument::get_command_line_arg_list()` instead.
 /// `tests.rs` checks this list against every `RWS_CONFIG_*` name in `src/`.
 pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
+    "RWS_CONFIG_CACHE_STATUS",
     "RWS_CONFIG_ERROR_FORMAT",
     "RWS_CONFIG_PROXY_NAME",
     "RWS_CONFIG_PROXY_STATUS",

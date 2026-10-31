@@ -25,6 +25,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `proxy_status = "errors"` or `"off"` limits it, `proxy_name` names the
   hop, `proxy_status_next_hop = true` adds the backend address and error
   text (off by default: they reveal internal addresses).
+- Responses through a response cache (`CacheLayer`, memory or disk, and
+  `[route.middleware.cache]`) carry `Cache-Status` (RFC 9211):
+  `rws; hit; ttl=42`, `rws; fwd=uri-miss; stored`, `fwd=stale`,
+  `fwd=request`, `fwd=method`, `fwd=bypass; detail=private`. An upstream's
+  `Cache-Status` is kept. `cache_status = false` leaves it out.
 
 ## 18.16.0 — 2026-10-31
 

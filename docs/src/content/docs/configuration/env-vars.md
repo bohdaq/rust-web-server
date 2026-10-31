@@ -29,6 +29,7 @@ order.
 | `RWS_CONFIG_PROXY_STATUS` | `always` | string | `Proxy-Status` (RFC 9209) on proxied responses (since 18.17.0): `always`, `errors` (failures only) or `off`. See [Proxy-Status](/proxy/reverse-proxy/#when-a-backend-fails-proxy-status). |
 | `RWS_CONFIG_PROXY_NAME` | `rws` | string | This hop's name in `Proxy-Status` and `Cache-Status`. |
 | `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` | `false` | boolean | Add the backend address (`next-hop`) and the failure's text (`details`) to `Proxy-Status`; they reveal internal addresses. |
+| `RWS_CONFIG_CACHE_STATUS` | `true` | boolean | `Cache-Status` (RFC 9211) on responses that pass through a response cache: `hit; ttl=…`, `fwd=uri-miss; stored`, … (since 18.17.0). See [Caching](/features/caching/#cache-status-header). |
 | `RWS_CONFIG_COMPRESSION_DICTIONARIES` | (empty) | string | Comma-separated URL patterns (`/js/app.*.js`) of static files offered as compression dictionaries; later versions go out as `dcz` / `dcb` deltas (since 18.12.0). See [Dictionary compression](/features/compression/#dictionary-compression). |
 | `RWS_CONFIG_EARLY_HINTS_HTTP1` | `false` | boolean | Also send `103 Early Hints` to HTTP/1.1 clients (since 18.12.0). HTTP/2 and HTTP/3 always get them; see [Early Hints](/features/early-hints/). |
 | `RWS_CONFIG_DIRECTORY_LISTING` | `true` | boolean | List a directory that has no `index.html` (since 18.8.4). `false` answers `404 Not Found` instead; directories with an `index.html` and files are unaffected. |

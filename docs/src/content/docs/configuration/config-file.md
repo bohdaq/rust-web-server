@@ -243,6 +243,7 @@ error_format            = "problem"  # RWS_CONFIG_ERROR_FORMAT: rws-made errors 
 proxy_status            = "always"   # RWS_CONFIG_PROXY_STATUS: Proxy-Status on proxied responses; "errors" or "off"
 proxy_name              = "rws"      # RWS_CONFIG_PROXY_NAME: this hop's name in Proxy-Status / Cache-Status
 proxy_status_next_hop   = false      # RWS_CONFIG_PROXY_STATUS_NEXT_HOP: add the backend address and error text
+cache_status            = true       # RWS_CONFIG_CACHE_STATUS: Cache-Status on responses through a response cache
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas
 early_hints_http1       = true       # RWS_CONFIG_EARLY_HINTS_HTTP1: also send 103 Early Hints over HTTP/1.1 (default false)
 directory_listing       = false      # RWS_CONFIG_DIRECTORY_LISTING: 404 instead of listing a directory without index.html (default true)

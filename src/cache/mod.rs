@@ -519,8 +519,11 @@ impl Middleware for CacheLayer {
             return Ok(answer);
         }
         // Only cache GET requests, and never private or partial ones.
-        if request.method != METHOD.get || Self::request_is_private(request) {
-            return next.execute(request, connection);
+        if request.method != METHOD.get {
+            return Ok(cache_status(next.execute(request, connection)?, "fwd=method"));
+        }
+        if Self::request_is_private(request) {
+            return Ok(cache_status(next.execute(request, connection)?, "fwd=bypass; detail=private"));
         }
 
         let bypass = Self::request_bypasses_cache(request);
@@ -532,26 +535,34 @@ impl Middleware for CacheLayer {
                     self.hits.fetch_add(1, Ordering::Relaxed);
                     response.headers.retain(|h| !h.name.eq_ignore_ascii_case("Age"));
                     response.headers.push(Header { name: "Age".into(), value: age.as_secs().to_string().into() });
-                    return Ok(response);
+                    let left = freshness(&response, self.ttl).saturating_sub(age).as_secs();
+                    return Ok(cache_status(response, &format!("hit; ttl={left}")));
                 }
             }
             self.misses.fetch_add(1, Ordering::Relaxed);
             let response = next.execute(request, connection)?;
             let ttl = freshness(&response, self.ttl);
+            let forwarded = if bypass { "fwd=request" } else { "fwd=uri-miss" };
             if !ttl.is_zero() && self.response_is_cacheable(request, &response) {
                 disk.put(&self.cache_key(request), &response, ttl);
                 self.stored.store(disk.len(), Ordering::Relaxed);
+                return Ok(cache_status(response, &format!("{forwarded}; stored")));
             }
-            return Ok(response);
+            return Ok(cache_status(response, forwarded));
         }
 
+        let mut forwarded = if bypass { "fwd=request" } else { "fwd=uri-miss" };
         if !bypass && self.stored.load(Ordering::Relaxed) > 0 {
             // Check for a valid cache hit.
             let key = self.cache_key(request);
             let guard = self.store().lock().unwrap();
             if let Some(entry) = guard.get(&key) {
                 self.hits.fetch_add(1, Ordering::Relaxed);
-                return Ok(Self::cached_response(entry));
+                let left = entry.ttl.saturating_sub(entry.inserted_at.elapsed()).as_secs();
+                return Ok(cache_status(Self::cached_response(entry), &format!("hit; ttl={left}")));
+            }
+            if guard.entries.contains_key(&key) {
+                forwarded = "fwd=stale";
             }
         }
         self.misses.fetch_add(1, Ordering::Relaxed);
@@ -570,9 +581,10 @@ impl Middleware for CacheLayer {
                 self.capacity,
             );
             self.stored.store(guard.entries.len(), Ordering::Relaxed);
+            return Ok(cache_status(response, &format!("{forwarded}; stored")));
         }
 
-        Ok(response)
+        Ok(cache_status(response, forwarded))
     }
 
     /// In-memory: safe on the event loop. A disk store reads and writes
@@ -580,6 +592,23 @@ impl Middleware for CacheLayer {
     fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         self.disk_store().is_none()
     }
+}
+
+/// Add this cache's `Cache-Status` member (RFC 9211, 18.17.0): `hit;
+/// ttl=N`, or `fwd=<why>` with `stored` when the response was kept. It goes
+/// after any `Cache-Status` the response already has (the hop nearest the
+/// client is last). `RWS_CONFIG_CACHE_STATUS=false` leaves it out.
+fn cache_status(mut response: Response, parameters: &str) -> Response {
+    let config = crate::server_config::ServerConfig::current();
+    if !config.cache_status {
+        return response;
+    }
+    let member = format!("{}; {parameters}", crate::header::sf::item(&config.proxy_name));
+    match response.headers.iter_mut().find(|h| h.name.eq_ignore_ascii_case("cache-status")) {
+        Some(existing) => existing.value = format!("{}, {member}", existing.value).into(),
+        None => response.headers.push(Header::new("Cache-Status", member)),
+    }
+    response
 }
 
 /// Stand-in for the disk store where there is none (wasm32).
