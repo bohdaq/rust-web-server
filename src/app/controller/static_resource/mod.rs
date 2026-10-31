@@ -496,6 +496,50 @@ impl StaticResourceController {
         Some(response)
     }
 
+    /// For a GET or HEAD of a path that names nothing but ends with
+    /// punctuation prose and Markdown glue onto links — `)`, `:`, `.`, `,`,
+    /// `;`, `]`, `>`, quotes (`/docs/http2/):` from `[HTTP/2](/docs/http2/):`
+    /// in an llms.txt) — a `301` to the path without it, when that is a file
+    /// or directory. `None` otherwise (the 404 stands). Since 18.15.0.
+    pub(crate) fn trailing_punctuation_redirect(request: &Request) -> Option<Response> {
+        const TRAILING: &[char] = &[')', ':', '.', ',', ';', ']', '>', '\'', '"'];
+        if request.method != METHOD.get && request.method != METHOD.head {
+            return None;
+        }
+        let (raw_path, query) = match request.request_uri.split_once('?') {
+            Some((path, query)) => (path, Some(query)),
+            None => (request.request_uri.as_str(), None),
+        };
+        let decoded = percent_decode_path(raw_path).ok()?;
+        let trimmed = decoded.trim_end_matches(TRAILING);
+        if trimmed.len() == decoded.len() || trimmed.is_empty() || !trimmed.starts_with('/') || trimmed.ends_with("..") {
+            return None;
+        }
+        let fs_path = static_fs_path(&os_specific_path(trimmed)).ok()?;
+        if !std::path::Path::new(&fs_path).exists() {
+            return None;
+        }
+        let mut location = String::with_capacity(trimmed.len() + 16);
+        for c in trimmed.chars() {
+            // Re-encode what a Location header can't carry as is.
+            if c.is_ascii_graphic() && !matches!(c, '%' | '"' | '<' | '>' | '\\' | '^' | '`' | '{' | '|' | '}') {
+                location.push(c);
+            } else {
+                let mut buf = [0u8; 4];
+                for b in c.encode_utf8(&mut buf).bytes() {
+                    location.push_str(&format!("%{b:02X}"));
+                }
+            }
+        }
+        if let Some(query) = query {
+            location.push('?');
+            location.push_str(query);
+        }
+        let mut response = Response::get_response(STATUS_CODE_REASON_PHRASE.n301_moved_permanently, None, None);
+        response.headers.push(Header { name: Header::_LOCATION.into(), value: location.into() });
+        Some(response)
+    }
+
     pub fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, Error> {
 
         let url = request.request_uri.to_string();

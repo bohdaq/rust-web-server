@@ -200,6 +200,10 @@ impl Application for App {
         {
             return Ok(StaticResourceController::process_general(request, response, &config));
         }
+        // `/docs/http2/):` — a link copied with the prose around it.
+        if let Some(redirect) = StaticResourceController::trailing_punctuation_redirect(request) {
+            return Ok(redirect);
+        }
         if NotFoundController::is_matching(request, connection) {
             return Ok(NotFoundController::process(request, response, connection));
         }

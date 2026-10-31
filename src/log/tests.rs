@@ -314,6 +314,16 @@ fn json_and_combined_lines_escape_and_format_exactly() {
     );
     assert!(json.starts_with("{\"time\":\"20") && json[9..time_end].ends_with('Z'), "{json}");
 
+    // With Host, User-Agent and Referer they follow, escaped.
+    let mut with_headers = request.clone();
+    with_headers.headers = vec![
+        crate::header::Header::new("Host", "rws8.tech".to_string()),
+        crate::header::Header::new("User-Agent", "Mozilla/5.0 (X11) \"quoted\"".to_string()),
+        crate::header::Header::new("Referer", "https://example.com/?q=rws".to_string()),
+    ];
+    let json = Log::json(&with_headers, &response, &v4);
+    assert!(json.ends_with(r#""bytes":1234,"host":"rws8.tech","user_agent":"Mozilla/5.0 (X11) \"quoted\"","referer":"https://example.com/?q=rws"}"#), "{json}");
+
     let v6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 1);
     let combined = Log::combined(&request, &response, &v6);
     assert!(combined.starts_with("::1 - - ["), "{combined}");

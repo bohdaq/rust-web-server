@@ -5,6 +5,21 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- A static path that names nothing but ends with punctuation copied along
+  with a link (`/docs/http2/):` from an llms.txt line, `/docs/install.`)
+  redirects (301) to the path without it when that exists — those requests
+  were 404s.
+
+### Changed
+
+- The JSON access log adds `host`, `user_agent` and `referer` after `bytes`,
+  each only when the request sent that header — who visited, for which
+  site, from where. Existing fields and their order are unchanged.
+
 ## 18.14.0 — 2026-10-31
 
 ### Added

@@ -104,10 +104,11 @@ rws_circuit_breaker_state == 2
 By default the server writes one newline-delimited JSON object per request to stdout:
 
 ```json
-{"time":"2026-07-02T12:00:00Z","remote_addr":"127.0.0.1","method":"GET","path":"/healthz","protocol":"HTTP/1.1","status":200,"bytes":2}
+{"time":"2026-07-02T12:00:00Z","remote_addr":"203.0.113.9","method":"GET","path":"/docs/","protocol":"HTTP/2.0","status":200,"bytes":14384,"host":"example.com","user_agent":"Mozilla/5.0 …","referer":"https://www.google.com/"}
 ```
 
-JSON logs are well-suited for ingestion by Loki, Fluentd, Datadog, and other structured-log collectors.
+`host`, `user_agent` and `referer` come last, each only when the request
+sent the header (since 18.15.0). JSON logs are well-suited for ingestion by Loki, Fluentd, Datadog, and other structured-log collectors.
 
 ### Combined Log Format
 

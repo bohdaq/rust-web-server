@@ -141,7 +141,9 @@ impl Log {
         log
     }
 
-    /// Returns a structured JSON log line for one request/response pair.
+    /// Returns a structured JSON log line for one request/response pair:
+    /// `time`, `remote_addr`, `method`, `path`, `protocol`, `status`, `bytes`,
+    /// then `host`, `user_agent` and `referer` when the request has them.
     ///
     /// Enable with `RWS_CONFIG_LOG_FORMAT=json`. Useful for log aggregators
     /// (Loki, Fluentd, Datadog) that ingest JSON from pod stdout.
@@ -169,6 +171,14 @@ impl Log {
         let _ = write!(out, "{}", response.status_code);
         out.extend_from_slice(b",\"bytes\":");
         out.extend_from_slice(crate::ext::decimal::Decimal::new(body_size as u128).as_str().as_bytes());
+        // Who asked, for what site, from where (18.15.0): only when sent.
+        for (key, name) in [(&b",\"host\":\""[..], "host"), (&b",\"user_agent\":\""[..], "user-agent"), (&b",\"referer\":\""[..], "referer")] {
+            if let Some(header) = request.header(name).filter(|h| !h.value.is_empty()) {
+                out.extend_from_slice(key);
+                push_json_escaped(out, &header.value);
+                out.push(b'"');
+            }
+        }
         out.push(b'}');
     }
 

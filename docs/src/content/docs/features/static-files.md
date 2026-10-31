@@ -146,6 +146,16 @@ echo "body { font-family: monospace; }" > rws-directory-listing.css
 
 If you set a CSP (`RWS_CONFIG_CSP`, or the default one via `RWS_CONFIG_SECURITY_HEADERS`) and excludes `'self'` from `style-src`/`script-src`, add an allowance for it or the listing will render unstyled the same way any other same-origin asset would under that policy.
 
+## Links with punctuation stuck to them
+
+A link copied out of prose or Markdown often brings the punctuation after it
+along: `/docs/http2/):` from `[HTTP/2](/docs/http2/): …` in an llms.txt,
+`/docs/install.` from the end of a sentence. When a `GET` or `HEAD` names
+nothing and its path ends with `)`, `:`, `.`, `,`, `;`, `]`, `>` or a quote,
+rws answers `301` to the path without them — if that is a file or
+directory — keeping the query string. Anything else still gets the `404`.
+Since 18.15.0.
+
 ## SPA fallback
 
 For local development, before you have a built app to serve this way, see [Frontend Dev Server Proxy](/getting-started/frontend-dev-proxy/) for running a React/Vite dev server alongside `rws`.

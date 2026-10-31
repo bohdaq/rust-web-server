@@ -1277,3 +1277,23 @@ fn later_versions_of_a_dictionary_file_go_out_as_deltas() {
     let response = plain.get(&path).header("Accept-Encoding", "br, dcz").header("Available-Dictionary", &held).send();
     assert_eq!((response.header("Use-As-Dictionary"), response.header("Content-Encoding")), (None, br));
 }
+
+// ── links with prose stuck to them (`/docs/x/):`) ─────────────────────────────
+
+#[test]
+fn trailing_punctuation_redirects_to_what_exists() {
+    let file = crate::test_env::TempPath::new_in_cwd("trail page.txt");
+    std::fs::write(&*file, "here").unwrap();
+    let name = file.file_name().unwrap().to_string_lossy().replace(' ', "%20");
+    let client = crate::test_client::TestClient::new(crate::app::App::with_config(crate::server_config::ServerConfig::default()));
+    for suffix in ["):", ")", ".", ",", "%29%3A", "\");", ">"] {
+        let response = client.get(&format!("/{name}{suffix}?q=1")).send();
+        assert_eq!(response.status(), 301, "{suffix}");
+        assert_eq!(response.header("Location"), Some(format!("/{name}?q=1").as_str()), "{suffix}");
+    }
+    assert_eq!(client.get(&format!("/{name}")).send().status(), 200, "the file itself");
+    assert_eq!(client.get("/no-such-page/):").send().status(), 404, "nothing behind it");
+    let root = client.get("/):").send();
+    assert_eq!((root.status(), root.header("Location")), (301, Some("/")), "the home page");
+    assert_eq!(client.post(&format!("/{name}):")).send().status(), 404, "GET and HEAD only");
+}
