@@ -19,6 +19,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `examples/a2a_tck.rs`. `A2aServer::extended_card` serves `GetExtendedAgentCard` to
   authenticated callers.
 
+- `[route.action] type = "a2a"`: an A2A gateway route. It serves the
+  upstream agent's card with its JSON-RPC interface pointing at the route,
+  forwards JSON-RPC calls (streams included) with headers from the
+  environment instead of the caller's `Authorization`, and writes an audit
+  line per call.
+
 ### Fixed
 
 - `http_client` tries every address a name resolves to, not just the first:

@@ -487,6 +487,25 @@ An [MCP gateway](/mcp/gateway/): one MCP endpoint in front of several upstream M
 
 The gateway lists its upstreams in the background at start: until it has, and while an upstream is down then, the route answers `503` and the build is retried every 10 s. `rws --check` reports unknown keys, bad prefixes and URLs, and unset token and header variables.
 
+### `[route.action]` — a2a
+
+An [A2A gateway](/mcp/a2a/#gateway): a public address for an A2A agent running elsewhere (since 18.18.0). Its card is served at `<path>/.well-known/agent-card.json` with the JSON-RPC interface pointing at this route, and JSON-RPC `POST`s to `<path>` go to the agent, streams included. Use the route's middleware for auth and rate limits; the caller's `Authorization` isn't passed on.
+
+```toml
+[[route]]
+  [route.match]
+  path = "/agents/billing/*"
+
+  [route.action]
+  type = "a2a"
+
+  [route.action.a2a]
+  upstream    = "http://10.0.0.7:9000"   # the agent's base URL (its card at /.well-known/agent-card.json)
+  timeout_ms  = 300000                   # default; SendMessage may wait for its task
+  audit_log   = true                     # one JSON line per call: client, method, status, duration
+  headers_env = { Authorization = "BILLING_AGENT_AUTHORIZATION" }  # sent to the agent, from the environment
+```
+
 ### `[route.action]` — llm
 
 An [LLM proxy](/proxy/llm-proxy/) in front of OpenAI-compatible and Anthropic providers: virtual keys, fallback, token usage, budgets (since 18.9.0). Provider keys, virtual keys and the Redis password come from the environment variables named.

@@ -33,6 +33,7 @@ pub use upstream::{BreakerConfig, RetryConfig, StickyConfig};
 pub mod builder;
 pub mod validate;
 pub mod mcp_gateway;
+pub mod a2a_gateway;
 pub mod llm;
 
 #[cfg(test)]
@@ -173,6 +174,8 @@ pub enum ActionConfig {
     },
     /// The MCP gateway ([`mcp_gateway`]).
     Mcp(Box<mcp_gateway::McpGatewayConfig>),
+    /// The A2A gateway ([`a2a_gateway`]).
+    A2a(Box<a2a_gateway::A2aGatewayConfig>),
     /// The LLM proxy ([`llm`]).
     Llm(Box<llm::LlmConfig>),
     Unknown(String),
@@ -516,6 +519,7 @@ impl ProxyConfig {
                     }
                 }
                 "mcp" => ActionConfig::Mcp(Box::new(mcp_gateway::parse(&map, &a_sec))),
+                "a2a" => ActionConfig::A2a(Box::new(a2a_gateway::parse(&map, &a_sec))),
                 "llm" => ActionConfig::Llm(Box::new(llm::parse(&map, &a_sec))),
                 other => ActionConfig::Unknown(other.to_string()),
             };

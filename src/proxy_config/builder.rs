@@ -212,6 +212,10 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     route.match_.path.clone().unwrap_or_else(|| "/mcp".to_string()),
                 )),
                 ActionConfig::Llm(llm) => arc_app(crate::proxy_config::llm::build(llm)),
+                ActionConfig::A2a(gateway) => arc_app(crate::proxy_config::a2a_gateway::A2aGateway::new(
+                    (**gateway).clone(),
+                    route.match_.path.as_deref().unwrap_or("/"),
+                )),
                 ActionConfig::Unknown(_) => {
                     // No-op: these fall through to fallback
                     arc_app(crate::proxy_config::NullApp)

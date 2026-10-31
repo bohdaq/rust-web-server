@@ -62,6 +62,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.mcp.allow" => super::mcp_gateway::ALLOW_KEYS.to_vec(),
         "route.action.mcp.limit" => super::mcp_gateway::LIMIT_KEYS.to_vec(),
         "route.action.llm" => super::llm::LLM_KEYS.to_vec(),
+        "route.action.a2a" => super::a2a_gateway::KEYS.to_vec(),
         "route.action.llm.provider" => super::llm::PROVIDER_KEYS.to_vec(),
         "route.action.llm.key" => super::llm::KEY_KEYS.to_vec(),
         "route.middleware" => vec!["timeout_ms", "max_body_size", "early_hints"],
@@ -109,7 +110,7 @@ pub fn check_unknown_keys(toml: &str, report: &mut ConfigReport) {
         }
         let shape = strip_indices(section);
         // Header names, relation names: any key.
-        if shape == "route.action.mcp.upstream.headers_env" || shape.starts_with("authz.type.") {
+        if shape == "route.action.mcp.upstream.headers_env" || shape == "route.action.a2a.headers_env" || shape.starts_with("authz.type.") {
             continue;
         }
         match known_keys(&shape) {
@@ -298,11 +299,14 @@ impl ProxyConfig {
                 ActionConfig::Llm(llm) => {
                     super::llm::validate(llm, &label, report);
                 }
+                ActionConfig::A2a(gateway) => {
+                    super::a2a_gateway::validate(gateway, route.match_.path.as_deref(), &label, report);
+                }
                 ActionConfig::Unknown(kind) if kind.is_empty() => {
                     report.error(format!("{label}: [route.action] has no `type`"));
                 }
                 ActionConfig::Unknown(kind) => {
-                    report.error(format!("{label}: unknown action type '{kind}' (expected proxy, grpc, static, redirect, respond, mcp or llm)"));
+                    report.error(format!("{label}: unknown action type '{kind}' (expected proxy, grpc, static, redirect, respond, mcp, llm or a2a)"));
                 }
             }
             let has_auth = route.middleware.auth.is_some() || self.global_middleware.auth.is_some();

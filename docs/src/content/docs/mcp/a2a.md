@@ -142,6 +142,32 @@ let agent = A2aServer::new(public_card)
 Authenticated callers get the fuller card from `GetExtendedAgentCard`; the
 public card says one exists (`capabilities.extendedAgentCard`).
 
+## Gateway
+
+The `rws` binary can also stand in front of agents that run elsewhere (any
+A2A 1.0 implementation), from `rws.config.toml`:
+
+```toml
+[[route]]
+  [route.match]
+  path = "/agents/billing/*"
+  [route.action]
+  type = "a2a"
+  [route.action.a2a]
+  upstream = "http://10.0.0.7:9000"
+  headers_env = { Authorization = "BILLING_AGENT_AUTHORIZATION" }
+  [route.middleware.auth]
+  type = "bearer"
+  token_env = "PARTNER_TOKEN"
+```
+
+Callers read the card at `/agents/billing/.well-known/agent-card.json`; its
+only interface is JSON-RPC at `/agents/billing`, so the agent's own address
+stays private. Calls are forwarded with the configured headers instead of
+the caller's `Authorization`, streams pass through, and with
+`audit_log = true` each call is a JSON line (client, method, status,
+duration). Settings: [config file](/configuration/config-file/#routeaction--a2a).
+
 ## Conformance
 
 CI runs the official A2A compatibility kit

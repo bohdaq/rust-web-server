@@ -51,6 +51,16 @@ pub const MAX_BODY: usize = 4 * 1024 * 1024;
 /// Tasks kept (oldest dropped first).
 pub const MAX_TASKS: usize = 10_000;
 
+/// JSON text of a parsed value (for the A2A gateway route).
+pub(crate) fn json_text(value: &JsonValue) -> String {
+    to_json(value)
+}
+
+/// A JSON string literal.
+pub(crate) fn quote_json(s: &str) -> String {
+    quote(s)
+}
+
 /// A random UUID v4.
 pub(crate) fn new_id() -> String {
     use std::hash::{BuildHasher, Hasher};
