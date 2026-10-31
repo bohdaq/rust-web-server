@@ -367,8 +367,15 @@ impl Middleware for CanaryLayer {
             }
         }
         match self.proxy(request, connection) {
-            Ok(resp) => Ok(resp),
-            Err(_) => Ok(bad_gateway()),
+            Ok(mut resp) => {
+                crate::proxy::status::received(&mut resp, None);
+                Ok(resp)
+            }
+            Err(e) => {
+                let mut resp = bad_gateway();
+                crate::proxy::status::failed_with(&mut resp, &e, None);
+                Ok(resp)
+            }
         }
     }
 }

@@ -1340,22 +1340,35 @@ impl Application for H2Forward<'_> {
         let route = self.0;
         let backends = route.live.read().unwrap_or_else(|e| e.into_inner()).clone();
         if backends.is_empty() {
-            return Ok(crate::proxy::bad_gateway());
+            let mut response = crate::proxy::bad_gateway();
+            crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::DestinationUnavailable, None, None);
+            return Ok(response);
         }
         // A streamed request body can be sent once: no second backend then.
         let attempts = if matches!(request.body, crate::request::Body::Stream(_)) { 1 } else { backends.len() };
         let start = route.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut failure: Option<(String, String)> = None;
         for attempt in 0..attempts {
             let url = &backends[(start + attempt) % backends.len()];
             let result = crate::proxy::forward_h2(
                 request, crate::proxy::Peer::of(conn), url, route.tls, route.trust.as_deref(), route.connect_timeout, route.read_timeout,
             );
             match result {
-                Ok(response) => return Ok(response),
-                Err(e) => eprintln!("grpc route: {e}"),
+                Ok(mut response) => {
+                    crate::proxy::status::received(&mut response, Some(url));
+                    return Ok(response);
+                }
+                Err(e) => {
+                    eprintln!("grpc route: {e}");
+                    failure = Some((e, url.clone()));
+                }
             }
         }
-        Ok(crate::proxy::bad_gateway())
+        let mut response = crate::proxy::bad_gateway();
+        if let Some((e, url)) = &failure {
+            crate::proxy::status::failed_with(&mut response, e, Some(url));
+        }
+        Ok(response)
     }
 }
 
@@ -1669,7 +1682,11 @@ impl DynamicProxy {
     /// when the circuit breaker took them out, `502` otherwise — or an
     /// unparsable backend address).
     fn prepare<'a>(&self, request: &'a Request, conn: &ConnectionInfo, tried: &[String]) -> Result<Prepared<'a>, Response> {
-        let backend = self.next_backend(request, &conn.client.ip, tried).map_err(|ejected| if ejected { service_unavailable() } else { bad_gateway() })?;
+        let backend = self.next_backend(request, &conn.client.ip, tried).map_err(|ejected| {
+            let mut response = if ejected { service_unavailable() } else { bad_gateway() };
+            crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::DestinationUnavailable, None, None);
+            response
+        })?;
 
         let guard = if self.strategy == LoadBalanceStrategy::LeastConnections {
             let counter = self.connection_counter(&backend);
@@ -1679,7 +1696,11 @@ impl DynamicProxy {
             None
         };
 
-        let (host, port, _) = crate::proxy_config::health::parse_backend_url(&backend).ok_or_else(bad_gateway)?;
+        let (host, port, _) = crate::proxy_config::health::parse_backend_url(&backend).ok_or_else(|| {
+            let mut response = bad_gateway();
+            crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ProxyConfigurationError, Some(&backend), None);
+            response
+        })?;
 
         // Apply path rewriting if configured
         let request = if self.strip_prefix.is_some() || self.add_prefix.is_some() {
@@ -1705,7 +1726,17 @@ impl DynamicProxy {
     }
 
     /// Record an attempt's outcome (breaker, metrics) and classify it.
-    fn settle(&self, backend: &str, result: Result<Response, ()>, started: std::time::Instant) -> Attempt {
+    fn settle(&self, backend: &str, result: Result<Response, String>, started: std::time::Instant, failure: &mut Option<(String, String)>) -> Attempt {
+        let result = match result {
+            Ok(mut response) => {
+                crate::proxy::status::received(&mut response, Some(backend));
+                Ok(response)
+            }
+            Err(e) => {
+                *failure = Some((e, backend.to_string()));
+                Err(())
+            }
+        };
         let status = result.as_ref().ok().map(|r| r.status_code);
         upstream::observe(&self.upstream, backend, status, started);
         let failed = status.is_none_or(|s| matches!(s, 502..=504));
@@ -1753,6 +1784,7 @@ impl DynamicProxy {
         }
         let mut tried: Vec<String> = Vec::new();
         let mut last: Option<Response> = None;
+        let mut failure: Option<(String, String)> = None;
         for attempt in 0..self.attempts(request) {
             let prepared = match self.prepare(request, conn, &tried) {
                 Ok(p) => p,
@@ -1781,7 +1813,7 @@ impl DynamicProxy {
                 match crate::proxy::h3_upstream::forward_async(&prepared.request, crate::proxy::Peer::of(conn), &target).await {
                     Err(crate::proxy::h3_upstream::H3Error::Connect(e)) => self.fall_back_to_tcp(&prepared.backend, &e),
                     result => {
-                        match self.settle(&prepared.backend, result.map_err(|_| ()), started) {
+                        match self.settle(&prepared.backend, result.map_err(|e| e.to_string()), started, &mut failure) {
                             Attempt::Done(mut response) => {
                                 self.stick(request, &prepared.backend, &mut response);
                                 return Ok(response);
@@ -1802,9 +1834,8 @@ impl DynamicProxy {
                 self.connect_timeout,
                 self.read_timeout,
             )
-            .await
-            .map_err(|_| ());
-            match self.settle(&prepared.backend, result, started) {
+            .await;
+            match self.settle(&prepared.backend, result, started, &mut failure) {
                 Attempt::Done(mut response) => {
                     self.stick(request, &prepared.backend, &mut response);
                     return Ok(response);
@@ -1813,7 +1844,14 @@ impl DynamicProxy {
             }
             tried.push(prepared.backend.clone());
         }
-        Ok(last.unwrap_or_else(bad_gateway))
+        Ok(last.unwrap_or_else(|| {
+            let mut response = bad_gateway();
+            match &failure {
+                Some((e, backend)) => crate::proxy::status::failed_with(&mut response, e, Some(backend)),
+                None => crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ProxyInternalError, None, None),
+            }
+            response
+        }))
     }
 
     /// Whether [`execute_async`](Self::execute_async) can serve this proxy.
@@ -1832,6 +1870,7 @@ impl Application for DynamicProxy {
         }
         let mut tried: Vec<String> = Vec::new();
         let mut last: Option<Response> = None;
+        let mut failure: Option<(String, String)> = None;
         for attempt in 0..self.attempts(request) {
             let prepared = match self.prepare(request, conn, &tried) {
                 Ok(p) => p,
@@ -1855,7 +1894,7 @@ impl Application for DynamicProxy {
                 match crate::proxy::h3_upstream::forward(&prepared.request, crate::proxy::Peer::of(conn), &target) {
                     Err(crate::proxy::h3_upstream::H3Error::Connect(e)) => self.fall_back_to_tcp(&prepared.backend, &e),
                     result => {
-                        match self.settle(&prepared.backend, result.map_err(|_| ()), started) {
+                        match self.settle(&prepared.backend, result.map_err(|e| e.to_string()), started, &mut failure) {
                             Attempt::Done(mut response) => {
                                 self.stick(request, &prepared.backend, &mut response);
                                 return Ok(response);
@@ -1877,9 +1916,8 @@ impl Application for DynamicProxy {
                 self.trust.as_deref(),
                 self.connect_timeout,
                 self.read_timeout,
-            )
-            .map_err(|_| ());
-            match self.settle(&prepared.backend, result, started) {
+            );
+            match self.settle(&prepared.backend, result, started, &mut failure) {
                 Attempt::Done(mut response) => {
                     self.stick(request, &prepared.backend, &mut response);
                     return Ok(response);
@@ -1888,7 +1926,14 @@ impl Application for DynamicProxy {
             }
             tried.push(prepared.backend.clone());
         }
-        Ok(last.unwrap_or_else(bad_gateway))
+        Ok(last.unwrap_or_else(|| {
+            let mut response = bad_gateway();
+            match &failure {
+                Some((e, backend)) => crate::proxy::status::failed_with(&mut response, e, Some(backend)),
+                None => crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ProxyInternalError, None, None),
+            }
+            response
+        }))
     }
 }
 

@@ -758,7 +758,15 @@ impl Application for IngressRouter {
                     self.connect_timeout,
                     self.read_timeout,
                 )
-                .or_else(|_| Ok(bad_gateway()))
+                .map(|mut response| {
+                    crate::proxy::status::received(&mut response, None);
+                    response
+                })
+                .or_else(|e| {
+                    let mut response = bad_gateway();
+                    crate::proxy::status::failed_with(&mut response, &e, None);
+                    Ok(response)
+                })
             }
             None => Ok(not_found()),
         }

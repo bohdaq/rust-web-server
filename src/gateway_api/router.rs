@@ -203,8 +203,9 @@ static MIRROR_COUNTER: AtomicUsize = AtomicUsize::new(0);
 enum Attempt {
     /// A response to send (or to retry on its status).
     Response(Response),
-    /// No response: the connection failed, or the attempt's timeout passed.
-    Failed { timed_out: bool },
+    /// No response: the connection failed, or the attempt's timeout passed
+    /// (the forwarder's error and the endpoint, for `Proxy-Status`).
+    Failed { timed_out: bool, error: String, next_hop: String },
 }
 
 /// Read timeout of an attempt without a route timeout.
@@ -259,8 +260,16 @@ impl<'a> Policy<'a> {
         if !retry {
             return Ok(match outcome {
                 Attempt::Response(response) => response,
-                Attempt::Failed { timed_out: true } => status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout),
-                Attempt::Failed { timed_out: false } => status(STATUS_CODE_REASON_PHRASE.n502_bad_gateway),
+                Attempt::Failed { timed_out: true, error, next_hop } => {
+                    let mut response = status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout);
+                    crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::HttpResponseTimeout, Some(&next_hop), Some(&error));
+                    response
+                }
+                Attempt::Failed { timed_out: false, error, next_hop } => {
+                    let mut response = status(STATUS_CODE_REASON_PHRASE.n502_bad_gateway);
+                    crate::proxy::status::failed_with(&mut response, &error, Some(&next_hop));
+                    response
+                }
             });
         }
         self.attempt += 1;
@@ -395,6 +404,7 @@ impl PortRouter {
         };
         let (request, ip, port, host_header) = (target.request.as_ref(), target.ip.as_str(), target.port, target.host_header.as_str());
         let started = std::time::Instant::now();
+        let next_hop = format!("{}:{}", target.ip, target.port);
         let forwarded = if let Some(tls) = &tls {
             crate::proxy::forward_tls_with_host(&tls.config, &tls.label, request, crate::proxy::Peer::of(connection), ip, port, &tls.server_name, host_header, connect_timeout(timeout), timeout)
         } else if super::upgrade::is_upgrade(request) {
@@ -405,8 +415,11 @@ impl PortRouter {
             crate::proxy::forward_pooled_with_host(crate::proxy::shared_pool(), request, crate::proxy::Peer::of(connection), ip, port, host_header, connect_timeout(timeout), timeout)
         };
         match forwarded {
-            Ok(response) => Attempt::Response(response),
-            Err(_) => Attempt::Failed { timed_out: started.elapsed() >= timeout },
+            Ok(mut response) => {
+                crate::proxy::status::received(&mut response, Some(&next_hop));
+                Attempt::Response(response)
+            }
+            Err(error) => Attempt::Failed { timed_out: started.elapsed() >= timeout, error, next_hop },
         }
     }
 
@@ -422,6 +435,7 @@ impl PortRouter {
             Err(response) => return Attempt::Response(response),
         };
         let started = std::time::Instant::now();
+        let next_hop = format!("{}:{}", target.ip, target.port);
         let forwarded = if tls.is_none() && target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
             // HTTP/2 upstreams have their own runtime and a blocking API.
             let (request, client_ip, tls_client, ip, port, host) = (target.request.into_owned(), connection.client.ip.clone(), connection.tls, target.ip, target.port, target.host_header);
@@ -433,8 +447,11 @@ impl PortRouter {
             crate::proxy::async_upstream::forward_gateway(&target.request, crate::proxy::Peer::of(connection), &target.ip, target.port, &target.host_header, tls, connect_timeout(timeout), timeout).await
         };
         match forwarded {
-            Ok(response) => Attempt::Response(response),
-            Err(_) => Attempt::Failed { timed_out: started.elapsed() >= timeout },
+            Ok(mut response) => {
+                crate::proxy::status::received(&mut response, Some(&next_hop));
+                Attempt::Response(response)
+            }
+            Err(error) => Attempt::Failed { timed_out: started.elapsed() >= timeout, error, next_hop },
         }
     }
 }

@@ -15,6 +15,9 @@ mod tests;
 /// `tests.rs` checks this list against every `RWS_CONFIG_*` name in `src/`.
 pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
     "RWS_CONFIG_ERROR_FORMAT",
+    "RWS_CONFIG_PROXY_NAME",
+    "RWS_CONFIG_PROXY_STATUS",
+    "RWS_CONFIG_PROXY_STATUS_NEXT_HOP",
     "RWS_CONFIG_ACME_ACCOUNT_KEY_PATH",
     "RWS_CONFIG_ADMIN_ALLOWED_ORIGINS",
     "RWS_CONFIG_ADMIN_LISTEN",

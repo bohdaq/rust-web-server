@@ -17,6 +17,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   a plain-text line. Status codes and headers are unchanged. Set
   `error_format = "text"` (`RWS_CONFIG_ERROR_FORMAT`) for the old bodies.
   [Error responses](https://rws8.tech/reference/errors/) lists them.
+- Proxied responses carry `Proxy-Status` (RFC 9209): `rws; received-status=200`,
+  or on failure the reason, `rws; error=connection_refused` (DNS, refused,
+  timeouts, TLS, terminated, incomplete, protocol errors, no backend in
+  rotation). Config-file routes, `ReverseProxy`, HTTP/2 and HTTP/3 reverse
+  proxies, canary, ingress, gRPC routes and the Gateway API router.
+  `proxy_status = "errors"` or `"off"` limits it, `proxy_name` names the
+  hop, `proxy_status_next_hop = true` adds the backend address and error
+  text (off by default: they reveal internal addresses).
 
 ## 18.16.0 — 2026-10-31
 

@@ -266,12 +266,48 @@ counted by `rws_upstream_h3_fallbacks_total{upstream="edge"}`. In the config
 file the same is `[[upstream]] protocol = "h3"` — see
 [HTTP/3 upstreams](/proxy/config-driven/#http3-upstreams).
 
-## 502 Bad Gateway
+## When a backend fails: `Proxy-Status`
 
-`ReverseProxy` returns `502 Bad Gateway` with `Content-Type: text/plain` when:
+When every attempt fails the client gets `502 Bad Gateway` (or `503`
+when every backend is out of rotation), as
+[problem details](/reference/errors/). Every proxied response, the
+successful ones too, carries a `Proxy-Status` header
+([RFC 9209](https://www.rfc-editor.org/rfc/rfc9209), since 18.17.0) saying
+what this hop saw:
 
-- No backends are configured.
-- All backends fail to connect or return a network error.
+```http
+Proxy-Status: rws; received-status=200
+Proxy-Status: rws; error=connection_refused
+Proxy-Status: rws; error=http_response_timeout
+```
+
+| `error=` | When |
+|---|---|
+| `dns_error` | The backend's name didn't resolve |
+| `connection_refused` | Nothing listens on the backend's port |
+| `connection_timeout` | The connection (or TLS handshake) took longer than the connect timeout |
+| `destination_ip_unroutable` | No route to the backend's address |
+| `destination_unavailable` | No backend in rotation (health checks, circuit breaker, drained) |
+| `tls_certificate_error` / `tls_protocol_error` | The backend's certificate wasn't trusted / the TLS handshake failed |
+| `http_response_timeout` | No response head within the read timeout |
+| `connection_terminated` | The backend closed or reset the connection before answering |
+| `http_response_incomplete` | The body ended early |
+| `http_protocol_error` | The response wasn't valid HTTP |
+| `proxy_configuration_error` | A backend address or TLS setting rws can't use |
+
+A `Proxy-Status` from the backend (another proxy behind this one) is kept,
+and rws's member is added after it, nearest the client last. Settings (all
+top-level in the config file):
+
+```toml
+proxy_status          = "always"  # RWS_CONFIG_PROXY_STATUS: "errors" = failures only, "off" = never
+proxy_name            = "edge-1"  # RWS_CONFIG_PROXY_NAME: this hop's name (default "rws")
+proxy_status_next_hop = false     # RWS_CONFIG_PROXY_STATUS_NEXT_HOP: add next-hop (backend address) and details (the error text)
+```
+
+`next-hop` and `details` name internal addresses, so they're off unless you
+turn them on; turn them on inside your own network, where they make a
+failed request explain itself.
 
 ## Combining with other middleware
 

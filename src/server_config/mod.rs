@@ -123,6 +123,15 @@ pub struct ServerConfig {
     /// text (`502 Bad Gateway`) as before 18.17.0; anything else (default
     /// `"problem"`) sends RFC 9457 `application/problem+json`.
     pub error_format_text: bool,
+    /// `RWS_CONFIG_PROXY_STATUS` — when proxied responses carry
+    /// `Proxy-Status` (RFC 9209): `"always"` (default), `"errors"`, `"off"`.
+    pub proxy_status: String,
+    /// `RWS_CONFIG_PROXY_NAME` — this hop's name in `Proxy-Status` (and
+    /// `Cache-Status`). Default `"rws"`.
+    pub proxy_name: String,
+    /// `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` — add the backend address
+    /// (`next-hop`) and failure text (`details`). Default `false`.
+    pub proxy_status_next_hop: bool,
     /// `RWS_CONFIG_EARLY_HINTS_HTTP1` — also send `103 Early Hints` to
     /// HTTP/1.1 clients. Default `false`: browsers use them only over HTTP/2
     /// and HTTP/3, and some old HTTP/1.1 clients mishandle extra `1xx`
@@ -163,6 +172,9 @@ impl Default for ServerConfig {
             client_hints: false,
             static_cache_control: STATIC_CACHE_CONTROL_DEFAULT.to_string(),
             error_format_text: false,
+            proxy_status: "always".to_string(),
+            proxy_name: "rws".to_string(),
+            proxy_status_next_hop: false,
             early_hints_http1: false,
             compression_dictionaries: Vec::new(),
             directory_listing: true,
@@ -202,6 +214,13 @@ impl ServerConfig {
             static_cache_control: std::env::var("RWS_CONFIG_STATIC_CACHE_CONTROL")
                 .unwrap_or_else(|_| STATIC_CACHE_CONTROL_DEFAULT.to_string()),
             error_format_text: read("RWS_CONFIG_ERROR_FORMAT").trim().eq_ignore_ascii_case("text"),
+            proxy_status: match read("RWS_CONFIG_PROXY_STATUS").trim().to_ascii_lowercase().as_str() {
+                "off" | "false" | "none" => "off".to_string(),
+                "errors" => "errors".to_string(),
+                _ => "always".to_string(),
+            },
+            proxy_name: Some(read("RWS_CONFIG_PROXY_NAME").trim().to_string()).filter(|n| !n.is_empty()).unwrap_or_else(|| "rws".to_string()),
+            proxy_status_next_hop: read("RWS_CONFIG_PROXY_STATUS_NEXT_HOP").eq_ignore_ascii_case("true"),
             early_hints_http1: read("RWS_CONFIG_EARLY_HINTS_HTTP1").eq_ignore_ascii_case("true"),
             compression_dictionaries: read("RWS_CONFIG_COMPRESSION_DICTIONARIES")
                 .split(',')

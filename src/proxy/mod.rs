@@ -24,6 +24,7 @@
 //! ```
 
 pub mod pool;
+pub mod status;
 #[cfg(feature = "http2")]
 pub(crate) mod async_upstream;
 #[cfg(not(target_arch = "wasm32"))]
@@ -287,8 +288,15 @@ impl Middleware for ReverseProxy {
             }
         }
         match self.proxy(request, connection) {
-            Ok(resp) => Ok(resp),
-            Err(_) => Ok(bad_gateway()),
+            Ok(mut resp) => {
+                status::received(&mut resp, None);
+                Ok(resp)
+            }
+            Err(e) => {
+                let mut resp = bad_gateway();
+                status::failed_with(&mut resp, &e, None);
+                Ok(resp)
+            }
         }
     }
 }
@@ -1457,12 +1465,15 @@ impl crate::middleware::Middleware for H2ReverseProxy {
             return next.execute(request, connection);
         }
         if self.inner.backends.is_empty() {
-            return Ok(bad_gateway());
+            let mut response = bad_gateway();
+            status::failed(&mut response, status::ProxyError::DestinationUnavailable, None, None);
+            return Ok(response);
         }
         // A streamed request body can be sent once: no second backend then.
         let attempts = if matches!(request.body, crate::request::Body::Stream(_)) { 1 } else { self.inner.backends.len() };
         let n = self.inner.backends.len();
         let start = self.inner.counter.fetch_add(1, Ordering::Relaxed);
+        let mut last_error = String::new();
         for attempt in 0..attempts {
             let backend = &self.inner.backends[(start + attempt) % n];
             let tls = backend.tls.then(|| match &self.inner.trust {
@@ -1476,11 +1487,17 @@ impl crate::middleware::Middleware for H2ReverseProxy {
                 read_timeout: self.inner.read_timeout,
                 authority: None,
             };
-            if let Ok(response) = h2_upstream::forward(request, Peer::of(connection), &target) {
-                return Ok(response);
+            match h2_upstream::forward(request, Peer::of(connection), &target) {
+                Ok(mut response) => {
+                    status::received(&mut response, None);
+                    return Ok(response);
+                }
+                Err(e) => last_error = e,
             }
         }
-        Ok(bad_gateway())
+        let mut response = bad_gateway();
+        status::failed_with(&mut response, &last_error, None);
+        Ok(response)
     }
 
     /// Headers only: a request this proxy doesn't forward passes through
@@ -1645,18 +1662,27 @@ impl crate::middleware::Middleware for H3ReverseProxy {
             return next.execute(request, connection);
         }
         if self.inner.backends.is_empty() {
-            return Ok(bad_gateway());
+            let mut response = bad_gateway();
+            status::failed(&mut response, status::ProxyError::DestinationUnavailable, None, None);
+            return Ok(response);
         }
         // A streamed request body can be sent once: no second backend then.
         let attempts = if matches!(request.body, crate::request::Body::Stream(_)) { 1 } else { self.inner.backends.len() };
         let n = self.inner.backends.len();
         let start = self.inner.counter.fetch_add(1, Ordering::Relaxed);
+        let mut last_error = String::new();
         for attempt in 0..attempts {
-            if let Ok(response) = self.attempt(&self.inner.backends[(start + attempt) % n], request, connection) {
-                return Ok(response);
+            match self.attempt(&self.inner.backends[(start + attempt) % n], request, connection) {
+                Ok(mut response) => {
+                    status::received(&mut response, None);
+                    return Ok(response);
+                }
+                Err(e) => last_error = e,
             }
         }
-        Ok(bad_gateway())
+        let mut response = bad_gateway();
+        status::failed_with(&mut response, &last_error, None);
+        Ok(response)
     }
 
     fn accepts_streamed_body(&self, _request: &Request, _connection: &crate::server::ConnectionInfo) -> bool {

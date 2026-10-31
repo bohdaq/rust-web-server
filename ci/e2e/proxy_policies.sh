@@ -179,12 +179,20 @@ done
 echo "ok: backend back in rotation after recovery_secs"
 
 # ── every backend out → 503 ──────────────────────────────────────────────────
-code=$(curl -s -o /dev/null -w '%{http_code}' "$(url /d/)")
-[ "$code" = 502 ] || fail "first request to a dead upstream: $code"
+curl -s -D first.out -o body.out "$(url /d/)"
+head -1 first.out | grep -q ' 502' || fail "first request to a dead upstream: $(head -1 first.out)"
+grep -qi '^proxy-status: rws; error=connection_refused' first.out || fail "502 without Proxy-Status connection_refused: $(cat first.out)"
+grep -qi '^content-type: application/problem+json' first.out || fail "502 isn't problem+json: $(cat first.out)"
+grep -q '"status":502' body.out || fail "502 body: $(cat body.out)"
 curl -s -D head.out -o body.out "$(url /d/)"
 head -1 head.out | grep -q ' 503' || fail "ejected upstream: $(head -1 head.out)"
 grep -qi '^retry-after:' head.out || fail "503 without Retry-After"
-echo "ok: an upstream with every backend ejected answers 503 + Retry-After"
+grep -qi '^proxy-status: rws; error=destination_unavailable' head.out || fail "503 without Proxy-Status destination_unavailable: $(cat head.out)"
+echo "ok: a dead upstream answers 502 (Proxy-Status connection_refused, problem+json), then ejected 503 + Retry-After (destination_unavailable)"
+curl -s -D ok.out -o /dev/null "$(url /w/)"
+grep -qi '^proxy-status: rws; received-status=200' ok.out || fail "proxied 200 without Proxy-Status: $(cat ok.out)"
+grep -qi 'next-hop' ok.out && fail "next-hop sent without proxy_status_next_hop"
+echo "ok: proxied responses carry Proxy-Status received-status, no backend address"
 
 # ── metrics series ───────────────────────────────────────────────────────────
 curl -s "$(url /metrics)" > metrics.out
