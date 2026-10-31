@@ -5,6 +5,17 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- Request mirroring: `[route.middleware.mirror]` (`upstream` or `backends`,
+  `percent`) copies a share of a route's requests to other backends and
+  drops their answers; fire-and-forget through a bounded queue, so a slow or
+  down mirror never affects responses. `proxy::mirror::Mirror` /
+  `MirrorLayer` in code, `rws_mirror_requests_total` on `/metrics`,
+  `ci/e2e/mirror.sh`.
+
 ## 18.10.2 — 2026-10-30
 
 ### Added

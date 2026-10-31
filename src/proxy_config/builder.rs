@@ -110,6 +110,7 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
         let matcher = RouteMatcher::from_match_config(&route.match_);
 
         let mut async_proxy: Option<Arc<DynamicProxy>> = None;
+        let mirror = route.middleware.mirror.as_ref().map(|m| build_mirror(&route.name, m, &upstream_lives));
 
         // Build the action handler (base application)
         let base_handler: Arc<dyn crate::application::Application + Send + Sync> =
@@ -143,7 +144,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                         upstream_strategy,
                     )
                     .with_trust(upstream_trust.get(upstream.as_str()).cloned())
-                    .with_policy(upstream, upstream_policies.get(upstream.as_str()).cloned()));
+                    .with_policy(upstream, upstream_policies.get(upstream.as_str()).cloned())
+                    .with_mirror(mirror.clone()));
                     if proxy.supports_async() && route.middleware.is_empty() {
                         async_proxy = Some(Arc::clone(&proxy));
                     }
@@ -206,8 +208,15 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                 }
             };
 
-        // Wrap the base handler with middleware layers
-        let handler = apply_middleware(base_handler, &route.middleware);
+        // Wrap the base handler with middleware layers. A proxy route sends
+        // its mirror copies itself (so it keeps the async forwarder); any
+        // other action gets a MirrorLayer.
+        let handler = if matches!(route.action, ActionConfig::Proxy { .. }) || mirror.is_none() {
+            apply_middleware(base_handler, &route.middleware)
+        } else {
+            let handler = apply_middleware(base_handler, &route.middleware);
+            arc_app(WithMiddleware::new(ArcApp(handler)).wrap(crate::proxy::mirror::MirrorLayer::new(mirror.clone().expect("checked"))))
+        };
 
         compiled.push(CompiledRoute { matcher, handler, async_proxy });
     }
@@ -310,6 +319,17 @@ fn spawn_listeners(config: &ProxyConfig) -> Vec<std::thread::JoinHandle<()>> {
 ///      request this route will reject outright doesn't pay for a timeout
 ///      wrapper (which runs its target on a background thread) or engage
 ///      any other layer at all
+/// A route's mirror: a declared upstream's live backends, or its own list.
+fn build_mirror(route: &str, config: &crate::proxy_config::MirrorConfig, lives: &HashMap<String, Arc<RwLock<Vec<String>>>>) -> crate::proxy::mirror::Mirror {
+    let name = if config.upstream.is_empty() { format!("{route}-mirror") } else { config.upstream.clone() };
+    let mirror = match lives.get(&config.upstream) {
+        Some(live) if !config.upstream.is_empty() => crate::proxy::mirror::Mirror::with_live_backends(name, Arc::clone(live)),
+        _ if !config.upstream.is_empty() => crate::proxy::mirror::Mirror::new(name, vec![config.upstream.clone()]),
+        _ => crate::proxy::mirror::Mirror::new(name, config.backends.clone()),
+    };
+    mirror.percent(if config.percent.is_finite() { config.percent } else { 0.0 })
+}
+
 pub(crate) fn apply_middleware(
     handler: Arc<dyn crate::application::Application + Send + Sync>,
     mw: &MiddlewareConfig,

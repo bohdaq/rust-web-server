@@ -184,6 +184,20 @@ pub struct MiddlewareConfig {
     /// `[route.middleware.wasm]`: a WebAssembly plugin (feature
     /// `wasm-plugins`, 18.10.0).
     pub wasm: Option<WasmConfig>,
+    /// `[route.middleware.mirror]`: copy a share of requests to other
+    /// backends (18.11.0).
+    pub mirror: Option<MirrorConfig>,
+}
+
+/// `[route.middleware.mirror]`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MirrorConfig {
+    /// A declared `[[upstream]]` (its health-checked backends) ...
+    pub upstream: String,
+    /// ... or backend URLs.
+    pub backends: Vec<String>,
+    /// Share of requests copied, 0–100.
+    pub percent: f64,
 }
 
 /// `[route.middleware.wasm]`.
@@ -650,9 +664,19 @@ fn parse_middleware_config(
         config: get_str(map, &w_sec, "config"),
     });
 
+    let m_sec = format!("{}.mirror", mw_sec);
+    let mirror = section_exists(map, &m_sec).then(|| MirrorConfig {
+        upstream: get_str(map, &m_sec, "upstream"),
+        backends: get_array(map, &m_sec, "backends"),
+        percent: {
+            let raw = get_str(map, &m_sec, "percent");
+            if raw.is_empty() { 100.0 } else { raw.parse::<f64>().unwrap_or(f64::NAN) }
+        },
+    });
+
     MiddlewareConfig {
         rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny,
-        timeout_ms, max_body_size, wasm,
+        timeout_ms, max_body_size, wasm, mirror,
     }
 }
 
@@ -889,7 +913,9 @@ impl Application for RouteDispatch {
 }
 
 impl MiddlewareConfig {
-    /// `true` when no layer is configured.
+    /// `true` when no layer is configured. A mirror doesn't count: proxy
+    /// routes send copies from `DynamicProxy` itself, so a mirrored proxy
+    /// route keeps the non-blocking forwarder.
     pub fn is_empty(&self) -> bool {
         self.rate_limit.is_none() && self.cache.is_none() && self.auth.is_none()
             && self.rewrite_request.is_empty() && self.rewrite_response.is_empty()
@@ -1328,6 +1354,9 @@ pub(crate) struct DynamicProxy {
     upstream: Arc<String>,
     /// The declared upstream's policy; `None` for an inline backend.
     policy: Option<Arc<upstream::UpstreamPolicy>>,
+    /// `[route.middleware.mirror]`: copies of requests, sent once per
+    /// request (not per retry).
+    mirror: Option<crate::proxy::mirror::Mirror>,
 }
 
 impl DynamicProxy {
@@ -1339,6 +1368,12 @@ impl DynamicProxy {
 
     /// Apply the upstream's weights, stickiness, circuit breaker, retries
     /// and metrics.
+    /// Send a copy of each request to `mirror` (once, not per retry).
+    pub(crate) fn with_mirror(mut self, mirror: Option<crate::proxy::mirror::Mirror>) -> Self {
+        self.mirror = mirror;
+        self
+    }
+
     pub(crate) fn with_policy(mut self, upstream: &str, policy: Option<Arc<upstream::UpstreamPolicy>>) -> Self {
         self.upstream = Arc::new(upstream.to_string());
         self.policy = policy;
@@ -1367,6 +1402,7 @@ impl DynamicProxy {
             trust: None,
             upstream: Arc::new(String::new()),
             policy: None,
+            mirror: None,
         }
     }
 
@@ -1576,6 +1612,9 @@ impl DynamicProxy {
     /// the backend answers, for HTTP and HTTPS backends alike.
     #[cfg(feature = "http2")]
     pub(crate) async fn execute_async(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        if let Some(mirror) = &self.mirror {
+            mirror.send(request, conn);
+        }
         let mut tried: Vec<String> = Vec::new();
         let mut last: Option<Response> = None;
         for attempt in 0..self.attempts(request) {
@@ -1625,6 +1664,9 @@ impl DynamicProxy {
 
 impl Application for DynamicProxy {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        if let Some(mirror) = &self.mirror {
+            mirror.send(request, conn);
+        }
         let mut tried: Vec<String> = Vec::new();
         let mut last: Option<Response> = None;
         for attempt in 0..self.attempts(request) {

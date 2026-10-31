@@ -251,6 +251,15 @@ fn prometheus_text_without_http() -> String {
         out.push_str(&upstream_text);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mirror_text = crate::proxy::mirror::prometheus_text();
+        if !mirror_text.is_empty() {
+            out.push('\n');
+            out.push_str(&mirror_text);
+        }
+    }
+
     #[cfg(feature = "wasm-plugins")]
     {
         let wasm_text = crate::wasm_plugin::metrics::prometheus_text();

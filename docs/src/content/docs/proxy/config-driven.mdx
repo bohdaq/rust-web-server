@@ -393,6 +393,25 @@ Content-Type: text/plain
 request body of 100000 bytes exceeds this route's 65536-byte limit
 ```
 
+#### Request mirroring
+
+Send a copy of a share of a route's requests to other backends and throw their answers away: try a new version under real traffic, or feed a shadow service (since 18.11.0).
+
+```toml
+[route.middleware.mirror]
+upstream = "shadow"      # a declared [[upstream]] (its health-checked backends)…
+# backends = ["http://10.0.0.9:8080"]   # …or addresses, round-robin
+percent  = 10            # share of requests copied, 0–100 (default 100), spread evenly
+```
+
+- **Fire and forget.** The client's response never waits for the mirror and doesn't depend on it: copies go through a queue of 1024 to four worker threads, and when the queue is full a copy is dropped. A slow or down mirror costs the route nothing.
+- **What's copied:** the request with its headers and body, plus the usual `X-Forwarded-*`. Requests whose body is streamed or over 64 KiB aren't mirrored (counted as `skipped`).
+- **Once per request:** retries to the route's own upstream aren't mirrored again, and the mirror's results never count toward the route's circuit breaker or retries.
+- A mirrored proxy route keeps the non-blocking forwarder; on other actions (`static`, `respond`, …) the copy is sent the same way.
+- `/metrics`: `rws_mirror_requests_total{mirror, outcome}`, where `mirror` is the upstream's name (or `<route>-mirror` for `backends`) and `outcome` is `sent`, `failed`, `dropped` or `skipped`.
+
+`rws --check` reports a mirror with neither or both of `upstream` and `backends`, a bad address, and a `percent` outside 0–100. In code, wrap any app in `proxy::mirror::MirrorLayer::new(Mirror::new(name, backends).percent(10.0))`.
+
 ## L4 proxy sections
 
 ### `[[tcp_proxy]]` — raw TCP tunnel

@@ -196,6 +196,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
 | `McpGateway` / `Upstream` | `mcp::gateway` | One MCP endpoint federating upstream MCP servers: `prefix__tool` names, per-caller `allow` rules, upstream credentials kept server-side (18.0.0). See [MCP gateway](/mcp/gateway/) |
 | `LlmProxy` / `Provider` / `Api` | `llm` | One endpoint in front of OpenAI-compatible and Anthropic providers: virtual keys, provider fallback before the first byte, token budgets (memory or Redis), `rws_llm_*` metrics (18.9.0). See [LLM proxy](/proxy/llm-proxy/) |
+| `Mirror` / `MirrorLayer` | `proxy::mirror` | Copy a share of requests to other backends, fire-and-forget, through a bounded queue (18.11.0). See [Request mirroring](/proxy/config-driven/#request-mirroring) |
 | `AdminApi` / `AdminConfig` | `admin` | The admin API on its own listener behind a bearer token: `start(&config)`, or drive `AdminApi` as an `Application` (18.10.0). See [Admin API](/deployment/admin/) |
 | `WasmLayer` | `wasm_plugin` | WebAssembly middleware: a core module with no imports, fuel and memory limits, request and response hooks (`wasm-plugins` feature, 18.10.0). See [WebAssembly plugins](/features/wasm-plugins/) |
 | `UsageParser` / `Usage` | `llm` | Token usage out of a provider response fed in pieces, JSON or event stream (18.9.0) |

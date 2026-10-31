@@ -66,7 +66,7 @@ and `http1`-only test runs before pushing.
 
 | # | State |
 |---|---|
-| 1 | — |
+| 1 | **done 2026-10-31**: `proxy::mirror` (`Mirror`: live backend list, even `percent` sampling, 1024-slot queue + 4 workers, bodies ≤ 64 KiB and in memory, `forward_upstream` with a 2 s / 10 s timeout, streamed answers drained; `MirrorLayer`); config `[route.middleware.mirror]` (`upstream` = declared upstream's live list or an address, or `backends`, `percent`) — on proxy routes `DynamicProxy::with_mirror` sends once per request in both `execute` and `execute_async`, and `MiddlewareConfig::is_empty` ignores the mirror so the async forwarder stays; other actions get a `MirrorLayer`. `rws --check`: neither/both targets, bad address, percent outside 0–100 (warn at 0). `rws_mirror_requests_total{mirror,outcome}`. Tests: 6 unit (sampling, delivery with body, skips, dead mirror never delays, config route with 50% on the async path, check errors) + `ci/e2e/mirror.sh` (5 checks incl. a 3 s mirror not delaying 3 requests) in CI as `mirror`. Note: config key is `[route.middleware.mirror]`, not `[route.action.proxy]`, so it works on every action. 2156 default / 1980 http1 |
 | 2 | — |
 | 3 | — |
 | 4 | — |

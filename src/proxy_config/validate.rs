@@ -69,6 +69,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.middleware.cache" => vec!["ttl_secs", "vary_by"],
         "route.middleware.auth" => vec!["type", "token_env", "secret_env", "htpasswd_file"],
         "route.middleware.ip_filter" => vec!["allow", "deny"],
+        "route.middleware.mirror" => vec!["upstream", "backends", "percent"],
         "route.middleware.wasm" => vec!["module", "fuel", "memory_mb", "config"],
         "route.middleware.rewrite.request" | "route.middleware.rewrite.response" => REWRITE_RULE_KEYS.to_vec(),
         "tcp_proxy" => vec!["name", "listen", "backends", "connect_timeout_ms"],
@@ -311,6 +312,23 @@ impl ProxyConfig {
 }
 
 fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigReport) {
+    if let Some(m) = &mw.mirror {
+        match (m.upstream.is_empty(), m.backends.is_empty()) {
+            (true, true) => report.error(format!("{label}: [middleware.mirror] needs `upstream` or `backends`")),
+            (false, false) => report.error(format!("{label}: [middleware.mirror] has both `upstream` and `backends`; use one")),
+            _ => {}
+        }
+        for b in &m.backends {
+            if crate::proxy_config::health::parse_backend_url(b).is_none() {
+                report.error(format!("{label}: mirror backend '{b}' is not a backend address"));
+            }
+        }
+        if !(m.percent.is_finite() && (0.0..=100.0).contains(&m.percent)) {
+            report.error(format!("{label}: mirror percent must be a number from 0 to 100"));
+        } else if m.percent == 0.0 {
+            report.warn(format!("{label}: mirror percent is 0: nothing is mirrored"));
+        }
+    }
     if let Some(wasm) = &mw.wasm {
         if wasm.module.is_empty() {
             report.error(format!("{label}: [middleware.wasm] has no `module`; the route answers 503"));

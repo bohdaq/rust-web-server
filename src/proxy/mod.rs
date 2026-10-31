@@ -26,6 +26,8 @@
 pub mod pool;
 #[cfg(feature = "http2")]
 pub(crate) mod async_upstream;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod mirror;
 #[cfg(feature = "http2")]
 pub(crate) mod h2_upstream;
 #[cfg(feature = "http2")]
