@@ -7,7 +7,12 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@lit-material/button": "0.1.0",
+    "@lit-material/button": "0.1.1",
+    "@lit-material/empty-state": "0.0.1",
+    "@lit-material/icon-button": "0.0.3",
+    "@lit-material/list": "0.0.3",
+    "@lit-material/snackbar": "0.0.3",
+    "@lit-material/text-field": "0.2.0",
     "@lit-material/tokens": "0.0.1",
     "lit": "3.3.3"
   },

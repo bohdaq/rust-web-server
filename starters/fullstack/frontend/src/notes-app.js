@@ -1,10 +1,16 @@
 import { LitElement, css, html } from "lit";
 
-/** The notes page: lists, adds and deletes notes through /api/notes. */
+// Material icon "delete" (Apache 2.0).
+const deleteIcon = html`<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path>
+</svg>`;
+
+/** notes page: lists, adds and deletes notes through /api/notes. */
 export class NotesApp extends LitElement {
   static properties = {
     notes: { state: true },
-    error: { state: true },
+    loaded: { state: true },
+    draft: { state: true },
   };
 
   static styles = css`
@@ -13,43 +19,39 @@ export class NotesApp extends LitElement {
       max-width: 40rem;
       margin: 2rem auto;
       padding: 0 1rem;
-      font-family: system-ui, sans-serif;
+      font-family: var(--md-sys-typescale-body-large-font, system-ui, sans-serif);
       color: var(--md-sys-color-on-surface, #1d1b20);
+    }
+    h1 {
+      font-family: var(--md-sys-typescale-headline-medium-font, inherit);
+      font-size: var(--md-sys-typescale-headline-medium-size, 1.75rem);
+      font-weight: var(--md-sys-typescale-headline-medium-weight, 400);
     }
     form {
       display: flex;
+      align-items: flex-start;
       gap: 0.5rem;
       margin-bottom: 1rem;
     }
-    input {
+    lit-material-text-field {
       flex: 1;
-      font: inherit;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid var(--md-sys-color-outline, #79747e);
-      border-radius: 0.5rem;
-      background: transparent;
-      color: inherit;
+      --lit-material-text-field-min-width: 0;
     }
-    ul {
-      list-style: none;
-      padding: 0;
+    lit-material-button {
+      margin-top: 0.5rem;
     }
-    li {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.25rem 0;
-      border-bottom: 1px solid var(--md-sys-color-outline-variant, #cac4d0);
-    }
-    .error {
-      color: var(--md-sys-color-error, #b3261e);
+    svg {
+      width: 100%;
+      height: 100%;
+      fill: currentColor;
     }
   `;
 
   constructor() {
     super();
     this.notes = [];
-    this.error = "";
+    this.loaded = false;
+    this.draft = "";
   }
 
   connectedCallback() {
@@ -68,26 +70,31 @@ export class NotesApp extends LitElement {
     return data;
   }
 
+  /** Shows a failed request in the snackbar. */
+  report(error) {
+    this.renderRoot.querySelector("lit-material-snackbar")?.show(error.message);
+  }
+
   async load() {
     try {
       this.notes = await this.request("GET", "/api/notes");
-      this.error = "";
     } catch (e) {
-      this.error = e.message;
+      this.report(e);
+    } finally {
+      this.loaded = true;
     }
   }
 
   async add(event) {
     event.preventDefault();
-    const input = this.renderRoot.querySelector("input");
-    const text = input.value.trim();
+    const text = this.draft.trim();
     if (!text) return;
     try {
       await this.request("POST", "/api/notes", { text });
-      input.value = "";
+      this.draft = "";
       await this.load();
     } catch (e) {
-      this.error = e.message;
+      this.report(e);
     }
   }
 
@@ -96,7 +103,7 @@ export class NotesApp extends LitElement {
       await this.request("DELETE", `/api/notes/${id}`);
       await this.load();
     } catch (e) {
-      this.error = e.message;
+      this.report(e);
     }
   }
 
@@ -104,18 +111,35 @@ export class NotesApp extends LitElement {
     return html`
       <h1>Notes</h1>
       <form @submit=${this.add}>
-        <input aria-label="New note" placeholder="Write a note" />
-        <lit-material-button type="submit">Add</lit-material-button>
+        <lit-material-text-field
+          variant="outlined"
+          label="New note"
+          autocomplete="off"
+          .value=${this.draft}
+          @input=${(e) => (this.draft = e.target.value)}
+        ></lit-material-text-field>
+        <lit-material-button type="submit" ?disabled=${!this.draft.trim()}>Add</lit-material-button>
       </form>
-      ${this.error ? html`<p class="error">${this.error}</p>` : ""}
-      <ul>
-        ${this.notes.map(
-          (note) => html`<li>
-            <span>${note.text}</span>
-            <lit-material-button variant="text" @click=${() => this.remove(note.id)}>Delete</lit-material-button>
-          </li>`,
-        )}
-      </ul>
+      ${this.notes.length
+        ? html`<lit-material-list>
+            ${this.notes.map(
+              (note) => html`<lit-material-list-item divider>
+                ${note.text}
+                <lit-material-icon-button
+                  slot="trailing"
+                  aria-label=${`Delete note: ${note.text}`}
+                  @click=${() => this.remove(note.id)}
+                  ><span slot="icon">${deleteIcon}</span></lit-material-icon-button
+                >
+              </lit-material-list-item>`,
+            )}
+          </lit-material-list>`
+        : this.loaded
+          ? html`<lit-material-empty-state size="compact" headline="No notes yet">
+              Write one above and press Add.
+            </lit-material-empty-state>`
+          : ""}
+      <lit-material-snackbar closable></lit-material-snackbar>
     `;
   }
 }

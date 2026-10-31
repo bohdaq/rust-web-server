@@ -42,6 +42,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Changed
 
+- `starters/fullstack`'s frontend uses lit-material components rather than
+  raw `<input>`/`<ul>`: an outlined text field, a list with a delete icon
+  button per note, an empty state, and a snackbar for failed requests (it
+  used to print them inline). Agents that copy the starter now start from
+  those components.
 - The access-log file rotates at 100 MiB by default (`access_log_max_size`
   was `0`, never) — at most 600 MiB with the 5 kept files. Set it to `0` to
   keep rotating with logrotate.
