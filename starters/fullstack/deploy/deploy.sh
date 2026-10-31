@@ -6,7 +6,8 @@
 # Uses the current kubectl context (CI writes one with a short-lived token).
 # Optional: DB_SECRET (default <app>-db-owner), PULL_USER + PULL_TOKEN to
 # create/refresh the <app>-pull image pull Secret for a private registry,
-# TIMEOUT (rollout and hostname wait, default 300s), and for a preview
+# TIMEOUT (rollout, hostname and URL wait, default 300s), HEALTH_PATH
+# (checked on the live URL, default /healthz), and for a preview
 # PREVIEW_HOURS (kube-dc removes it that long after the last deploy),
 # PREVIEW_REPOSITORY + PREVIEW_PULL_REQUEST (and when that pull request
 # closes; public repositories).
@@ -45,12 +46,25 @@ fi
 # The platform writes the hostname once the certificate is issued.
 for _ in $(seq 1 $((TIMEOUT / 5))); do
   host=$(kubectl -n "$NAMESPACE" get service "$APP" -o jsonpath='{.metadata.annotations.service\.nlb\.kube-dc\.com/route-hostname-status}')
-  if [ -n "$host" ]; then
+  [ -n "$host" ] && break
+  sleep 5
+done
+if [ -z "$host" ]; then
+  echo "The Service has no hostname yet; check: kubectl -n $NAMESPACE get events"
+  exit 1
+fi
+
+# Green only when the live URL answers (certificate served, route programmed,
+# app healthy), so the GitHub deployment shows what users get.
+for _ in $(seq 1 $((TIMEOUT / 5))); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$host${HEALTH_PATH:-/healthz}" || true)
+  if [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 400 ]; then
     echo "url=https://$host"
     [ -n "${GITHUB_OUTPUT:-}" ] && echo "url=https://$host" >> "$GITHUB_OUTPUT"
     exit 0
   fi
   sleep 5
 done
-echo "The Service has no hostname yet; check: kubectl -n $NAMESPACE get events"
+echo "https://$host${HEALTH_PATH:-/healthz} did not answer (last status: ${code:-none})."
+kubectl -n "$NAMESPACE" logs "deployment/$APP" --tail=30 || true
 exit 1
