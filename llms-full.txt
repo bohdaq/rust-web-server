@@ -5277,7 +5277,7 @@ engine.reload().unwrap();
 
 <https://rws8.tech/building-apps/i18n/>
 
-The `i18n` module (since 18.17.0) holds your messages in one catalog per
+The `i18n` module (since 18.16.0) holds your messages in one catalog per
 language, picks the language each request asks for in `Accept-Language`, and
 fills in placeholders and plural forms. It needs no feature flag and no
 extra dependency.

@@ -1,4 +1,4 @@
-//! Translations (18.17.0, #33): message catalogs, one per language, and the
+//! Translations (18.16.0, #33): message catalogs, one per language, and the
 //! language each request asks for.
 //!
 //! ```rust
