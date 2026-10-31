@@ -5,7 +5,7 @@
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.12.0
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.13.0
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
