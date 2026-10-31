@@ -142,40 +142,47 @@ fn pool() -> &'static Pool {
 
 /// Forward `request` over HTTP/3 and return the response head — its body
 /// streaming in `stream_pipe` unless small enough to buffer.
+///
+/// Never called from an async task (it blocks); async callers use
+/// [`forward_async`]. Every wait in the exchange is bounded by the connect
+/// or read timeout, so the head (or an error) always arrives.
 pub(crate) fn forward(request: &Request, client: crate::proxy::Peer<'_>, target: &Target<'_>) -> Result<Response, H3Error> {
-    let receiver = start(request, client, target)?;
-    let wait = target.connect_timeout + target.read_timeout + Duration::from_secs(1);
-    match receiver.recv_timeout(wait) {
-        Ok(result) => result,
-        Err(_) => Err(H3Error::Failed(format!("h3 proxy: no response head within {} ms", wait.as_millis()))),
-    }
+    start(request, client, target)?.blocking_recv().unwrap_or_else(|_| Err(gone()))
 }
 
-/// [`forward`] for async callers: awaits the head instead of blocking.
+/// [`forward`] for async callers: awaits the head, no thread hand-off.
 pub(crate) async fn forward_async(request: &Request, client: crate::proxy::Peer<'_>, target: &Target<'_>) -> Result<Response, H3Error> {
-    let receiver = start(request, client, target)?;
-    let wait = target.connect_timeout + target.read_timeout + Duration::from_secs(1);
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    runtime().spawn_blocking(move || {
-        let _ = tx.send(receiver.recv_timeout(wait));
-    });
-    match rx.await {
-        Ok(Ok(result)) => result,
-        _ => Err(H3Error::Failed(format!("h3 proxy: no response head within {} ms", wait.as_millis()))),
-    }
+    start(request, client, target)?.await.unwrap_or_else(|_| Err(gone()))
 }
 
-type HeadSender = std::sync::mpsc::SyncSender<Result<Response, H3Error>>;
+fn gone() -> H3Error {
+    H3Error::Failed("h3 proxy: the exchange ended without a response".to_string())
+}
+
+/// Where the response head goes: once, by whichever part of the exchange
+/// gets there first.
+struct HeadSender(Mutex<Option<tokio::sync::oneshot::Sender<Result<Response, H3Error>>>>);
+
+impl HeadSender {
+    /// `false` when the head was already sent or the caller is gone.
+    fn try_send(&self, result: Result<Response, H3Error>) -> Result<(), ()> {
+        match self.0.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            Some(tx) => tx.send(result).map_err(|_| ()),
+            None => Err(()),
+        }
+    }
+}
 
 fn start(
     request: &Request,
     client: crate::proxy::Peer<'_>,
     target: &Target<'_>,
-) -> Result<std::sync::mpsc::Receiver<Result<Response, H3Error>>, H3Error> {
+) -> Result<tokio::sync::oneshot::Receiver<Result<Response, H3Error>>, H3Error> {
     let addr = format!("{}:{}", target.host, target.port);
     let head = request_head(request, client, &addr).map_err(H3Error::Failed)?;
     let quic = quic_config(target.tls).map_err(H3Error::Connect)?;
-    let (head_tx, head_rx) = std::sync::mpsc::sync_channel(1);
+    let (tx, head_rx) = tokio::sync::oneshot::channel();
+    let head_tx = HeadSender(Mutex::new(Some(tx)));
     let exchange = Exchange {
         key: format!("{:x}|{addr}", Arc::as_ptr(target.tls) as usize),
         addr,

@@ -12154,6 +12154,13 @@ tls_ca_file = "/etc/rws/internal-ca.pem" # optional, as for any https:// upstrea
 - Weights, stickiness, retries, the circuit breaker, mirroring and early
   hints work the same, and proxy routes keep the non-blocking forwarder.
 - Health checks stay HTTP/1.1 over TCP.
+- **It costs more than TCP.** QUIC does its packet handling and encryption
+  in user space: in a local test (proxy and backend on one 8-core machine,
+  1 KiB responses, 50 connections) proxying over HTTP/3 took about 1.75×
+  the CPU per request of HTTP/1.1 over TLS (112 vs 64 ms per 1000 requests)
+  at half the throughput (21k vs 42k requests/s). Choose it for what the
+  network path gains — lossy or long links, no head-of-line blocking between
+  requests — not for speed on a LAN.
 - `rws --check` reports a `protocol` other than `http1` / `h3`, `h3` with a
   non-`https://` backend, and `h3` in a build without the `http3` feature.
 
