@@ -189,7 +189,7 @@ Change a running server without editing files, and extend it without recompiling
 
 - **Traffic page**: people, AI agents and bots, counted server-side, in the admin UI, admin API and MCP. Plan: [TRAFFIC_INSIGHTS.md](TRAFFIC_INSIGHTS.md). Released 2026-10-31 with the disk guard (`min_free_disk`), access-log rotation by default, `host`/`user_agent`/`referer` log fields and the trailing-punctuation redirect.
 
-## 18.16.0 — Google Cloud Storage
+## 18.16.0 — Google Cloud Storage (released 2026-10-31)
 
 - **#35** **`storage-gcs`** — `GcsStorage` over the JSON API, Application Default Credentials (token, service account / `authorized_user` file, metadata server); every storage backend's tests now run in CI. Done 2026-10-31.
 - **#34** (part) — the `wasm32-wasip2` build compiles again and CI serves the component under `wasmtime serve` (`wasm-shim`). Done 2026-10-31.
