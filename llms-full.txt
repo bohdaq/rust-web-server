@@ -18847,12 +18847,14 @@ let agent = A2aServer::new(
 | `GetTask` | A stored task, `historyLength` most recent messages |
 | `ListTasks` | Tasks, newest first, by `contextId` / `status`, `pageSize` 1–100 with `pageToken` |
 | `CancelTask` | Cancels a task that isn't finished (`-32002` when it is) |
+| `SendStreamingMessage` | Like `SendMessage`, as server-sent events: the task first, then each `statusUpdate` and `artifactUpdate`, ending when the task finishes or asks for input (or one `message` event) |
+| `SubscribeToTask` | Follows a task that isn't finished: the task first, then its updates |
 
 Clients must send `A2A-Version: 1.0` (header or query parameter); other
 versions get `-32009`. Errors use the A2A codes (`-32001` task not found,
 `-32004` unsupported operation, …) with a `google.rpc.ErrorInfo` detail.
-Streaming, push notifications and the extended card aren't served yet; the
-card says so (`capabilities`), and their methods answer `-32004`/`-32003`.
+Push notifications and the extended card aren't served yet; the card says
+so (`capabilities`), and their methods answer `-32003`/`-32004`.
 
 ## Messages and tasks
 
@@ -18865,9 +18867,48 @@ joins the text parts. The handler's `ctx` builds the task to return:
 - `ctx.fail(reason)` / `ctx.reject(reason)`;
 - `ctx.task(state, message, artifacts)` for anything else.
 
+## Long-running work
+
+`ctx.start()` stores the task (working) and gives you a `TaskHandle` to
+update it from any thread; return `A2aReply::Running(handle)`:
+
+```rust,ignore
+.on_message(|ctx, message| {
+    let task = ctx.start();
+    let worker = task.clone();
+    std::thread::spawn(move || {
+        worker.working(Some("reading the invoice"));
+        if worker.is_canceled() { return; }           // CancelTask was called
+        worker.artifact(Artifact::text("summary", "…"));
+        worker.complete();                            // or fail(reason), input_required(question)
+    });
+    A2aReply::Running(task)
+})
+```
+
+`SendMessage` waits until the task finishes or asks for input (A2A's
+default), up to `.blocking_timeout(…)` (300 s), then answers with its state;
+a client that sends `configuration.returnImmediately: true` gets the task at
+once and polls `GetTask` or streams. Streams get every update as it happens.
+
+## Authentication
+
+```rust,ignore
+let agent = A2aServer::new(card)
+    .require_bearer_tokens([("token-for-billing", "billing"), ("token-for-crm", "crm")]);
+```
+
+Requests to the JSON-RPC endpoint need `Authorization: Bearer <token>`
+(`401` otherwise); the card stays public and lists the bearer scheme
+(`securitySchemes`, `securityRequirements`). Each token stands for an
+identity, and callers only see their own tasks. `require_bearer(token)` is
+the one-token form.
+
+## History and limits
+
 The task's history keeps every message in order. A handler that panics
-fails its task instead of the request. At most 10,000 tasks are kept, oldest
-first out.
+fails its task instead of the request. At most 10,000 tasks are kept (the
+oldest finished ones go first), 16 streams per task, 4 MiB per request.
 
 ---
 

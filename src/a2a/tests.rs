@@ -10,6 +10,27 @@ fn agent() -> A2aServer {
             "panic" => panic!("handler bug"),
             text if ctx.task.is_some() => A2aReply::Task(ctx.complete(vec![Artifact::text("answer", format!("you chose {text}"))])),
             "work" => A2aReply::Task(ctx.task(TaskState::Working, None, Vec::new())),
+            "slow" => {
+                let task = ctx.start();
+                let worker = task.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(60));
+                    worker.working(Some("halfway"));
+                    worker.artifact(Artifact::text("result", "42"));
+                    worker.complete();
+                });
+                A2aReply::Running(task)
+            }
+            "forever" => {
+                let task = ctx.start();
+                let worker = task.clone();
+                std::thread::spawn(move || {
+                    while !worker.is_canceled() {
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                });
+                A2aReply::Running(task)
+            }
             text => A2aReply::Task(ctx.complete(vec![Artifact::text("echo", text)])),
         })
 }
@@ -48,7 +69,8 @@ fn the_agent_card() {
     assert_eq!("1.2.0", s(&card, &["version"]));
     let interface = &card.get("supportedInterfaces").unwrap().as_array().unwrap()[0];
     assert_eq!(("http://agents.example.com/a2a", "JSONRPC", "1.0"), (s(interface, &["url"]), s(interface, &["protocolBinding"]), s(interface, &["protocolVersion"])));
-    assert_eq!(Some(&json_lite::JsonValue::Bool(false)), card.get("capabilities").unwrap().get("streaming"));
+    assert_eq!(Some(&json_lite::JsonValue::Bool(true)), card.get("capabilities").unwrap().get("streaming"));
+    assert!(card.get("securitySchemes").is_none(), "no auth configured");
     let skill = &card.get("skills").unwrap().as_array().unwrap()[0];
     assert_eq!(("echo", "demo"), (s(skill, &["id"]), skill.get("tags").unwrap().as_array().unwrap()[0].as_str().unwrap()));
     assert_eq!("text/plain", card.get("defaultInputModes").unwrap().as_array().unwrap()[0].as_str().unwrap());
@@ -150,7 +172,7 @@ fn errors_and_versions() {
     assert_eq!(-32602, error_code(&call(&client, "SendMessage", r#"{"message":{"messageId":"m","role":"ROLE_USER","parts":[{"text":"a","url":"b"}]}}"#)));
     assert_eq!(-32602, error_code(&call(&client, "SendMessage", r#"{"message":{"role":"ROLE_USER","parts":[{"text":"a"}]}}"#)));
     assert_eq!(-32602, error_code(&call(&client, "SendMessage", "{}")));
-    assert_eq!(-32004, error_code(&call(&client, "SendStreamingMessage", "{}")));
+    assert_eq!(-32602, error_code(&call(&client, "SendStreamingMessage", "{}")), "streams need a message too");
     assert_eq!(-32003, error_code(&call(&client, "CreateTaskPushNotificationConfig", "{}")));
     assert_eq!(-32004, error_code(&call(&client, "GetExtendedAgentCard", "{}")));
 
@@ -180,4 +202,109 @@ fn parts_round_trip_and_requests_fall_through() {
     assert!(model::timestamp().len() == 24 && model::timestamp().ends_with('Z'));
     let id = new_id();
     assert_eq!((36, Some('4')), (id.len(), id.chars().nth(14)));
+}
+
+fn stream_events(response: crate::response::Response) -> Vec<json_lite::JsonValue> {
+    use std::io::Read;
+    let mut text = String::new();
+    response.stream_pipe.expect("an SSE stream").read_to_string(&mut text).unwrap();
+    text.lines().filter_map(|l| l.strip_prefix("data: ")).map(|d| json_lite::parse(d).unwrap()).collect()
+}
+
+fn rpc_request(method: &str, params: &str, token: Option<&str>) -> crate::request::Request {
+    let body = format!(r#"{{"jsonrpc":"2.0","id":"s1","method":"{method}","params":{params}}}"#);
+    let mut headers = vec![crate::header::Header::new("A2A-Version", "1.0".to_string())];
+    if let Some(t) = token {
+        headers.push(crate::header::Header::new("Authorization", format!("Bearer {t}")));
+    }
+    crate::request::Request { method: "POST".into(), request_uri: "/a2a".into(), http_version: "HTTP/1.1".into(), headers, body: body.into_bytes().into() }
+}
+
+fn message_params(text: &str, extra: &str) -> String {
+    format!(r#"{{"message":{{"messageId":"{}","role":"ROLE_USER","parts":[{{"text":"{text}"}}]}}{extra}}}"#, new_id())
+}
+
+#[test]
+fn send_message_waits_for_a_running_task_unless_told_not_to() {
+    let client = TestClient::new(agent());
+    let started = std::time::Instant::now();
+    let done = call(&client, "SendMessage", &message_params("slow", ""));
+    let task = done.get("result").unwrap().get("task").unwrap();
+    assert_eq!("TASK_STATE_COMPLETED", s(task, &["status", "state"]));
+    assert!(started.elapsed() >= std::time::Duration::from_millis(50), "it waited for the worker");
+    assert_eq!("42", s(&task.get("artifacts").unwrap().as_array().unwrap()[0].get("parts").unwrap().as_array().unwrap()[0], &["text"]));
+    assert_eq!("halfway", s(&task.get("history").unwrap().as_array().unwrap()[1].get("parts").unwrap().as_array().unwrap()[0], &["text"]));
+
+    let quick = call(&client, "SendMessage", &message_params("slow", r#","configuration":{"returnImmediately":true}"#));
+    assert_eq!("TASK_STATE_WORKING", s(quick.get("result").unwrap().get("task").unwrap(), &["status", "state"]));
+
+    let impatient = TestClient::new(agent().blocking_timeout(std::time::Duration::from_millis(50)));
+    let reply = call(&impatient, "SendMessage", &message_params("forever", ""));
+    let task = reply.get("result").unwrap().get("task").unwrap();
+    assert_eq!("TASK_STATE_WORKING", s(task, &["status", "state"]), "past blocking_timeout: the current state");
+    let id = s(task, &["id"]).to_string();
+    let canceled = call(&impatient, "CancelTask", &format!(r#"{{"id":"{id}"}}"#));
+    assert_eq!("TASK_STATE_CANCELED", s(canceled.get("result").unwrap(), &["status", "state"]));
+}
+
+#[test]
+fn streams_send_the_task_then_its_updates() {
+    use crate::application::Application;
+    let agent = agent();
+    let conn = crate::server::ConnectionInfo::default();
+
+    let events = stream_events(agent.execute(&rpc_request("SendStreamingMessage", &message_params("slow", ""), None), &conn).unwrap());
+    let kinds: Vec<&str> = events.iter().map(|e| match e.get("result").unwrap() {
+        json_lite::JsonValue::Object(pairs) => pairs[0].0.as_str(),
+        _ => "?",
+    }).collect();
+    assert_eq!(vec!["task", "statusUpdate", "artifactUpdate", "statusUpdate"], kinds);
+    assert_eq!("s1", s(&events[0], &["id"]));
+    assert_eq!("TASK_STATE_WORKING", s(&events[0], &["result", "task", "status", "state"]));
+    assert_eq!("TASK_STATE_COMPLETED", s(&events[3], &["result", "statusUpdate", "status", "state"]));
+    assert_eq!("result", s(&events[2], &["result", "artifactUpdate", "artifact", "name"]));
+
+    let one = stream_events(agent.execute(&rpc_request("SendStreamingMessage", &message_params("", ""), None), &conn).unwrap());
+    assert_eq!(1, one.len());
+    assert_eq!("Say something.", s(&one[0].get("result").unwrap().get("message").unwrap().get("parts").unwrap().as_array().unwrap()[0], &["text"]));
+    let asked = stream_events(agent.execute(&rpc_request("SendStreamingMessage", &message_params("ask", ""), None), &conn).unwrap());
+    assert_eq!(1, asked.len(), "a task waiting for input ends the stream");
+
+    // SubscribeToTask: the current task first, then updates.
+    let running = agent.execute(&rpc_request("SendMessage", &message_params("slow", r#","configuration":{"returnImmediately":true}"#), None), &conn).unwrap();
+    let running = json_lite::parse(std::str::from_utf8(&running.content_range_list[0].body).unwrap()).unwrap();
+    let id = s(&running, &["result", "task", "id"]).to_string();
+    let events = stream_events(agent.execute(&rpc_request("SubscribeToTask", &format!(r#"{{"id":"{id}"}}"#), None), &conn).unwrap());
+    assert_eq!("TASK_STATE_WORKING", s(&events[0], &["result", "task", "status", "state"]));
+    assert_eq!("TASK_STATE_COMPLETED", s(events.last().unwrap(), &["result", "statusUpdate", "status", "state"]));
+    let finished = agent.execute(&rpc_request("SubscribeToTask", &format!(r#"{{"id":"{id}"}}"#), None), &conn).unwrap();
+    let finished = json_lite::parse(std::str::from_utf8(&finished.content_range_list[0].body).unwrap()).unwrap();
+    assert_eq!(-32004, error_code(&finished), "a finished task can't be subscribed to");
+}
+
+#[test]
+fn bearer_tokens_and_per_caller_tasks() {
+    use crate::application::Application;
+    let agent = agent().require_bearer_tokens([("t-alice", "alice"), ("t-bob", "bob")]);
+    let conn = crate::server::ConnectionInfo::default();
+    let body = |r: crate::response::Response| (r.status_code, String::from_utf8(r.content_range_list.first().map(|c| c.body.clone()).unwrap_or_default()).unwrap());
+
+    let (status, _) = body(agent.execute(&rpc_request("GetTask", r#"{"id":"x"}"#, None), &conn).unwrap());
+    assert_eq!(401, status);
+    let refused = agent.execute(&rpc_request("GetTask", r#"{"id":"x"}"#, Some("wrong")), &conn).unwrap();
+    assert_eq!(401, refused.status_code);
+    assert!(refused.headers.iter().any(|h| h.name == "WWW-Authenticate"));
+
+    let (_, text) = body(agent.execute(&rpc_request("SendMessage", &message_params("hi", ""), Some("t-alice")), &conn).unwrap());
+    let id = s(&json_lite::parse(&text).unwrap(), &["result", "task", "id"]).to_string();
+    let (_, mine) = body(agent.execute(&rpc_request("GetTask", &format!(r#"{{"id":"{id}"}}"#), Some("t-alice")), &conn).unwrap());
+    assert_eq!(id, s(&json_lite::parse(&mine).unwrap(), &["result", "id"]));
+    let (_, theirs) = body(agent.execute(&rpc_request("GetTask", &format!(r#"{{"id":"{id}"}}"#), Some("t-bob")), &conn).unwrap());
+    assert_eq!(-32001, error_code(&json_lite::parse(&theirs).unwrap()), "bob can't see alice's task");
+
+    let card = TestClient::new(agent).get(AGENT_CARD_PATH).send();
+    assert_eq!(200, card.status(), "the card stays public");
+    let card = json_lite::parse(card.body_text()).unwrap();
+    assert_eq!("Bearer", s(&card, &["securitySchemes", "bearer", "httpAuthSecurityScheme", "scheme"]));
+    assert!(card.get("securityRequirements").and_then(|r| r.as_array()).is_some_and(|r| r.len() == 1));
 }

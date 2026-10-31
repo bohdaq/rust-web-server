@@ -13,8 +13,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   (JSON-RPC binding): the Agent Card at `/.well-known/agent-card.json`,
   `SendMessage` (a direct message or a stored task; continuing a task that
   waits for input), `GetTask`, `ListTasks`, `CancelTask`, `A2A-Version`
-  checks and the A2A error codes. Fuzz target `a2a_request`. Streaming and
-  push notifications follow.
+  checks and the A2A error codes; long-running tasks updated from other
+  threads through a `TaskHandle` (`SendMessage` waits for them, or answers
+  at once with `returnImmediately`); `SendStreamingMessage` and
+  `SubscribeToTask` as server-sent events; bearer tokens with per-caller
+  tasks, listed on the card. Fuzz target `a2a_request`.
 
 ### Fixed
 

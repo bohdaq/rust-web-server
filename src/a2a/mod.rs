@@ -23,11 +23,15 @@
 //! on.
 
 mod model;
+mod tasks;
 
 pub use model::{Artifact, Message, Part, PartContent, Role, Task, TaskState, TaskStatus};
+pub use tasks::TaskHandle;
 
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::time::Duration;
+
+use tasks::Shared;
 
 use model::{quote, to_json, Obj};
 
@@ -173,9 +177,9 @@ impl AgentCard {
         self
     }
 
-    pub(crate) fn to_json(&self, url: &str) -> String {
+    pub(crate) fn to_json(&self, url: &str, bearer: bool) -> String {
         let interface = Obj::new().str("url", url).str("protocolBinding", "JSONRPC").str("protocolVersion", PROTOCOL_VERSION).done();
-        let capabilities = r#"{"streaming":false,"pushNotifications":false,"extendedAgentCard":false}"#;
+        let capabilities = r#"{"streaming":true,"pushNotifications":false,"extendedAgentCard":false}"#;
         let skills: Vec<String> = self.skills.iter().map(Skill::to_json).collect();
         let provider = self.provider.as_ref().map(|(org, url)| Obj::new().str("organization", org).str("url", url).done());
         Obj::new()
@@ -190,6 +194,8 @@ impl AgentCard {
             .opt_raw("provider", provider.as_deref())
             .opt_str("documentationUrl", self.documentation_url.as_deref())
             .opt_str("iconUrl", self.icon_url.as_deref())
+            .opt_raw("securitySchemes", bearer.then_some(r#"{"bearer":{"httpAuthSecurityScheme":{"scheme":"Bearer"}}}"#))
+            .opt_raw("securityRequirements", bearer.then_some(r#"[{"schemes":{"bearer":{"list":[]}}}]"#))
             .done()
     }
 }
@@ -201,6 +207,8 @@ pub struct A2aContext {
     task_id: String,
     context_id: String,
     user_message: Message,
+    shared: Arc<Shared>,
+    owner: String,
     /// The task this message continues (one waiting for input), if any.
     pub task: Option<Task>,
     /// Media types the client accepts in replies (empty: any).
@@ -262,50 +270,39 @@ impl A2aContext {
     pub fn input_required(&self, question: &str) -> Task {
         self.task(TaskState::InputRequired, Some(Message::agent_text(question)), Vec::new())
     }
+
+    /// Start working on this message in the background: the task is stored
+    /// (working) at once; return `A2aReply::Running(handle)` and update it
+    /// through the handle from any thread. `SendMessage` waits for it to
+    /// finish (or ask for input), streams follow it.
+    pub fn start(&self) -> TaskHandle {
+        let task = self.task(TaskState::Working, None, Vec::new());
+        let mut store = self.shared.lock();
+        store.put(&self.owner, task);
+        let canceled = store.get_mut(&self.owner, &self.task_id).map(|s| Arc::clone(&s.canceled)).unwrap_or_default();
+        drop(store);
+        TaskHandle { shared: Arc::clone(&self.shared), owner: self.owner.clone(), id: self.task_id.clone(), canceled }
+    }
+}
+
+impl std::fmt::Debug for TaskHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskHandle").field("id", &self.id).finish()
+    }
 }
 
 /// A handler's answer to a message.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum A2aReply {
     /// A direct reply; no task.
     Message(Message),
     /// A task (stored, so `GetTask` and later messages find it).
     Task(Task),
+    /// A task started with [`A2aContext::start`], still being worked on.
+    Running(TaskHandle),
 }
 
 type Handler = Arc<dyn Fn(&A2aContext, Message) -> A2aReply + Send + Sync>;
-
-struct Stored {
-    owner: String,
-    task: Task,
-}
-
-#[derive(Default)]
-struct TaskStore {
-    tasks: HashMap<String, Stored>,
-    order: VecDeque<String>,
-}
-
-impl TaskStore {
-    fn put(&mut self, owner: &str, task: Task) {
-        if !self.tasks.contains_key(&task.id) {
-            self.order.push_back(task.id.clone());
-        }
-        self.tasks.insert(task.id.clone(), Stored { owner: owner.to_string(), task });
-        while self.tasks.len() > MAX_TASKS {
-            match self.order.pop_front() {
-                Some(id) => {
-                    self.tasks.remove(&id);
-                }
-                None => break,
-            }
-        }
-    }
-
-    fn get(&self, owner: &str, id: &str) -> Option<&Task> {
-        self.tasks.get(id).filter(|s| s.owner == owner).map(|s| &s.task)
-    }
-}
 
 /// The A2A server: an [`Application`] serving the Agent Card and the
 /// JSON-RPC endpoint.
@@ -314,8 +311,11 @@ pub struct A2aServer {
     card: Arc<AgentCard>,
     path: String,
     handler: Handler,
-    tasks: Arc<Mutex<TaskStore>>,
+    tasks: Arc<Shared>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
+    /// Bearer tokens and the identity each stands for; empty: no auth.
+    tokens: Arc<Vec<(String, String)>>,
+    blocking_timeout: Duration,
 }
 
 impl A2aServer {
@@ -326,8 +326,10 @@ impl A2aServer {
             card: Arc::new(card),
             path: "/a2a".to_string(),
             handler: Arc::new(|ctx: &A2aContext, _| A2aReply::Task(ctx.reject("this agent has no message handler"))),
-            tasks: Arc::new(Mutex::new(TaskStore::default())),
+            tasks: Arc::new(Shared::default()),
             fallback: None,
+            tokens: Arc::new(Vec::new()),
+            blocking_timeout: Duration::from_secs(300),
         }
     }
 
@@ -346,10 +348,40 @@ impl A2aServer {
         self
     }
 
+    /// Require `Authorization: Bearer <token>` on the JSON-RPC endpoint (the
+    /// card stays public and lists the scheme).
+    pub fn require_bearer(self, token: &str) -> A2aServer {
+        self.require_bearer_tokens([(token, "default")])
+    }
+
+    /// Several tokens, each standing for an identity; callers only see their
+    /// own tasks.
+    pub fn require_bearer_tokens<'a>(mut self, tokens: impl IntoIterator<Item = (&'a str, &'a str)>) -> A2aServer {
+        self.tokens = Arc::new(tokens.into_iter().filter(|(t, _)| !t.is_empty()).map(|(t, i)| (t.to_string(), i.to_string())).collect());
+        self
+    }
+
+    /// How long `SendMessage` waits for a running task to finish or ask for
+    /// input before answering with its current state (default 300 s).
+    pub fn blocking_timeout(mut self, timeout: Duration) -> A2aServer {
+        self.blocking_timeout = timeout;
+        self
+    }
+
     /// Requests that aren't A2A go to `app`.
     pub fn wrap(mut self, app: impl Application + Send + Sync + 'static) -> A2aServer {
         self.fallback = Some(Arc::new(app));
         self
+    }
+
+    /// The caller's identity: `""` without auth, the token's identity with
+    /// it, `None` when the token is missing or wrong.
+    fn caller(&self, request: &Request) -> Option<String> {
+        if self.tokens.is_empty() {
+            return Some(String::new());
+        }
+        let sent = request.header(crate::header::Header::_AUTHORIZATION)?.value.strip_prefix("Bearer ")?.trim().to_string();
+        self.tokens.iter().find(|(token, _)| crate::core::constant_time_eq(token.as_bytes(), sent.as_bytes())).map(|(_, identity)| identity.clone())
     }
 
     fn endpoint_url(&self, request: &Request, connection: &ConnectionInfo) -> String {
@@ -361,12 +393,12 @@ impl A2aServer {
     }
 
     fn card_response(&self, request: &Request, connection: &ConnectionInfo) -> Response {
-        let mut response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, self.card.to_json(&self.endpoint_url(request, connection)).into_bytes());
+        let mut response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, self.card.to_json(&self.endpoint_url(request, connection), !self.tokens.is_empty()).into_bytes());
         response.headers.push(crate::header::Header::new("Cache-Control", "public, max-age=300".to_string()));
         response
     }
 
-    fn rpc(&self, request: &Request) -> Response {
+    fn rpc(&self, request: &Request, owner: &str) -> Response {
         let reply = |body: String| Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, body.into_bytes());
         if request.body.len() > MAX_BODY {
             return crate::error::problem(STATUS_CODE_REASON_PHRASE.n413_payload_too_large, "A2A request too large");
@@ -387,7 +419,13 @@ impl A2aServer {
             return reply(error_json(&id, e));
         }
         let params = call.get("params").cloned().unwrap_or(JsonValue::Object(Vec::new()));
-        match self.dispatch(method, &params, "") {
+        if method == "SendStreamingMessage" || method == "SubscribeToTask" {
+            return match self.stream(method, &params, owner, &id) {
+                Ok(response) => response,
+                Err(e) => reply(error_json(&id, e)),
+            };
+        }
+        match self.dispatch(method, &params, owner) {
             Ok(result) => reply(format!(r#"{{"jsonrpc":"2.0","id":{id},"result":{result}}}"#)),
             Err(e) => reply(error_json(&id, e)),
         }
@@ -398,24 +436,21 @@ impl A2aServer {
             "SendMessage" => self.send_message(params, owner),
             "GetTask" => {
                 let id = params.get("id").and_then(JsonValue::as_str).ok_or_else(|| RpcError::InvalidParams("id is required".into()))?;
-                let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+                let tasks = self.tasks.lock();
                 let task = tasks.get(owner, id).ok_or(RpcError::TaskNotFound)?;
                 Ok(task.to_json(history_length(params)?))
             }
             "ListTasks" => self.list_tasks(params, owner),
             "CancelTask" => {
                 let id = params.get("id").and_then(JsonValue::as_str).ok_or_else(|| RpcError::InvalidParams("id is required".into()))?;
-                let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-                let mut task = tasks.get(owner, id).cloned().ok_or(RpcError::TaskNotFound)?;
-                if task.status.state.is_terminal() {
-                    return Err(RpcError::TaskNotCancelable);
+                if !tasks::set_state(&self.tasks, owner, id, TaskState::Canceled, None) {
+                    return Err(match self.tasks.lock().get(owner, id) {
+                        Some(_) => RpcError::TaskNotCancelable,
+                        None => RpcError::TaskNotFound,
+                    });
                 }
-                task.status = TaskStatus { state: TaskState::Canceled, message: None, timestamp: model::timestamp() };
-                let json = task.to_json(None);
-                tasks.put(owner, task);
-                Ok(json)
+                Ok(self.tasks.lock().get(owner, id).map(|t| t.to_json(None)).unwrap_or_default())
             }
-            "SendStreamingMessage" | "SubscribeToTask" => Err(RpcError::UnsupportedOperation("streaming isn't supported by this agent".into())),
             "GetExtendedAgentCard" => Err(RpcError::UnsupportedOperation("this agent has no extended card".into())),
             "CreateTaskPushNotificationConfig" | "GetTaskPushNotificationConfig" | "ListTaskPushNotificationConfigs" | "DeleteTaskPushNotificationConfig" => {
                 Err(RpcError::PushNotificationNotSupported)
@@ -424,7 +459,8 @@ impl A2aServer {
         }
     }
 
-    fn send_message(&self, params: &JsonValue, owner: &str) -> Result<String, RpcError> {
+    /// Run the handler for a `SendMessage` / `SendStreamingMessage`.
+    fn handle_message(&self, params: &JsonValue, owner: &str) -> Result<Outcome, RpcError> {
         let message = Message::from_json(params.get("message").ok_or_else(|| RpcError::InvalidParams("message is required".into()))?).map_err(RpcError::InvalidParams)?;
         let configuration = params.get("configuration");
         let accepted_output_modes = configuration
@@ -432,14 +468,9 @@ impl A2aServer {
             .and_then(JsonValue::as_array)
             .map(|a| a.iter().filter_map(|m| m.as_str().map(str::to_string)).collect())
             .unwrap_or_default();
-        let history = match configuration {
-            Some(c) => history_length(c)?,
-            None => None,
-        };
         let existing = match &message.task_id {
             Some(id) => {
-                let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-                let task = tasks.get(owner, id).cloned().ok_or(RpcError::TaskNotFound)?;
+                let task = self.tasks.lock().get(owner, id).cloned().ok_or(RpcError::TaskNotFound)?;
                 if task.status.state.is_terminal() {
                     return Err(RpcError::UnsupportedOperation(format!("task {id} is {} and takes no more messages", task.status.state.as_str())));
                 }
@@ -451,20 +482,93 @@ impl A2aServer {
         let context_id = existing.as_ref().map(|t| t.context_id.clone()).or_else(|| message.context_id.clone()).unwrap_or_else(new_id);
         let mut user_message = message.clone();
         user_message.context_id = Some(context_id.clone());
-        let ctx = A2aContext { task_id, context_id: context_id.clone(), user_message, task: existing, accepted_output_modes };
+        let ctx = A2aContext {
+            task_id,
+            context_id: context_id.clone(),
+            user_message,
+            shared: Arc::clone(&self.tasks),
+            owner: owner.to_string(),
+            task: existing,
+            accepted_output_modes,
+        };
         let handler = Arc::clone(&self.handler);
         let reply = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&ctx, message))).unwrap_or_else(|_| A2aReply::Task(ctx.fail("the agent failed")));
-        match reply {
+        Ok(match reply {
             A2aReply::Message(mut m) => {
                 m.context_id.get_or_insert(context_id);
-                Ok(format!(r#"{{"message":{}}}"#, m.to_json()))
+                Outcome::Message(m)
             }
             A2aReply::Task(task) => {
-                let json = task.to_json(history);
-                self.tasks.lock().unwrap_or_else(|e| e.into_inner()).put(owner, task);
-                Ok(format!(r#"{{"task":{json}}}"#))
+                let id = task.id.clone();
+                self.tasks.lock().put(owner, task);
+                Outcome::Task(id, false)
+            }
+            A2aReply::Running(handle) => Outcome::Task(handle.id, true),
+        })
+    }
+
+    fn send_message(&self, params: &JsonValue, owner: &str) -> Result<String, RpcError> {
+        let configuration = params.get("configuration");
+        let history = match configuration {
+            Some(c) => history_length(c)?,
+            None => None,
+        };
+        let return_immediately = configuration.and_then(|c| c.get("returnImmediately")) == Some(&JsonValue::Bool(true));
+        match self.handle_message(params, owner)? {
+            Outcome::Message(m) => Ok(format!(r#"{{"message":{}}}"#, m.to_json())),
+            Outcome::Task(id, running) => {
+                // Blocking by default: until the task finishes or waits on
+                // the client (A2A 1.0 §3.2.2), within blocking_timeout.
+                let deadline = std::time::Instant::now() + self.blocking_timeout;
+                let mut store = self.tasks.lock();
+                loop {
+                    let Some(task) = store.get(owner, &id) else { return Err(RpcError::TaskNotFound) };
+                    let state = task.status.state;
+                    let now = std::time::Instant::now();
+                    if !running || return_immediately || state.is_terminal() || state.is_interrupted() || now >= deadline {
+                        return Ok(format!(r#"{{"task":{}}}"#, task.to_json(history)));
+                    }
+                    store = self.tasks.changed.wait_timeout(store, deadline - now).map(|(g, _)| g).unwrap_or_else(|e| e.into_inner().0);
+                }
             }
         }
+    }
+
+    /// `SendStreamingMessage` and `SubscribeToTask`: an SSE stream whose
+    /// first event is the task (or the one message), then its updates until
+    /// it finishes or waits on the client.
+    fn stream(&self, method: &str, params: &JsonValue, owner: &str, rpc_id: &str) -> Result<Response, RpcError> {
+        let id = if method == "SubscribeToTask" {
+            let id = params.get("id").and_then(JsonValue::as_str).ok_or_else(|| RpcError::InvalidParams("id is required".into()))?.to_string();
+            let store = self.tasks.lock();
+            let task = store.get(owner, &id).ok_or(RpcError::TaskNotFound)?;
+            if task.status.state.is_terminal() {
+                return Err(RpcError::UnsupportedOperation(format!("task {id} is {}", task.status.state.as_str())));
+            }
+            id
+        } else {
+            match self.handle_message(params, owner)? {
+                Outcome::Message(m) => {
+                    let (sender, response) = crate::sse::SseStream::new().start();
+                    let _ = sender.try_send(tasks::event(rpc_id, "message", &m.to_json()));
+                    return Ok(response);
+                }
+                Outcome::Task(id, _) => id,
+            }
+        };
+        let (sender, response) = crate::sse::SseStream::new().buffer(64).start();
+        let mut store = self.tasks.lock();
+        let stored = store.get_mut(owner, &id).ok_or(RpcError::TaskNotFound)?;
+        let _ = sender.try_send(tasks::event(rpc_id, "task", &stored.task.to_json(None)));
+        let state = stored.task.status.state;
+        let follow = !state.is_terminal() && (method == "SubscribeToTask" || !state.is_interrupted());
+        if follow {
+            if stored.subscribers.len() >= tasks::MAX_SUBSCRIBERS {
+                return Err(RpcError::UnsupportedOperation(format!("task {id} has {} streams already", tasks::MAX_SUBSCRIBERS)));
+            }
+            stored.subscribers.push(tasks::Subscriber { sender, rpc_id: rpc_id.to_string() });
+        }
+        Ok(response)
     }
 
     fn list_tasks(&self, params: &JsonValue, owner: &str) -> Result<String, RpcError> {
@@ -483,7 +587,7 @@ impl A2aServer {
             None => 0,
         };
         let history = history_length(params)?.or(Some(0));
-        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        let tasks = self.tasks.lock();
         // Newest first.
         let matching: Vec<&Task> = tasks
             .order
@@ -501,6 +605,13 @@ impl A2aServer {
             .str("nextPageToken", &next)
             .done())
     }
+}
+
+/// What a message led to.
+enum Outcome {
+    Message(Message),
+    /// A stored task's id, and whether a worker is still updating it.
+    Task(String, bool),
 }
 
 fn history_length(params: &JsonValue) -> Result<Option<usize>, RpcError> {
@@ -570,7 +681,15 @@ impl Application for A2aServer {
         }
         if path == self.path {
             if request.method == "POST" {
-                return Ok(self.rpc(request));
+                let owner = match self.caller(request) {
+                    Some(owner) => owner,
+                    None => {
+                        let mut response = crate::error::problem(STATUS_CODE_REASON_PHRASE.n401_unauthorized, "A2A requests need a bearer token");
+                        response.headers.push(crate::header::Header::new("WWW-Authenticate", r#"Bearer realm="a2a""#.to_string()));
+                        return Ok(response);
+                    }
+                };
+                return Ok(self.rpc(request, &owner));
             }
             let mut response = crate::error::problem(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed, "A2A requests are JSON-RPC POSTs");
             response.headers.push(crate::header::Header::new("Allow", "POST".to_string()));
