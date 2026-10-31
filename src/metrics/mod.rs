@@ -245,7 +245,10 @@ fn prometheus_text_without_http() -> String {
         out.push_str(&route_text);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     let upstream_text = crate::proxy_config::upstream::prometheus_text();
+    #[cfg(target_arch = "wasm32")]
+    let upstream_text = String::new();
     if !upstream_text.is_empty() {
         out.push('\n');
         out.push_str(&upstream_text);

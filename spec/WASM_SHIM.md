@@ -186,8 +186,11 @@ wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm
   (`Fields::new()`, `OutgoingResponse::new()`, etc.) link but panic without a live host, so
   `to_wasi_headers`/`write_response`/`handle` are covered by the `wasmtime serve` smoke test above
   instead, run manually rather than wired into CI yet.
-- **Still open**: an automated CI job that builds the component and drives the `wasmtime serve`
-  smoke test in scripted form (the manual steps above, scripted) — see Toolchain / CI below.
+- **Automated since 2026-10-31**: `ci/e2e/wasm_shim.sh` (CI matrix entry `wasm-shim`, Wasmtime
+  49.0.4) builds the component and checks a page from a `--dir` grant, `/healthz`, a 404 and a
+  3 MB file streamed byte for byte. Its first run found the wasm build broken by code added since
+  (WebSocket routes, upstream metrics, MCP gateway audit log, `disk_guard`'s size parser) — now
+  gated or moved to modules every target compiles.
 
 ---
 
@@ -313,9 +316,8 @@ sources.
 - No dev-only tooling needed in the end — `wit-bindgen`/`wasmtime`/`wasmtime-wasi-http` as
   dev-dependencies turned out unnecessary (see Phase 1 item 4). `rws-wasm-shim`'s only dependency
   is `wasip2 = "2.0"`.
-- **Still open**: a CI job that installs `wasm32-wasip2` + `wasmtime`, builds the release
-  component, runs it under `wasmtime serve` in the background, and curls it (scripting the manual
-  verification already done) — kept separate from the main `cargo test` job, not blocking it.
+- **Done 2026-10-31**: the `wasm-shim` CI matrix entry installs `wasm32-wasip2` + Wasmtime
+  49.0.4, builds the release component and runs `ci/e2e/wasm_shim.sh` against `wasmtime serve`.
 - file-ext 12.1.0 is published to crates.io; the root `Cargo.toml`'s existing `"12.0.0"`
   requirement resolves it directly via `^12.0.0` — no `[patch]` section needed.
 
@@ -330,8 +332,7 @@ sources.
 3. **Phase 2** ✅ mostly — stateless middleware parity (verified per-feature), streaming bodies
    (verified with a real 9 MB file), `http_client` outgoing-handler backend (verified with real
    HTTP and HTTPS), which in turn unblocked `sso`/`secrets`/`storage-s3`/`storage-azure`/
-   `ForwardAuthLayer` for free. Only the CI job (scripting the manual `wasmtime serve` verification)
-   remains open.
+   `ForwardAuthLayer` for free. CI job: done 2026-10-31 (`wasm-shim`).
 4. **Phase 3** — the stateful-middleware risk is now **confirmed**, not theorized (see above);
    revisit WASI 0.3 once it's out of RC remains open.
 

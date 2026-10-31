@@ -2214,14 +2214,7 @@ impl crate::middleware::Middleware for BearerAuthMiddleware {
     }
 }
 
-/// Compares in time independent of where the inputs first differ, so response
-/// timing doesn't reveal how much of a guessed token was right.
-pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
-}
+pub(crate) use crate::core::constant_time_eq;
 
 /// Stands in for an auth layer whose configuration can't be honoured (see
 /// `builder::apply_middleware`): every request gets `503`, never the route.

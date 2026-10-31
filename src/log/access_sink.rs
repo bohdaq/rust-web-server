@@ -143,17 +143,7 @@ fn destination() -> &'static Destination {
     })
 }
 
-/// A byte count: digits, optionally followed by `K`, `M` or `G` (×1024).
-pub(crate) fn parse_size(value: &str) -> Option<u64> {
-    let value = value.trim();
-    let (digits, multiplier) = match value.as_bytes().last()? {
-        b'k' | b'K' => (&value[..value.len() - 1], 1 << 10),
-        b'm' | b'M' => (&value[..value.len() - 1], 1 << 20),
-        b'g' | b'G' => (&value[..value.len() - 1], 1 << 30),
-        _ => (value, 1),
-    };
-    digits.trim().parse::<u64>().ok()?.checked_mul(multiplier)
-}
+pub(crate) use crate::disk_guard::parse_size;
 
 /// How often the background thread writes out every buffer.
 pub(crate) const FLUSH_INTERVAL: Duration = Duration::from_millis(100);

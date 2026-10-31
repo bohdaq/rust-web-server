@@ -262,7 +262,7 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                 }
             }
             "RWS_CONFIG_ACCESS_LOG_MAX_SIZE" | "RWS_CONFIG_ACCESS_LOG_KEEP" => {
-                if crate::log::access_sink::parse_size(value).is_none() {
+                if crate::disk_guard::parse_size(value).is_none() {
                     report.error(format!("{key} = {value:?}: expected a number of bytes or files (e.g. 104857600 or 100M)"));
                 }
             }

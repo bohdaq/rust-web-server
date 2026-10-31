@@ -205,6 +205,7 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
     ///     }
     /// });
     /// ```
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn websocket<F>(mut self, pattern: &str, handler: F) -> Self
     where
         F: Fn(crate::websocket::WebSocketConnection, PathParams, Arc<S>) + Send + Sync + 'static,

@@ -62,6 +62,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   each only when the request sent that header — who visited, for which
   site, from where. Existing fields and their order are unchanged.
 
+### Fixed
+
+- The `wasm32-wasip2` build (`rws-wasm-shim`) compiles again: WebSocket
+  routes, upstream metrics and the MCP gateway are native-only there. CI
+  now builds the component and serves pages, a 404 and a streamed file
+  through `wasmtime serve` (`ci/e2e/wasm_shim.sh`), so it can't break
+  unnoticed again.
+
 ## 18.14.0 — 2026-10-31
 
 ### Added

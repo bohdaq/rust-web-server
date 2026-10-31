@@ -58,8 +58,20 @@ fn parse_floor(value: &str) -> Option<Floor> {
         let percent: u64 = percent.trim().parse().ok().filter(|p| *p <= 100)?;
         return Some(if percent == 0 { Floor::Off } else { Floor::Percent(percent) });
     }
-    let bytes = crate::log::access_sink::parse_size(value)?;
+    let bytes = parse_size(value)?;
     Some(if bytes == 0 { Floor::Off } else { Floor::Bytes(bytes) })
+}
+
+/// A byte count: digits, optionally followed by `K`, `M` or `G` (×1024).
+pub(crate) fn parse_size(value: &str) -> Option<u64> {
+    let value = value.trim();
+    let (digits, multiplier) = match value.as_bytes().last()? {
+        b'k' | b'K' => (&value[..value.len() - 1], 1 << 10),
+        b'm' | b'M' => (&value[..value.len() - 1], 1 << 20),
+        b'g' | b'G' => (&value[..value.len() - 1], 1 << 30),
+        _ => (value, 1),
+    };
+    digits.trim().parse::<u64>().ok()?.checked_mul(multiplier)
 }
 
 /// Bytes that must stay free on a filesystem of `total` bytes.

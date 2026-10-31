@@ -88,6 +88,7 @@
 //! None — configure the server programmatically via the builder.
 
 pub(crate) mod json_rpc;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod gateway;
 mod modern;
 mod tasks;
@@ -3561,7 +3562,7 @@ fn no_content() -> Response {
 /// A configured static token against the presented one: never matches an
 /// empty token (fails closed), compared in constant time.
 fn bearer_matches(expected: &str, provided: &str) -> bool {
-    !expected.is_empty() && crate::proxy_config::constant_time_eq(expected.as_bytes(), provided.as_bytes())
+    !expected.is_empty() && crate::core::constant_time_eq(expected.as_bytes(), provided.as_bytes())
 }
 
 /// `403` for a browser `Origin` not in [`McpServer::allowed_origins`].

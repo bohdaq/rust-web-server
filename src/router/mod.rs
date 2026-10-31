@@ -133,6 +133,7 @@ impl Router {
     ///     }
     /// });
     /// ```
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn websocket<F>(self, pattern: &str, handler: F) -> Self
     where
         F: Fn(crate::websocket::WebSocketConnection, PathParams) + Send + Sync + 'static,

@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, wasm-shim, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -176,6 +176,13 @@ jobs:
           cargo build --bin rws --features "acme auth wasm-plugins"
           cargo build --release --target wasm32-unknown-unknown --manifest-path examples/wasm_plugin/Cargo.toml
           ci/e2e/wasm_plugin.sh target/debug/rws examples/wasm_plugin/target/wasm32-unknown-unknown/release/rws_wasm_plugin_example.wasm
+      - name: rws as a wasi:http component (rws-wasm-shim under wasmtime serve)
+        if: matrix.check == 'wasm-shim'
+        run: |
+          rustup target add wasm32-wasip2
+          cargo build --release --target wasm32-wasip2 -p rws-wasm-shim
+          curl -sSfL https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.4/wasmtime-v49.0.4-x86_64-linux.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          ci/e2e/wasm_shim.sh target/wasm32-wasip2/release/rws_wasm_shim.wasm "$RUNNER_TEMP/wasmtime-v49.0.4-x86_64-linux/wasmtime"
       - uses: actions/setup-node@v4
         if: matrix.check == 'admin-ui'
         with:
