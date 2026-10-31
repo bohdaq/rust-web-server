@@ -61,7 +61,8 @@ export function docsVersions({ repo, cacheDir }) {
             return false;
           }
         });
-        const archive = execFileSync("git", ["-C", repo, "archive", tag, ...paths]);
+        // The docs of a release are a few MB: past execFileSync's 1 MiB default (ENOBUFS).
+        const archive = execFileSync("git", ["-C", repo, "archive", tag, ...paths], { maxBuffer: 256 * 1024 * 1024 });
         execFileSync("tar", ["-x", "-C", dir], { input: archive });
       }
       const json = join(dir, "docs", "sidebar.json");
