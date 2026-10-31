@@ -87,6 +87,36 @@ reports it. A reload re-reads the file, so a rotated CA takes effect on
 HTTPS upstreams require the `http-client` or `http2` feature — both are included in the default (`http3`) build and the `http2`-only build. The `http1`-only build (`--no-default-features --features http1`) returns `502` for HTTPS backends and logs an error.
 :::
 
+### HTTP/3 upstreams
+
+`protocol = "h3"` sends an upstream's requests over HTTP/3 (QUIC, UDP) instead
+of HTTP/1.1 over TCP. Since 18.13.0.
+
+```toml
+[[upstream]]
+name        = "edge"
+protocol    = "h3"                       # default: HTTP/1.1
+backends    = ["https://edge1.internal:443", "https://edge2.internal:443"]
+tls_ca_file = "/etc/rws/internal-ca.pem" # optional, as for any https:// upstream
+```
+
+- Backends must be `https://` (QUIC is always TLS); trust works as above —
+  WebPKI, `tls_ca_file`, client certificates.
+- One multiplexed QUIC connection per backend, reused across requests;
+  bodies stream both ways, trailers are passed on.
+- **Fallback to TCP.** When QUIC can't connect to a backend (UDP blocked, no
+  handshake within `connect_timeout_ms`, a TLS failure) the request goes over
+  HTTPS on TCP to the same host and port, and that backend stays on TCP for
+  5 minutes before QUIC is tried again. The client sees no error;
+  `rws_upstream_h3_fallbacks_total{upstream}` counts it. A failure once the
+  QUIC connection is up counts like any backend failure (retries, circuit
+  breaker).
+- Weights, stickiness, retries, the circuit breaker, mirroring and early
+  hints work the same, and proxy routes keep the non-blocking forwarder.
+- Health checks stay HTTP/1.1 over TCP.
+- `rws --check` reports a `protocol` other than `http1` / `h3`, `h3` with a
+  non-`https://` backend, and `h3` in a build without the `http3` feature.
+
 ### Backend URL format summary
 
 | Format | Protocol | Default port |

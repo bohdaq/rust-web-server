@@ -148,7 +148,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     .with_trust(upstream_trust.get(upstream.as_str()).cloned())
                     .with_policy(upstream, upstream_policies.get(upstream.as_str()).cloned())
                     .with_mirror(mirror.clone())
-                    .with_early_hints(&route.middleware.early_hints));
+                    .with_early_hints(&route.middleware.early_hints)
+                    .with_h3(upstream_cfg.is_some_and(|u| u.protocol.eq_ignore_ascii_case("h3"))));
                     if proxy.supports_async() && route.middleware.is_empty() {
                         async_proxy = Some(Arc::clone(&proxy));
                     }

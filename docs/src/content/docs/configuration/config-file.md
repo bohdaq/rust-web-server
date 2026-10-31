@@ -308,6 +308,7 @@ strategy  = "round_robin"   # "round_robin" | "random" | "ip_hash" | "least_conn
 # tls_ca_file = "/etc/rws/internal-ca.pem"  # TLS backends: trust this CA instead of the public roots
 # tls_client_cert_file = "/etc/rws/client.pem"  # TLS backends that require a client certificate (mutual TLS),
 # tls_client_key_file  = "/etc/rws/client.key"  #   with its private key — since 18.3.0
+# protocol = "h3"        # HTTP/3 (QUIC) to the https:// backends, TCP fallback — since 18.13.0
 
 [upstream.health_check]
 path                = "/health"  # HTTP path polled on each backend (default: /health)

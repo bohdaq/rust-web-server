@@ -196,3 +196,75 @@ fn a_closed_connection_is_replaced_by_a_new_one() {
     let mut again = forward(&request("GET /hello HTTP/1.1\r\nHost: x\r\n\r\n"), peer(), &target(addr.port(), &tls)).unwrap();
     assert_eq!(body(&mut again), b"hello over h3");
 }
+
+// ── config-file routes: [[upstream]] protocol = "h3" ──────────────────────────
+
+fn config_app(toml: &str) -> crate::proxy_config::ConfigDrivenApp {
+    let report = crate::config_check::check_str(toml);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    let config = crate::proxy_config::ProxyConfig::from_str(toml);
+    assert!(config.routes[0].middleware.is_empty(), "h3 keeps the async forwarder");
+    crate::proxy_config::builder::build(config).0
+}
+
+fn h3_toml(port: u16, ca_file: &str) -> String {
+    format!(
+        "[[upstream]]\nname = \"app\"\nprotocol = \"h3\"\nbackends = [\"https://localhost:{port}\"]\ntls_ca_file = \"{ca_file}\"\n\n\
+         [[route]]\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"proxy\"\nupstream = \"app\"\nconnect_timeout_ms = 1000\n"
+    )
+}
+
+#[test]
+fn config_proxy_routes_reach_an_h3_upstream_on_both_paths() {
+    let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+    let ca = TempPath::new("h3_upstream_route_ca.pem");
+    std::fs::write(ca.as_str(), certified.cert.pem()).unwrap();
+    let (endpoint, _) = start_backend_on("127.0.0.1:0".parse().unwrap(), Some((certified.cert.pem(), certified.signing_key.serialize_pem(), certified.cert.der().to_vec())));
+    let app = config_app(&h3_toml(endpoint.local_addr().unwrap().port(), ca.as_str()));
+    let conn = ConnectionInfo { tls: true, ..ConnectionInfo::default() };
+    let get = request("GET /headers HTTP/1.1\r\nHost: shop.example\r\n\r\n");
+    let mut sync = app.execute(&get, &conn).unwrap();
+    assert!(String::from_utf8(body(&mut sync)).unwrap().starts_with("HTTP/3.0 via=3 rws"), "sync path over HTTP/3");
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let mut async_response = runtime.block_on(async { app.execute_async(&get, &conn).expect("async route").await }).unwrap();
+    assert!(String::from_utf8(body(&mut async_response)).unwrap().starts_with("HTTP/3.0"), "async path over HTTP/3");
+}
+
+#[test]
+fn a_backend_quic_cannot_reach_is_served_over_tcp_and_remembered() {
+    // HTTPS on TCP only: nothing on that UDP port.
+    let (port, _, accepted, pem) = crate::proxy::tests::tls_backend_with_pem(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ntcp", 100);
+    let ca = TempPath::new("h3_upstream_fallback_ca.pem");
+    std::fs::write(ca.as_str(), pem).unwrap();
+    let app = config_app(&h3_toml(port, ca.as_str()).replace("name = \"app\"", "name = \"fallback-test\"").replace("upstream = \"app\"", "upstream = \"fallback-test\""));
+    let get = request("GET /x HTTP/1.1\r\nHost: x\r\n\r\n");
+    let count = || {
+        crate::proxy_config::upstream::prometheus_text()
+            .lines()
+            .find(|l| l.starts_with("rws_upstream_h3_fallbacks_total{upstream=\"fallback-test\"}"))
+            .map(|l| l.rsplit(' ').next().unwrap().to_string())
+    };
+    let started = std::time::Instant::now();
+    let mut first = app.execute(&get, &ConnectionInfo::default()).unwrap();
+    assert_eq!((first.status_code, body(&mut first)), (200, b"tcp".to_vec()));
+    assert!(started.elapsed() < Duration::from_secs(3), "bounded by connect_timeout_ms");
+    assert_eq!(count().as_deref(), Some("1"));
+    let started = std::time::Instant::now();
+    let mut second = app.execute(&get, &ConnectionInfo::default()).unwrap();
+    assert_eq!(body(&mut second), b"tcp");
+    assert!(started.elapsed() < Duration::from_millis(500), "no second QUIC attempt");
+    assert_eq!(count().as_deref(), Some("1"), "remembered: no new fallback");
+    assert!(accepted.load(std::sync::atomic::Ordering::Relaxed) >= 1);
+}
+
+#[test]
+fn rws_check_reports_protocol_mistakes() {
+    let base = |protocol: &str, backend: &str| {
+        format!("[[upstream]]\nname = \"u\"\nprotocol = \"{protocol}\"\nbackends = [\"{backend}\"]\n\n[[route]]\n[route.match]\npath = \"/\"\n[route.action]\ntype = \"proxy\"\nupstream = \"u\"\n")
+    };
+    let errors = |toml: String| crate::config_check::check_str_offline(&toml).errors.join("\n");
+    assert!(errors(base("h3", "https://10.0.0.5:443")).is_empty());
+    assert!(errors(base("http1", "http://10.0.0.5:80")).is_empty());
+    assert!(errors(base("h3", "http://10.0.0.5:80")).contains("needs https:// backends"));
+    assert!(errors(base("quic", "https://10.0.0.5:443")).contains("protocol must be"));
+}

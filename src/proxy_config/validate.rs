@@ -32,7 +32,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         section
     };
     let keys: Vec<&'static str> = match section {
-        "upstream" => vec!["name", "backends", "strategy", "weights", "tls_ca_file", "tls_client_cert_file", "tls_client_key_file"],
+        "upstream" => vec!["name", "backends", "strategy", "weights", "tls_ca_file", "tls_client_cert_file", "tls_client_key_file", "protocol"],
         "upstream.sticky" => vec!["cookie", "max_age_secs"],
         "upstream.circuit_breaker" => vec!["failure_threshold", "recovery_secs", "half_open_probes"],
         "upstream.retry" => vec!["attempts", "status"],
@@ -158,6 +158,18 @@ impl ProxyConfig {
             }
             if upstream.backends.is_empty() {
                 report.error(format!("{label}: `backends` is empty"));
+            }
+            match upstream.protocol.to_ascii_lowercase().as_str() {
+                "" | "http1" => {}
+                "h3" => {
+                    if !cfg!(feature = "http3") {
+                        report.error(format!("{label}: protocol = \"h3\" needs a build with the http3 feature (the default)"));
+                    }
+                    if let Some(plain) = upstream.backends.iter().find(|b| !b.starts_with("https://")) {
+                        report.error(format!("{label}: protocol = \"h3\" needs https:// backends (QUIC is always TLS); '{plain}' isn't"));
+                    }
+                }
+                other => report.error(format!("{label}: protocol must be \"http1\" or \"h3\", not \"{other}\"")),
             }
             for backend in &upstream.backends {
                 if !is_host_port(backend) {

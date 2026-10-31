@@ -201,6 +201,8 @@ struct Stats {
     /// `(upstream, backend)` → stats.
     backends: HashMap<(String, String), BackendStats>,
     retries: HashMap<String, u64>,
+    /// `protocol = "h3"` upstreams: requests that fell back to TCP.
+    h3_fallbacks: HashMap<String, u64>,
     /// The current configuration's upstreams, for gauges.
     policies: Vec<Arc<UpstreamPolicy>>,
 }
@@ -208,6 +210,12 @@ struct Stats {
 fn stats() -> &'static Mutex<Stats> {
     static STATS: OnceLock<Mutex<Stats>> = OnceLock::new();
     STATS.get_or_init(Default::default)
+}
+
+/// A request to `upstream` went over TCP because QUIC couldn't connect.
+#[cfg(feature = "http3")]
+pub(crate) fn observe_h3_fallback(upstream: &str) {
+    *stats().lock().unwrap_or_else(|e| e.into_inner()).h3_fallbacks.entry(upstream.to_string()).or_default() += 1;
 }
 
 /// Make `policies` the ones `/metrics` reports gauges for (each compile).
@@ -380,6 +388,16 @@ pub(crate) fn prometheus_text() -> String {
             out.push_str("# HELP rws_upstream_circuit_breaker_state Each backend's circuit breaker (0=closed, 1=half_open, 2=open)\n");
             out.push_str("# TYPE rws_upstream_circuit_breaker_state gauge\n");
             out.push_str(&breaker_lines);
+        }
+    }
+    if !stats.h3_fallbacks.is_empty() {
+        let mut names: Vec<&String> = stats.h3_fallbacks.keys().collect();
+        names.sort();
+        out.push_str("# HELP rws_upstream_h3_fallbacks_total Requests to a protocol = \"h3\" upstream sent over TCP because QUIC couldn't connect\n");
+        out.push_str("# TYPE rws_upstream_h3_fallbacks_total counter\n");
+        for name in names {
+            let upstream = name.replace('\\', "\\\\").replace('"', "\\\"");
+            out.push_str(&format!("rws_upstream_h3_fallbacks_total{{upstream=\"{upstream}\"}} {}\n", stats.h3_fallbacks[name]));
         }
     }
     out

@@ -52,6 +52,7 @@ impl Sink {
     }
 
     /// Start counting again (a sink reused for the next request).
+    #[cfg_attr(not(feature = "http2"), allow(dead_code))]
     pub(crate) fn reset(&self) {
         self.sent.store(0, Ordering::Relaxed);
     }

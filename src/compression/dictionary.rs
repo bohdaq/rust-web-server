@@ -177,10 +177,10 @@ pub fn encode(encoding: DictionaryEncoding, body: &[u8], dictionary: &[u8], leve
             )
             .ok()?;
         }
+        // Not compiled in: refused by `available()` above.
         #[allow(unreachable_patterns)]
         _ => {
             let _ = (level, window);
-            return None;
         }
     }
     Some(out)
@@ -189,8 +189,8 @@ pub fn encode(encoding: DictionaryEncoding, body: &[u8], dictionary: &[u8], leve
 /// The original of an [`encode`]d body: checks the magic and that the hash
 /// is `dictionary`'s, and stops past `max_len` decoded bytes. `None` on any
 /// mismatch or error.
+#[cfg_attr(not(any(feature = "zstd", feature = "brotli")), allow(unused_variables, unused_mut, unreachable_code))]
 pub fn decode(encoding: DictionaryEncoding, data: &[u8], dictionary: &[u8], max_len: usize) -> Option<Vec<u8>> {
-    use std::io::Read;
     let header = encoding.header_len();
     if data.len() < header || !data.starts_with(encoding.magic()) || data[encoding.magic().len()..header] != hash(dictionary) {
         return None;
@@ -200,6 +200,7 @@ pub fn decode(encoding: DictionaryEncoding, data: &[u8], dictionary: &[u8], max_
     match encoding {
         #[cfg(feature = "zstd")]
         DictionaryEncoding::Dcz => {
+            use std::io::Read;
             let mut decoder = zstd::stream::read::Decoder::with_ref_prefix(stream, dictionary).ok()?;
             decoder.window_log_max(23).ok()?;
             decoder.take(max_len as u64 + 1).read_to_end(&mut out).ok()?;
@@ -225,7 +226,10 @@ pub fn decode(encoding: DictionaryEncoding, data: &[u8], dictionary: &[u8], max_
             .ok()?;
         }
         #[allow(unreachable_patterns)]
-        _ => return None,
+        _ => {
+            let _ = stream;
+            return None;
+        }
     }
     (out.len() <= max_len).then_some(out)
 }

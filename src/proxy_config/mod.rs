@@ -90,6 +90,11 @@ pub struct UpstreamConfig {
     pub circuit_breaker: Option<BreakerConfig>,
     /// `[upstream.retry]` — try another backend. Since 18.6.0.
     pub retry: Option<RetryConfig>,
+    /// `protocol` — `"h3"` sends requests over HTTP/3 (QUIC) to the
+    /// `https://` backends, falling back to TCP for a backend QUIC can't
+    /// reach. Empty (the default) or `"http1"`: HTTP/1.1 as before. Since
+    /// 18.13.0.
+    pub protocol: String,
 }
 
 #[derive(Debug, Clone)]
@@ -395,6 +400,7 @@ impl ProxyConfig {
             upstreams.push(UpstreamConfig {
                 name, backends, strategy, health_check, tls, tls_ca_file, tls_client_cert_file, tls_client_key_file,
                 weights, sticky, circuit_breaker, retry,
+                protocol: get_str(&map, &sec, "protocol"),
             });
             i += 1;
         }
@@ -1381,6 +1387,10 @@ pub(crate) struct DynamicProxy {
     mirror: Option<crate::proxy::mirror::Mirror>,
     /// `early_hints`: sent once per request, before the first attempt.
     early_hints: Option<Arc<Vec<String>>>,
+    /// `protocol = "h3"`: requests go over HTTP/3; backends QUIC couldn't
+    /// reach are on TCP until the time kept here.
+    #[cfg(feature = "http3")]
+    h3: Option<Arc<std::sync::Mutex<HashMap<String, std::time::Instant>>>>,
 }
 
 impl DynamicProxy {
@@ -1397,6 +1407,48 @@ impl DynamicProxy {
     pub(crate) fn with_early_hints(mut self, links: &[String]) -> Self {
         self.early_hints = (!links.is_empty()).then(|| Arc::new(links.to_vec()));
         self
+    }
+
+    /// Send requests over HTTP/3 (`protocol = "h3"`); needs TLS backends
+    /// and the `http3` feature (a no-op without it — `rws --check` reports
+    /// that).
+    #[cfg_attr(not(feature = "http3"), allow(unused_mut))]
+    pub(crate) fn with_h3(mut self, enabled: bool) -> Self {
+        #[cfg(feature = "http3")]
+        {
+            self.h3 = (enabled && self.tls).then(Default::default);
+        }
+        #[cfg(not(feature = "http3"))]
+        let _ = enabled;
+        self
+    }
+
+    /// The HTTP/3 target for `backend`, unless this proxy doesn't use
+    /// HTTP/3 or the backend is on TCP for now.
+    #[cfg(feature = "http3")]
+    fn h3_target(&self, backend: &str) -> Option<Arc<rustls::ClientConfig>> {
+        let tcp_until = self.h3.as_ref()?;
+        let mut tcp_until = tcp_until.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(until) = tcp_until.get(backend) {
+            if std::time::Instant::now() < *until {
+                return None;
+            }
+            tcp_until.remove(backend);
+        }
+        Some(match &self.trust {
+            Some(trust) => trust.client_config(),
+            None => crate::proxy::tls_client_config(),
+        })
+    }
+
+    /// QUIC couldn't reach `backend`: TCP for [`H3_FALLBACK`], counted.
+    #[cfg(feature = "http3")]
+    fn fall_back_to_tcp(&self, backend: &str, error: &str) {
+        if let Some(tcp_until) = &self.h3 {
+            tcp_until.lock().unwrap_or_else(|e| e.into_inner()).insert(backend.to_string(), std::time::Instant::now() + H3_FALLBACK);
+        }
+        upstream::observe_h3_fallback(&self.upstream);
+        eprintln!("upstream {}: HTTP/3 to {backend} failed ({error}); using TCP for {} s", self.upstream, H3_FALLBACK.as_secs());
     }
 
     /// Send a copy of each request to `mirror` (once, not per retry).
@@ -1435,6 +1487,8 @@ impl DynamicProxy {
             policy: None,
             mirror: None,
             early_hints: None,
+            #[cfg(feature = "http3")]
+            h3: None,
         }
     }
 
@@ -1668,6 +1722,30 @@ impl DynamicProxy {
                 },
             });
             let started = std::time::Instant::now();
+            #[cfg(feature = "http3")]
+            if let Some(config) = self.h3_target(&prepared.backend) {
+                let target = crate::proxy::h3_upstream::Target {
+                    host: &prepared.host,
+                    port: prepared.port,
+                    tls: &config,
+                    connect_timeout: self.connect_timeout,
+                    read_timeout: self.read_timeout,
+                };
+                match crate::proxy::h3_upstream::forward_async(&prepared.request, crate::proxy::Peer::of(conn), &target).await {
+                    Err(crate::proxy::h3_upstream::H3Error::Connect(e)) => self.fall_back_to_tcp(&prepared.backend, &e),
+                    result => {
+                        match self.settle(&prepared.backend, result.map_err(|_| ()), started) {
+                            Attempt::Done(mut response) => {
+                                self.stick(request, &prepared.backend, &mut response);
+                                return Ok(response);
+                            }
+                            Attempt::Failed(response) => last = response,
+                        }
+                        tried.push(prepared.backend.clone());
+                        continue;
+                    }
+                }
+            }
             let result = crate::proxy::async_upstream::forward(
                 &prepared.request,
                 crate::proxy::Peer::of(conn),
@@ -1718,6 +1796,30 @@ impl Application for DynamicProxy {
             // Pooled keep-alive connections to the backend, TLS or not (a
             // fresh connection per request halved throughput vs. Caddy/nginx).
             let started = std::time::Instant::now();
+            #[cfg(feature = "http3")]
+            if let Some(config) = self.h3_target(&prepared.backend) {
+                let target = crate::proxy::h3_upstream::Target {
+                    host: &prepared.host,
+                    port: prepared.port,
+                    tls: &config,
+                    connect_timeout: self.connect_timeout,
+                    read_timeout: self.read_timeout,
+                };
+                match crate::proxy::h3_upstream::forward(&prepared.request, crate::proxy::Peer::of(conn), &target) {
+                    Err(crate::proxy::h3_upstream::H3Error::Connect(e)) => self.fall_back_to_tcp(&prepared.backend, &e),
+                    result => {
+                        match self.settle(&prepared.backend, result.map_err(|_| ()), started) {
+                            Attempt::Done(mut response) => {
+                                self.stick(request, &prepared.backend, &mut response);
+                                return Ok(response);
+                            }
+                            Attempt::Failed(response) => last = response,
+                        }
+                        tried.push(prepared.backend.clone());
+                        continue;
+                    }
+                }
+            }
             let result = crate::proxy::forward_upstream_trusting(
                 crate::proxy::shared_pool(),
                 &prepared.request,
@@ -1742,6 +1844,10 @@ impl Application for DynamicProxy {
         Ok(last.unwrap_or_else(bad_gateway))
     }
 }
+
+/// How long a backend QUIC couldn't reach is sent requests over TCP.
+#[cfg(feature = "http3")]
+pub(crate) const H3_FALLBACK: Duration = Duration::from_secs(300);
 
 fn service_unavailable() -> Response {
     use crate::mime_type::MimeType;

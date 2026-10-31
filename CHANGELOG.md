@@ -5,6 +5,17 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- HTTP/3 to upstreams: `[[upstream]] protocol = "h3"` sends requests over
+  QUIC to `https://` backends (one multiplexed connection per backend,
+  streaming both ways, trailers), on both forwarding paths. A backend QUIC
+  can't reach is served over TCP and kept there for 5 minutes,
+  counted by `rws_upstream_h3_fallbacks_total`. `rws --check` validates
+  `protocol`.
+
 ## 18.12.0 — 2026-10-31
 
 ### Added
