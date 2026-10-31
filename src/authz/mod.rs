@@ -27,9 +27,13 @@ pub(crate) mod config;
 pub(crate) mod identity;
 mod layer;
 pub mod rebac;
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+pub mod sql;
 
 pub use identity::{with_identity, Identity};
 pub use layer::{AuthzLayer, ObjectTemplate};
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+pub use sql::SqlStore;
 pub use rebac::{AuthzError, Authorizer, MemoryStore, ObjectRef, Schema, Subject, Tuple, TupleFilter, TupleStore};
 #[cfg(feature = "http2")]
 pub use identity::scope_identity;

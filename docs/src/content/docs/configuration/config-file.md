@@ -328,7 +328,7 @@ Relationship-based authorization for routes with `[route.middleware.authz]`
 
 ```toml
 [authz]
-store  = "memory"                        # the default
+store  = "memory"                        # or "sql": RWS_DB_* (a model-* feature)
 tuples = ["doc:42#owner@user:olga"]      # written at start and on reload; may span lines
 
 [authz.type.doc]                         # one table per object type

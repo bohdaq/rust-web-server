@@ -26,6 +26,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   file `[authz]` (schema per `[authz.type.<name>]`, seed `tuples`) plus
   `[route.middleware.authz] relation / object`; `rws --check` validates
   them; runtime tuples survive a reload. `ci/e2e/authz.sh`.
+- `authz::SqlStore`: tuples in SQLite, Postgres or MySQL (a model
+  feature), with a 1 s read cache; `[authz] store = "sql"` (`RWS_DB_*`).
 - The proxy config parser accepts arrays spanning several lines (comments
   and a trailing comma allowed).
 

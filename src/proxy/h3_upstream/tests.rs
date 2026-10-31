@@ -166,7 +166,7 @@ fn connect_failures_are_told_apart() {
 
     // A backend whose certificate isn't trusted: the handshake fails.
     let (addr, _) = start_backend();
-    let error = forward(&request("GET / HTTP/1.1\r\nHost: x\r\n\r\n"), peer(), &target(addr.port(), default_tls())).unwrap_err();
+    let error = forward(&request("GET / HTTP/1.1\r\nHost: x\r\n\r\n"), peer(), &target(addr.port(), &crate::proxy::tls_client_config())).unwrap_err();
     assert!(matches!(error, H3Error::Connect(_)), "{error}");
 }
 

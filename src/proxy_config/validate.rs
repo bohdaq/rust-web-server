@@ -151,7 +151,12 @@ impl ProxyConfig {
     /// in the environment the server will run in.
     pub fn validate(&self, report: &mut ConfigReport) {
         // [authz], built over a throwaway store (nothing is written).
-        let authz = super::builder::config_authorizer_with(self, std::sync::Arc::new(crate::authz::MemoryStore::new()));
+        let authz = super::builder::config_authorizer_with(self, Some(std::sync::Arc::new(crate::authz::MemoryStore::new())));
+        if self.authz.as_ref().is_some_and(|a| a.store == "sql")
+            && !cfg!(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))
+        {
+            report.error("[authz]: store = \"sql\" needs a build with a model-sqlite / model-postgres / model-mysql feature".to_string());
+        }
         if let Some(Err(e)) = &authz {
             report.error(format!("[authz]: {e}"));
         }

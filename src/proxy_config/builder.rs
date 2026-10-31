@@ -619,13 +619,14 @@ impl Clone for ArcApp {
 /// The authorizer `[authz]` describes: its schema, the process-wide tuple
 /// store, the seed tuples written. `None` without `[authz]`.
 pub(crate) fn config_authorizer(config: &ProxyConfig) -> Option<Result<crate::authz::Authorizer, String>> {
-    config_authorizer_with(config, crate::authz::config::memory_store())
+    config_authorizer_with(config, None)
 }
 
-/// [`config_authorizer`] over `store` (a throwaway one for `rws --check`).
+/// [`config_authorizer`], or over `check_store` whatever `store` says — a
+/// throwaway store for `rws --check`, which must not connect or write.
 pub(crate) fn config_authorizer_with(
     config: &ProxyConfig,
-    memory: Arc<dyn crate::authz::TupleStore>,
+    check_store: Option<Arc<dyn crate::authz::TupleStore>>,
 ) -> Option<Result<crate::authz::Authorizer, String>> {
     let authz = config.authz.as_ref()?;
     Some((|| {
@@ -636,9 +637,14 @@ pub(crate) fn config_authorizer_with(
                 schema = schema.relation(kind, relation, definition).map_err(|e| format!("type {kind}, relation {relation}: {e}"))?;
             }
         }
-        let store = match authz.store.as_str() {
-            "" | "memory" => memory,
-            other => return Err(format!("store = \"{other}\" isn't supported (memory)")),
+        let store = match (authz.store.as_str(), check_store) {
+            ("" | "memory" | "sql", Some(store)) => store,
+            ("" | "memory", None) => crate::authz::config::memory_store(),
+            #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+            ("sql", None) => crate::authz::sql::config_store()?,
+            #[cfg(not(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
+            ("sql", None) => return Err("store = \"sql\" needs a build with a model-sqlite / model-postgres / model-mysql feature".to_string()),
+            (other, _) => return Err(format!("store = \"{other}\" isn't supported (memory or sql)")),
         };
         let authorizer = crate::authz::Authorizer::with_store(schema, store).map_err(|e| e.to_string())?;
         for tuple in &authz.tuples {

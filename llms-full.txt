@@ -1616,7 +1616,7 @@ Relationship-based authorization for routes with `[route.middleware.authz]`
 
 ```toml
 [authz]
-store  = "memory"                        # the default
+store  = "memory"                        # or "sql": RWS_DB_* (a model-* feature)
 tuples = ["doc:42#owner@user:olga"]      # written at start and on reload; may span lines
 
 [authz.type.doc]                         # one table per object type
@@ -8169,8 +8169,36 @@ authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allow
 - Names are letters, digits, `_`, `-` and `.`; ids anything but `#`, `@`,
   spaces and control characters; both up to 256 characters.
 
-Tuples live in a `TupleStore`: `MemoryStore` here (lost on restart); a SQL
-store and admin API endpoints follow in later 18.14 work.
+Tuples live in a `TupleStore`: `MemoryStore` (lost on restart) or
+`SqlStore` (below); admin API endpoints follow in later 18.14 work.
+
+## Storing tuples in a database
+
+`SqlStore` keeps tuples in a `rws_authz_tuples` table — SQLite, Postgres or
+MySQL through the [model layer](/database/overview/) (a `model-sqlite`,
+`model-postgres` or `model-mysql` feature):
+
+```rust
+use rust_web_server::authz::{Authorizer, SqlStore};
+
+let store = SqlStore::from_env()?;            // RWS_DB_BACKEND, RWS_DB_NAME, …
+// or SqlStore::open(DbConfig { … })
+let authz = Authorizer::new(schema, store)?;
+authz.write_str("doc:42#owner@user:olga")?;   // stays across restarts
+```
+
+- The table (and an index on object and relation) is created if missing;
+  each row's key is the SHA-256 of the tuple, so writes are idempotent.
+- Queries run on a runtime of the store's own (`rws-authz-sql`), so checks
+  work from any handler, async server or not.
+- Reads are cached for 1 s; this process's writes clear the cache at once.
+  A tuple another process changes is seen within that second.
+- `SqlStore::new(pool)` takes a pool you already have; it must outlive the
+  runtime it was made on.
+
+In the config file, `[authz] store = "sql"` uses `RWS_DB_*` (opened once per
+process; seed tuples written at start and on reload). `rws --check` checks
+the schema and tuples without connecting.
 
 ## Protecting routes
 
@@ -20264,6 +20292,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `JwtLayer` | `auth` (`auth`) | HS256 Bearer JWT validation; `::rs256`/`::es256` verify against a static public key (`auth-asymmetric`) |
 | `Identity` / `with_identity` / `scope_identity` | `authz` | The authenticated caller (`user:alice`), set by every authenticator for the rest of the request — not a header; `Identity::current()` (18.14.0). See [Authorization](/features/authorization/) |
 | `Authorizer` / `Schema` / `Tuple` / `TupleStore` / `MemoryStore` | `authz` | Relationship-based access control: a schema of relations (`user \| group#member \| owner \| parent->viewer`), tuples (`doc:42#editor@user:alice`), `check` / `explain` with depth and read limits (18.14.0). See [Authorization](/features/authorization/#relationships) |
+| `SqlStore` | `authz::sql` (`model-*`) | Relationship tuples in SQLite / Postgres / MySQL (`rws_authz_tuples`), 1 s read cache, own runtime (18.14.0). See [Authorization](/features/authorization/#storing-tuples-in-a-database) |
 | `AuthzLayer` / `ObjectTemplate` | `authz` | Middleware: the caller needs a relation on an object named from the request (`doc:{path:2}`, `{query:k}`, `{header:H}`); 401 / 403 (18.14.0). See [Authorization](/features/authorization/#protecting-routes) |
 | `ForwardAuthLayer` | `auth::forward` (`auth`) | Delegates allow/deny to an external HTTP service; verbatim pass-through on non-2xx, 502 if unreachable |
 | `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry. See [IP filter](/features/ip-filter/) |

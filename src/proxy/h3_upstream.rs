@@ -87,15 +87,6 @@ fn runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
-/// The client configuration for backends without a `tls_ca_file`: WebPKI.
-pub(crate) fn default_tls() -> &'static Arc<rustls::ClientConfig> {
-    static CONFIG: OnceLock<Arc<rustls::ClientConfig>> = OnceLock::new();
-    CONFIG.get_or_init(|| {
-        let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        Arc::new(crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth())
-    })
-}
-
 /// `tls` as a QUIC client configuration with ALPN `h3`, built once per
 /// configuration (the source is kept so its address isn't reused).
 fn quic_config(tls: &Arc<rustls::ClientConfig>) -> Result<quinn::ClientConfig, String> {

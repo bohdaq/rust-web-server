@@ -111,8 +111,36 @@ authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allow
 - Names are letters, digits, `_`, `-` and `.`; ids anything but `#`, `@`,
   spaces and control characters; both up to 256 characters.
 
-Tuples live in a `TupleStore`: `MemoryStore` here (lost on restart); a SQL
-store and admin API endpoints follow in later 18.14 work.
+Tuples live in a `TupleStore`: `MemoryStore` (lost on restart) or
+`SqlStore` (below); admin API endpoints follow in later 18.14 work.
+
+## Storing tuples in a database
+
+`SqlStore` keeps tuples in a `rws_authz_tuples` table — SQLite, Postgres or
+MySQL through the [model layer](/database/overview/) (a `model-sqlite`,
+`model-postgres` or `model-mysql` feature):
+
+```rust
+use rust_web_server::authz::{Authorizer, SqlStore};
+
+let store = SqlStore::from_env()?;            // RWS_DB_BACKEND, RWS_DB_NAME, …
+// or SqlStore::open(DbConfig { … })
+let authz = Authorizer::new(schema, store)?;
+authz.write_str("doc:42#owner@user:olga")?;   // stays across restarts
+```
+
+- The table (and an index on object and relation) is created if missing;
+  each row's key is the SHA-256 of the tuple, so writes are idempotent.
+- Queries run on a runtime of the store's own (`rws-authz-sql`), so checks
+  work from any handler, async server or not.
+- Reads are cached for 1 s; this process's writes clear the cache at once.
+  A tuple another process changes is seen within that second.
+- `SqlStore::new(pool)` takes a pool you already have; it must outlive the
+  runtime it was made on.
+
+In the config file, `[authz] store = "sql"` uses `RWS_DB_*` (opened once per
+process; seed tuples written at start and on reload). `rws --check` checks
+the schema and tuples without connecting.
 
 ## Protecting routes
 
