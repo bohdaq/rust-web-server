@@ -3,6 +3,7 @@
 import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 
 import gauge from "../node_modules/@phosphor-icons/core/assets/regular/gauge.svg?raw";
+import chart_line from "../node_modules/@phosphor-icons/core/assets/regular/chart-line.svg?raw";
 import tree_structure from "../node_modules/@phosphor-icons/core/assets/regular/tree-structure.svg?raw";
 import certificate from "../node_modules/@phosphor-icons/core/assets/regular/certificate.svg?raw";
 import sliders_horizontal from "../node_modules/@phosphor-icons/core/assets/regular/sliders-horizontal.svg?raw";
@@ -21,6 +22,7 @@ import lock_key from "../node_modules/@phosphor-icons/core/assets/regular/lock-k
 
 const byName = {
   "gauge": gauge,
+  "chart-line": chart_line,
   "tree-structure": tree_structure,
   "certificate": certificate,
   "sliders-horizontal": sliders_horizontal,

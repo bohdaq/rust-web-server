@@ -457,6 +457,10 @@
         "link": "/deployment/admin/"
       },
       {
+        "label": "Traffic insights",
+        "link": "/deployment/traffic/"
+      },
+      {
         "label": "systemd",
         "link": "/deployment/systemd/"
       },

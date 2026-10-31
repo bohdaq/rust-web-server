@@ -3,7 +3,7 @@ title: Operate rws from an AI client
 description: Point Claude Code, Claude Desktop or Cursor at a running rws and let it read metrics and logs, block an abusive IP, or switch on maintenance mode.
 ---
 
-The `rws` binary has an MCP endpoint with 24 tools for looking at and steering
+The `rws` binary has an MCP endpoint with 25 tools for looking at and steering
 the running server: its configuration, metrics, recent requests and errors,
 the response cache, the IP blocklist, maintenance mode, runtime feature flags
 and config reload. An AI client connected to it can answer "why are we
@@ -55,7 +55,7 @@ claude mcp add --transport http rws https://www.example.com/mcp \
 }
 ```
 
-Each tool carries behaviour hints: the 16 that only read are marked
+Each tool carries behaviour hints: the 17 that only read are marked
 read-only, and the ones that change something (`set_maintenance`, `block_ip`,
 `unblock_ip`, `cache_clear`, `feature_set`, `reload_config`, `authz_write`,
 `authz_delete`) are not, so a
@@ -75,6 +75,7 @@ client that asks before acting asks for those.
 | `feature_flags`, `feature_list` | |
 | `authz_check` `{"subject": "user:alice", "relation": "viewer", "object": "doc:42"}` — allowed, and why | `authz_write` / `authz_delete` `{"tuple": "doc:42#viewer@user:alice"}` |
 | `authz_tuples` `{"object": "doc", "subject": "user:alice"}` — relationship tuples | |
+| `traffic_summary` `{"hours": 24, "host": "example.com"}` — who visited: people, AI agents, bots | |
 
 The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer

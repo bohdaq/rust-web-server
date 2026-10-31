@@ -313,6 +313,17 @@ pub fn purge_cache(name: &str, path: Option<&str>, prefix: Option<&str>) -> Opti
     Some(format!(r#"{{"name":{},"purged":{n}}}"#, quoted(name)))
 }
 
+// ── Traffic insights (18.16.0) ────────────────────────────────────────────────
+
+/// Who visited in the last `hours` (1–2160), optionally for one host: the
+/// Traffic page's JSON. `Err` when counting is off.
+pub fn traffic_json(hours: u64, host: Option<&str>) -> Result<String, String> {
+    if !crate::traffic::enabled() {
+        return Err("traffic counting is off (on with the admin API unless [traffic] enabled = false)".to_string());
+    }
+    Ok(crate::traffic::summary::json(hours, host.filter(|h| !h.is_empty()), crate::traffic::record::now()))
+}
+
 // ── Authorization (#32) ───────────────────────────────────────────────────────
 
 fn authorizer_slot() -> &'static RwLock<Option<crate::authz::Authorizer>> {

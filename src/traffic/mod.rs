@@ -19,7 +19,7 @@ mod classify;
 pub mod config;
 mod data;
 pub(crate) mod persist;
-pub(crate) mod record;
+pub mod record;
 pub mod summary;
 
 pub use classify::{classify, Class, Group, Kind};

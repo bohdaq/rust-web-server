@@ -25,6 +25,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   only once it loads a stylesheet, script or font. Saved every 5 minutes
   to `traffic.json` beside the certificate (or `persist`), 30 days by
   default, bounded to a few MB at any load. About 160 ns per request.
+- Traffic page in the admin UI: visitors, page views and requests for
+  people, AI agents and bots over a day, a week or 30 days, change from the
+  period before, a chart, and tables of the pages people read, AI agents
+  (verified by network or not), the pages they read, bots by kind,
+  referrers and 404s; a button per site. Admin API `GET /traffic` and MCP
+  tool `traffic_summary` (the binary has 25 tools). Docs:
+  [Traffic insights](https://rws8.tech/deployment/traffic/).
 
 - A static path that names nothing but ends with punctuation copied along
   with a link (`/docs/http2/):` from an llms.txt line, `/docs/install.`)

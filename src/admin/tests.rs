@@ -337,3 +337,18 @@ fn the_ui_is_served_without_the_token_and_locked_down() {
     let raw = "POST /admin/ HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n";
     assert_eq!(api.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap().status_code, 401);
 }
+
+#[test]
+fn traffic_is_404_while_off_and_a_summary_while_on() {
+    let _g = crate::test_env::lock();
+    let api = AdminApi::new("t");
+    crate::traffic::record::disable_for_tests();
+    let (status, text) = call(&api, "GET", "/admin/api/v1/traffic", "");
+    assert_eq!(status, 404, "{text}");
+    crate::traffic::enable();
+    let (status, text) = call(&api, "GET", "/admin/api/v1/traffic?hours=168&host=example.com", "");
+    assert_eq!(status, 200, "{text}");
+    assert!(text.contains(r#""hours":168"#) && text.contains(r#""bucket":"day""#) && text.contains(r#""host":"example.com""#), "{text}");
+    assert!(text.contains(r#""totals":{"people":"#), "{text}");
+    assert_eq!(call(&api, "POST", "/admin/api/v1/traffic", "").0, 405);
+}

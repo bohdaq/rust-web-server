@@ -18227,7 +18227,7 @@ If `.require_bearer(token)` or `.require_bearer_tokens(...)` and `.require_oauth
 
 <https://rws8.tech/mcp/operate/>
 
-The `rws` binary has an MCP endpoint with 24 tools for looking at and steering
+The `rws` binary has an MCP endpoint with 25 tools for looking at and steering
 the running server: its configuration, metrics, recent requests and errors,
 the response cache, the IP blocklist, maintenance mode, runtime feature flags
 and config reload. An AI client connected to it can answer "why are we
@@ -18279,7 +18279,7 @@ claude mcp add --transport http rws https://www.example.com/mcp \
 }
 ```
 
-Each tool carries behaviour hints: the 16 that only read are marked
+Each tool carries behaviour hints: the 17 that only read are marked
 read-only, and the ones that change something (`set_maintenance`, `block_ip`,
 `unblock_ip`, `cache_clear`, `feature_set`, `reload_config`, `authz_write`,
 `authz_delete`) are not, so a
@@ -18299,6 +18299,7 @@ client that asks before acting asks for those.
 | `feature_flags`, `feature_list` | |
 | `authz_check` `{"subject": "user:alice", "relation": "viewer", "object": "doc:42"}` — allowed, and why | `authz_write` / `authz_delete` `{"tuple": "doc:42#viewer@user:alice"}` |
 | `authz_tuples` `{"object": "doc", "subject": "user:alice"}` — relationship tuples | |
+| `traffic_summary` `{"hours": 24, "host": "example.com"}` — who visited: people, AI agents, bots | |
 
 The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer
@@ -19916,6 +19917,7 @@ Keep it on loopback and reach it through an SSH tunnel (`ssh -L 9901:127.0.0.1:9
 Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) and paste the token. It shows:
 
 - **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
+- **Traffic**: who visited, people, AI agents and bots, over a day, week or 30 days (18.16.0; see [Traffic insights](/deployment/traffic/)).
 - **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
 - **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), authorization tuples (add, remove, check), the IP blocklist and feature flags.
@@ -19956,6 +19958,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `POST /authz/tuples` `{"tuple":"doc:42#viewer@user:alice"}` | Add a tuple (checked against the schema): `{"tuple":…,"written":true}` (`false`: already there); `400` when the schema doesn't allow it |
 | `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
 | `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
+| `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.16.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |
@@ -19990,6 +19993,89 @@ Example `GET /status`:
 ```
 
 `POST /admin/config/reload` on the main listener (the older reload endpoint) is unchanged.
+
+---
+
+# Traffic insights
+
+<https://rws8.tech/deployment/traffic/>
+
+The admin UI's **Traffic** page (since 18.16.0) shows who visited your sites
+over the last day, week or 30 days, in three groups:
+
+- **People**: browsers that load the page's styles, scripts or fonts, as a
+  browser does for a person.
+- **AI agents**: AI crawlers, AI search and assistants fetching a page for
+  someone (GPTBot, ClaudeBot, PerplexityBot, ChatGPT-User…).
+- **Bots**: search engines, SEO tools, monitors, link previews, scanners
+  probing for `/.env` or `/wp-login.php`, libraries like `curl`, and anything
+  that claims to be a well-known crawler from outside that crawler's network.
+
+rws counts this from the requests it already serves: no JavaScript on your
+pages, no cookies, nothing sent anywhere.
+
+## Turning it on
+
+It is on whenever the [admin API](/deployment/admin/) is. Open the admin UI
+and pick **Traffic**. To turn counting off, or tune it:
+
+```toml
+[traffic]
+enabled        = true                       # false: not counted, no page
+retention_days = 30                         # 1–90
+persist        = "/var/lib/rws/traffic.json" # default: traffic.json beside the certificate; "off": memory only
+exclude        = ["/healthz", "/readyz", "/metrics"]
+```
+
+The counts are saved every five minutes and at shutdown (written to a
+temporary file and renamed, and only while the disk has room), so restarts
+and upgrades keep them. Without a certificate and without `persist` they live
+in memory only.
+
+## What the page shows
+
+- Visitors, page views and requests per group, with the change from the
+  period before.
+- Requests over time: per hour for a day, per day for a week or 30 days.
+- The pages people read most, the AI agents that came (with **Verified** when
+  the request came from the network its operator publishes), the pages AI
+  agents read, bots by kind, the sites people came from, and paths answered
+  `404`.
+- With more than one site (virtual hosts, `Host` names) a button per site.
+  Visitor counts are for all sites together.
+
+## How visitors are told apart
+
+From each request's address, `User-Agent` and path, in this order:
+
+1. Loopback is this machine (health checks, the admin UI) and isn't counted.
+2. An address in a published crawler network (Google, Bing, Apple,
+   DuckDuckGo, OpenAI, Perplexity, Common Crawl) is that crawler, verified.
+3. A `User-Agent` that claims one of those crawlers from anywhere else is
+   **spoofed**, a bot.
+4. Paths only scanners ask for are scanners.
+5. Known AI agents ([ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt))
+   and crawlers ([crawler-user-agents](https://github.com/monperrus/crawler-user-agents))
+   by name. Both lists and the networks are bundled and refreshed each release.
+6. A browser `User-Agent` waits: once it loads a `.css`, `.js`, `.mjs` or font
+   it is a person and its earlier requests count as one. Without one within
+   two minutes or 32 requests it is a bot ("browser, no assets").
+
+A visitor is a hash of a per-process secret, the day, the site, the address
+and the `User-Agent`. The secret and the hashes are never saved: no addresses
+or `User-Agent`s are kept, in memory or in the file. A restart within a day
+can count a returning visitor once more.
+
+Counting costs about 160 ns per request. Memory and the file are bounded: at
+most 16 sites (the rest count as `other`) and 200 entries per list per day
+(the rest as `(other)`; 100 are saved).
+
+## From the API or an AI client
+
+`GET /admin/api/v1/traffic?hours=168&host=example.com` returns the page's data
+(`hours` 1–2160, default 24; `host` optional); `404` when counting is off. The
+MCP tool `traffic_summary` `{"hours": 24}` answers the same, so an AI client
+connected to the server can tell you who has been visiting.
 
 ---
 

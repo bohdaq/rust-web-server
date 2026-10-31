@@ -200,7 +200,8 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
-pub(crate) fn now() -> u64 {
+/// Seconds since the epoch, as the counts use.
+pub fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
@@ -608,6 +609,11 @@ pub(crate) fn restore(hosts: Vec<String>, hours: BTreeMap<(u64, u8), [Counts; 3]
     for (day, lists) in days {
         shard.days.entry(day).or_default().merge(&lists);
     }
+}
+
+#[cfg(test)]
+pub(crate) fn disable_for_tests() {
+    ENABLED.store(false, Ordering::Relaxed);
 }
 
 #[cfg(test)]

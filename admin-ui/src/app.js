@@ -7,6 +7,7 @@ const bytes = (n) =>
 
 const VIEWS = [
   { id: "overview", label: "Overview", icon: "gauge" },
+  { id: "traffic", label: "Traffic", icon: "chart-line" },
   { id: "upstreams", label: "Upstreams", icon: "tree-structure" },
   { id: "certificates", label: "Certificates", icon: "certificate" },
   { id: "controls", label: "Controls", icon: "sliders-horizontal" },
@@ -84,6 +85,8 @@ export class RwsAdmin extends LitElement {
     paused: { state: true },
     filter: { state: true },
     busy: { state: true },
+    trafficHours: { state: true },
+    trafficHost: { state: true },
   };
 
   constructor() {
@@ -94,6 +97,8 @@ export class RwsAdmin extends LitElement {
     this.samples = [];
     this.paused = false;
     this.filter = "";
+    this.trafficHours = 24;
+    this.trafficHost = "";
     this.busy = "";
     this.lastTotal = null;
   }
@@ -176,7 +181,7 @@ export class RwsAdmin extends LitElement {
     this.view = view;
     if (location.hash !== `#/${view}`) history.replaceState(null, "", `#/${view}`);
     this.error = "";
-    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000 }[view];
+    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, traffic: 30000 }[view];
     this.load(view);
     if (every) this.timer = setInterval(() => this.load(view), every);
     if (view === "logs") this.updateComplete.then(() => this.follow());
@@ -216,6 +221,8 @@ export class RwsAdmin extends LitElement {
       await get("certificates", "/certificates");
     } else if (view === "controls") {
       await Promise.all([get("maintenance", "/maintenance"), get("blocklist", "/blocklist"), get("flags", "/flags"), get("rateLimit", "/rate-limit"), get("caches", "/caches"), this.loadAuthz()]);
+    } else if (view === "traffic") {
+      await this.loadTraffic();
     } else if (view === "config") {
       await get("config", "/config");
     }
@@ -266,6 +273,23 @@ export class RwsAdmin extends LitElement {
     this.act("block", "/blocklist", { method: "POST", body: { ip } }, (r) => `${r.blocked} blocked`).then(() => {
       if (!this.error && field) field.value = "";
     });
+  }
+
+  // Counting can be off: a 404 shows an explanation, not an error.
+  async loadTraffic() {
+    const host = this.trafficHost ? `&host=${encodeURIComponent(this.trafficHost)}` : "";
+    try {
+      this.data = { ...this.data, traffic: await api(`/traffic?hours=${this.trafficHours}${host}`) };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) this.data = { ...this.data, traffic: null };
+    }
+  }
+
+  setTraffic(hours, host) {
+    this.trafficHours = hours;
+    this.trafficHost = host;
+    this.data = { ...this.data, traffic: undefined };
+    this.loadTraffic();
   }
 
   // Authorization is optional: a 404 hides its section instead of showing an error.
@@ -355,6 +379,7 @@ export class RwsAdmin extends LitElement {
       case "upstreams": return this.renderUpstreams();
       case "certificates": return this.renderCertificates();
       case "controls": return this.renderControls();
+      case "traffic": return this.renderTraffic();
       case "config": return this.renderConfig();
       case "logs": return this.renderLogs();
       default: return this.renderOverview();
@@ -526,6 +551,73 @@ export class RwsAdmin extends LitElement {
           ? html`<lit-material-empty-state size="compact" headline="No feature flags">Applications register flags with <code>feature::global()</code>; they appear here to switch at runtime.</lit-material-empty-state>`
           : html`<lit-material-table caption="Feature flags" caption-hidden density="compact" .columns=${flagColumns} .rows=${d.flags}></lit-material-table>`}
       </section>
+    `;
+  }
+
+  renderTraffic() {
+    const t = this.data.traffic;
+    if (t === null) {
+      return html`<h1>Traffic</h1><lit-material-empty-state headline="Traffic counting is off">It's on whenever the admin API is, unless <code>[traffic] enabled = false</code>.</lit-material-empty-state>`;
+    }
+    if (!t) return html`<h1>Traffic</h1>${this.skeleton(4)}`;
+    const ranges = [[24, "Day"], [168, "Week"], [720, "30 days"]];
+    const period = { 24: "day", 168: "week", 720: "30 days" }[t.hours] ?? `${t.hours} hours`;
+    const change = (now, before) => (before ? `${now >= before ? "+" : "−"}${Math.abs(Math.round(((now - before) / before) * 100))}% vs the previous ${period}.` : "");
+    const groups = [
+      ["people", "People", "Browsers that loaded the page's styles or scripts"],
+      ["ai", "AI agents", "AI crawlers, AI search and assistants fetching for someone"],
+      ["bots", "Bots", "Search engines, SEO tools, monitors, previews, scanners and the like"],
+    ];
+    const series = groups.map(([key, name]) => ({ name, points: t.series.map((p) => ({ x: p.t * 1000, y: p[key] })) }));
+    const pairs = (rows) => rows.map(([key, count]) => ({ key, count }));
+    const countColumn = { key: "count", label: "Requests", numeric: true, render: (r) => r.count.toLocaleString() };
+    const kindLabel = (k) => k.replaceAll("-", " ");
+    const table = (title, caption, rows, columns) => html`
+      <section class="section" aria-label=${title}>
+        <h2>${title}</h2>
+        ${rows.length === 0
+          ? html`<p class="lede">Nothing in this ${period}.</p>`
+          : html`<lit-material-table caption=${caption} caption-hidden density="compact" .columns=${columns} .rows=${rows}></lit-material-table>`}
+      </section>`;
+    return html`
+      <h1>Traffic</h1>
+      <p class="lede">Who visited in the last ${period}. People are browsers that load the page's styles or scripts; AI agents and bots are known by name, published network or behaviour. No IP addresses or User-Agents are kept.</p>
+      <div class="row" style="margin-bottom: var(--space-300)">
+        ${ranges.map(([hours, label]) => html`<lit-material-button variant=${t.hours === hours ? "tonal" : "text"} @click=${() => this.setTraffic(hours, this.trafficHost)}>${label}</lit-material-button>`)}
+        ${t.hosts.length > 1
+          ? html`<span style="width: var(--space-300)"></span>
+              <lit-material-button variant=${!t.host ? "tonal" : "text"} @click=${() => this.setTraffic(this.trafficHours, "")}>All sites</lit-material-button>
+              ${t.hosts.map((h) => html`<lit-material-button variant=${t.host === h ? "tonal" : "text"} @click=${() => this.setTraffic(this.trafficHours, h)}>${h}</lit-material-button>`)}`
+          : nothing}
+      </div>
+      <div class="grid">
+        ${groups.map(([key, label, hint]) => html`
+          <lit-material-stat label=${`${label}: visitors`} value=${t.totals[key].visitors.toLocaleString()}
+            caption=${`${t.totals[key].pages.toLocaleString()} page views, ${t.totals[key].requests.toLocaleString()} requests. ${change(t.totals[key].requests, t.previous[key].requests)}`} title=${hint}>
+            <lit-material-sparkline slot="caption" label=${`${label}: requests per ${t.bucket}`} .values=${t.series.map((p) => p[key])}></lit-material-sparkline>
+          </lit-material-stat>`)}
+      </div>
+      <section class="section" aria-label="Requests over time">
+        <lit-material-line-chart label=${`Requests per ${t.bucket}`} unit="requests" height="240" .series=${series}
+          .formatX=${(x) => (t.bucket === "hour" ? new Date(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(x).toLocaleDateString())}></lit-material-line-chart>
+        ${t.host ? html`<p class="lede">Visitors are counted for all sites together.</p>` : nothing}
+      </section>
+      ${table("Most read pages (people)", "Pages people read", pairs(t.people_pages), [{ key: "key", label: "Page", mono: true }, { ...countColumn, label: "Views" }])}
+      ${table("AI agents", "AI agents", t.ai_agents, [
+        { key: "name", label: "Agent" },
+        { key: "operator", label: "Operator" },
+        { key: "kind", label: "Kind", render: (r) => kindLabel(r.kind) },
+        { key: "verified", label: "Network", render: (r) => (r.verified ? status("ok", "Verified") : status("neutral", "Unverified")) },
+        { key: "requests", label: "Requests", numeric: true, render: (r) => r.requests.toLocaleString() },
+      ])}
+      ${table("Pages AI agents read", "Pages AI agents read", pairs(t.ai_pages), [{ key: "key", label: "Page", mono: true }, countColumn])}
+      ${table("Bots", "Bots by kind", t.bots, [
+        { key: "kind", label: "Kind", render: (r) => kindLabel(r.kind) },
+        { key: "name", label: "Name", render: (r) => r.name || "—" },
+        { key: "requests", label: "Requests", numeric: true, render: (r) => r.requests.toLocaleString() },
+      ])}
+      ${table("Referrers (people)", "Sites people came from", pairs(t.referrers), [{ key: "key", label: "Site", mono: true }, { ...countColumn, label: "Visits" }])}
+      ${table("Not found", "Paths answered 404", pairs(t.not_found), [{ key: "key", label: "Path", mono: true }, countColumn])}
     `;
   }
 

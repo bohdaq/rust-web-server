@@ -345,6 +345,17 @@ impl AdminApi {
                 _ => wrong_method("DELETE"),
             };
         }
+        if route == "/traffic" {
+            if method != "GET" {
+                return wrong_method("GET");
+            }
+            let hours = query(request, "hours").and_then(|h| h.parse().ok()).unwrap_or(24);
+            let host = query(request, "host").map(|h| crate::url::URL::percent_decode(&h));
+            return match ops::traffic_json(hours, host.as_deref()) {
+                Ok(body) => ok(body),
+                Err(e) => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+            };
+        }
         if route == "/authz" || route.starts_with("/authz/") {
             return authz_route(method, route, request);
         }

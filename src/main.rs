@@ -361,6 +361,15 @@ fn rws_mcp_tools(
             },
         )
         .tool(
+            "traffic_summary",
+            "Who visited the site: people, AI agents (by name and operator) and bots (by kind), with top pages, referrers and 404s, for the last N hours",
+            r#"{"type":"object","properties":{"hours":{"type":"integer","default":24,"description":"24 = a day, 168 = a week, 720 = 30 days"},"host":{"type":"string","description":"only this site (Host header)"}}}"#,
+            |args| {
+                let hours = extract_arg(args, "hours").and_then(|h| h.parse().ok()).unwrap_or(24);
+                rust_web_server::admin::ops::traffic_json(hours, extract_arg(args, "host").as_deref()).map(McpContent::json)
+            },
+        )
+        .tool(
             "authz_check",
             "Whether a subject has a relation on an object under the authorization schema, with the path that allowed it",
             r#"{"type":"object","properties":{"subject":{"type":"string","description":"e.g. user:alice"},"relation":{"type":"string","description":"e.g. viewer"},"object":{"type":"string","description":"e.g. doc:42"}},"required":["subject","relation","object"]}"#,
@@ -407,7 +416,7 @@ fn rws_mcp_tools(
     let mut mcp = mcp;
     for name in ["server_config", "feature_flags", "server_metrics", "list_routes", "cache_stats", "rate_limit_config",
         "check_rate_limit", "cors_config", "list_static_files", "maintenance_status", "list_blocked_ips", "feature_list",
-        "recent_requests", "recent_errors", "authz_check", "authz_tuples"] {
+        "recent_requests", "recent_errors", "authz_check", "authz_tuples", "traffic_summary"] {
         mcp = mcp.tool_annotations(name, read_only.clone());
     }
     for name in ["cache_clear", "reload_config", "set_maintenance", "block_ip", "feature_set", "authz_write"] {

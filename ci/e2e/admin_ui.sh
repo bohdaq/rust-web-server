@@ -2,7 +2,8 @@
 # The admin UI (admin-ui/, embedded in src/admin/ui/) in headless Chromium
 # against the rws binary: sign-in, drain from the upstreams page, maintenance
 # mode, purging a response cache (from the page and with HTTP PURGE),
-# authorization tuples and a check, the live log, and no CSP violations.
+# authorization tuples and a check, the Traffic page, the live log, and no
+# CSP violations.
 #
 #   ci/e2e/admin_ui.sh <path-to-rws>
 # Needs node and `npm install playwright@1.64.0` + `npx playwright install chromium`
@@ -23,6 +24,7 @@ cd "$WORK"
 mkdir www
 for port in 18481 18482; do
   mkdir -p "b$port" && echo "backend-$port" > "b$port/index.html"
+  echo "body{}" > "b$port/site.css"
   (cd "b$port" && exec python3 -I -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1) & PIDS+=($!)
 done
 cat > rws.config.toml <<'TOML'
@@ -63,5 +65,8 @@ export UI_E2E_ADMIN_TOKEN="ui-e2e-$RANDOM"
 export UI_E2E_PURGE_TOKEN="purge-$RANDOM"
 (cd www && exec env RWS_CONFIG_FILE=../rws.config.toml "$RWS" >../rws.log 2>&1) & PIDS+=($!)
 for _ in $(seq 1 100); do curl -s -o /dev/null http://127.0.0.1:18489/admin/ && break; sleep 0.1; done
-node "$HERE/check.mjs" http://127.0.0.1:18489 "$UI_E2E_ADMIN_TOKEN" http://127.0.0.1:18480/ "$UI_E2E_PURGE_TOKEN" || { tail -20 rws.log; exit 1; }
+# Traffic from this machine's own non-loopback address counts as a visitor
+# (loopback is "internal" and not counted).
+EXTERNAL="http://$(hostname -I | awk '{print $1}'):18480/"
+node "$HERE/check.mjs" http://127.0.0.1:18489 "$UI_E2E_ADMIN_TOKEN" http://127.0.0.1:18480/ "$UI_E2E_PURGE_TOKEN" "$EXTERNAL" || { tail -20 rws.log; exit 1; }
 echo "all admin UI end-to-end checks passed"

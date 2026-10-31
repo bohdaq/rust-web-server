@@ -4,7 +4,7 @@
 // the API agree, PURGE over HTTP, and a request appear in the live log.
 import { chromium } from "playwright";
 
-const [admin, token, publicUrl, purgeToken] = process.argv.slice(2);
+const [admin, token, publicUrl, purgeToken, externalUrl] = process.argv.slice(2);
 const api = (path) => fetch(`${admin}/admin/api/v1${path}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json());
 const fail = (message) => { console.error(`FAIL: ${message}`); process.exit(1); };
 
@@ -81,6 +81,25 @@ await page.locator("#authz-object input").fill("doc:42");
 await page.getByRole("button", { name: "Check" }).click();
 await page.locator("#authz-result").getByText("Allowed").waitFor({ timeout: 5000 }).catch(() => fail("the check didn't show Allowed"));
 console.log("ok: authorization tuple added and checked from the UI");
+
+// Visitors from outside: a person (a page and its stylesheet), an AI agent
+// claiming GPTBot (not from OpenAI's network: spoofed), and curl.
+const browserUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const visit = (path, ua) => fetch(`${externalUrl}${path}`, { headers: { "User-Agent": ua } });
+await visit("", browserUA);
+await visit("site.css", browserUA);
+await visit("", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.3; +https://openai.com/gptbot)");
+await visit("", "curl/8.5.0");
+const traffic = await api("/traffic?hours=24");
+if (traffic.totals.people.visitors !== 1 || traffic.totals.people.pages !== 1) fail(`people: ${JSON.stringify(traffic.totals.people)}`);
+if (!traffic.bots.some((b) => b.kind === "spoofed" && b.name === "GPTBot")) fail(`spoofed GPTBot not counted: ${JSON.stringify(traffic.bots)}`);
+if (!traffic.bots.some((b) => b.kind === "tool")) fail(`curl not counted: ${JSON.stringify(traffic.bots)}`);
+await page.goto(`${admin}/admin/#/traffic`);
+await page.locator('lit-material-stat[label="People: visitors"]').waitFor({ timeout: 5000 }).catch(() => fail("no Traffic page"));
+await page.locator("lit-material-line-chart").waitFor({ timeout: 5000 }).catch(() => fail("no traffic chart"));
+await page.getByRole("button", { name: "Week" }).click();
+await page.getByText("Who visited in the last week").waitFor({ timeout: 5000 }).catch(() => fail("the range didn't switch"));
+console.log("ok: Traffic page counts a person, a spoofed GPTBot and curl");
 
 await page.goto(`${admin}/admin/#/logs`);
 await page.waitForTimeout(800);
