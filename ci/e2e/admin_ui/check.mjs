@@ -71,6 +71,17 @@ if (purged.status !== 200 || (await purged.text()) !== '{"purged":1}') fail("PUR
 if ((await entries()) !== 1) fail(`PURGE left ${await entries()} entries`);
 console.log("ok: purge a cache from the UI and with HTTP PURGE");
 
+await page.locator("#authz-tuple input").fill("doc:42#viewer@user:alice");
+await page.getByRole("button", { name: "Add" }).last().click();
+await page.getByText("doc:42#viewer@user:alice added").waitFor({ timeout: 5000 }).catch(() => fail("no confirmation for the added tuple"));
+if (!(await api("/authz/tuples")).tuples.includes("doc:42#viewer@user:alice")) fail("the tuple didn't reach the server");
+await page.locator("#authz-subject input").fill("user:alice");
+await page.locator("#authz-relation input").fill("viewer");
+await page.locator("#authz-object input").fill("doc:42");
+await page.getByRole("button", { name: "Check" }).click();
+await page.locator("#authz-result").getByText("Allowed").waitFor({ timeout: 5000 }).catch(() => fail("the check didn't show Allowed"));
+console.log("ok: authorization tuple added and checked from the UI");
+
 await page.goto(`${admin}/admin/#/logs`);
 await page.waitForTimeout(800);
 const marker = `ui-marker-${Date.now()}`;

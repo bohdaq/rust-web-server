@@ -359,6 +359,41 @@ fn rws_mcp_tools(
                 let n = extract_arg(args, "n").and_then(|v| v.parse::<usize>().ok()).unwrap_or(20);
                 Ok(McpContent::json(rust_web_server::admin::ops::recent_json(n, true)))
             },
+        )
+        .tool(
+            "authz_check",
+            "Whether a subject has a relation on an object under the authorization schema, with the path that allowed it",
+            r#"{"type":"object","properties":{"subject":{"type":"string","description":"e.g. user:alice"},"relation":{"type":"string","description":"e.g. viewer"},"object":{"type":"string","description":"e.g. doc:42"}},"required":["subject","relation","object"]}"#,
+            |args| {
+                let arg = |key| extract_arg(args, key).unwrap_or_default();
+                rust_web_server::admin::ops::authz_check(&arg("subject"), &arg("relation"), &arg("object"))
+                    .map(McpContent::json)
+                    .map_err(|e| e.to_string())
+            },
+        )
+        .tool(
+            "authz_tuples",
+            "List authorization relationship tuples, filtered by object (doc:42, or a type like doc), relation and subject",
+            r#"{"type":"object","properties":{"object":{"type":"string"},"relation":{"type":"string"},"subject":{"type":"string"},"limit":{"type":"integer","default":100}}}"#,
+            |args| {
+                let arg = |key| extract_arg(args, key).filter(|v| !v.is_empty());
+                let limit = arg("limit").and_then(|n| n.parse().ok()).unwrap_or(100);
+                rust_web_server::admin::ops::authz_tuples_json(arg("object").as_deref(), arg("relation").as_deref(), arg("subject").as_deref(), limit)
+                    .map(McpContent::json)
+                    .map_err(|e| e.to_string())
+            },
+        )
+        .tool(
+            "authz_write",
+            "Add an authorization relationship tuple, e.g. doc:42#viewer@user:alice (checked against the schema)",
+            r#"{"type":"object","properties":{"tuple":{"type":"string"}},"required":["tuple"]}"#,
+            |args| rust_web_server::admin::ops::authz_write(&extract_arg(args, "tuple").unwrap_or_default()).map(McpContent::json),
+        )
+        .tool(
+            "authz_delete",
+            "Remove an authorization relationship tuple, e.g. doc:42#viewer@user:alice",
+            r#"{"type":"object","properties":{"tuple":{"type":"string"}},"required":["tuple"]}"#,
+            |args| rust_web_server::admin::ops::authz_delete(&extract_arg(args, "tuple").unwrap_or_default()).map(McpContent::json),
         );
     // Behaviour hints, so an AI client can tell looking from changing — and
     // ask before the latter.
@@ -372,13 +407,13 @@ fn rws_mcp_tools(
     let mut mcp = mcp;
     for name in ["server_config", "feature_flags", "server_metrics", "list_routes", "cache_stats", "rate_limit_config",
         "check_rate_limit", "cors_config", "list_static_files", "maintenance_status", "list_blocked_ips", "feature_list",
-        "recent_requests", "recent_errors"] {
+        "recent_requests", "recent_errors", "authz_check", "authz_tuples"] {
         mcp = mcp.tool_annotations(name, read_only.clone());
     }
-    for name in ["cache_clear", "reload_config", "set_maintenance", "block_ip", "feature_set"] {
+    for name in ["cache_clear", "reload_config", "set_maintenance", "block_ip", "feature_set", "authz_write"] {
         mcp = mcp.tool_annotations(name, changes(true));
     }
-    mcp.tool_annotations("unblock_ip", changes(false))
+    mcp.tool_annotations("unblock_ip", changes(false)).tool_annotations("authz_delete", changes(true))
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────

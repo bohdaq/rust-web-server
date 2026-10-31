@@ -28,6 +28,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   them; runtime tuples survive a reload. `ci/e2e/authz.sh`.
 - `authz::SqlStore`: tuples in SQLite, Postgres or MySQL (a model
   feature), with a 1 s read cache; `[authz] store = "sql"` (`RWS_DB_*`).
+- Authorization at runtime: admin API `GET /authz`, `GET`/`POST`/`DELETE
+  /authz/tuples`, `POST /authz/check` (with the path that allowed it); an
+  Authorization section in the admin UI; MCP tools `authz_check`,
+  `authz_tuples`, `authz_write`, `authz_delete` (the binary has 24 tools).
+  `admin::ops::register_authorizer` for library apps.
 - The proxy config parser accepts arrays spanning several lines (comments
   and a trailing comma allowed).
 

@@ -8170,7 +8170,7 @@ authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allow
   spaces and control characters; both up to 256 characters.
 
 Tuples live in a `TupleStore`: `MemoryStore` (lost on restart) or
-`SqlStore` (below); admin API endpoints follow in later 18.14 work.
+`SqlStore` (below).
 
 ## Storing tuples in a database
 
@@ -8261,6 +8261,18 @@ object   = "doc:{path:2}"
 - An `[authz]` that can't be built makes `authz` routes answer `503`
   (logged), never lets them through.
 - `[middleware.authz]` in the global table applies to every request.
+
+## Managing tuples at runtime
+
+The [admin API](/deployment/admin/) lists, adds and removes tuples and
+explains a check (`GET`/`POST`/`DELETE /admin/api/v1/authz/tuples`,
+`POST /admin/api/v1/authz/check`); the admin UI has the same on its Controls
+page, and the binary's MCP endpoint has `authz_check`, `authz_tuples`,
+`authz_write` and `authz_delete`. They manage the config file's `[authz]`;
+a library app hands over its own with `admin::ops::register_authorizer(authz.clone())`.
+Writes are checked against the schema. Most tuples are written by the
+application itself, as things are shared — the runtime tools are for
+operators and fixes.
 
 ---
 
@@ -18172,7 +18184,7 @@ If `.require_bearer(token)` or `.require_bearer_tokens(...)` and `.require_oauth
 
 <https://rws8.tech/mcp/operate/>
 
-The `rws` binary has an MCP endpoint with 20 tools for looking at and steering
+The `rws` binary has an MCP endpoint with 24 tools for looking at and steering
 the running server: its configuration, metrics, recent requests and errors,
 the response cache, the IP blocklist, maintenance mode, runtime feature flags
 and config reload. An AI client connected to it can answer "why are we
@@ -18224,9 +18236,10 @@ claude mcp add --transport http rws https://www.example.com/mcp \
 }
 ```
 
-Each tool carries behaviour hints: the 14 that only read are marked
+Each tool carries behaviour hints: the 16 that only read are marked
 read-only, and the ones that change something (`set_maintenance`, `block_ip`,
-`unblock_ip`, `cache_clear`, `feature_set`, `reload_config`) are not, so a
+`unblock_ip`, `cache_clear`, `feature_set`, `reload_config`, `authz_write`,
+`authz_delete`) are not, so a
 client that asks before acting asks for those.
 
 ## The tools
@@ -18241,6 +18254,8 @@ client that asks before acting asks for those.
 | `cache_stats`, `rate_limit_config`, `check_rate_limit` `{"ip": "…"}` | |
 | `cors_config`, `list_routes`, `list_static_files` | |
 | `feature_flags`, `feature_list` | |
+| `authz_check` `{"subject": "user:alice", "relation": "viewer", "object": "doc:42"}` — allowed, and why | `authz_write` / `authz_delete` `{"tuple": "doc:42#viewer@user:alice"}` |
+| `authz_tuples` `{"object": "doc", "subject": "user:alice"}` — relationship tuples | |
 
 The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer
@@ -19804,7 +19819,7 @@ Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) an
 - **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
 - **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
-- **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), the IP blocklist and feature flags.
+- **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), authorization tuples (add, remove, check), the IP blocklist and feature flags.
 - **Config**: every setting in effect, filterable, secrets hidden.
 - **Logs**: the access log as it's written, with pause.
 
@@ -19837,6 +19852,11 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /cache`, `DELETE /cache` | Response-cache hits, misses and size; clear it. `404` when the server has no cache |
 | `GET /caches` | Every response cache (18.11.0): `name` (`app` for the binary's own, `route:<name>` per config route, `route:#N` for unnamed ones), `kind` (`memory` or `disk`), `entries`, `bytes` (disk only, else `null`), `hits`, `misses` |
 | `DELETE /caches/<name>?path=/p` or `?prefix=/p/` | Purge one target (every `Vary` variant) or a prefix; without either, everything. Answers `{"name":…,"purged":n}`; `404` for an unknown name |
+| `GET /authz` | The authorization schema (18.14.0): `{"types":{"doc":["owner","viewer"],…}}`. `404` without authorization configured |
+| `GET /authz/tuples?object=&relation=&subject=&limit=` | Relationship tuples; `object` is `doc:42` or just a type (`doc`); at most `limit` (100, up to 1000) |
+| `POST /authz/tuples` `{"tuple":"doc:42#viewer@user:alice"}` | Add a tuple (checked against the schema): `{"tuple":…,"written":true}` (`false`: already there); `400` when the schema doesn't allow it |
+| `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
+| `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |

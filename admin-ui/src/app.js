@@ -210,7 +210,7 @@ export class RwsAdmin extends LitElement {
     } else if (view === "certificates") {
       await get("certificates", "/certificates");
     } else if (view === "controls") {
-      await Promise.all([get("maintenance", "/maintenance"), get("blocklist", "/blocklist"), get("flags", "/flags"), get("rateLimit", "/rate-limit"), get("caches", "/caches")]);
+      await Promise.all([get("maintenance", "/maintenance"), get("blocklist", "/blocklist"), get("flags", "/flags"), get("rateLimit", "/rate-limit"), get("caches", "/caches"), this.loadAuthz()]);
     } else if (view === "config") {
       await get("config", "/config");
     }
@@ -261,6 +261,39 @@ export class RwsAdmin extends LitElement {
     this.act("block", "/blocklist", { method: "POST", body: { ip } }, (r) => `${r.blocked} blocked`).then(() => {
       if (!this.error && field) field.value = "";
     });
+  }
+
+  // Authorization is optional: a 404 hides its section instead of showing an error.
+  async loadAuthz() {
+    try {
+      const [schema, list] = await Promise.all([api("/authz"), api("/authz/tuples?limit=200")]);
+      this.data = { ...this.data, authz: { schema, tuples: list.tuples } };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) this.data = { ...this.data, authz: null };
+    }
+  }
+
+  addTuple(event) {
+    event.preventDefault();
+    const field = this.querySelector("#authz-tuple");
+    const tuple = (field?.value ?? "").trim();
+    if (!tuple) return;
+    this.act("authz-add", "/authz/tuples", { method: "POST", body: { tuple } }, (r) => (r.written ? `${r.tuple} added` : `${r.tuple} was already there`)).then(() => {
+      if (!this.error && field) field.value = "";
+    });
+  }
+
+  async checkAccess(event) {
+    event.preventDefault();
+    const value = (id) => (this.querySelector(id)?.value ?? "").trim();
+    const body = { subject: value("#authz-subject"), relation: value("#authz-relation"), object: value("#authz-object") };
+    if (!body.subject || !body.relation || !body.object) return;
+    try {
+      const result = await this.call("/authz/check", { method: "POST", body });
+      this.data = { ...this.data, authzCheck: { ...body, ...result } };
+    } catch {
+      // Shown through this.error.
+    }
   }
 
   purge(name) {
@@ -469,6 +502,8 @@ export class RwsAdmin extends LitElement {
               .columns=${blockColumns} .rows=${d.blocklist.map((ip) => ({ ip }))}></lit-material-table>`}
       </section>
 
+      ${d.authz ? this.renderAuthz(d.authz, d.authzCheck) : nothing}
+
       <section class="section" aria-labelledby="caches-title">
         <h2 id="caches-title">Response caches</h2>
         ${!d.caches || d.caches.length === 0
@@ -482,6 +517,45 @@ export class RwsAdmin extends LitElement {
         ${d.flags.length === 0
           ? html`<lit-material-empty-state size="compact" headline="No feature flags">Applications register flags with <code>feature::global()</code>; they appear here to switch at runtime.</lit-material-empty-state>`
           : html`<lit-material-table caption="Feature flags" caption-hidden density="compact" .columns=${flagColumns} .rows=${d.flags}></lit-material-table>`}
+      </section>
+    `;
+  }
+
+  renderAuthz(authz, check) {
+    const columns = [
+      { key: "tuple", label: "Tuple", mono: true },
+      {
+        key: "action",
+        label: "Action",
+        hiddenLabel: true,
+        render: (r) => html`<lit-material-button variant="text" ?disabled=${this.busy === `authz-del:${r.tuple}`}
+          @click=${() => this.act(`authz-del:${r.tuple}`, `/authz/tuples?tuple=${encodeURIComponent(r.tuple)}`, { method: "DELETE" }, () => `${r.tuple} removed`)}>Remove</lit-material-button>`,
+      },
+    ];
+    const types = Object.entries(authz.schema.types).filter(([, relations]) => relations.length).map(([type, relations]) => `${type}: ${relations.join(", ")}`);
+    return html`
+      <section class="section" aria-labelledby="authz-title">
+        <h2 id="authz-title">Authorization</h2>
+        <p class="lede">Relationship tuples, object#relation@subject. Schema: ${types.join(" · ")}.</p>
+        <form class="row" @submit=${(e) => this.addTuple(e)} novalidate>
+          <lit-material-text-field id="authz-tuple" variant="outlined" label="Tuple" supporting-text="e.g. doc:42#viewer@user:alice"></lit-material-text-field>
+          <lit-material-button type="submit" ?disabled=${this.busy === "authz-add"}><span slot="icon" class="icon">${icon("plus")}</span>Add</lit-material-button>
+        </form>
+        ${authz.tuples.length === 0
+          ? html`<p class="lede" style="margin-top: var(--space-200)">No tuples yet.</p>`
+          : html`<lit-material-table style="margin-top: var(--space-200)" caption="Relationship tuples" caption-hidden density="compact"
+              .columns=${columns} .rows=${authz.tuples.map((tuple) => ({ tuple }))}></lit-material-table>`}
+        <form class="row" style="margin-top: var(--space-300)" @submit=${(e) => this.checkAccess(e)} novalidate>
+          <lit-material-text-field id="authz-subject" variant="outlined" label="Subject" supporting-text="user:alice"></lit-material-text-field>
+          <lit-material-text-field id="authz-relation" variant="outlined" label="Relation" supporting-text="viewer"></lit-material-text-field>
+          <lit-material-text-field id="authz-object" variant="outlined" label="Object" supporting-text="doc:42"></lit-material-text-field>
+          <lit-material-button type="submit" variant="tonal">Check</lit-material-button>
+        </form>
+        ${check
+          ? html`<p class="lede" id="authz-result" style="margin-top: var(--space-200)">
+              ${check.allowed ? status("ok", "Allowed") : status("error", "Denied")}
+              ${check.subject} ${check.relation} ${check.object}${check.allowed ? html` — via <code>${check.path.join(" → ")}</code>` : nothing}</p>`
+          : nothing}
       </section>
     `;
   }

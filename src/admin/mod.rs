@@ -247,6 +247,48 @@ fn body_str(request: &Request, key: &str) -> Option<String> {
     value.starts_with('"').then(|| crate::mcp::json_rpc::extract_str(&format!(r#"{{"v":{value}}}"#), "v")).flatten()
 }
 
+/// `405`, naming the methods that work.
+fn wrong_method(allowed: &str) -> Response {
+    let mut response = error(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed, &format!("use {allowed}"));
+    response.headers.push(Header::new("Allow", allowed.to_string()));
+    response
+}
+
+/// `/authz`, `/authz/tuples`, `/authz/check` (#32).
+fn authz_route(method: &str, route: &str, request: &Request) -> Response {
+    let decoded = |key: &str| query(request, key).map(|v| crate::url::URL::percent_decode(&v)).filter(|v| !v.is_empty());
+    // A configuration problem is a 404 ("nothing to manage"), a bad request
+    // a 400.
+    let answer = |result: Result<String, String>, missing_is_404: bool| match result {
+        Ok(body) => ok(body),
+        Err(e) if missing_is_404 && e.starts_with("no authorization configured") => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+        Err(e) => error(STATUS_CODE_REASON_PHRASE.n400_bad_request, &e),
+    };
+    match (method, route) {
+        ("GET", "/authz") => answer(ops::authz_schema_json(), true),
+        (_, "/authz") => wrong_method("GET"),
+        ("GET", "/authz/tuples") => {
+            let limit = decoded("limit").and_then(|n| n.parse().ok()).unwrap_or(100);
+            answer(ops::authz_tuples_json(decoded("object").as_deref(), decoded("relation").as_deref(), decoded("subject").as_deref(), limit), true)
+        }
+        ("POST", "/authz/tuples") => match body_str(request, "tuple") {
+            Some(tuple) => answer(ops::authz_write(&tuple), true),
+            None => bad_request(r#"expected {"tuple":"doc:42#viewer@user:alice"}"#),
+        },
+        ("DELETE", "/authz/tuples") => match decoded("tuple").or_else(|| body_str(request, "tuple")) {
+            Some(tuple) => answer(ops::authz_delete(&tuple), true),
+            None => bad_request(r#"expected ?tuple=… or {"tuple":"doc:42#viewer@user:alice"}"#),
+        },
+        (_, "/authz/tuples") => wrong_method("GET, POST, DELETE"),
+        ("POST", "/authz/check") => match (body_str(request, "subject"), body_str(request, "relation"), body_str(request, "object")) {
+            (Some(subject), Some(relation), Some(object)) => answer(ops::authz_check(&subject, &relation, &object), true),
+            _ => bad_request(r#"expected {"subject":"user:alice","relation":"viewer","object":"doc:42"}"#),
+        },
+        (_, "/authz/check") => wrong_method("POST"),
+        _ => error(STATUS_CODE_REASON_PHRASE.n404_not_found, "unknown /authz endpoint"),
+    }
+}
+
 /// Query parameter `key` of the request target.
 fn query(request: &Request, key: &str) -> Option<String> {
     let (_, query) = request.request_uri.split_once('?')?;
@@ -264,11 +306,6 @@ fn parse_ip(ip: &str) -> Option<String> {
 impl AdminApi {
     fn route(&self, request: &Request, connection: &ConnectionInfo, route: &str) -> Response {
         let method = request.method.as_str();
-        let wrong_method = |allowed: &str| {
-            let mut response = error(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed, &format!("use {allowed}"));
-            response.headers.push(Header::new("Allow", allowed.to_string()));
-            response
-        };
         if let Some(ip) = route.strip_prefix("/blocklist/") {
             return match (method, parse_ip(ip)) {
                 ("DELETE", Some(ip)) => ok(ops::unblock(&ip)),
@@ -307,6 +344,9 @@ impl AdminApi {
                 },
                 _ => wrong_method("DELETE"),
             };
+        }
+        if route == "/authz" || route.starts_with("/authz/") {
+            return authz_route(method, route, request);
         }
         match (method, route) {
             ("GET", "/caches") => ok(ops::caches_json()),

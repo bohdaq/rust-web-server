@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The admin UI (admin-ui/, embedded in src/admin/ui/) in headless Chromium
 # against the rws binary: sign-in, drain from the upstreams page, maintenance
-# mode, purging a response cache (from the page and with HTTP PURGE), the live
-# log, and no CSP violations.
+# mode, purging a response cache (from the page and with HTTP PURGE),
+# authorization tuples and a check, the live log, and no CSP violations.
 #
 #   ci/e2e/admin_ui.sh <path-to-rws>
 # Needs node and `npm install playwright@1.64.0` + `npx playwright install chromium`
@@ -30,6 +30,10 @@ port = 18480
 [admin]
 listen = "127.0.0.1:18489"
 token_env = "UI_E2E_ADMIN_TOKEN"
+
+[authz]
+[authz.type.doc]
+viewer = "user"
 
 [[upstream]]
 name = "web"

@@ -312,3 +312,77 @@ pub fn purge_cache(name: &str, path: Option<&str>, prefix: Option<&str>) -> Opti
     let n = cache.purge(&target);
     Some(format!(r#"{{"name":{},"purged":{n}}}"#, quoted(name)))
 }
+
+// ── Authorization (#32) ───────────────────────────────────────────────────────
+
+fn authorizer_slot() -> &'static RwLock<Option<crate::authz::Authorizer>> {
+    static SLOT: OnceLock<RwLock<Option<crate::authz::Authorizer>>> = OnceLock::new();
+    SLOT.get_or_init(RwLock::default)
+}
+
+/// The authorizer the admin API and MCP tools manage, for a library app
+/// (the config file's `[authz]` is used otherwise). Since 18.14.0.
+pub fn register_authorizer(authorizer: crate::authz::Authorizer) {
+    *authorizer_slot().write().unwrap_or_else(|e| e.into_inner()) = Some(authorizer);
+}
+
+/// The registered authorizer, else the config file's; `Err` says why there
+/// is none.
+pub fn authorizer() -> Result<crate::authz::Authorizer, String> {
+    if let Some(authorizer) = authorizer_slot().read().unwrap_or_else(|e| e.into_inner()).clone() {
+        return Ok(authorizer);
+    }
+    match crate::authz::config::current() {
+        Some(result) => result,
+        None => Err("no authorization configured ([authz] in the config file, or admin::ops::register_authorizer)".to_string()),
+    }
+}
+
+/// The schema: `{"types":{"doc":["owner","viewer"],…}}`.
+pub fn authz_schema_json() -> Result<String, String> {
+    let authorizer = authorizer()?;
+    let schema = authorizer.schema();
+    let types: Vec<String> = schema
+        .types()
+        .iter()
+        .map(|kind| format!("{}:[{}]", quoted(kind), schema.relations(kind).iter().map(|r| quoted(r)).collect::<Vec<_>>().join(",")))
+        .collect();
+    Ok(format!(r#"{{"types":{{{}}}}}"#, types.join(",")))
+}
+
+/// Tuples matching the given parts (each optional), at most `limit`.
+pub fn authz_tuples_json(object: Option<&str>, relation: Option<&str>, subject: Option<&str>, limit: usize) -> Result<String, String> {
+    let authorizer = authorizer()?;
+    let filter = crate::authz::TupleFilter {
+        object: object.filter(|o| o.contains(':')).map(crate::authz::ObjectRef::parse).transpose().map_err(|e| e.to_string())?,
+        object_kind: object.filter(|o| !o.contains(':')).map(str::to_string),
+        relation: relation.map(str::to_string),
+        subject: subject.map(crate::authz::Subject::parse).transpose().map_err(|e| e.to_string())?,
+    };
+    let tuples = authorizer.store().list(&filter, limit.clamp(1, 1000)).map_err(|e| e.to_string())?;
+    Ok(format!(r#"{{"tuples":[{}]}}"#, tuples.iter().map(|t| quoted(&t.to_string())).collect::<Vec<_>>().join(",")))
+}
+
+/// Write `tuple`; `{"tuple":…,"written":true|false}` (false: already there).
+pub fn authz_write(tuple: &str) -> Result<String, String> {
+    let tuple = crate::authz::Tuple::parse(tuple).map_err(|e| e.to_string())?;
+    let written = authorizer()?.write(&tuple).map_err(|e| e.to_string())?;
+    Ok(format!(r#"{{"tuple":{},"written":{written}}}"#, quoted(&tuple.to_string())))
+}
+
+/// Delete `tuple`; `{"tuple":…,"deleted":true|false}`.
+pub fn authz_delete(tuple: &str) -> Result<String, String> {
+    let tuple = crate::authz::Tuple::parse(tuple).map_err(|e| e.to_string())?;
+    let deleted = authorizer()?.delete(&tuple).map_err(|e| e.to_string())?;
+    Ok(format!(r#"{{"tuple":{},"deleted":{deleted}}}"#, quoted(&tuple.to_string())))
+}
+
+/// Whether `subject` has `relation` on `object`, with the path that allowed
+/// it: `{"allowed":true,"path":[…]}`.
+pub fn authz_check(subject: &str, relation: &str, object: &str) -> Result<String, String> {
+    let path = authorizer()?.explain(subject, relation, object).map_err(|e| e.to_string())?;
+    Ok(match path {
+        Some(path) => format!(r#"{{"allowed":true,"path":[{}]}}"#, path.iter().map(|p| quoted(p)).collect::<Vec<_>>().join(",")),
+        None => r#"{"allowed":false,"path":[]}"#.to_string(),
+    })
+}

@@ -200,3 +200,36 @@ fn rws_check_reports_authz_mistakes() {
     let no_auth = AUTHZ_TOML.replace("[route.middleware.auth]\ntype = \"jwt\"\nsecret_env = \"RWS_TEST_AUTHZ_JWT\"\n", "");
     assert!(warnings(&no_auth).contains("every request gets 401"));
 }
+
+#[test]
+fn the_admin_api_lists_writes_deletes_and_checks_tuples() {
+    let _g = crate::test_env::lock(); // the admin's authorizer is process-wide
+    let schema = Schema::new()
+        .relation("group", "member", "user").unwrap()
+        .relation("doc", "viewer", "user | group#member").unwrap();
+    let authz = Authorizer::new(schema, MemoryStore::new()).unwrap();
+    crate::admin::ops::register_authorizer(authz.clone());
+    let api = crate::admin::AdminApi::new("t");
+    let call = |method: &str, path: &str, body: &str| {
+        let raw = format!("{method} {path} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer t\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let response = api.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap();
+        (response.status_code, body_of(&response))
+    };
+    fn body_of(r: &crate::response::Response) -> String {
+        String::from_utf8_lossy(&r.content_range_list.first().map(|c| c.body.clone()).unwrap_or_default()).to_string()
+    }
+    assert_eq!(call("GET", "/admin/api/v1/authz", ""), (200, r#"{"types":{"doc":["viewer"],"group":["member"],"user":[]}}"#.to_string()));
+    assert_eq!(call("POST", "/admin/api/v1/authz/tuples", r#"{"tuple":"group:eng#member@user:gina"}"#), (200, r#"{"tuple":"group:eng#member@user:gina","written":true}"#.to_string()));
+    call("POST", "/admin/api/v1/authz/tuples", r#"{"tuple":"doc:42#viewer@group:eng#member"}"#);
+    assert_eq!(call("POST", "/admin/api/v1/authz/tuples", r#"{"tuple":"doc:42#owner@user:x"}"#).0, 400, "not in the schema");
+    assert_eq!(call("POST", "/admin/api/v1/authz/tuples", r#"{"nope":1}"#).0, 400);
+    let check = r#"{"subject":"user:gina","relation":"viewer","object":"doc:42"}"#;
+    assert_eq!(call("POST", "/admin/api/v1/authz/check", check), (200, r#"{"allowed":true,"path":["doc:42#viewer","group:eng#member","group:eng#member@user:gina"]}"#.to_string()));
+    assert_eq!(call("GET", "/admin/api/v1/authz/tuples?object=doc", ""), (200, r#"{"tuples":["doc:42#viewer@group:eng#member"]}"#.to_string()));
+    assert_eq!(call("GET", "/admin/api/v1/authz/tuples?subject=user%3Agina", "").1, r#"{"tuples":["group:eng#member@user:gina"]}"#);
+    assert_eq!(call("DELETE", "/admin/api/v1/authz/tuples?tuple=group%3Aeng%23member%40user%3Agina", ""), (200, r#"{"tuple":"group:eng#member@user:gina","deleted":true}"#.to_string()));
+    assert_eq!(call("POST", "/admin/api/v1/authz/check", check).1, r#"{"allowed":false,"path":[]}"#);
+    assert_eq!(call("PUT", "/admin/api/v1/authz/tuples", "").0, 405);
+    assert_eq!(call("GET", "/admin/api/v1/authz/nothing", "").0, 404);
+    assert!(authz.check("user:gina", "viewer", "doc:42").is_ok());
+}

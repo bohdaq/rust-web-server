@@ -112,7 +112,7 @@ authz.explain("user:olga", "viewer", "doc:42")?;          // the path that allow
   spaces and control characters; both up to 256 characters.
 
 Tuples live in a `TupleStore`: `MemoryStore` (lost on restart) or
-`SqlStore` (below); admin API endpoints follow in later 18.14 work.
+`SqlStore` (below).
 
 ## Storing tuples in a database
 
@@ -203,3 +203,15 @@ object   = "doc:{path:2}"
 - An `[authz]` that can't be built makes `authz` routes answer `503`
   (logged), never lets them through.
 - `[middleware.authz]` in the global table applies to every request.
+
+## Managing tuples at runtime
+
+The [admin API](/deployment/admin/) lists, adds and removes tuples and
+explains a check (`GET`/`POST`/`DELETE /admin/api/v1/authz/tuples`,
+`POST /admin/api/v1/authz/check`); the admin UI has the same on its Controls
+page, and the binary's MCP endpoint has `authz_check`, `authz_tuples`,
+`authz_write` and `authz_delete`. They manage the config file's `[authz]`;
+a library app hands over its own with `admin::ops::register_authorizer(authz.clone())`.
+Writes are checked against the schema. Most tuples are written by the
+application itself, as things are shared — the runtime tools are for
+operators and fixes.

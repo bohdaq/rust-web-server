@@ -22,6 +22,9 @@ cd "$WORK"
 mkdir www
 cat > rws.config.toml <<'TOML'
 port = 18560
+[admin]
+listen = "127.0.0.1:18569"
+token_env = "AUTHZ_E2E_ADMIN"
 
 [authz]
 tuples = [
@@ -72,6 +75,7 @@ relation = "editor"
 object = "doc:{path:2}"
 TOML
 export AUTHZ_E2E_SECRET="e2e-$RANDOM"
+export AUTHZ_E2E_ADMIN="admin-$RANDOM"
 "$RWS" --check >check.log 2>&1 || { cat check.log; fail "rws --check rejected the config"; }
 grep -q "warning" check.log && { cat check.log; fail "rws --check warned"; }
 (cd www && exec env RWS_CONFIG_FILE=../rws.config.toml "$RWS" >../rws.log 2>&1) & PIDS+=($!)
@@ -95,16 +99,27 @@ check_all() {
   [ "$(status GET /docs/42 vic)" = 200 ] || fail "folder viewer can't read"
   [ "$(status PUT /docs/42 gina)" = 200 ] || fail "group member can't edit"
   [ "$(status PUT /docs/42 vic)" = 403 ] || fail "folder viewer could edit"
-  [ "$(status GET /docs/42 eve)" = 403 ] || fail "a stranger could read"
+  [ "$(status GET /docs/42 mallory)" = 403 ] || fail "a stranger could read"
   [ "$(status GET /docs/7 olga)" = 403 ] || fail "the owner of 42 could read 7"
   [ "$(status GET /docs/42)" = 401 ] || fail "no token wasn't 401"
 }
 check_all
 pass "owner, group member and folder viewer read; only editors write; others 403; no token 401"
 
+admin() { curl -s -X "$1" -H "Authorization: Bearer $AUTHZ_E2E_ADMIN" -H "Content-Type: application/json" ${3:+-d "$3"} "http://127.0.0.1:18569/admin/api/v1$2"; }
+[ "$(admin POST /authz/tuples '{"tuple":"doc:42#viewer@user:eve"}')" = '{"tuple":"doc:42#viewer@user:eve","written":true}' ] || fail "admin API didn't write the tuple"
+[ "$(status GET /docs/42 eve)" = 200 ] || fail "a tuple written through the admin API didn't take effect"
+admin POST /authz/check '{"subject":"user:gina","relation":"viewer","object":"doc:42"}' | grep -q '"allowed":true,"path":\["doc:42#viewer","doc:42#editor","group:eng#member","group:eng#member@user:gina"\]' || fail "check didn't explain: $(admin POST /authz/check '{"subject":"user:gina","relation":"viewer","object":"doc:42"}')"
+admin GET "/authz/tuples?object=doc%3A42" | grep -q 'doc:42#viewer@user:eve' || fail "tuple list"
+pass "admin API: a granted tuple takes effect, check explains the path, tuples are listed"
+
 kill -HUP "${PIDS[-1]}"
 sleep 1
 grep -q "ERROR" rws.log && fail "reload logged an error"
 check_all
-pass "the same after a SIGHUP reload"
+[ "$(status GET /docs/42 eve)" = 200 ] || fail "the runtime tuple didn't survive the reload"
+pass "the same after a SIGHUP reload, runtime tuples kept"
+[ "$(admin DELETE '/authz/tuples?tuple=doc%3A42%23viewer%40user%3Aeve')" = '{"tuple":"doc:42#viewer@user:eve","deleted":true}' ] || fail "admin delete"
+[ "$(status GET /docs/42 eve)" = 403 ] || fail "a deleted tuple still allowed"
+pass "admin API delete takes effect"
 echo "all authorization end-to-end checks passed"
