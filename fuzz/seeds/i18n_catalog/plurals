@@ -1,0 +1,5 @@
+# comment
+greeting = "Hi, {name}!"
+items.one = "{count} item"
+items.other = '{count} items' # literal
+esc = "a\tb \u00e9 {{x}}"

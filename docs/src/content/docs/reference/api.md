@@ -75,6 +75,11 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Query` | `extract` | Parsed query string as `HashMap<String, String>` |
 | `RequestHeaders` | `extract` | All request headers with case-insensitive `.get(name)` |
 | `RequestId` | `extract` / `request_id` | The ID `RequestIdLayer` put on the request; empty string without it (never fails) |
+| `AcceptLanguage` | `i18n` | `Accept-Language` preferences (also an extractor); `parse`, `negotiate(&available)` (RFC 4647 lookup). See [Translations](/building-apps/i18n/) |
+| `Catalogs` | `i18n` | Message catalogs per language plus a default; `from_dir`, `add`, `for_request`, `for_language`, `negotiate` |
+| `Catalog` | `i18n` | One language's messages (flat TOML subset); `parse`, `get` |
+| `Translator` | `i18n` | Messages in the chosen language: `t`, `t_with`, `plural`, `plural_with`, `locale`, `localize(response)` |
+| `plural_category` | `i18n` | CLDR plural category (`one`/`few`/`many`/`other`) of a count in a language |
 | `IntoResponse` | `error` | Trait for mapping error enums to `Response` values. See [Error handling](/building-apps/error-handling/) |
 | `AppError` | `error` | Built-in error variants: `BadRequest`, `NotFound`, `Internal`, etc. |
 | `Validate` | `validate` | Field-level validation trait. See [Validation](/building-apps/validation/) |

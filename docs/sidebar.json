@@ -118,6 +118,10 @@
         "link": "/building-apps/templates/"
       },
       {
+        "label": "Translations (i18n)",
+        "link": "/building-apps/i18n/"
+      },
+      {
         "label": "Dependency Injection",
         "link": "/building-apps/dependency-injection/"
       }

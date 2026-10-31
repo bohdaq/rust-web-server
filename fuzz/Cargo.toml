@@ -253,3 +253,17 @@ path = "fuzz_targets/cache_entry.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "accept_language"
+path = "fuzz_targets/accept_language.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "i18n_catalog"
+path = "fuzz_targets/i18n_catalog.rs"
+test = false
+doc = false
+bench = false

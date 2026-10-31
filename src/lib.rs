@@ -59,6 +59,7 @@ pub mod compression;
 pub mod cookie;
 pub mod error;
 pub mod extract;
+pub mod i18n;
 pub mod ip_filter;
 pub mod macros;
 pub mod blocklist;
@@ -304,6 +305,33 @@ pub mod fuzz_api {
         if let Ok(fs_path) = crate::app::controller::static_resource::static_fs_path(path) {
             let relative = &fs_path[crate::app::controller::static_resource::working_directory().len()..];
             assert!(!relative.split(['/', '\\']).any(|segment| segment == ".."), "{:?} -> {:?}", path, fs_path);
+        }
+    }
+
+    /// `Accept-Language` parsing and negotiation (#33): any header value;
+    /// at most `MAX_LANGUAGE_RANGES` ranges, and the language chosen is
+    /// always one of those offered.
+    pub fn accept_language(data: &[u8]) {
+        let Ok(value) = std::str::from_utf8(data) else { return };
+        let preferences = crate::i18n::AcceptLanguage::parse(value);
+        assert!(preferences.0.len() <= crate::i18n::MAX_LANGUAGE_RANGES);
+        let available = ["en", "en-GB", "uk", "pt-BR"];
+        if let Some(chosen) = preferences.negotiate(&available) {
+            assert!(available.contains(&chosen));
+        }
+    }
+
+    /// i18n catalog text (#33): any input; whatever parses translates
+    /// without panicking, plurals and placeholders included.
+    pub fn i18n_catalog(data: &[u8]) {
+        let Ok(text) = std::str::from_utf8(data) else { return };
+        if let Ok(catalogs) = crate::i18n::Catalogs::new("en").add("en", text) {
+            let t = catalogs.for_language("en");
+            for line in text.lines() {
+                let key = line.split('=').next().unwrap_or("").trim();
+                let _ = t.t_with(key, &[("name", "x")]);
+                let _ = t.plural(key.trim_end_matches(".one").trim_end_matches(".other"), 3);
+            }
         }
     }
 

@@ -192,3 +192,16 @@ fn authz_check_through_a_long_cycle_of_groups() {
         let _ = crate::authz::rebac::parse_expression(&long);
     });
 }
+
+#[test]
+fn i18n_catalog_and_accept_language_of_any_length() {
+    on_small_stack(|| {
+        let text = "k = \"{a}{{b}}\"\n".repeat(50_000);
+        let catalogs = crate::i18n::Catalogs::new("en").add("en", &text).unwrap();
+        let message = "{x}".repeat(50_000);
+        let catalogs = catalogs.add("uk", &format!("m = \"{message}\"")).unwrap();
+        assert_eq!(150_000, catalogs.for_language("uk").t("m").len());
+        let header = "en;q=0.5,".repeat(50_000);
+        assert_eq!(crate::i18n::MAX_LANGUAGE_RANGES, crate::i18n::AcceptLanguage::parse(&header).0.len());
+    });
+}

@@ -5,6 +5,18 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- Translations (`i18n` module, #33): message catalogs per language
+  (`<language>.toml`, a flat TOML subset), `Accept-Language` parsing and
+  RFC 4647 negotiation (`AcceptLanguage`, also an extractor), fallback from
+  regional to base to default language, `{name}` placeholders, plural forms
+  for the common language families (`plural_category`), and
+  `Translator::localize` for `Content-Language` + `Vary`. No new
+  dependency. Fuzz targets `accept_language`, `i18n_catalog`.
+
 ## 18.16.0 — 2026-10-31
 
 ### Added

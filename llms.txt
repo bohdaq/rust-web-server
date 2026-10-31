@@ -54,6 +54,7 @@ Use it as:
 - [Async Handlers](https://rws8.tech/building-apps/async-handlers/): Write async route handlers using AsyncAppWithState for non-blocking I/O with databases, HTTP clients, and other async libraries.
 - [HTTP Client](https://rws8.tech/building-apps/http-client/): Call external APIs from handlers with the built-in synchronous Client and the async AsyncClient.
 - [HTML Templates](https://rws8.tech/building-apps/templates/): Render HTML responses with the Tera template engine via the tera feature flag, with hot reload for edited templates.
+- [Translations (i18n)](https://rws8.tech/building-apps/i18n/): Answer each visitor in their language with message catalogs, Accept-Language negotiation, placeholders and plural forms, no extra dependencies.
 - [Dependency Injection](https://rws8.tech/building-apps/dependency-injection/): Use Container to register and resolve typed services across request handlers.
 
 ## Features
