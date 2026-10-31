@@ -65,6 +65,7 @@ pub mod blocklist;
 pub mod cache;
 pub mod early_hints;
 pub mod disk_guard;
+pub mod traffic;
 pub mod authz;
 pub mod config_reload;
 #[cfg(not(target_arch = "wasm32"))]
@@ -350,6 +351,16 @@ pub mod fuzz_api {
         if let Some((_, _, _, offset)) = crate::cache::disk::parse_entry_header(data) {
             let _ = crate::response::Response::parse_upstream(&data[offset..], crate::proxy::REGENERATED_OR_HOP_BY_HOP);
         }
+    }
+
+    /// A request as the traffic classifier sees it: the first line is the
+    /// User-Agent, the rest the path; the address comes from the first byte.
+    pub fn traffic_classify(data: &[u8]) {
+        let text = String::from_utf8_lossy(data);
+        let (ua, path) = text.split_once('\n').unwrap_or((&text, "/"));
+        let ip = std::net::IpAddr::from([data.first().copied().unwrap_or(1), 2, 3, 4]);
+        let class = crate::traffic::classify(ip, Some(ua), path);
+        let _ = (class.group(), class.kind.label());
     }
 
     /// Authorization text as the admin API and config file read it (#32):

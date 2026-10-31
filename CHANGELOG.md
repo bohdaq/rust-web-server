@@ -9,6 +9,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- `traffic::classify(ip, user_agent, path)`: people (browsers), AI agents
+  (training, search, assistants) and bots (search engines, SEO, monitoring,
+  link previews, scanners, tools), from bundled lists — ai.robots.txt and
+  crawler-user-agents (MIT, `src/traffic/NOTICE.md`) — and the IP ranges
+  Google, Bing, Apple, DuckDuckGo, OpenAI, Perplexity and Common Crawl
+  publish; a User-Agent claiming one of those crawlers from elsewhere is
+  marked spoofed. `ci/gen_bot_lists.py` regenerates the tables (`--check`
+  in CI). Fuzz target `traffic_classify`.
+
 - A static path that names nothing but ends with punctuation copied along
   with a link (`/docs/http2/):` from an llms.txt line, `/docs/install.`)
   redirects (301) to the path without it when that exists — those requests

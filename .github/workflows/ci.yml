@@ -372,3 +372,4 @@ jobs:
       - run: python3 ci/gen_llms.py --check
       # The Cursor rule and Copilot instructions are generated from the agent skill
       - run: python3 ci/gen_agents.py --check
+      - run: python3 ci/gen_bot_lists.py --check

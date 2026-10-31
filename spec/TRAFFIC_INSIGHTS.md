@@ -100,7 +100,7 @@ User, 2026-10-31:
 
 | # | State |
 |---|---|
-| 1 | — |
+| 1 | **done 2026-10-31**: `ci/gen_bot_lists.py` (`--update` fetches ai.robots.txt @ d8e8b77 and crawler-user-agents @ db662d2 via `gh` plus 12 published IP-range JSONs into a minimized `src/traffic/bots.json`; default/`--check` regenerate `src/traffic/data.rs` offline): 202 AI agents (function → ai-training / ai-search / ai-assistant / ai-agent), ~1,400 crawler literals (regexes with one `(a|b)` group expanded; 30 real regexes dropped; tags → search-engine, seo, monitoring, social-preview, feed, archiver), a 3-entry supplement (SemrushBot, AhrefsBot, DataForSeoBot) and one override (facebookexternalhit is a link preview, not AI training); 2,515 prefixes in 12 networks. `traffic::classify(ip, ua, path) -> Class { kind, name, operator, verified }`, order: loopback → published network (verified) → UA claiming a network-verified crawler from elsewhere (spoofed) → scanner paths (secrets, VCS, other servers' admin pages; not `.php` in general — a PHP site's pages aren't scans) → no UA → AI list → crawler list → browser UA (`Kind::Browser`, a person if it loads assets — tranche 2) → tool. Licenses in `src/traffic/NOTICE.md`. Tests: 5 (real browser/bot UAs, verified GPTBot/ChatGPT-User/Googlebot v4+v6, spoofed Googlebot/GPTBot, ClaudeBot/Bytespider/Semrush/Ahrefs/facebookexternalhit/UptimeRobot/curl/python-requests/HeadlessChrome, scanners, PHP pages, loopback incl. mapped). Fuzz `traffic_classify` |
 | 2 | — |
 | 3 | — |
 | 4 | — |
