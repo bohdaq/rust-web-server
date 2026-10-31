@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
+use crate::compression::dictionary::{DictionaryEncoding, DictionaryHash};
 use crate::compression::{Encoding, Level};
 
 /// Most files held open at once — well under the common 256-descriptor
@@ -51,6 +52,22 @@ pub(crate) struct OpenFile {
     /// slot per [`Encoding`] — compressing a text file on every request cost
     /// ~80× serving it.
     encoded: [RwLock<Option<CachedEncoded>>; 3],
+    /// For a file used as a compression dictionary: its hash as of
+    /// `(len, modified)`, worked out (and the bytes kept in
+    /// `dictionaries`) once per version.
+    dictionary_hash: RwLock<Option<(u64, u128, DictionaryHash)>>,
+    /// The last delta sent: this version against one dictionary, in one
+    /// coding (counted in the contents budget).
+    delta: RwLock<Option<CachedDelta>>,
+}
+
+struct CachedDelta {
+    len: u64,
+    modified: u128,
+    dictionary: DictionaryHash,
+    encoding: DictionaryEncoding,
+    /// `None`: not smaller than the file.
+    bytes: Option<Arc<[u8]>>,
 }
 
 struct CachedContents {
@@ -116,7 +133,8 @@ impl Drop for OpenFile {
                 .encoded
                 .iter_mut()
                 .map(|slot| slot.get_mut().map(|g| g.as_ref().and_then(|g| g.bytes.as_ref()).map_or(0, |b| b.len())).unwrap_or(0))
-                .sum::<usize>();
+                .sum::<usize>()
+            + self.delta.get_mut().map(|d| d.as_ref().and_then(|d| d.bytes.as_ref()).map_or(0, |b| b.len())).unwrap_or(0);
         CONTENTS_BYTES.fetch_sub(held, Ordering::Relaxed);
     }
 }
@@ -152,6 +170,8 @@ impl OpenFile {
             contents: RwLock::new(None),
             last_state: RwLock::new(None),
             encoded: [RwLock::new(None), RwLock::new(None), RwLock::new(None)],
+            dictionary_hash: RwLock::new(None),
+            delta: RwLock::new(None),
         })
     }
 
@@ -208,6 +228,53 @@ impl OpenFile {
             }
         }
         Ok(compressed.map_or(Encoded::NotSmaller, Encoded::Smaller))
+    }
+
+    /// This version's hash as a compression dictionary; the first call per
+    /// version reads the file and keeps its bytes in the dictionary store.
+    pub(crate) fn dictionary_hash(&self, state: &FileState) -> std::io::Result<DictionaryHash> {
+        if let Some((len, modified, hash)) = *self.dictionary_hash.read().unwrap_or_else(|e| e.into_inner()) {
+            if len == state.len && modified == state.modified {
+                return Ok(hash);
+            }
+        }
+        let bytes: Arc<[u8]> = Arc::from(self.contents(state)?);
+        let hash = crate::compression::dictionary::hash(&bytes);
+        super::dictionaries::remember(hash, bytes);
+        if settled(state.modified) {
+            *self.dictionary_hash.write().unwrap_or_else(|e| e.into_inner()) = Some((state.len, state.modified, hash));
+        }
+        Ok(hash)
+    }
+
+    /// This version as a delta against `dictionary` (named `hash`) in
+    /// `encoding`; `None` when that isn't smaller than the file. The last
+    /// one is cached, within the contents budget.
+    pub(crate) fn delta(
+        &self,
+        state: &FileState,
+        encoding: DictionaryEncoding,
+        hash: DictionaryHash,
+        dictionary: &[u8],
+    ) -> std::io::Result<Option<Arc<[u8]>>> {
+        if let Some(cached) = self.delta.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            if cached.len == state.len && cached.modified == state.modified && cached.dictionary == hash && cached.encoding == encoding {
+                return Ok(cached.bytes.clone());
+            }
+        }
+        let plain = self.contents(state)?;
+        let bytes = crate::compression::dictionary::encode(encoding, &plain, dictionary, Level::Static)
+            .filter(|delta| delta.len() < plain.len())
+            .map(|delta| Arc::<[u8]>::from(delta.as_slice()));
+        if self.cache_contents && state.len <= MAX_GZIPPED_FILE && settled(state.modified) {
+            let mut slot = self.delta.write().unwrap_or_else(|e| e.into_inner());
+            let released = slot.as_ref().and_then(|d| d.bytes.as_ref()).map_or(0, |b| b.len());
+            let wanted = bytes.as_ref().map_or(0, |b| b.len());
+            if reserve(released, wanted) {
+                *slot = Some(CachedDelta { len: state.len, modified: state.modified, dictionary: hash, encoding, bytes: bytes.clone() });
+            }
+        }
+        Ok(bytes)
     }
 
     /// The open file (for `sendfile`).

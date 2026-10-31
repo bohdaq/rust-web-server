@@ -115,12 +115,41 @@ uncompressed: compressing a slice would describe bytes that don't exist.
 ## Dictionary compression
 
 With a dictionary (RFC 9842), a new version of a file is sent as the
-difference from a version the browser already has. In rws's tests a 36 KiB
-bundle with one changed version string goes out in 397 bytes as `dcz`,
-against 965 for plain `zstd` and 2.2 KiB for `gzip`; the less repetitive
-the file, the bigger the gap.
-The browser names the dictionary it holds in `Available-Dictionary` (its
-SHA-256) and accepts `dcz` (zstd) or `dcb` (brotli). Since 18.12.0.
+difference from a version the browser already has. The browser names the
+dictionary it holds in `Available-Dictionary` (its SHA-256) and accepts
+`dcz` (zstd) or `dcb` (brotli). Since 18.12.0.
+
+### Static files
+
+List the URL patterns of files whose next versions should go out as deltas
+— typically bundles with a version or hash in the name:
+
+```toml
+compression_dictionaries = ["/js/app.*.js", "/css/site.*.css"]   # RWS_CONFIG_COMPRESSION_DICTIONARIES
+static_cache_control     = "public, max-age=31536000, immutable"  # browsers only use fresh dictionaries
+```
+
+A file matching a pattern (`*` matches any characters, `/` included) is sent
+with `Use-As-Dictionary: match="<pattern>"` and `Vary: Accept-Encoding,
+Available-Dictionary`, and rws keeps a copy of its bytes. After a deploy,
+the browser asks for `/js/app.v2.js` naming `app.v1.js` as its dictionary,
+and rws sends v2 as a delta against the copy it kept, `dcz` first. In the
+end-to-end test a 102 KiB bundle with a few changed lines arrives in 85
+bytes (`dcz`) or 73 (`dcb`), against 13.7 KiB as `br`, and Chromium
+decodes it to the exact file.
+
+- Each version's hash is worked out once; deltas are cached per version and
+  dictionary like the `br` forms, with an ETag of `"…-dcz-<hash prefix>"`.
+- Files up to 1 MiB, compressible types only, `GET`/`HEAD` without `Range`.
+- Kept dictionaries take up to 32 MiB, oldest out first, and are lost on
+  restart: until browsers fetch a file again they get `br` or `zstd`.
+- A dictionary the server doesn't have (another server, an evicted one)
+  means the usual `br` / `zstd` / `gzip`.
+- `static_cache_control` matters: browsers use a dictionary only while
+  it's fresh in their cache, and the default `no-cache` makes it stale at
+  once. Use versioned names with a long `max-age`.
+
+### In code
 
 `compression::dictionary` has the codec:
 
@@ -154,7 +183,8 @@ curl -s -D - -o /dev/null -H "Accept-Encoding: br" http://localhost:7878/app.js
 # etag: "1793007086216830266-26624-br"
 ```
 
-## No configuration needed
+## Configuration
 
-There are no `rws.config.toml` keys, environment variables or middleware
-layers for compression.
+Compression needs none: there are no keys, environment variables or
+middleware layers for `gzip`, `br` and `zstd`. Only dictionary compression
+is opt-in, with `compression_dictionaries` (above).

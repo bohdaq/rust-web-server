@@ -4,6 +4,7 @@ ci/e2e/grpc/target
 site/mcp/target
 ci/e2e/grpc_web/node_modules
 ci/e2e/admin_ui/node_modules
+ci/e2e/dictionary/node_modules
 admin-ui/node_modules
 .idea
 /shelf/

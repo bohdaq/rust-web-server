@@ -24,6 +24,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   custom dictionary), parses `Available-Dictionary` and negotiates the
   coding. Output checked against the `zstd` CLI. Fuzz target
   `available_dictionary`.
+- Dictionary compression for static files: `compression_dictionaries =
+  ["/js/app.*.js"]` (`RWS_CONFIG_COMPRESSION_DICTIONARIES`) offers matching
+  files as dictionaries (`Use-As-Dictionary`), keeps their bytes (32 MiB,
+  oldest out) and sends later versions as `dcz` / `dcb` deltas to browsers
+  that hold an earlier one. `ci/e2e/dictionary.sh`: Chromium decodes the
+  delta; the `zstd` CLI and libbrotlidec decode each coding.
 
 ## 18.11.0 — 2026-10-31
 

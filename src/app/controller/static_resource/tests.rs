@@ -1204,3 +1204,76 @@ fn directory_listing_can_be_turned_off() {
     assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, via_app(&get("/static/"), off.clone()).status_code);
     assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, via_app(&get("/static/test.json"), off).status_code);
 }
+
+// ── #38: static files as compression dictionaries ─────────────────────────────
+
+#[test]
+fn dictionary_patterns_glob_like_url_patterns() {
+    use super::dictionaries::{glob, matching_pattern, use_as_dictionary};
+    assert!(glob("/js/app.*.js", "/js/app.1a2b.js"));
+    assert!(glob("/js/*", "/js/vendor/x.js"), "* crosses /");
+    assert!(glob("/a*b*c", "/aXbYc") && glob("/exact.css", "/exact.css"));
+    assert!(!glob("/js/app.*.js", "/js/app.1a2b.css"));
+    assert!(!glob("/js/app.*.js", "/css/app.1.js"));
+    assert!(!glob("/a*bb", "/ab"), "parts can't overlap");
+    let patterns = vec!["/css/*.css".to_string(), "/js/*.js".to_string()];
+    assert_eq!(matching_pattern(&patterns, "/js/x.js"), Some("/js/*.js"));
+    assert_eq!(matching_pattern(&patterns, "/img/x.png"), None);
+    assert_eq!(use_as_dictionary("/js/*.js"), r#"match="/js/*.js""#);
+    assert_eq!(use_as_dictionary(r#"/a"b\c"#), r#"match="/a\"b\\c""#);
+}
+
+#[test]
+fn later_versions_of_a_dictionary_file_go_out_as_deltas() {
+    use crate::compression::dictionary::{decode, hash, DictionaryEncoding};
+    let file = crate::test_env::TempPath::new_in_cwd("rws_dict_test_bundle.js");
+    let name = file.file_name().unwrap().to_string_lossy().to_string();
+    let path = format!("/{name}");
+    let version = |v: &str, n: usize| -> Vec<u8> {
+        (0..n).map(|i| format!("export function widget{i}(el) {{ el.dataset.v = '{v}'; return el.querySelector('.w{i}'); }}\n")).collect::<String>().into_bytes()
+    };
+    let (v1, v2) = (version("1.0.0", 300), version("1.0.1", 301));
+    let config = crate::server_config::ServerConfig {
+        compression_dictionaries: vec!["/rws_test_*_rws_dict_test_*.js".to_string()],
+        ..crate::server_config::ServerConfig::default()
+    };
+    let client = crate::test_client::TestClient::new(crate::app::App::with_config(config));
+    // Builds without brotli (http1-only) send these uncompressed.
+    let br = crate::compression::Encoding::Brotli.available().then_some("br");
+
+    std::fs::write(&*file, &v1).unwrap();
+    let first = client.get(&path).header("Accept-Encoding", "br, dcz, dcb").send();
+    assert_eq!(first.status(), 200);
+    assert_eq!(first.header("Use-As-Dictionary"), Some(r#"match="/rws_test_*_rws_dict_test_*.js""#));
+    assert_eq!(first.header("Content-Encoding"), br, "no dictionary yet: plain br");
+    assert!(first.header("Vary").unwrap().contains("Available-Dictionary"));
+
+    std::fs::write(&*file, &v2).unwrap();
+    let held = format!(":{}:", crate::core::base64::Base64::encode(&hash(&v1)).unwrap());
+    for (accept, coding) in [("br, dcb, dcz", DictionaryEncoding::Dcz), ("br, dcb", DictionaryEncoding::Dcb)] {
+        if !coding.available() {
+            continue;
+        }
+        let delta = client.get(&path).header("Accept-Encoding", accept).header("Available-Dictionary", &held).send();
+        assert_eq!(delta.status(), 200);
+        assert_eq!(delta.header("Content-Encoding"), Some(coding.token()), "{accept}");
+        assert!(delta.header("ETag").unwrap().contains(&format!("-{}-", coding.token())), "{:?}", delta.header("ETag"));
+        assert_eq!(delta.header("Use-As-Dictionary"), Some(r#"match="/rws_test_*_rws_dict_test_*.js""#), "the new version is a dictionary too");
+        assert!(delta.body_bytes().len() < 600, "{} bytes", delta.body_bytes().len());
+        assert_eq!(decode(coding, delta.body_bytes(), &v1, 1 << 20).unwrap(), v2);
+        // Its ETag revalidates to a 304.
+        let etag = delta.header("ETag").unwrap().to_string();
+        let again = client.get(&path).header("Accept-Encoding", accept).header("Available-Dictionary", &held).header("If-None-Match", &etag).send();
+        assert_eq!(again.status(), 304);
+    }
+
+    let unknown = format!(":{}:", crate::core::base64::Base64::encode(&hash(b"never served")).unwrap());
+    let fallback = client.get(&path).header("Accept-Encoding", "br, dcz").header("Available-Dictionary", &unknown).send();
+    assert_eq!(fallback.header("Content-Encoding"), br, "a dictionary we don't have");
+    assert!(super::dictionaries::kept() >= 2, "both versions kept");
+
+    // Without the setting nothing changes.
+    let plain = crate::test_client::TestClient::new(crate::app::App::with_config(crate::server_config::ServerConfig::default()));
+    let response = plain.get(&path).header("Accept-Encoding", "br, dcz").header("Available-Dictionary", &held).send();
+    assert_eq!((response.header("Use-As-Dictionary"), response.header("Content-Encoding")), (None, br));
+}

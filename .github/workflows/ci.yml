@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -174,6 +174,15 @@ jobs:
         if: matrix.check == 'admin-ui'
         with:
           node-version: 24
+      - uses: actions/setup-node@v4
+        if: matrix.check == 'dictionary'
+        with:
+          node-version: 24
+      - name: Dictionary compression for static files (Chromium, zstd CLI, libbrotlidec)
+        if: matrix.check == 'dictionary'
+        run: |
+          (cd ci/e2e/dictionary && npm install --no-save --no-audit --no-fund playwright@1.64.0 && npx playwright install --with-deps chromium)
+          ci/e2e/dictionary.sh target/debug/rws
       - name: Admin UI (embedded bundle up to date; headless Chromium against the binary)
         if: matrix.check == 'admin-ui'
         run: |

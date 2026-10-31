@@ -15,6 +15,7 @@ use crate::url::URL;
 
 #[cfg(test)]
 mod tests;
+pub(crate) mod dictionaries;
 pub(crate) mod open_file_cache;
 
 pub struct StaticResourceController;
@@ -387,6 +388,30 @@ impl StaticResourceController {
         } else {
             None
         };
+        // Dictionary compression (#38), only for configured patterns: this
+        // file is offered as a dictionary, and goes out as a delta when the
+        // client holds an earlier version we kept.
+        let dictionary_pattern = if config.compression_dictionaries.is_empty()
+            || state.len > crate::compression::dictionary::MAX_SIZE as u64
+            || !crate::compression::is_compressible(mime)
+        {
+            None
+        } else {
+            dictionaries::matching_pattern(&config.compression_dictionaries, path)
+        };
+        let delta = match dictionary_pattern {
+            Some(_) => {
+                let _ = file.dictionary_hash(&state);
+                match (crate::compression::dictionary::available_dictionary(request), crate::compression::dictionary::negotiate(request)) {
+                    (Some(held), Some(coding)) => match dictionaries::get(&held) {
+                        Some(bytes) => file.delta(&state, coding, held, &bytes).ok()?.map(|delta| (coding, held, delta)),
+                        None => None,
+                    },
+                    _ => None,
+                }
+            }
+            None => None,
+        };
         // ETag "<modified>-<len>", plus "-<coding>" when the file goes out
         // compressed (each representation needs its own strong ETag), and the
         // nanosecond Last-Modified, built without format!: this runs for
@@ -398,7 +423,13 @@ impl StaticResourceController {
         etag_value.push_str(modified.as_str());
         etag_value.push('-');
         etag_value.push_str(len.as_str());
-        if let Some(encoding) = encoding {
+        if let Some((coding, held, _)) = &delta {
+            // A delta depends on the dictionary too: "-dcz-<its hash>".
+            etag_value.push('-');
+            etag_value.push_str(coding.token());
+            etag_value.push('-');
+            held[..4].iter().for_each(|b| etag_value.push_str(&format!("{b:02x}")));
+        } else if let Some(encoding) = encoding {
             etag_value.push('-');
             etag_value.push_str(encoding.token());
         }
@@ -411,9 +442,13 @@ impl StaticResourceController {
         // threshold too) go to gzip clients compressed — a JS bundle of a few
         // hundred KiB used to be sent uncompressed.
         let mut sent_encoded = None;
+        let mut sent_delta = None;
         let large = state.len > StaticResourceController::STREAM_THRESHOLD;
         let body = if not_modified {
             None
+        } else if let Some((coding, _, bytes)) = &delta {
+            sent_delta = Some(*coding);
+            Some(bytes.to_vec())
         } else if let Some(encoding) = encoding {
             match file.encoded(&state, encoding, &fs_path).ok()? {
                 open_file_cache::Encoded::Smaller(bytes) => {
@@ -438,6 +473,7 @@ impl StaticResourceController {
         response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
         if not_modified {
             response.set_status(STATUS_CODE_REASON_PHRASE.n304_not_modified);
+            mark_dictionary(&mut response, dictionary_pattern);
             return Some(response);
         }
         response.set_status(STATUS_CODE_REASON_PHRASE.n200_ok);
@@ -446,13 +482,17 @@ impl StaticResourceController {
             response.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: mime.to_string().into() });
             response.headers.push(Header { name: Header::_CONTENT_LENGTH.into(), value: len.as_str().to_string().into() });
             response.stream_file = Some(fs_path);
+            mark_dictionary(&mut response, dictionary_pattern);
             return Some(response);
         };
 
         response.content_range_list = vec![Range::get_content_range(body, mime.to_string())];
-        if let Some(encoding) = sent_encoded {
+        if let Some(coding) = sent_delta {
+            crate::compression::dictionary::mark_encoded(&mut response, coding);
+        } else if let Some(encoding) = sent_encoded {
             crate::compression::mark_encoded(&mut response, encoding);
         }
+        mark_dictionary(&mut response, dictionary_pattern);
         Some(response)
     }
 
@@ -1117,3 +1157,12 @@ pub(crate) fn file_modified_utc(path: &str) -> Result<u128, String> {
         .unwrap_or(0))
 }
 
+
+/// A file offered as a compression dictionary (#38): `Use-As-Dictionary`
+/// with its pattern, and `Vary` on what picks the representation.
+fn mark_dictionary(response: &mut Response, pattern: Option<&str>) {
+    let Some(pattern) = pattern else { return };
+    response.headers.push(Header { name: "Use-As-Dictionary".into(), value: dictionaries::use_as_dictionary(pattern).into() });
+    crate::compression::dictionary::add_vary(response, "Accept-Encoding");
+    crate::compression::dictionary::add_vary(response, "Available-Dictionary");
+}

@@ -124,6 +124,11 @@ pub struct ServerConfig {
     /// and HTTP/3, and some old HTTP/1.1 clients mishandle extra `1xx`
     /// responses (18.12.0).
     pub early_hints_http1: bool,
+    /// `RWS_CONFIG_COMPRESSION_DICTIONARIES` — URL patterns (`/js/app.*.js`,
+    /// comma-separated) of static files used as compression dictionaries:
+    /// later versions go out as `dcz` / `dcb` deltas against the one the
+    /// browser has (18.12.0). Empty by default.
+    pub compression_dictionaries: Vec<String>,
     /// `RWS_CONFIG_DIRECTORY_LISTING` — list a directory that has no
     /// `index.html`. Default `true`; `false` answers 404 instead (18.8.4).
     pub directory_listing: bool,
@@ -154,6 +159,7 @@ impl Default for ServerConfig {
             client_hints: false,
             static_cache_control: STATIC_CACHE_CONTROL_DEFAULT.to_string(),
             early_hints_http1: false,
+            compression_dictionaries: Vec::new(),
             directory_listing: true,
             log_format: Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE.to_string(),
             request_allocation_size: *Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES,
@@ -191,6 +197,11 @@ impl ServerConfig {
             static_cache_control: std::env::var("RWS_CONFIG_STATIC_CACHE_CONTROL")
                 .unwrap_or_else(|_| STATIC_CACHE_CONTROL_DEFAULT.to_string()),
             early_hints_http1: read("RWS_CONFIG_EARLY_HINTS_HTTP1").eq_ignore_ascii_case("true"),
+            compression_dictionaries: read("RWS_CONFIG_COMPRESSION_DICTIONARIES")
+                .split(',')
+                .map(|p| p.trim().to_string())
+                .filter(|p| p.starts_with('/'))
+                .collect(),
             directory_listing: !read("RWS_CONFIG_DIRECTORY_LISTING").eq_ignore_ascii_case("false"),
             log_format: read(Config::RWS_CONFIG_LOG_FORMAT),
             request_allocation_size: std::env::var(
