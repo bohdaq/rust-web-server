@@ -169,6 +169,14 @@ Change a running server without editing files, and extend it without recompiling
 
 **Done when:** Admin API authenticated by default and covered by `rws --check` and e2e tests; a WASM plugin example that rewrites a header, with a CPU/memory limit test.
 
+## 18.11.0 — Mirroring and cache
+
+- **#39** ✅ *18.11.0 (2026-10-31); plan and history: [MIRROR_DISK_CACHE.md](MIRROR_DISK_CACHE.md)* **Request mirroring, backend drain, disk cache with a purge API** — drain shipped in 18.10.0 (admin API); mirroring, upstream `Cache-Control` TTLs, a disk store and purge (admin API, HTTP `PURGE`, MCP) in 18.11.0.
+
+## 18.12.0 — Faster page loads
+
+- **#38** **103 Early Hints and compression dictionaries** — Early Hints from config and upstream `103`s (RFC 8297), h2/h3 by default; `dcb` / `dcz` dictionary compression for static files (RFC 9842). Plan: [EARLY_HINTS_DICTIONARY.md](EARLY_HINTS_DICTIONARY.md) (2026-10-31).
+
 ## 19.0.0 — Breaking changes
 
 - **#63** **Proxy response pass-through.** On the 18.0.0 benchmarks rws leads nginx in most scenarios, but on proxy-1k it is level or slightly behind (EPYC 7763: 48.7 vs 45.3 µs CPU per request; the one Intel run: −2% requests per second, +9% CPU per request). The remaining cost is rws parsing every upstream response into a `Response` and writing it out again, about 7% of a proxied request's CPU in the per-core profile. Carry a simple upstream head through unparsed instead, keeping what the parse does for safety: dropping hop-by-hop and duplicate `Content-Length` headers and rejecting CR/LF. That needs a new field on `Response`, whose fields are all public and built by struct literal, so it breaks apps; mark `Response` `#[non_exhaustive]` (with constructors) in the same release so later fields don't. Judge it by same-run A/B against 18.x on proxy-1k. *Planned 2026-10-26.* **Shelved 2026-10-30**: re-measured (proxy-1k level with nginx on throughput, +4.6% CPU/request); a same-run A/B of the cheap non-breaking half was noise, so a major version for the rest isn't worth it ([RELEASE_19_0.md](RELEASE_19_0.md)).
@@ -183,8 +191,6 @@ Valuable, but blocked on an upstream dependency or waiting for a user who needs 
 - **#35** **`storage-gcs`** — the third cloud backend next to S3 and Azure.
 - **#36** **Encrypted Client Hello** — once rustls has a server-side API; publish ECH configs in DNS HTTPS records (Caddy 2.10 automates it; nginx 1.29 and HAProxy 3.3 ship it).
 - **#37** **HTTP/3 to upstreams** (HAProxy 3.3, experimental).
-- **#38** **103 Early Hints and compression dictionaries** — Early Hints from config or upstream `Link` headers (RFC 8297); `dcb` / `dcz` dictionary compression (RFC 9842, Pingora).
-- **#39** **Request mirroring, backend drain, disk cache with a purge API** — Traefik and Envoy have mirroring and drain; the cache is in-memory today.
 
 ## Not planned (for 18.x)
 
