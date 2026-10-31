@@ -18858,9 +18858,8 @@ let agent = A2aServer::new(
 Clients must send `A2A-Version: 1.0` (header or query parameter); other
 versions get `-32009`. Errors use the A2A codes (`-32001` task not found,
 `-32004` unsupported operation, …) with a `google.rpc.ErrorInfo` detail.
-Push notifications and the extended card are off until you turn them on
-(below); the card's `capabilities` say which are on, and their methods
-answer `-32003` / `-32004` while off.
+Push notifications and the extended card aren't served yet; the card says
+so (`capabilities`), and their methods answer `-32003`/`-32004`.
 
 ## Messages and tasks
 
@@ -18909,39 +18908,6 @@ Requests to the JSON-RPC endpoint need `Authorization: Bearer <token>`
 (`securitySchemes`, `securityRequirements`). Each token stands for an
 identity, and callers only see their own tasks. `require_bearer(token)` is
 the one-token form.
-
-## Push notifications
-
-A client that won't hold a stream open can give a webhook: in `SendMessage`
-(`configuration.taskPushNotificationConfig`) or later with
-`CreateTaskPushNotificationConfig` (plus `Get…`, `List…`, `Delete…`). Each
-update is POSTed to it as the same JSON a stream carries (`task`,
-`statusUpdate`, `artifactUpdate`), `Content-Type: application/a2a+json`,
-with `Authorization: <scheme> <credentials>` from the config's
-`authentication` and its `token` as `X-A2A-Notification-Token`.
-
-```rust,ignore
-let agent = A2aServer::new(card)
-    .push_notifications(["https://hooks.partner.example/", "https://ci.example.com/a2a/"]);
-```
-
-Webhook URLs come from clients, so rws calls only URLs that start with a
-prefix you list (requests to anywhere else, such as `169.254.169.254` or your
-internal network, are refused with `-32602`) and follows no redirects.
-Deliveries go out in order from one thread, 10 s timeout, three attempts
-(0.5 s and 2 s apart); at most 10 webhooks per task, and credentials are
-never returned by `Get…`/`List…`.
-
-## Extended card
-
-```rust,ignore
-let agent = A2aServer::new(public_card)
-    .require_bearer_tokens([("token-for-billing", "billing")])
-    .extended_card(AgentCard::new("Invoice agent", "With the internal skills", "1.0.0").skill(audit));
-```
-
-Authenticated callers get the fuller card from `GetExtendedAgentCard`; the
-public card says one exists (`capabilities.extendedAgentCard`).
 
 ## History and limits
 

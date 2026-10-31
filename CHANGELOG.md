@@ -5,18 +5,6 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
-
-### Added
-
-- A2A push notifications: webhooks registered with `SendMessage` or
-  `CreateTaskPushNotificationConfig` (and Get/List/Delete) get every task
-  update as `application/a2a+json`, with the config's `Authorization` and
-  `X-A2A-Notification-Token`; only URLs under the prefixes given to
-  `A2aServer::push_notifications` are called, without redirects, three
-  attempts each. `A2aServer::extended_card` serves `GetExtendedAgentCard` to
-  authenticated callers.
-
 ## 18.17.0 — 2026-10-31
 
 ### Changed
