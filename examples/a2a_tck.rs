@@ -27,7 +27,11 @@ pub fn agent() -> A2aServer {
         .provider("rws", "https://rws8.tech")
         .modes(&["text"], &["text"])
         .skill(Skill::new("tck", "TCK Conformance", "Handles TCK conformance test messages").tag("tck"));
-    A2aServer::new(card).on_message(|ctx, message| {
+    A2aServer::new(card)
+        // The kit's webhook receiver runs on this machine. Loopback is allowed
+        // here only for the test run: a real agent lists its partners' hooks.
+        .push_notifications(["http://localhost:", "http://127.0.0.1:"])
+        .on_message(|ctx, message| {
         let id = message.message_id.clone();
         let is = |prefix: &str| id.starts_with(prefix);
         if is("tck-message-response") {
