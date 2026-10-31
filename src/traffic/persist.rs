@@ -147,8 +147,20 @@ pub(crate) fn save(path: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
     }
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text)?;
+    let _ = std::fs::remove_file(&tmp);
+    write_private(&tmp, text.as_bytes())?;
     std::fs::rename(&tmp, path)
+}
+
+/// Write a new file only its owner can read (0600 on Unix): the counts
+/// name pages and referrers, which other local users needn't see.
+fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(path)?.write_all(bytes)
 }
 
 /// Load `path` into the counts; a missing file is fine, an unreadable one

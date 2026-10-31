@@ -24,7 +24,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   AI agents, bot kinds, referrers, 404s). A browser counts as a person
   only once it loads a stylesheet, script or font. Saved every 5 minutes
   to `traffic.json` beside the certificate (or `persist`), 30 days by
-  default, bounded to a few MB at any load. About 160 ns per request.
+  default, bounded to a few MB at any load. About 160 ns per request. The
+  file is readable by its owner only (0600).
 - Traffic page in the admin UI: visitors, page views and requests for
   people, AI agents and bots over a day, a week or 30 days, change from the
   period before, a chart, and tables of the pages people read, AI agents

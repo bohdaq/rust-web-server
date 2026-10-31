@@ -31,7 +31,8 @@ exclude        = ["/healthz", "/readyz", "/metrics"]
 ```
 
 The counts are saved every five minutes and at shutdown (written to a
-temporary file and renamed, and only while the disk has room), so restarts
+temporary file and renamed, readable by its owner only, and only while
+the disk has room), so restarts
 and upgrades keep them. Without a certificate and without `persist` they live
 in memory only.
 

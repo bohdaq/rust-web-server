@@ -212,7 +212,13 @@ fn counts_survive_a_save_and_load() {
     record(&hit("132.196.86.7", GPTBOT, "/docs/", T0 + 2));
     let before = summary(24, None, T0 + 60);
     let file = crate::test_env::TempPath::new("traffic_counts.json");
+    std::fs::write(&*file, "older, world-readable").unwrap();
     super::persist::save(&file).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&*file).unwrap().permissions().mode() & 0o777, 0o600, "only the owner reads the counts");
+    }
     let text = std::fs::read_to_string(&*file).unwrap();
     assert!(text.starts_with(r#"{"version":1,"hosts":["example.com"],"hours":[["#), "{text}");
     assert!(!text.contains("203.0.113") && !text.contains("Chrome"), "no addresses or user agents saved");
