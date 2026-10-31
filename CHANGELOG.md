@@ -5,6 +5,18 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- A2A push notifications: webhooks registered with `SendMessage` or
+  `CreateTaskPushNotificationConfig` (and Get/List/Delete) get every task
+  update as `application/a2a+json`, with the config's `Authorization` and
+  `X-A2A-Notification-Token`; only URLs under the prefixes given to
+  `A2aServer::push_notifications` are called, without redirects, three
+  attempts each. `A2aServer::extended_card` serves `GetExtendedAgentCard` to
+  authenticated callers.
+
 ## 18.17.0 — 2026-10-31
 
 ### Changed
@@ -45,6 +57,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- `install.sh` falls back to the `releases/latest` redirect when the GitHub
+  API answers nothing (its 60 requests an hour per address run out on shared
+  CI runners and office networks), instead of failing with "could not find
+  the latest release".
 - `service_discovery::json_lite` (used for Vault, AWS Secrets Manager,
   Consul, etcd, Docker and GCS responses) refuses JSON nested deeper than
   128 levels instead of recursing until the stack overflows.

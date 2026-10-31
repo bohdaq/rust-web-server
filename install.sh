@@ -69,6 +69,16 @@ esac
 if [ -z "$version" ]; then
   version=$(fetch_text "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null \
     | sed -n 's/^ *"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1 || true)
+  # The API allows 60 unauthenticated requests an hour per address (shared
+  # by CI runners and offices): fall back to where /releases/latest redirects.
+  if [ -z "$version" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      latest=$(curl -fsSLI --proto '=https' --tlsv1.2 -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest" 2>/dev/null || true)
+    else
+      latest=$(wget -q -S --spider "https://github.com/$repo/releases/latest" 2>&1 | sed -n 's/^ *[Ll]ocation: *//p' | tail -n 1 | tr -d '\r' || true)
+    fi
+    version=${latest##*/tag/}
+  fi
   case "$version" in
     [0-9]*.[0-9]*.[0-9]*) ;;
     *) fail "could not find the latest release; pass --version, e.g. --version 18.8.3" ;;
