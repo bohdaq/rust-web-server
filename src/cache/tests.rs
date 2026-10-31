@@ -689,6 +689,7 @@ fn cache_status_of(response: &Response) -> String {
 
 #[test]
 fn cache_status_says_hit_miss_and_why() {
+    let _g = crate::test_env::lock(); // cache_status_from_the_disk_store_and_switched_off turns it off
     let app = CountingApp::new(response_with_cache_control("max-age=120"));
     let layer = CacheLayer::memory(100).ttl(60);
     assert_eq!("rws; fwd=uri-miss; stored", cache_status_of(&layer.handle(&get("/a"), &conn(), &app).unwrap()));
