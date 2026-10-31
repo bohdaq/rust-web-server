@@ -184,5 +184,5 @@ impl Middleware for AuthzLayer {
 }
 
 fn denied(status: &crate::response::StatusCodeReasonPhrase, message: &str) -> Response {
-    Response::json(status, format!(r#"{{"error":"{message}"}}"#).into_bytes())
+    crate::error::problem::problem_with_text(status, message, &format!(r#"{{"error":"{message}"}}"#))
 }

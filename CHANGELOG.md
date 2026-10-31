@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- Errors rws produces itself (proxy `502`/`503`/`504`, `413`, `431`,
+  `408`, `401`/`403` from the auth and filter layers, `429`, maintenance,
+  misconfigured routes, `AppError`) answer with RFC 9457 problem details,
+  `application/problem+json`
+  (`{"type":"about:blank","title":"Bad Gateway","status":502}`), instead of
+  a plain-text line. Status codes and headers are unchanged. Set
+  `error_format = "text"` (`RWS_CONFIG_ERROR_FORMAT`) for the old bodies.
+  [Error responses](https://rws8.tech/reference/errors/) lists them.
+
 ## 18.16.0 — 2026-10-31
 
 ### Added

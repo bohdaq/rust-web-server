@@ -50,10 +50,7 @@ use std::time::Duration;
 pub use pool::{ConnPool, Pool};
 
 use crate::application::Application;
-use crate::core::New;
 use crate::middleware::Middleware;
-use crate::mime_type::MimeType;
-use crate::range::Range;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
@@ -572,18 +569,7 @@ pub(crate) fn normalize_upstream_response(mut response: Response) -> Response {
 }
 
 pub(crate) fn bad_gateway() -> Response {
-    let cr = Range::get_content_range(
-        b"502 Bad Gateway".to_vec(),
-        MimeType::TEXT_PLAIN.to_string(),
-    );
-    let mut r = Response::new();
-    r.status_code = *STATUS_CODE_REASON_PHRASE.n502_bad_gateway.status_code;
-    r.reason_phrase = STATUS_CODE_REASON_PHRASE
-        .n502_bad_gateway
-        .reason_phrase
-        .to_string();
-    r.content_range_list = vec![cr];
-    r
+    crate::error::problem(STATUS_CODE_REASON_PHRASE.n502_bad_gateway, "")
 }
 
 // ── Streaming proxy helpers ───────────────────────────────────────────────────

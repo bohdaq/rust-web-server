@@ -239,6 +239,7 @@ csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Secur
 security_headers        = true       # RWS_CONFIG_SECURITY_HEADERS: X-Frame-Options, Referrer-Policy, Permissions-Policy, default CSP
 nanos_headers           = false      # RWS_CONFIG_NANOS_HEADERS: Date-/Last-Modified-Unix-Epoch-Nanos
 static_cache_control    = "no-cache" # RWS_CONFIG_STATIC_CACHE_CONTROL: Cache-Control for static files
+error_format            = "problem"  # RWS_CONFIG_ERROR_FORMAT: rws-made errors as application/problem+json; "text" = plain text as before 18.17.0
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas
 early_hints_http1       = true       # RWS_CONFIG_EARLY_HINTS_HTTP1: also send 103 Early Hints over HTTP/1.1 (default false)
 directory_listing       = false      # RWS_CONFIG_DIRECTORY_LISTING: 404 instead of listing a directory without index.html (default true)

@@ -160,10 +160,11 @@ impl Application for App {
             None => ServerConfig::current(),
         };
         let header_list = Header::get_header_list_with_config(request, &config);
-        let response = Response::get_response(
+        let response = crate::error::problem::with_headers(
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,
+            &format!("no handler for method {}", request.method),
+            "",
             Some(header_list),
-            None,
         );
 
         let controllers = [

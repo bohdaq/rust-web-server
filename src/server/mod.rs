@@ -56,10 +56,6 @@ use crate::header::Header;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::log::Log;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::mime_type::MimeType;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::range::{ContentRange, Range};
-#[cfg(not(target_arch = "wasm32"))]
 use crate::symbol::SYMBOL;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::thread_pool::ThreadPool;
@@ -136,14 +132,8 @@ impl Server {
             body: Default::default(),
         };
 
-        let size = message.chars().count() as u64;
-        let content_range = ContentRange {
-            unit: Range::BYTES.to_string(),
-            range: Range { start: 0, end: size },
-            size: size.to_string(),
-            body: Vec::from(message.as_bytes()),
-            content_type: MimeType::TEXT_PLAIN.to_string(),
-        };
+        let (body, content_type) = crate::error::problem::from_text(STATUS_CODE_REASON_PHRASE.n400_bad_request, &message);
+        let content_range = crate::range::Range::get_content_range(body, content_type.to_string());
 
         let header_list = Header::get_header_list(&error_request);
         let error_response: Response = Response::get_response(
@@ -170,14 +160,8 @@ impl Server {
             body: Default::default(),
         };
 
-        let size = message.chars().count() as u64;
-        let content_range = ContentRange {
-            unit: Range::BYTES.to_string(),
-            range: Range { start: 0, end: size },
-            size: size.to_string(),
-            body: Vec::from(message.as_bytes()),
-            content_type: MimeType::TEXT_PLAIN.to_string(),
-        };
+        let (body, content_type) = crate::error::problem::from_text(STATUS_CODE_REASON_PHRASE.n413_payload_too_large, &message);
+        let content_range = crate::range::Range::get_content_range(body, content_type.to_string());
 
         let mut header_list = Header::get_header_list(&error_request);
         header_list.push(Header { name: Header::_CONNECTION.into(), value: "close".into() });
@@ -220,14 +204,8 @@ impl Server {
             body: Default::default(),
         };
 
-        let size = message.chars().count() as u64;
-        let content_range = ContentRange {
-            unit: Range::BYTES.to_string(),
-            range: Range { start: 0, end: size },
-            size: size.to_string(),
-            body: Vec::from(message.as_bytes()),
-            content_type: MimeType::TEXT_PLAIN.to_string(),
-        };
+        let (body, content_type) = crate::error::problem::from_text(status, &message);
+        let content_range = crate::range::Range::get_content_range(body, content_type.to_string());
 
         let mut header_list = Header::get_header_list(&error_request);
         header_list.push(Header { name: Header::_CONNECTION.into(), value: "close".into() });
@@ -266,14 +244,8 @@ impl Server {
             body: Default::default(),
         };
 
-        let size = message.chars().count() as u64;
-        let content_range = ContentRange {
-            unit: Range::BYTES.to_string(),
-            range: Range { start: 0, end: size },
-            size: size.to_string(),
-            body: Vec::from(message.as_bytes()),
-            content_type: MimeType::TEXT_PLAIN.to_string(),
-        };
+        let (body, content_type) = crate::error::problem::from_text(STATUS_CODE_REASON_PHRASE.n417_expectation_failed, &message);
+        let content_range = crate::range::Range::get_content_range(body, content_type.to_string());
 
         let mut header_list = Header::get_header_list(&error_request);
         header_list.push(Header { name: Header::_CONNECTION.into(), value: "close".into() });

@@ -484,7 +484,7 @@ impl WasmLayer {
     fn failed(&self, hook: &'static str, e: &PluginError) -> Response {
         metrics::error(&self.plugin.name, e.kind());
         eprintln!("wasm plugin {} ({hook}) {e}", self.plugin.name);
-        Response::text(STATUS_CODE_REASON_PHRASE.n500_internal_server_error, "500 Internal Server Error: a plugin failed")
+        crate::error::problem(STATUS_CODE_REASON_PHRASE.n500_internal_server_error, "a plugin failed")
     }
 }
 

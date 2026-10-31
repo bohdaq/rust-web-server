@@ -158,6 +158,7 @@ Use it as:
 
 - [API Reference](https://rws8.tech/reference/api/): Quick-reference index of all major public types in rust-web-server, grouped by area.
 - [Troubleshooting](https://rws8.tech/reference/troubleshooting/): Common errors when starting, reaching, building and deploying rws, and how to fix them.
+- [Error responses](https://rws8.tech/reference/errors/): The errors rws itself produces, as RFC 9457 problem details (application/problem+json), and how to get the plain-text bodies back.
 - [Migrating to 18.0](https://rws8.tech/reference/migrating-18/): What changes when upgrading rws from 17.x to 18.0 — Header field types, default response headers, and RSA public keys.
 - [Architecture](https://rws8.tech/reference/architecture/): How rws handles a request — listeners, the HTTP/1.1, HTTP/2 and HTTP/3 front ends, the Application trait, middleware, the static-file and proxy fast paths, and configuration.
 - [Benchmarks](https://rws8.tech/reference/benchmarks/): rws compared with Caddy and nginx on static files and reverse proxying, and how to reproduce the numbers.

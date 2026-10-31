@@ -391,11 +391,7 @@ impl SamlSp {
     }
 
     fn error_response(msg: &str) -> Response {
-        let mut r = Response::new();
-        r.status_code = *STATUS_CODE_REASON_PHRASE.n500_internal_server_error.status_code;
-        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n500_internal_server_error.reason_phrase.to_string();
-        r.content_range_list = vec![Range::get_content_range(msg.as_bytes().to_vec(), MimeType::TEXT_PLAIN.to_string())];
-        r
+        crate::error::problem::problem_with_text(STATUS_CODE_REASON_PHRASE.n500_internal_server_error, msg, msg)
     }
 }
 

@@ -4,8 +4,6 @@ mod tests;
 use std::collections::HashMap;
 
 use crate::header::Header;
-use crate::mime_type::MimeType;
-use crate::range::Range;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::url::URL;
@@ -155,10 +153,5 @@ impl RequestId {
 
 fn bad_request(request: &Request, msg: &str) -> Response {
     let header_list = Header::get_header_list(request);
-    let cr = Range::get_content_range(msg.as_bytes().to_vec(), MimeType::TEXT_PLAIN.to_string());
-    Response::get_response(
-        STATUS_CODE_REASON_PHRASE.n400_bad_request,
-        Some(header_list),
-        Some(vec![cr]),
-    )
+    crate::error::problem::with_headers(STATUS_CODE_REASON_PHRASE.n400_bad_request, msg, msg, Some(header_list))
 }

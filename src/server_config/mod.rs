@@ -119,6 +119,10 @@ pub struct ServerConfig {
     /// `If-None-Match` / `If-Modified-Since` (a 304). An empty value keeps
     /// the `no-store` default for static files too.
     pub static_cache_control: String,
+    /// `RWS_CONFIG_ERROR_FORMAT` — `"text"` sends rws-made errors as plain
+    /// text (`502 Bad Gateway`) as before 18.17.0; anything else (default
+    /// `"problem"`) sends RFC 9457 `application/problem+json`.
+    pub error_format_text: bool,
     /// `RWS_CONFIG_EARLY_HINTS_HTTP1` — also send `103 Early Hints` to
     /// HTTP/1.1 clients. Default `false`: browsers use them only over HTTP/2
     /// and HTTP/3, and some old HTTP/1.1 clients mishandle extra `1xx`
@@ -158,6 +162,7 @@ impl Default for ServerConfig {
             nanos_headers: false,
             client_hints: false,
             static_cache_control: STATIC_CACHE_CONTROL_DEFAULT.to_string(),
+            error_format_text: false,
             early_hints_http1: false,
             compression_dictionaries: Vec::new(),
             directory_listing: true,
@@ -196,6 +201,7 @@ impl ServerConfig {
             client_hints: read("RWS_CONFIG_CLIENT_HINTS").eq_ignore_ascii_case("true"),
             static_cache_control: std::env::var("RWS_CONFIG_STATIC_CACHE_CONTROL")
                 .unwrap_or_else(|_| STATIC_CACHE_CONTROL_DEFAULT.to_string()),
+            error_format_text: read("RWS_CONFIG_ERROR_FORMAT").trim().eq_ignore_ascii_case("text"),
             early_hints_http1: read("RWS_CONFIG_EARLY_HINTS_HTTP1").eq_ignore_ascii_case("true"),
             compression_dictionaries: read("RWS_CONFIG_COMPRESSION_DICTIONARIES")
                 .split(',')

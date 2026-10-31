@@ -168,14 +168,7 @@ impl Middleware for ForwardAuthLayer {
 }
 
 fn auth_service_unreachable() -> Response {
-    let mut r = Response::new();
-    r.status_code = *STATUS_CODE_REASON_PHRASE.n502_bad_gateway.status_code;
-    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n502_bad_gateway.reason_phrase.to_string();
-    r.content_range_list = vec![Range::get_content_range(
-        b"502 Bad Gateway: auth service unreachable".to_vec(),
-        MimeType::TEXT_PLAIN.to_string(),
-    )];
-    r
+    crate::error::problem(STATUS_CODE_REASON_PHRASE.n502_bad_gateway, "auth service unreachable")
 }
 
 fn passthrough_response(auth_response: &crate::http_client::Response) -> Response {

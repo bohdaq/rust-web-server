@@ -490,6 +490,10 @@
         "link": "/reference/troubleshooting/"
       },
       {
+        "label": "Error responses",
+        "link": "/reference/errors/"
+      },
+      {
         "label": "Migrating to 18.0",
         "link": "/reference/migrating-18/"
       },

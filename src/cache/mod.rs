@@ -295,7 +295,7 @@ impl CacheLayer {
         let sent = request.header(Header::_AUTHORIZATION).and_then(|h| h.value.strip_prefix("Bearer ").map(str::trim));
         let authorized = sent.is_some_and(|s| same_bytes(s.as_bytes(), token.as_bytes()));
         if !authorized {
-            let mut response = Response::json(STATUS_CODE_REASON_PHRASE.n401_unauthorized, br#"{"error":"PURGE needs the purge token"}"#.to_vec());
+            let mut response = crate::error::problem::problem_with_text(STATUS_CODE_REASON_PHRASE.n401_unauthorized, "PURGE needs the purge token", r#"{"error":"PURGE needs the purge token"}"#);
             response.headers.push(Header::new("WWW-Authenticate", r#"Bearer realm="cache purge""#));
             return Some(response);
         }

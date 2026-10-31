@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod tests;
 
+pub mod problem;
+pub use problem::problem;
+
 use crate::header::Header;
-use crate::mime_type::MimeType;
-use crate::range::Range;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 
@@ -79,6 +80,12 @@ impl IntoResponse for AppError {
             AppError::Internal(msg)             => (STATUS_CODE_REASON_PHRASE.n500_internal_server_error, msg.as_str()),
         };
 
+        // Problem details (18.17.0); `error_format = "text"` keeps the bare
+        // message as the body.
+        let detail = match &self {
+            AppError::Unauthorized | AppError::Forbidden | AppError::TooManyRequests => "",
+            _ => body_str,
+        };
         let dummy = Request {
             method: "GET".to_string(),
             request_uri: "/".to_string(),
@@ -86,9 +93,6 @@ impl IntoResponse for AppError {
             headers: vec![],
             body: Default::default(),
         };
-        let header_list = Header::get_header_list(&dummy);
-        let body = body_str.as_bytes().to_vec();
-        let content_range = Range::get_content_range(body, MimeType::TEXT_PLAIN.to_string());
-        Response::get_response(status, Some(header_list), Some(vec![content_range]))
+        problem::with_headers(status, detail, body_str, Some(Header::get_header_list(&dummy)))
     }
 }

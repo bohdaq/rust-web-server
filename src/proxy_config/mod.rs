@@ -1897,28 +1897,13 @@ impl Application for DynamicProxy {
 pub(crate) const H3_FALLBACK: Duration = Duration::from_secs(300);
 
 fn service_unavailable() -> Response {
-    use crate::mime_type::MimeType;
-    use crate::range::Range;
-    let mut r = Response::new();
-    r.status_code = *STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code;
-    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n503_service_unavailable.reason_phrase.to_string();
+    let mut r = crate::error::problem(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "every backend is out of rotation");
     r.headers.push(crate::header::Header { name: "Retry-After".into(), value: "5".into() });
-    r.content_range_list = vec![Range::get_content_range(b"503 Service Unavailable: every backend is out of rotation".to_vec(), MimeType::TEXT_PLAIN.to_string())];
     r
 }
 
 fn bad_gateway() -> Response {
-    use crate::mime_type::MimeType;
-    use crate::range::Range;
-    let cr = Range::get_content_range(
-        b"502 Bad Gateway".to_vec(),
-        MimeType::TEXT_PLAIN.to_string(),
-    );
-    let mut r = Response::new();
-    r.status_code = *STATUS_CODE_REASON_PHRASE.n502_bad_gateway.status_code;
-    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n502_bad_gateway.reason_phrase.to_string();
-    r.content_range_list = vec![cr];
-    r
+    crate::error::problem(STATUS_CODE_REASON_PHRASE.n502_bad_gateway, "")
 }
 
 // ── RedirectAdapter ────────────────────────────────────────────────────────────
@@ -2235,10 +2220,7 @@ pub(crate) struct PluginMisconfigured;
 
 impl crate::middleware::Middleware for PluginMisconfigured {
     fn handle(&self, _request: &Request, _conn: &ConnectionInfo, _next: &dyn Application) -> Result<Response, String> {
-        Ok(Response::text(
-            STATUS_CODE_REASON_PHRASE.n503_service_unavailable,
-            "503 Service Unavailable: this route's plugin is misconfigured",
-        ))
+        Ok(crate::error::problem(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "this route's plugin is misconfigured"))
     }
 }
 
@@ -2249,10 +2231,7 @@ impl crate::middleware::Middleware for AuthMisconfigured {
         _conn: &ConnectionInfo,
         _next: &dyn Application,
     ) -> Result<Response, String> {
-        Ok(Response::text(
-            STATUS_CODE_REASON_PHRASE.n503_service_unavailable,
-            "503 Service Unavailable: authentication for this route is misconfigured",
-        ))
+        Ok(crate::error::problem(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "authentication for this route is misconfigured"))
     }
 }
 

@@ -24,26 +24,16 @@ mod tests;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::application::Application;
-use crate::core::New as _;
 use crate::middleware::Middleware;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-use crate::range::Range;
-use crate::mime_type::MimeType;
 use crate::server::ConnectionInfo;
 
 /// Flip to `true` to activate maintenance mode; back to `false` to resume.
 pub static MAINTENANCE_MODE: AtomicBool = AtomicBool::new(false);
 
 fn service_unavailable() -> Response {
-    let mut r = Response::new();
-    r.status_code = *STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code;
-    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n503_service_unavailable.reason_phrase.to_string();
-    r.content_range_list = vec![Range::get_content_range(
-        b"Service Temporarily Unavailable".to_vec(),
-        MimeType::TEXT_PLAIN.to_string(),
-    )];
-    r
+    crate::error::problem::problem_with_text(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "maintenance", "Service Temporarily Unavailable")
 }
 
 /// Middleware that returns `503` when [`MAINTENANCE_MODE`] is `true`.

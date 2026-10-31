@@ -47,10 +47,10 @@ the forwarders return a failure kind → `ProxyError { kind, detail }` →
 | request too large for the route | `http_request_error` |
 | circuit breaker open | `destination_unavailable` + `details="circuit open"` |
 
-On success the header carries `received-status=<n>` only when
-`proxy_status = "always"`; default `"errors"`. `next-hop` (the backend
-address) is sent only with `proxy_status_next_hop = true` — it reveals
-internal addresses. Applies to: config-file proxy routes (sync and async
+Sent on every proxied response (decided 2026-10-31: standards by default),
+with `received-status=<n>` on success; `proxy_status = "errors"` limits it
+to failures, `"off"` drops it. `next-hop` (the backend address) is sent only
+with `proxy_status_next_hop = true` — it reveals internal addresses. Applies to: config-file proxy routes (sync and async
 forwarders), `ReverseProxy`, canary, ingress, Gateway API router,
 `H2ReverseProxy`/gRPC, the LLM proxy and the MCP gateway.
 
@@ -64,29 +64,27 @@ and gets ours prepended (RFC 9211 §2: newest first). Static files served
 from the open-file cache aren't a "cache" in this sense — no header.
 
 **problem+json.** One builder, `error::problem(status, detail)`, used by
-every rws-made error. Default: content negotiation — problem+json when the
-request's `Accept` names `application/problem+json` or `application/json`
-(or the route is an API route: MCP, LLM proxy, admin API, which already
-speak JSON), plain text otherwise, so browsers and existing scripts see
-what they see today. `error_format = "problem"` forces it, `"text"` keeps
-text always. `type` is `about:blank` (RFC 9457 §4.2.1) except for errors
-with their own page: `https://rws8.tech/errors/<slug>` documented on one
-docs page (`reference/errors.md`), so `type` links somewhere useful.
-`AppError::into_response` gains `.problem()` for app code that wants the
+every rws-made error. Default (decided 2026-10-31): always problem+json;
+`error_format = "text"` brings back the plain-text bodies. The static
+404 page (`404.html` or the built-in one) is the site's content, not an
+rws-made error, and stays HTML. `type` is `about:blank` (RFC 9457 §4.2.1)
+except for errors with their own page: `https://rws8.tech/errors/<slug>`
+documented on one docs page (`reference/errors.md`), so `type` links
+somewhere useful. `AppError` gains `.problem()` for app code that wants the
 same shape; `IntoResponse` stays as is.
 
 ## Compatibility
 
-All additive: two new response headers on proxied/cached responses and a
-body format chosen only for clients that ask for JSON. A client parsing the
-old text body of a 502 while sending `Accept: application/json` would see
-JSON — the CHANGELOG says so, and `error_format = "text"` restores it.
+Changed defaults, listed under "Changed" in the CHANGELOG with the switch
+back: rws-made error bodies are JSON (`error_format = "text"`), and proxied
+responses carry `Proxy-Status` (`proxy_status = "errors"` or `"off"`).
+`Cache-Status` is a new header only. Status codes don't change.
 
 ## Tranches
 
 | # | Scope | Status |
 |---|---|---|
-| 1 | `error::problem` + negotiation + `error_format`; every rws-made error through it (server 413/431/408, rate limit 429, auth 401/403, maintenance/drain 503, proxy 502/503/504, timeout 504); `reference/errors.md`; tests per producer | — |
+| 1 | **done 2026-10-31**: `error::problem` / `problem_with_text` / `from_text` (`src/error/problem.rs`), `error_format` (`RWS_CONFIG_ERROR_FORMAT`, `ServerConfig::error_format_text`; `text` reproduces every old body byte for byte, an empty old body stays bodiless). Through it: server 400/408/413/417/431 (sync + async), proxy/config proxy/canary/ingress/Gateway API router (>= 400 only) 502/503/504/404/421/500, timeout 504, forward-auth 502, maintenance 503, misconfigured auth/plugin 503, WASM plugin 500, authz 401/403, cache PURGE 401, App 501, SSO/SAML 500, extractor 400, and `AppError` (so IP filter, blocklist, CSRF, Basic/JWT 401, rate limit 429). Left as they are: static 404 page, admin/MCP/LLM/OAuth/validation JSON errors, h2 headers-only 413/431. Docs `reference/errors.md`; tests: `error::tests::rws_errors_are_problem_details_unless_text_is_asked_for`, server 400 test updated | done |
 | 2 | `ProxyError` kinds from the forwarders (sync, async, h2, gateway router, ingress, LLM, MCP gateway) → `Proxy-Status`; `proxy_name`, `proxy_status`, `proxy_status_next_hop`; e2e: `ci/e2e/proxy_policies.sh` asserts the error per failure (refused port, black-hole timeout, all ejected) | — |
 | 3 | `Cache-Status` in `CacheLayer` (memory, disk) and the mirror cache; upstream header chaining; `ci/e2e/mirror.sh` + cache unit tests assert each value | — |
 | 4 | Docs (`proxy/`, `features/caching.md`, `reference/errors.md`, env vars), CHANGELOG, release 18.17.0 | — |

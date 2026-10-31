@@ -91,6 +91,9 @@ pub fn redirect(request: &Request, host: &str, listener_https: bool, listener_po
 }
 
 pub(crate) fn status(code: &'static crate::response::StatusCodeReasonPhrase) -> Response {
+    if *code.status_code >= 400 {
+        return crate::error::problem(code, "");
+    }
     let mut response = Response::new();
     response.status_code = *code.status_code;
     response.reason_phrase = code.reason_phrase.to_string();
