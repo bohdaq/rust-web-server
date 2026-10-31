@@ -179,7 +179,11 @@ Change a running server without editing files, and extend it without recompiling
 
 ## 18.13.0 — HTTP/3 upstreams
 
-- **#37** **HTTP/3 to upstreams** — `[[upstream]] protocol = "h3"` for config proxy routes and `H3ReverseProxy` in code, falling back to TCP when QUIC can't connect (HAProxy 3.3, experimental). Plan: [HTTP3_UPSTREAMS.md](HTTP3_UPSTREAMS.md) (2026-10-31).
+- **#37** ✅ *18.13.0 (2026-10-31); plan and history: [HTTP3_UPSTREAMS.md](HTTP3_UPSTREAMS.md)* **HTTP/3 to upstreams** — `[[upstream]] protocol = "h3"` for config proxy routes and `H3ReverseProxy` in code, falling back to TCP when QUIC can't connect (HAProxy 3.3, experimental).
+
+## 18.14.0 — Authorization
+
+- **#32** **Authorization API** — relationship-based (Zanzibar-style) access control: a schema in config or code, tuples in memory or SQL, one `Identity` from every authenticator, `[route.middleware.authz]` and `AuthzLayer`, tuples managed from code and the admin API. Plan: [AUTHORIZATION_REBAC.md](AUTHORIZATION_REBAC.md) (2026-10-31).
 
 ## 19.0.0 — Breaking changes
 
@@ -189,7 +193,6 @@ Change a running server without editing files, and extend it without recompiling
 
 Valuable, but blocked on an upstream dependency or waiting for a user who needs it. Picked into a release when that changes.
 
-- **#32** **Authorization API** — `RbacLayer` / `check(user, object, action)` on top of the SSO claims.
 - **#33** **i18n** — message catalogs and an `Accept-Language` extractor.
 - **#34** **WASM shim remainder** — a `wasm32-wasip2` CI smoke test first, then stateful middleware, then WASI 0.3 ([WASM_SHIM.md](WASM_SHIM.md)).
 - **#35** **`storage-gcs`** — the third cloud backend next to S3 and Azure.
