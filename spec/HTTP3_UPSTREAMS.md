@@ -87,7 +87,7 @@ and `http1`-only test runs before pushing (the `http1` build has no QUIC:
 
 | # | State |
 |---|---|
-| 1 | — |
+| 1 | **done 2026-10-31**: `proxy::h3_upstream` (feature `http3`): runtime `rws-h3-upstream` (2 workers); QUIC client endpoints per address family made lazily on it; `quinn::ClientConfig` per rustls config (ALPN `h3`, cached by pointer with the source `Arc` kept); pool of `h3` `SendRequest`s keyed by trust + address with connection ids, the driver's `poll_close` removes the entry. `forward` (sync, std channel) and `forward_async` (oneshot), `H3Error::{Connect, Failed}` — name lookup, endpoint, handshake (bounded by the connect timeout), TLS alert and HTTP/3 setup are `Connect`. Request head drops hop-by-hop headers, keeps `te: trailers`, adds `x-forwarded-*` and `via: 3 rws`; `RequestStream::split`: body sent by a task (`Body::Bytes` at once, `Body::Stream` read on the blocking pool, a read error stops the stream), response head returned at once, ≤ 1 MiB non-gRPC with a length buffered, else `stream_pipe`; trailers into `Response::trailers`; each wait bounded by the read timeout. Tests (6, against `h3_handler` in-process with a self-signed cert): GET + forwarded headers + pooled connection, 404, body whole and streamed (45 KB), 2 MiB streamed response, trailers, connect failure on a dead UDP port within the timeout + untrusted certificate = `Connect`, async entry, backend restart on the same port → reconnect. 5 repeated runs green. 2204 default / 2018 http1 |
 | 2 | — |
 | 3 | — |
 | 4 | — |

@@ -30,6 +30,8 @@ pub(crate) mod async_upstream;
 pub mod mirror;
 #[cfg(feature = "http2")]
 pub(crate) mod h2_upstream;
+#[cfg(feature = "http3")]
+pub(crate) mod h3_upstream;
 #[cfg(feature = "http2")]
 pub mod grpc_web;
 #[cfg(feature = "http2")]
