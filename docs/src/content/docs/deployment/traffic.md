@@ -3,7 +3,7 @@ title: Traffic insights
 description: See who visits your sites (people, AI agents and bots) on the admin UI's Traffic page, counted by rws itself with no tracking script.
 ---
 
-The admin UI's **Traffic** page (since 18.16.0) shows who visited your sites
+The admin UI's **Traffic** page (since 18.15.0) shows who visited your sites
 over the last day, week or 30 days, in three groups:
 
 - **People**: browsers that load the page's styles, scripts or fonts, as a

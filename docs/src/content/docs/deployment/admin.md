@@ -29,7 +29,7 @@ Keep it on loopback and reach it through an SSH tunnel (`ssh -L 9901:127.0.0.1:9
 Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) and paste the token. It shows:
 
 - **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
-- **Traffic**: who visited, people, AI agents and bots, over a day, week or 30 days (18.16.0; see [Traffic insights](/deployment/traffic/)).
+- **Traffic**: who visited, people, AI agents and bots, over a day, week or 30 days (18.15.0; see [Traffic insights](/deployment/traffic/)).
 - **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
 - **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), authorization tuples (add, remove, check), the IP blocklist and feature flags.
@@ -70,7 +70,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `POST /authz/tuples` `{"tuple":"doc:42#viewer@user:alice"}` | Add a tuple (checked against the schema): `{"tuple":…,"written":true}` (`false`: already there); `400` when the schema doesn't allow it |
 | `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
 | `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
-| `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.16.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
+| `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |

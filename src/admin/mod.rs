@@ -533,7 +533,7 @@ pub fn start_from_env() {
         Ok(Some(addr)) => {
             println!("admin API at http://{addr}{API_PREFIX}/");
             // Traffic insights are shown by the admin UI: counted when it's
-            // on, unless `[traffic] enabled = false` (18.16.0).
+            // on, unless `[traffic] enabled = false` (18.15.0).
             if crate::traffic::config::enabled_setting() != Some(false) {
                 crate::traffic::start();
             }

@@ -1,4 +1,4 @@
-//! Traffic insights (18.16.0): who visits — people, AI agents, bots —
+//! Traffic insights (18.15.0): who visits — people, AI agents, bots —
 //! worked out by rws from each request, for the admin UI's Traffic page.
 //!
 //! This first part is the classifier, [`classify`]: from the client's

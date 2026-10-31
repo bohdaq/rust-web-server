@@ -210,7 +210,7 @@ allowed_origins = ["https://ops.example.com"] # browser origins besides the list
 
 ## `[traffic]`
 
-Traffic insights for the admin UI (since 18.16.0): on whenever the admin API
+Traffic insights for the admin UI (since 18.15.0): on whenever the admin API
 is, counting people, AI agents and bots per hour and day. No IP addresses or
 User-Agents are kept.
 

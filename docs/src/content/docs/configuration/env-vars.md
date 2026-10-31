@@ -162,7 +162,7 @@ don't use them.
 | `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `100M` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate and `SIGUSR1`). The default was `0` before 18.15.0. |
 | `RWS_CONFIG_ACCESS_LOG_KEEP` | `5` | integer | Rotated access-log files to keep; `0` empties the file instead of keeping any. |
 | `RWS_CONFIG_MIN_FREE_DISK` | larger of 1% and 1G | size or `N%` | Below this much free space on its filesystem rws stops writing the access-log file and disk-cache entries (dropped and counted) until space returns; `0` turns it off (since 18.15.0). See [Disk safety](/deployment/observability/#disk-safety). |
-| `RWS_CONFIG_TRAFFIC_ENABLED` | on with the admin API | boolean | Count visitors (people, AI, bots) for the admin UI's Traffic page; `false` turns it off (since 18.16.0). |
+| `RWS_CONFIG_TRAFFIC_ENABLED` | on with the admin API | boolean | Count visitors (people, AI, bots) for the admin UI's Traffic page; `false` turns it off (since 18.15.0). |
 | `RWS_CONFIG_TRAFFIC_RETENTION_DAYS` | `30` | 1–90 | Days of traffic counts kept. |
 | `RWS_CONFIG_TRAFFIC_PERSIST` | `traffic.json` beside the certificate | path or `off` | Where the counts are saved (every 5 minutes and at shutdown) so restarts keep them; unset with no certificate configured: not saved. |
 | `RWS_CONFIG_TRAFFIC_EXCLUDE` | `/healthz,/readyz,/metrics` | paths | Exact paths not counted. |

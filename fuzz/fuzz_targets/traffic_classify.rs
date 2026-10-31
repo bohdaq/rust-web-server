@@ -1,4 +1,4 @@
-//! A User-Agent and path through the traffic classifier (18.16.0). Must
+//! A User-Agent and path through the traffic classifier (18.15.0). Must
 //! never panic.
 #![no_main]
 use libfuzzer_sys::fuzz_target;

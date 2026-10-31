@@ -313,7 +313,7 @@ pub fn purge_cache(name: &str, path: Option<&str>, prefix: Option<&str>) -> Opti
     Some(format!(r#"{{"name":{},"purged":{n}}}"#, quoted(name)))
 }
 
-// ── Traffic insights (18.16.0) ────────────────────────────────────────────────
+// ── Traffic insights (18.15.0) ────────────────────────────────────────────────
 
 /// Who visited in the last `hours` (1–2160), optionally for one host: the
 /// Traffic page's JSON. `Err` when counting is off.
