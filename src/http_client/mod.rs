@@ -510,20 +510,27 @@ fn send_once(
     let addr = format!("{}:{}", parsed.host, parsed.port);
     let timeout = Duration::from_millis(timeout_ms);
 
-    // Resolve + connect
-    let sock_addr = addr
-        .parse::<std::net::SocketAddr>()
-        .or_else(|_| {
+    // Resolve, then try each address in turn: `localhost` gives ::1 first,
+    // and a server listening on IPv4 only refuses it.
+    let addresses: Vec<std::net::SocketAddr> = match addr.parse::<std::net::SocketAddr>() {
+        Ok(one) => vec![one],
+        Err(_) => {
             use std::net::ToSocketAddrs;
-            addr.to_socket_addrs()
-                .map_err(|e| HttpClientError(format!("DNS lookup for '{addr}' failed: {e}")))?
-                .next()
-                .ok_or_else(|| HttpClientError(format!("no address for '{addr}'")))
-        })
-        .map_err(|e: HttpClientError| e)?;
-
-    let tcp = TcpStream::connect_timeout(&sock_addr, timeout)
-        .map_err(|e| HttpClientError(format!("connect to '{addr}' failed: {e}")))?;
+            addr.to_socket_addrs().map_err(|e| HttpClientError(format!("DNS lookup for '{addr}' failed: {e}")))?.collect()
+        }
+    };
+    let mut last_error = HttpClientError(format!("no address for '{addr}'"));
+    let mut connected = None;
+    for sock_addr in addresses {
+        match TcpStream::connect_timeout(&sock_addr, timeout) {
+            Ok(tcp) => {
+                connected = Some(tcp);
+                break;
+            }
+            Err(e) => last_error = HttpClientError(format!("connect to '{addr}' ({sock_addr}) failed: {e}")),
+        }
+    }
+    let tcp = connected.ok_or(last_error)?;
     tcp.set_read_timeout(Some(timeout))
         .map_err(|e| HttpClientError(e.to_string()))?;
     tcp.set_write_timeout(Some(timeout))

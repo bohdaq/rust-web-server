@@ -558,7 +558,22 @@ impl A2aServer {
             }
             A2aReply::Task(task) => {
                 let id = task.id.clone();
-                self.tasks.lock().put(owner, task);
+                let continued = ctx.task.is_some();
+                let mut store = self.tasks.lock();
+                store.put(owner, task);
+                // A continued task moved on: tell its streams and webhooks.
+                if continued {
+                    if let Some(stored) = store.get_mut(owner, &id) {
+                        let update = Obj::new().str("taskId", &stored.task.id).str("contextId", &stored.task.context_id).raw("status", &stored.task.status.to_json()).done();
+                        tasks::publish(stored, self.tasks.push.get(), "statusUpdate", &update);
+                        let state = stored.task.status.state;
+                        if state.is_terminal() || state.is_interrupted() {
+                            stored.subscribers.clear();
+                        }
+                    }
+                    drop(store);
+                    self.tasks.changed.notify_all();
+                }
                 Outcome::Task(id, false)
             }
             A2aReply::Running(handle) => Outcome::Task(handle.id, true),

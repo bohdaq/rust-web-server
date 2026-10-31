@@ -444,3 +444,22 @@ fn proto_field_names_work_like_camel_case() {
     let listed = call(&client, "ListTasks", r#"{"page_size":1}"#);
     assert_eq!(1, listed.get("result").unwrap().get("tasks").unwrap().as_array().unwrap().len());
 }
+
+#[test]
+fn a_continued_task_notifies_its_webhook() {
+    let (base, seen) = webhook();
+    let local = base.replace("127.0.0.1", "localhost");
+    let client = TestClient::new(agent().push_notifications(["http://localhost:"]));
+    let config = format!(r#","configuration":{{"taskPushNotificationConfig":{{"url":"{local}t"}}}}"#);
+    let reply = call(&client, "SendMessage", &message_params("ask", &config));
+    let id = s(reply.get("result").unwrap().get("task").unwrap(), &["id"]).to_string();
+    send(&client, "blue", &format!(r#","taskId":"{id}""#));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while seen.lock().unwrap().len() < 2 && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(2, seen.len(), "{seen:?}");
+    assert_eq!("TASK_STATE_INPUT_REQUIRED", s(&json_lite::parse(&seen[0].1).unwrap(), &["task", "status", "state"]));
+    assert_eq!("TASK_STATE_COMPLETED", s(&json_lite::parse(&seen[1].1).unwrap(), &["statusUpdate", "status", "state"]));
+}

@@ -353,3 +353,20 @@ mod tests {
         .unwrap();
     }
 }
+
+#[test]
+fn localhost_reaches_a_server_listening_on_ipv4_only() {
+    // `localhost` may resolve to ::1 first; every address is tried.
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        }
+    });
+    let response = crate::http_client::Client::new().get(&format!("http://localhost:{port}/")).send().expect("reached over IPv4");
+    assert_eq!((200, "ok"), (response.status(), response.text().unwrap().as_str()));
+}

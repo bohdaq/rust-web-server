@@ -19,6 +19,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `examples/a2a_tck.rs`. `A2aServer::extended_card` serves `GetExtendedAgentCard` to
   authenticated callers.
 
+### Fixed
+
+- `http_client` tries every address a name resolves to, not just the first:
+  `localhost` (often `::1` first) now reaches a server listening on IPv4 only,
+  and so do hosts whose IPv6 address doesn't answer.
+- A2A: a task a client's follow-up message moves on (an `A2aReply::Task`
+  for a continued task) now notifies its streams and webhooks; only
+  `TaskHandle` updates did.
+
 ## 18.17.0 — 2026-10-31
 
 ### Changed
