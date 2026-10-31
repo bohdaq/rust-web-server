@@ -64,6 +64,22 @@ done
 echo "ok: access log rotated by size, keeping 2"
 stop
 
+# ── a disk under min_free_disk: lines are dropped (and counted), not written ─
+rm -f access.log*
+start 'ip = "127.0.0.1"
+port = 8702
+log_format = "combined"
+access_log = "access.log"
+min_free_disk = "1000000G"'
+hit 5 "toofull"
+[ "$(lines access.log toofull)" = 0 ] || fail "lines were written to a disk under min_free_disk"
+curl -s http://127.0.0.1:8702/metrics | grep -q '^rws_access_log_dropped_lines_total [1-9]' || fail "dropped lines not counted: $(curl -s http://127.0.0.1:8702/metrics | grep -i disk)"
+curl -s http://127.0.0.1:8702/metrics | grep -q 'rws_disk_low{dir=".*"} 1' || fail "disk not reported low"
+grep -q "under the .* RWS_CONFIG_MIN_FREE_DISK floor" rws.log || fail "no warning logged"
+[ "$(grep -c "RWS_CONFIG_MIN_FREE_DISK floor" rws.log)" = 1 ] || fail "the warning repeated"
+echo "ok: under min_free_disk the access log stops, counted, warned once"
+stop
+
 # ── without access_log, SIGUSR1 keeps its default action ────────────────────
 start 'ip = "127.0.0.1"
 port = 8702'

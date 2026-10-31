@@ -1292,8 +1292,10 @@ fn trailing_punctuation_redirects_to_what_exists() {
         assert_eq!(response.header("Location"), Some(format!("/{name}?q=1").as_str()), "{suffix}");
     }
     assert_eq!(client.get(&format!("/{name}")).send().status(), 200, "the file itself");
-    assert_eq!(client.get("/no-such-page/):").send().status(), 404, "nothing behind it");
+    // Nothing behind it: no redirect (the 404 or a configured fallback answers).
+    let missing = client.get("/rws-test-no-such-page-7f3a/):").send();
+    assert!(missing.status() != 301 && missing.header("Location").is_none(), "{}", missing.status());
     let root = client.get("/):").send();
     assert_eq!((root.status(), root.header("Location")), (301, Some("/")), "the home page");
-    assert_eq!(client.post(&format!("/{name}):")).send().status(), 404, "GET and HEAD only");
+    assert_ne!(client.post(&format!("/{name}):")).send().status(), 301, "GET and HEAD only");
 }

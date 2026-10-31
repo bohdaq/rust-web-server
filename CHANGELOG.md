@@ -14,8 +14,20 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   redirects (301) to the path without it when that exists — those requests
   were 404s.
 
+- `min_free_disk` (`RWS_CONFIG_MIN_FREE_DISK`, default the larger of 1% and
+  1 GiB): below it rws stops writing the access-log file and disk-cache
+  entries (dropped and counted) until space returns — a full disk costs
+  log lines, not the server. `rws_disk_free_bytes`, `rws_disk_low`,
+  `rws_access_log_dropped_lines_total`, `rws_cache_skipped_writes_total`;
+  `disk` in the admin `/status` and a warning on the admin UI's Overview.
+  Access-log write errors are logged at most once a minute. A "Disk
+  safety" section covers journald, Docker and Kubernetes log limits.
+
 ### Changed
 
+- The access-log file rotates at 100 MiB by default (`access_log_max_size`
+  was `0`, never) — at most 600 MiB with the 5 kept files. Set it to `0` to
+  keep rotating with logrotate.
 - The JSON access log adds `host`, `user_agent` and `referer` after `bytes`,
   each only when the request sent that header — who visited, for which
   site, from where. Existing fields and their order are unchanged.

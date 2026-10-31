@@ -208,6 +208,10 @@ impl DiskStore {
         if key.len() > MAX_KEY {
             return;
         }
+        if !crate::disk_guard::has_room(&self.dir) {
+            crate::disk_guard::skipped_cache_write();
+            return;
+        }
         let stored_ms = now_ms();
         let mut bytes = format!("{MAGIC} {stored_ms} {} {}\n{key}\n", ttl.as_secs(), key.len()).into_bytes();
         bytes.extend_from_slice(&response.clone().generate());

@@ -2,7 +2,8 @@ import { LitElement, html, nothing } from "lit";
 import { api, ApiError, followLogs, setToken, token } from "./api.js";
 import { icon } from "./icons.js";
 
-const bytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KiB` : `${(n / 1048576).toFixed(1)} MiB`);
+const bytes = (n) =>
+  n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KiB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MiB` : `${(n / 1073741824).toFixed(1)} GiB`;
 
 const VIEWS = [
   { id: "overview", label: "Overview", icon: "gauge" },
@@ -372,6 +373,9 @@ export class RwsAdmin extends LitElement {
     return html`
       <h1>Overview</h1>
       <p class="lede">Up ${duration(s.uptime_secs)}, process ${s.pid}. Counters refresh every 2 seconds.</p>
+      ${(s.disk ?? []).filter((d) => d.low).map((d) => html`<lit-material-alert variant="warning" style="margin-bottom: var(--space-200)">
+        <span slot="title">Disk almost full</span>
+        ${d.dir} has ${bytes(d.free_bytes)} free of ${bytes(d.total_bytes)}: rws has stopped writing the access log and disk cache there until space is freed.</lit-material-alert>`)}
       <div class="grid">
         <lit-material-stat label="Requests served" value=${m.requests_total.toLocaleString()}>
           ${rates.length > 1 ? html`<lit-material-sparkline slot="caption" label="Requests per second" .values=${rates}></lit-material-sparkline>` : nothing}

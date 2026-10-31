@@ -64,6 +64,11 @@ Traffic page of the admin UI, computed by rws itself. Target: **18.16.0**.
   host filter. **MCP** tool `traffic_summary`.
 - **Config** `[traffic]`: `enabled`, `retention_days`, `persist` (file),
   `exclude` paths; `rws --check`.
+- **Bounded by construction** (disk safety, 2026-10-31): 720 hourly
+  buckets (30 days), top lists capped at ~200 entries a day with the rest
+  folded into "other", the classification cache capped — the persisted
+  file stays under ~2 MiB at any load, and it's written through
+  `disk_guard::has_room`.
 - **Performance budget**: ≤ 1% CPU per request in a same-run A/B; the UA
   match runs once per `(ip, ua)` per day.
 

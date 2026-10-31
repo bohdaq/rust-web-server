@@ -443,8 +443,14 @@ fn status_json(connection: &ConnectionInfo) -> String {
     let tls = !env(Config::RWS_CONFIG_TLS_CERT_FILE).is_empty() || !env(Config::RWS_CONFIG_ACME_DOMAINS).is_empty();
     let redirect = env(Config::RWS_CONFIG_HTTP_REDIRECT_PORT);
     let features: Vec<String> = features().iter().map(|f| format!("\"{f}\"")).collect();
+    // Where rws writes files (access log, disk cache): free space and
+    // whether it's under RWS_CONFIG_MIN_FREE_DISK (18.15.0).
+    let disk: Vec<String> = crate::disk_guard::status()
+        .into_iter()
+        .map(|(dir, free, total, low)| format!(r#"{{"dir":"{}","free_bytes":{free},"total_bytes":{total},"low":{low}}}"#, json_escape(&dir)))
+        .collect();
     format!(
-        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}}}}"#,
+        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}},"disk":[{}]}}"#,
         env!("CARGO_PKG_VERSION"),
         std::process::id(),
         started().elapsed().as_secs(),
@@ -455,6 +461,7 @@ fn status_json(connection: &ConnectionInfo) -> String {
         if redirect.trim().is_empty() { "null".to_string() } else { format!("\"{}\"", json_escape(redirect.trim())) },
         json_escape(&connection.server.ip),
         connection.server.port,
+        disk.join(","),
     )
 }
 

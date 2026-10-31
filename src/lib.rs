@@ -64,6 +64,7 @@ pub mod macros;
 pub mod blocklist;
 pub mod cache;
 pub mod early_hints;
+pub mod disk_guard;
 pub mod authz;
 pub mod config_reload;
 #[cfg(not(target_arch = "wasm32"))]

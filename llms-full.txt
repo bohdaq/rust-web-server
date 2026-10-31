@@ -1207,8 +1207,9 @@ don't use them.
 | `RWS_CONFIG_PROXY_PROTOCOL` | `false` | boolean | Every connection to the main listener starts with a PROXY protocol v1 or v2 header (HAProxy `send-proxy`, AWS NLB, GCP); its source address becomes the client address. Connections without one are closed. Since 18.3.0; read at startup. See [Behind a load balancer](/proxy/overview/#behind-an-l4-load-balancer-proxy-protocol). |
 | `RWS_CONFIG_WATCH` | `false` | boolean | Reload when `rws.config.toml` (or `RWS_CONFIG_FILE`) or a configured TLS certificate or key changes — the same validated reload as `SIGHUP`, checked once a second (since 18.1.0). Read at startup. See [Hot reload](/features/hot-reload/#reloading-when-the-file-changes). |
 | `RWS_CONFIG_ACCESS_LOG` | (stdout) | path | Append access-log lines to this file instead of stdout (since 18.1.0). Opened at the first line; `SIGUSR1` reopens it (for logrotate). Read at startup. See [Logs](/deployment/observability/#writing-to-a-file). |
-| `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `0` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate). |
+| `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `100M` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate and `SIGUSR1`). The default was `0` before 18.15.0. |
 | `RWS_CONFIG_ACCESS_LOG_KEEP` | `5` | integer | Rotated access-log files to keep; `0` empties the file instead of keeping any. |
+| `RWS_CONFIG_MIN_FREE_DISK` | larger of 1% and 1G | size or `N%` | Below this much free space on its filesystem rws stops writing the access-log file and disk-cache entries (dropped and counted) until space returns; `0` turns it off (since 18.15.0). See [Disk safety](/deployment/observability/#disk-safety). |
 | `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
 
 The log format is hot-reloadable.
@@ -1502,8 +1503,9 @@ log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) |
 watch                   = true       # RWS_CONFIG_WATCH: reload when this file or a certificate changes (default false)
 proxy_protocol          = true       # RWS_CONFIG_PROXY_PROTOCOL: connections start with a PROXY protocol header (default false)
 access_log              = "/var/log/rws/access.log"  # RWS_CONFIG_ACCESS_LOG: write the access log here instead of stdout
-access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size; 0 (default) = never (use logrotate + SIGUSR1)
+access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size (default 100M since 18.15.0); 0 = never (use logrotate + SIGUSR1)
 access_log_keep         = 5          # RWS_CONFIG_ACCESS_LOG_KEEP: rotated files kept (access.log.1 … .5)
+min_free_disk           = "2G"       # RWS_CONFIG_MIN_FREE_DISK: stop writing the access log / disk cache below this free (or "5%"); default max(1%, 1G); "0" = off
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 open_file_cache_strict  = true       # RWS_CONFIG_OPEN_FILE_CACHE_STRICT: false = trust size/mtime for that long (no fstat per request)
@@ -19688,16 +19690,17 @@ log to a file instead of stdout:
 ```toml
 log_format          = "combined"
 access_log          = "/var/log/rws/access.log"
-access_log_max_size = "100M"    # optional: rotate past 100 MiB
+access_log_max_size = "100M"    # rotate past 100 MiB (the default since 18.15.0)
 access_log_keep     = 5         # access.log.1 … access.log.5
 ```
 
 - Lines are appended; the file and its directory must be writable by rws.
-- **Rotation by rws:** with `access_log_max_size`, the file is renamed
-  `access.log.1` (older ones shift up, the oldest past `access_log_keep` is
-  deleted) and a new one is started when the next lines would pass the
-  size.
-- **Rotation by logrotate:** leave `access_log_max_size` at `0` and have
+- **Rotation by rws** (the default): past `access_log_max_size` (100 MiB
+  unless set) the file is renamed `access.log.1` (older ones shift up, the
+  oldest past `access_log_keep` is deleted) and a new one is started — at
+  most 600 MiB with the defaults. Before 18.15.0 the default was `0`,
+  never rotating.
+- **Rotation by logrotate:** set `access_log_max_size` to `0` and have
   logrotate send `SIGUSR1` after moving the file; rws reopens the path
   before its next write:
 
@@ -19717,6 +19720,60 @@ access_log_keep     = 5         # access.log.1 … access.log.5
 
   Without an access-log file `SIGUSR1` keeps its default action (it ends
   the process), so don't send it to an rws logging to stdout.
+
+### Disk safety
+
+A busy server writes a lot: at 10,000 requests a second an access log
+grows by about 170 GB a day. Everything rws writes is bounded:
+
+| What | Bound |
+|---|---|
+| Access log in a file | rotated at `access_log_max_size` (100 MiB) × `access_log_keep` (5) |
+| Disk cache | `[route.middleware.cache] max_size` (256 MiB), oldest out |
+| Any of them, whatever the settings | `min_free_disk` (below) |
+
+**`min_free_disk`** (`RWS_CONFIG_MIN_FREE_DISK`, since 18.15.0): before
+writing the access-log file or a disk-cache entry, rws checks the free
+space of that filesystem (at most every 5 s). Under the floor it stops
+writing there — the lines are dropped and counted, the cache serves what it
+has — logs one warning, and resumes when space is back. A full disk then
+costs log lines, never the server, a database or a mail spool on the same
+disk.
+
+```toml
+min_free_disk = "2G"     # or "5%"; default: the larger of 1% and 1 GiB; "0" turns it off
+```
+
+The space counted is what an unprivileged process may use, so the root
+reserve most filesystems keep is already set aside. `/metrics` has
+`rws_disk_free_bytes{dir}`, `rws_disk_low{dir}`,
+`rws_access_log_dropped_lines_total` and `rws_cache_skipped_writes_total`;
+the admin API's `/status` lists each directory, and the admin UI's Overview
+warns while one is low.
+
+**Logging to stdout** leaves the bound to what collects it:
+
+- **journald** keeps at most `SystemMaxUse` (default 10% of the
+  filesystem, up to 4 GiB) and drops lines past `RateLimitBurst` per
+  `RateLimitIntervalSec`. For a busy server set them in
+  `/etc/systemd/journald.conf.d/rws.conf`:
+
+  ```ini
+  [Journal]
+  SystemMaxUse=2G
+  RateLimitIntervalSec=0
+  ```
+
+  (`RateLimitIntervalSec=0` stops journald dropping rws's lines; the size
+  cap still holds.)
+- **Docker**: the default `json-file` driver never rotates — set
+  `--log-opt max-size=100m --log-opt max-file=5` (or the same in
+  `daemon.json`).
+- **Kubernetes** rotates container logs at 10 MiB × 5 by default
+  (`containerLogMaxSize`, `containerLogMaxFiles`).
+
+If you don't read every line, `log_format = "off"` writes none; metrics and
+the admin API keep working.
 
 ### Log aggregation in Kubernetes
 
@@ -19862,7 +19919,7 @@ All under `/admin/api/v1/`, JSON in and out.
 
 | Method and path | What it does |
 |---|---|
-| `GET /status` | Version, process id, uptime, readiness, compile-time features, and the main, redirect and admin listeners |
+| `GET /status` | Version, process id, uptime, readiness, compile-time features, the main, redirect and admin listeners, and `disk`: each directory rws writes to with `free_bytes`, `total_bytes` and `low` (under `min_free_disk`, 18.15.0) |
 | `GET /config` | Every `RWS_CONFIG_*` setting in effect; values of names with `SECRET`, `PASSWORD` or `TOKEN` read `(hidden)` |
 | `POST /reload` | Reload the configuration and certificates, as `SIGHUP` does, and wait for it (up to 10 s): `{"reloaded":true,"applied":true,"reloads":3,"errors":[]}`. With errors (a config file that doesn't validate) `applied` is `false`, `errors` lists them and the running configuration stays. `503` while the server starts or stops, `504` when it didn't finish |
 | `GET /metrics` | Request, error and connection counters, thread-pool queue, readiness (`/metrics` on the main port has the full Prometheus set) |

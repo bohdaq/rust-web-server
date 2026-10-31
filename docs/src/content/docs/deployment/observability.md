@@ -153,16 +153,17 @@ log to a file instead of stdout:
 ```toml
 log_format          = "combined"
 access_log          = "/var/log/rws/access.log"
-access_log_max_size = "100M"    # optional: rotate past 100 MiB
+access_log_max_size = "100M"    # rotate past 100 MiB (the default since 18.15.0)
 access_log_keep     = 5         # access.log.1 … access.log.5
 ```
 
 - Lines are appended; the file and its directory must be writable by rws.
-- **Rotation by rws:** with `access_log_max_size`, the file is renamed
-  `access.log.1` (older ones shift up, the oldest past `access_log_keep` is
-  deleted) and a new one is started when the next lines would pass the
-  size.
-- **Rotation by logrotate:** leave `access_log_max_size` at `0` and have
+- **Rotation by rws** (the default): past `access_log_max_size` (100 MiB
+  unless set) the file is renamed `access.log.1` (older ones shift up, the
+  oldest past `access_log_keep` is deleted) and a new one is started — at
+  most 600 MiB with the defaults. Before 18.15.0 the default was `0`,
+  never rotating.
+- **Rotation by logrotate:** set `access_log_max_size` to `0` and have
   logrotate send `SIGUSR1` after moving the file; rws reopens the path
   before its next write:
 
@@ -182,6 +183,60 @@ access_log_keep     = 5         # access.log.1 … access.log.5
 
   Without an access-log file `SIGUSR1` keeps its default action (it ends
   the process), so don't send it to an rws logging to stdout.
+
+### Disk safety
+
+A busy server writes a lot: at 10,000 requests a second an access log
+grows by about 170 GB a day. Everything rws writes is bounded:
+
+| What | Bound |
+|---|---|
+| Access log in a file | rotated at `access_log_max_size` (100 MiB) × `access_log_keep` (5) |
+| Disk cache | `[route.middleware.cache] max_size` (256 MiB), oldest out |
+| Any of them, whatever the settings | `min_free_disk` (below) |
+
+**`min_free_disk`** (`RWS_CONFIG_MIN_FREE_DISK`, since 18.15.0): before
+writing the access-log file or a disk-cache entry, rws checks the free
+space of that filesystem (at most every 5 s). Under the floor it stops
+writing there — the lines are dropped and counted, the cache serves what it
+has — logs one warning, and resumes when space is back. A full disk then
+costs log lines, never the server, a database or a mail spool on the same
+disk.
+
+```toml
+min_free_disk = "2G"     # or "5%"; default: the larger of 1% and 1 GiB; "0" turns it off
+```
+
+The space counted is what an unprivileged process may use, so the root
+reserve most filesystems keep is already set aside. `/metrics` has
+`rws_disk_free_bytes{dir}`, `rws_disk_low{dir}`,
+`rws_access_log_dropped_lines_total` and `rws_cache_skipped_writes_total`;
+the admin API's `/status` lists each directory, and the admin UI's Overview
+warns while one is low.
+
+**Logging to stdout** leaves the bound to what collects it:
+
+- **journald** keeps at most `SystemMaxUse` (default 10% of the
+  filesystem, up to 4 GiB) and drops lines past `RateLimitBurst` per
+  `RateLimitIntervalSec`. For a busy server set them in
+  `/etc/systemd/journald.conf.d/rws.conf`:
+
+  ```ini
+  [Journal]
+  SystemMaxUse=2G
+  RateLimitIntervalSec=0
+  ```
+
+  (`RateLimitIntervalSec=0` stops journald dropping rws's lines; the size
+  cap still holds.)
+- **Docker**: the default `json-file` driver never rotates — set
+  `--log-opt max-size=100m --log-opt max-file=5` (or the same in
+  `daemon.json`).
+- **Kubernetes** rotates container logs at 10 MiB × 5 by default
+  (`containerLogMaxSize`, `containerLogMaxFiles`).
+
+If you don't read every line, `log_format = "off"` writes none; metrics and
+the admin API keep working.
 
 ### Log aggregation in Kubernetes
 

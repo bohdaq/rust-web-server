@@ -25,8 +25,12 @@ use std::time::Duration;
 /// unset keeps them on stdout.
 pub const RWS_CONFIG_ACCESS_LOG: &str = "RWS_CONFIG_ACCESS_LOG";
 /// `RWS_CONFIG_ACCESS_LOG_MAX_SIZE`: rotate the file past this many bytes
-/// (`0`, the default: never — leave it to logrotate and `SIGUSR1`).
+/// (default [`DEFAULT_MAX_SIZE`] since 18.15.0; `0`: never — leave it to
+/// logrotate and `SIGUSR1`).
 pub const RWS_CONFIG_ACCESS_LOG_MAX_SIZE: &str = "RWS_CONFIG_ACCESS_LOG_MAX_SIZE";
+/// The rotation size when `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` is unset: with
+/// 5 kept files the log takes at most 600 MiB.
+pub const DEFAULT_MAX_SIZE: u64 = 100 << 20;
 /// `RWS_CONFIG_ACCESS_LOG_KEEP`: rotated files kept (default 5).
 pub const RWS_CONFIG_ACCESS_LOG_KEEP: &str = "RWS_CONFIG_ACCESS_LOG_KEEP";
 
@@ -127,7 +131,7 @@ fn destination() -> &'static Destination {
             return Destination::Stdout;
         }
         let number = |key: &str, default: u64| std::env::var(key).ok().and_then(|v| parse_size(&v)).unwrap_or(default);
-        let max_size = number(RWS_CONFIG_ACCESS_LOG_MAX_SIZE, 0);
+        let max_size = number(RWS_CONFIG_ACCESS_LOG_MAX_SIZE, DEFAULT_MAX_SIZE);
         let keep = number(RWS_CONFIG_ACCESS_LOG_KEEP, 5).min(1000) as u32;
         match LogFile::open(Path::new(path.trim()), max_size, keep) {
             Ok(file) => Destination::File(Mutex::new(file)),
@@ -250,8 +254,21 @@ fn write_out(bytes: &[u8]) {
         Destination::Stdout => write_stdout(bytes),
         Destination::File(file) => {
             let mut file = file.lock().unwrap_or_else(|e| e.into_inner());
+            // A disk under RWS_CONFIG_MIN_FREE_DISK: drop the lines (counted)
+            // rather than fill it.
+            if !crate::disk_guard::has_room(&file.path) {
+                crate::disk_guard::dropped_log_lines(memchr::memchr_iter(b'\n', bytes).count() as u64);
+                return;
+            }
             if let Err(e) = file.write(bytes, REOPEN.swap(false, Ordering::Relaxed)) {
-                eprintln!("access log: {e}");
+                // At most one line a minute: a failing disk would otherwise
+                // log an error per flush — to stderr, often the same disk.
+                static LAST: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+                let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+                if last.is_none_or(|at| at.elapsed() >= Duration::from_secs(60)) {
+                    *last = Some(std::time::Instant::now());
+                    eprintln!("access log: {e} (further errors within a minute aren't shown)");
+                }
             }
         }
     }

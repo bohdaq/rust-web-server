@@ -260,6 +260,12 @@ fn prometheus_text_without_http() -> String {
         }
     }
 
+    let disk_text = crate::disk_guard::prometheus_text();
+    if !disk_text.is_empty() {
+        out.push('\n');
+        out.push_str(&disk_text);
+    }
+
     let hints_text = crate::early_hints::prometheus_text();
     if !hints_text.is_empty() {
         out.push('\n');
