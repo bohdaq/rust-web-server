@@ -147,7 +147,7 @@ public card says one exists (`capabilities.extendedAgentCard`).
 CI runs the official A2A compatibility kit
 ([a2aproject/a2a-tck](https://github.com/a2aproject/a2a-tck), pinned) over
 JSON-RPC against `examples/a2a_tck.rs`, which implements the kit's
-scenarios; `ci/a2a-tck-baseline.txt` lists what fails today.
+scenarios. It passes every JSON-RPC check that applies (94 of 101; the rest are optional features the test agent leaves off); `ci/a2a-tck-baseline.txt` would list known failures and is empty.
 
 ## History and limits
 
