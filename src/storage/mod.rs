@@ -3,7 +3,8 @@
 //! `FormMultipartData::parse()` hands back raw bytes with no place to put
 //! them. This module gives handlers a single `Storage` trait so the same
 //! upload code works against local disk in development and an S3-compatible
-//! bucket (AWS S3, Cloudflare R2, MinIO) or Azure Blob Storage in production.
+//! bucket (AWS S3, Cloudflare R2, MinIO), Azure Blob Storage or Google Cloud
+//! Storage in production.
 //!
 //! # Local disk (requires the `storage-local` feature)
 //!
@@ -79,6 +80,11 @@ pub(crate) mod azure_credentials;
 #[cfg(feature = "storage-azure")]
 mod azure_signature;
 
+#[cfg(feature = "storage-gcs")]
+mod gcs;
+#[cfg(feature = "storage-gcs")]
+mod gcs_credentials;
+
 #[cfg(feature = "storage-local")]
 mod local;
 #[cfg(feature = "storage-s3")]
@@ -90,6 +96,8 @@ pub use local::LocalStorage;
 pub use s3::{S3Config, S3Storage};
 #[cfg(feature = "storage-azure")]
 pub use azure_blob::{AzureBlobConfig, AzureBlobStorage};
+#[cfg(feature = "storage-gcs")]
+pub use gcs::{GcsConfig, GcsStorage};
 
 // ── StorageError ─────────────────────────────────────────────────────────────
 
@@ -115,9 +123,9 @@ impl std::error::Error for StorageError {}
 
 /// Backend-independent object storage.
 ///
-/// Implement this trait to plug a custom backend (GCS, a database-backed
-/// store, ...) into the same handler code that already works against
-/// [`LocalStorage`], [`S3Storage`], and [`AzureBlobStorage`].
+/// Implement this trait to plug a custom backend (a database-backed store,
+/// ...) into the same handler code that already works against
+/// [`LocalStorage`], [`S3Storage`], [`AzureBlobStorage`] and `GcsStorage`.
 pub trait Storage: Send + Sync {
     /// Store `data` under `key`, overwriting any existing object at that key.
     /// Returns the key that was stored (backends that normalize or namespace

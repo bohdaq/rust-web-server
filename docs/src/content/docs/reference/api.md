@@ -327,6 +327,8 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `S3Config` | `storage` (`storage-s3`) | Bucket, region, endpoint, credentials; `from_env()` |
 | `AzureBlobStorage` | `storage` (`storage-azure`) | Azure Blob Storage with Shared Key signing or Managed Identity, no Azure SDK |
 | `AzureBlobConfig` | `storage` (`storage-azure`) | Account, container, endpoint, credentials; `from_env()` |
+| `GcsStorage` | `storage` (`storage-gcs`) | Google Cloud Storage over its JSON API, no Google SDK; Application Default Credentials (token, service account or gcloud file, metadata server) |
+| `GcsConfig` | `storage` (`storage-gcs`) | Bucket and endpoint; `from_env()` reads `RWS_GCS_BUCKET`, `RWS_GCS_ENDPOINT` |
 | `Mailer` | `mailer` (`mailer`; STARTTLS/SMTPS also need `http-client` or `http2`) | SMTP client; `Mailer::from_env()` reads `RWS_SMTP_*`; `.send(&email)`. See [Email](/features/email/) |
 | `Email` | `mailer` (`mailer`) | An RFC 5322 message; `Email::builder()` |
 | `EmailBuilder` | `mailer` (`mailer`) | `.to`, `.cc`, `.bcc`, `.reply_to`, `.subject`, `.text`, `.html`, `.build()` (`multipart/alternative` when both bodies are set) |

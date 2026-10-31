@@ -9514,7 +9514,7 @@ match mailer.send(&email) {
 
 <https://rws8.tech/features/storage/>
 
-`FormMultipartData::parse()` (see [Forms & File Uploads](/building-apps/forms-uploads/)) hands back raw bytes with no place to put them. The `storage` module gives handlers a single `Storage` trait so the same upload code works against local disk in development and an S3-compatible bucket in production.
+`FormMultipartData::parse()` (see [Forms & File Uploads](/building-apps/forms-uploads/)) hands back raw bytes with no place to put them. The `storage` module gives handlers a single `Storage` trait so the same upload code works against local disk in development and an S3-compatible bucket, Azure Blob Storage or Google Cloud Storage in production.
 
 ```rust
 pub trait Storage: Send + Sync {
@@ -9719,6 +9719,44 @@ RWS_AZURE_CONTAINER=my-container
 :::note[Signing scope]
 Shared Key requests sign every `x-ms-*` header actually sent — `x-ms-date`, `x-ms-version`, and `x-ms-blob-type` on `PUT` — plus the standard `Content-Type`/`Content-Length` slots. Managed Identity requests skip signing entirely and use `Authorization: Bearer {token}` instead. This covers standard single-blob `PUT`/`GET`/`DELETE` — there's no support for SAS tokens, blob listing, or multipart (block list) uploads.
 :::
+
+## Google Cloud Storage (`storage-gcs` feature)
+
+Talks to the GCS JSON API through the outbound HTTP client — **no Google SDK** (since 18.16.0).
+
+```toml
+[dependencies]
+rust-web-server = { version = "18", features = ["storage-gcs"] }
+```
+
+```rust,no_run
+use rust_web_server::storage::{GcsStorage, Storage};
+
+let store = GcsStorage::from_env()?;
+
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+let bytes = store.get(&key)?;
+store.delete(&key)?;
+let public_url = store.url(&key); // https://storage.googleapis.com/<bucket>/avatars/42.png
+# Ok::<(), rust_web_server::storage::StorageError>(())
+```
+
+`GcsStorage::from_env()` reads `RWS_GCS_BUCKET` (required) and `RWS_GCS_ENDPOINT` (default `https://storage.googleapis.com`; point it at an emulator such as fake-gcs-server). Or build `GcsConfig { bucket, endpoint }` and call `GcsStorage::new`.
+
+### Credentials
+
+An OAuth 2.0 access token, found the way Google's own client libraries find Application Default Credentials, so whatever already works for `gcloud` works here:
+
+| Source | Used when | Notes |
+|---|---|---|
+| `RWS_GCS_ACCESS_TOKEN` | set | A token you already have (`gcloud auth print-access-token`); used as is, never refreshed. |
+| `GOOGLE_APPLICATION_CREDENTIALS` | set | A service account key file (a JWT signed with its key, traded for a token; native builds) or an `authorized_user` file. |
+| gcloud's `application_default_credentials.json` | the file exists | Written by `gcloud auth application-default login` (under `CLOUDSDK_CONFIG` or `~/.config/gcloud`). |
+| Metadata server | last resort | Compute Engine, GKE Workload Identity, Cloud Run, Cloud Functions: no key at all. `GCE_METADATA_HOST` overrides `metadata.google.internal`. |
+
+`RWS_GCS_CREDENTIAL_SOURCE=token|file|metadata|none` picks one and skips detection; `none` sends no credentials (emulators). Tokens are cached and refreshed two minutes before they expire. The token asks for the `devstorage.read_write` scope.
+
+GCS also speaks the S3 API with HMAC keys: `S3Storage` with `RWS_S3_ENDPOINT=https://storage.googleapis.com` works too, if you'd rather manage HMAC keys than tokens.
 
 ## Large objects: `put_stream`
 
@@ -20709,6 +20747,8 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `S3Config` | `storage` (`storage-s3`) | Bucket, region, endpoint, credentials; `from_env()` |
 | `AzureBlobStorage` | `storage` (`storage-azure`) | Azure Blob Storage with Shared Key signing or Managed Identity, no Azure SDK |
 | `AzureBlobConfig` | `storage` (`storage-azure`) | Account, container, endpoint, credentials; `from_env()` |
+| `GcsStorage` | `storage` (`storage-gcs`) | Google Cloud Storage over its JSON API, no Google SDK; Application Default Credentials (token, service account or gcloud file, metadata server) |
+| `GcsConfig` | `storage` (`storage-gcs`) | Bucket and endpoint; `from_env()` reads `RWS_GCS_BUCKET`, `RWS_GCS_ENDPOINT` |
 | `Mailer` | `mailer` (`mailer`; STARTTLS/SMTPS also need `http-client` or `http2`) | SMTP client; `Mailer::from_env()` reads `RWS_SMTP_*`; `.send(&email)`. See [Email](/features/email/) |
 | `Email` | `mailer` (`mailer`) | An RFC 5322 message; `Email::builder()` |
 | `EmailBuilder` | `mailer` (`mailer`) | `.to`, `.cc`, `.bcc`, `.reply_to`, `.subject`, `.text`, `.html`, `.build()` (`multipart/alternative` when both bodies are set) |

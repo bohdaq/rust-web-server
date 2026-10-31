@@ -7,6 +7,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- `GcsStorage` (`storage-gcs` feature): Google Cloud Storage for the
+  `Storage` trait, over the JSON API with no Google SDK. Credentials as
+  Google's client libraries find them: `RWS_GCS_ACCESS_TOKEN`, a service
+  account key or `authorized_user` file (`GOOGLE_APPLICATION_CREDENTIALS`
+  or gcloud's default file), or the metadata server (Compute Engine, GKE,
+  Cloud Run); `RWS_GCS_CREDENTIAL_SOURCE=none` for emulators. CI now runs
+  every storage backend's tests.
+
 ### Fixed
 
 - The `wasm32-wasip2` build (`rws-wasm-shim`) compiles again: WebSocket

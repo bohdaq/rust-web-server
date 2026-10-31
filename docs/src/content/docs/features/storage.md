@@ -1,9 +1,9 @@
 ---
 title: File / Object Storage
-description: A single Storage trait for local disk and S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), with no AWS SDK dependency.
+description: A single Storage trait for local disk, S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), Azure Blob Storage and Google Cloud Storage, with no cloud SDK dependency.
 ---
 
-`FormMultipartData::parse()` (see [Forms & File Uploads](/building-apps/forms-uploads/)) hands back raw bytes with no place to put them. The `storage` module gives handlers a single `Storage` trait so the same upload code works against local disk in development and an S3-compatible bucket in production.
+`FormMultipartData::parse()` (see [Forms & File Uploads](/building-apps/forms-uploads/)) hands back raw bytes with no place to put them. The `storage` module gives handlers a single `Storage` trait so the same upload code works against local disk in development and an S3-compatible bucket, Azure Blob Storage or Google Cloud Storage in production.
 
 ```rust
 pub trait Storage: Send + Sync {
@@ -208,6 +208,44 @@ RWS_AZURE_CONTAINER=my-container
 :::note[Signing scope]
 Shared Key requests sign every `x-ms-*` header actually sent — `x-ms-date`, `x-ms-version`, and `x-ms-blob-type` on `PUT` — plus the standard `Content-Type`/`Content-Length` slots. Managed Identity requests skip signing entirely and use `Authorization: Bearer {token}` instead. This covers standard single-blob `PUT`/`GET`/`DELETE` — there's no support for SAS tokens, blob listing, or multipart (block list) uploads.
 :::
+
+## Google Cloud Storage (`storage-gcs` feature)
+
+Talks to the GCS JSON API through the outbound HTTP client — **no Google SDK** (since 18.16.0).
+
+```toml
+[dependencies]
+rust-web-server = { version = "18", features = ["storage-gcs"] }
+```
+
+```rust,no_run
+use rust_web_server::storage::{GcsStorage, Storage};
+
+let store = GcsStorage::from_env()?;
+
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+let bytes = store.get(&key)?;
+store.delete(&key)?;
+let public_url = store.url(&key); // https://storage.googleapis.com/<bucket>/avatars/42.png
+# Ok::<(), rust_web_server::storage::StorageError>(())
+```
+
+`GcsStorage::from_env()` reads `RWS_GCS_BUCKET` (required) and `RWS_GCS_ENDPOINT` (default `https://storage.googleapis.com`; point it at an emulator such as fake-gcs-server). Or build `GcsConfig { bucket, endpoint }` and call `GcsStorage::new`.
+
+### Credentials
+
+An OAuth 2.0 access token, found the way Google's own client libraries find Application Default Credentials, so whatever already works for `gcloud` works here:
+
+| Source | Used when | Notes |
+|---|---|---|
+| `RWS_GCS_ACCESS_TOKEN` | set | A token you already have (`gcloud auth print-access-token`); used as is, never refreshed. |
+| `GOOGLE_APPLICATION_CREDENTIALS` | set | A service account key file (a JWT signed with its key, traded for a token; native builds) or an `authorized_user` file. |
+| gcloud's `application_default_credentials.json` | the file exists | Written by `gcloud auth application-default login` (under `CLOUDSDK_CONFIG` or `~/.config/gcloud`). |
+| Metadata server | last resort | Compute Engine, GKE Workload Identity, Cloud Run, Cloud Functions: no key at all. `GCE_METADATA_HOST` overrides `metadata.google.internal`. |
+
+`RWS_GCS_CREDENTIAL_SOURCE=token|file|metadata|none` picks one and skips detection; `none` sends no credentials (emulators). Tokens are cached and refreshed two minutes before they expire. The token asks for the `devstorage.read_write` scope.
+
+GCS also speaks the S3 API with HMAC keys: `S3Storage` with `RWS_S3_ENDPOINT=https://storage.googleapis.com` works too, if you'd rather manage HMAC keys than tokens.
 
 ## Large objects: `put_stream`
 

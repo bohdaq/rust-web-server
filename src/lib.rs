@@ -176,7 +176,7 @@ pub mod mailer;
 pub mod jobs;
 // Also compiled under `secrets` — `secrets::aws_secrets_manager`/`azure_key_vault`
 // reuse `StorageError` and the SigV4/Managed-Identity credential helpers from here.
-#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "secrets"))]
+#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs", feature = "secrets"))]
 pub mod storage;
 #[cfg(feature = "openapi")]
 pub mod openapi;

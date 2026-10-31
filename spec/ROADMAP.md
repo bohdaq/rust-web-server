@@ -185,6 +185,15 @@ Change a running server without editing files, and extend it without recompiling
 
 - **#32** **Authorization API** — relationship-based (Zanzibar-style) access control: a schema in config or code, tuples in memory or SQL, one `Identity` from every authenticator, `[route.middleware.authz]` and `AuthzLayer`, tuples managed from code and the admin API. Plan: [AUTHORIZATION_REBAC.md](AUTHORIZATION_REBAC.md) (2026-10-31).
 
+## 18.15.0 — Traffic insights and disk safety
+
+- **Traffic page**: people, AI agents and bots, counted server-side, in the admin UI, admin API and MCP. Plan: [TRAFFIC_INSIGHTS.md](TRAFFIC_INSIGHTS.md). Released 2026-10-31 with the disk guard (`min_free_disk`), access-log rotation by default, `host`/`user_agent`/`referer` log fields and the trailing-punctuation redirect.
+
+## 18.16.0 — Google Cloud Storage
+
+- **#35** **`storage-gcs`** — `GcsStorage` over the JSON API, Application Default Credentials (token, service account / `authorized_user` file, metadata server); every storage backend's tests now run in CI. Done 2026-10-31.
+- **#34** (part) — the `wasm32-wasip2` build compiles again and CI serves the component under `wasmtime serve` (`wasm-shim`). Done 2026-10-31.
+
 ## 19.0.0 — Breaking changes
 
 - **#63** **Proxy response pass-through.** On the 18.0.0 benchmarks rws leads nginx in most scenarios, but on proxy-1k it is level or slightly behind (EPYC 7763: 48.7 vs 45.3 µs CPU per request; the one Intel run: −2% requests per second, +9% CPU per request). The remaining cost is rws parsing every upstream response into a `Response` and writing it out again, about 7% of a proxied request's CPU in the per-core profile. Carry a simple upstream head through unparsed instead, keeping what the parse does for safety: dropping hop-by-hop and duplicate `Content-Length` headers and rejecting CR/LF. That needs a new field on `Response`, whose fields are all public and built by struct literal, so it breaks apps; mark `Response` `#[non_exhaustive]` (with constructors) in the same release so later fields don't. Judge it by same-run A/B against 18.x on proxy-1k. *Planned 2026-10-26.* **Shelved 2026-10-30**: re-measured (proxy-1k level with nginx on throughput, +4.6% CPU/request); a same-run A/B of the cheap non-breaking half was noise, so a major version for the rest isn't worth it ([RELEASE_19_0.md](RELEASE_19_0.md)).
@@ -194,8 +203,7 @@ Change a running server without editing files, and extend it without recompiling
 Valuable, but blocked on an upstream dependency or waiting for a user who needs it. Picked into a release when that changes.
 
 - **#33** **i18n** — message catalogs and an `Accept-Language` extractor.
-- **#34** **WASM shim remainder** — a `wasm32-wasip2` CI smoke test first, then stateful middleware, then WASI 0.3 ([WASM_SHIM.md](WASM_SHIM.md)).
-- **#35** **`storage-gcs`** — the third cloud backend next to S3 and Azure.
+- **#34** **WASM shim remainder** — the CI smoke test shipped in 18.16.0; left: stateful middleware, which needs a host key-value binding (`wasi-keyvalue`, pre-1.0 — `wasmtime serve` starts a fresh instance per request), and WASI 0.3 once it's out of RC ([WASM_SHIM.md](WASM_SHIM.md)).
 - **#36** **Encrypted Client Hello** — once rustls has a server-side API; publish ECH configs in DNS HTTPS records (Caddy 2.10 automates it; nginx 1.29 and HAProxy 3.3 ship it).
 
 ## Not planned (for 18.x)

@@ -78,7 +78,7 @@ Use it as:
 - [CSRF Protection](https://rws8.tech/features/csrf/): Double-submit cookie pattern with constant-time comparison and automatic SameSite=Strict enforcement.
 - [Sessions](https://rws8.tech/features/sessions/): Server-side session management with in-memory, database-backed, and Redis-backed session stores.
 - [Email / SMTP](https://rws8.tech/features/email/): Send transactional email from handlers using the built-in SMTP mailer — plain, STARTTLS, and SMTPS; multipart text+HTML; AUTH PLAIN.
-- [File / Object Storage](https://rws8.tech/features/storage/): A single Storage trait for local disk and S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), with no AWS SDK dependency.
+- [File / Object Storage](https://rws8.tech/features/storage/): A single Storage trait for local disk, S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), Azure Blob Storage and Google Cloud Storage, with no cloud SDK dependency.
 - [Response Caching](https://rws8.tech/features/caching/): In-memory, capacity-bounded response cache middleware with TTL, Vary-header support, and manual invalidation.
 - [Metrics](https://rws8.tech/features/metrics/): Built-in Prometheus metrics — server-wide counters always active, per-route histograms via MetricsLayer middleware.
 - [Distributed Tracing](https://rws8.tech/features/tracing/): OpenTelemetry-compatible HTTP server spans and nested child spans via OtelLayer and otel::span, with W3C traceparent propagation.
