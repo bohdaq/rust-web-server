@@ -1,6 +1,6 @@
 // Phosphor icons (landing-page-design B6), inlined as strings at build time:
-// only the ones the app uses.
-import { unsafeSVG } from "lit/directives/unsafe-svg.js";
+// only the ones the app uses, registered by name with @lit-material/icon.
+import { registerIcons } from "@lit-material/icon";
 
 import gauge from "../node_modules/@phosphor-icons/core/assets/regular/gauge.svg?raw";
 import chart_line from "../node_modules/@phosphor-icons/core/assets/regular/chart-line.svg?raw";
@@ -20,7 +20,7 @@ import trash from "../node_modules/@phosphor-icons/core/assets/regular/trash.svg
 import plus from "../node_modules/@phosphor-icons/core/assets/regular/plus.svg?raw";
 import lock_key from "../node_modules/@phosphor-icons/core/assets/regular/lock-key.svg?raw";
 
-const byName = {
+registerIcons({
   "gauge": gauge,
   "chart-line": chart_line,
   "tree-structure": tree_structure,
@@ -38,10 +38,7 @@ const byName = {
   "trash": trash,
   "plus": plus,
   "lock-key": lock_key,
-};
+});
 
-/** The icon `name` as a lit template value. */
-export function icon(name) {
-  const svg = byName[name] ?? "";
-  return unsafeSVG(svg.replace("<svg ", '<svg aria-hidden="true" focusable="false" '));
-}
+/** The icon `name` as a template value (a `lit-material-icon`). */
+export { icon } from "@lit-material/icon";

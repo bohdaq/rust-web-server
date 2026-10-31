@@ -60,6 +60,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Changed
 
+- The admin UI registers its Phosphor icons with `@lit-material/icon`'s
+  `registerIcons()` and renders them as `lit-material-icon` instead of
+  its own name-to-SVG helper; it looks the same.
 - `starters/fullstack`'s frontend uses lit-material components rather than
   raw `<input>`/`<ul>`: an outlined text field, a list with a delete icon
   button per note, an empty state, and a snackbar for failed requests (it
