@@ -17,6 +17,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   publish; a User-Agent claiming one of those crawlers from elsewhere is
   marked spoofed. `ci/gen_bot_lists.py` regenerates the tables (`--check`
   in CI). Fuzz target `traffic_classify`.
+- Traffic counting (`[traffic]`, on whenever the admin API is): every
+  request — logged or not — lands in hourly counts per host and group
+  (people, AI, bots), daily unique visitors (hashed with a secret that's
+  never stored; no IPs or User-Agents kept) and daily top lists (pages,
+  AI agents, bot kinds, referrers, 404s). A browser counts as a person
+  only once it loads a stylesheet, script or font. Saved every 5 minutes
+  to `traffic.json` beside the certificate (or `persist`), 30 days by
+  default, bounded to a few MB at any load. About 160 ns per request.
 
 - A static path that names nothing but ends with punctuation copied along
   with a link (`/docs/http2/):` from an llms.txt line, `/docs/install.`)

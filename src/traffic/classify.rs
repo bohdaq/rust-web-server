@@ -178,8 +178,11 @@ const SCANNER_PATHS: &[&str] = &[
     "/telescope/", "/_ignition/", "/debug/default/view", "/console/", "/manager/html", "/geoserver/", "/autodiscover/",
 ];
 
-fn scanner_path(path: &str) -> bool {
-    let path = path.split('?').next().unwrap_or(path).to_ascii_lowercase();
+pub(super) fn scanner_path(path: &str) -> bool {
+    let path = path.split('?').next().unwrap_or(path);
+    // Lowercase only when needed: most paths already are.
+    let path: std::borrow::Cow<'_, str> =
+        if path.bytes().any(|b| b.is_ascii_uppercase()) { path.to_ascii_lowercase().into() } else { path.into() };
     SCANNER_PATHS.iter().any(|p| path.starts_with(p) || path.contains(p))
         || path.ends_with(".sql")
         || path.ends_with(".bak")

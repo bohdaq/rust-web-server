@@ -190,6 +190,8 @@ impl Log {
     /// 100 ms (and when a thread's buffer passes 32 KiB, when the thread
     /// exits, and at process exit); [`Log::flush_access_log`] writes them now.
     pub fn log_access(request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        // Traffic insights count every request, whether lines are written.
+        crate::traffic::observe(request, response, peer_addr.ip());
         let config = crate::server_config::ServerConfig::current();
         let format = &config.log_format;
         if format.eq_ignore_ascii_case("off") || format.eq_ignore_ascii_case("none") {

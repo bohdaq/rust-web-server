@@ -519,7 +519,14 @@ pub fn start(config: &AdminConfig) -> Result<Option<std::net::SocketAddr>, Strin
 /// entry point. A misconfigured admin API is logged, not fatal.
 pub fn start_from_env() {
     match start(&AdminConfig::from_env()) {
-        Ok(Some(addr)) => println!("admin API at http://{addr}{API_PREFIX}/"),
+        Ok(Some(addr)) => {
+            println!("admin API at http://{addr}{API_PREFIX}/");
+            // Traffic insights are shown by the admin UI: counted when it's
+            // on, unless `[traffic] enabled = false` (18.16.0).
+            if crate::traffic::config::enabled_setting() != Some(false) {
+                crate::traffic::start();
+            }
+        }
         Ok(None) => {}
         Err(e) => eprintln!("admin API not started: {e}"),
     }

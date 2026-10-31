@@ -207,6 +207,20 @@ token_env       = "RWS_ADMIN_TOKEN"           # default
 allowed_origins = ["https://ops.example.com"] # browser origins besides the listener's own
 ```
 
+
+## `[traffic]`
+
+Traffic insights for the admin UI (since 18.16.0): on whenever the admin API
+is, counting people, AI agents and bots per hour and day. No IP addresses or
+User-Agents are kept.
+
+```toml
+[traffic]
+# enabled        = false                     # on with [admin] listen; false turns it off
+retention_days   = 30                        # 1–90
+# persist        = "/var/lib/rws/traffic.json"  # default: traffic.json beside the certificate; "off"
+# exclude        = ["/healthz", "/readyz", "/metrics"]
+```
 ## Other settings
 
 ```toml

@@ -535,6 +535,7 @@ fn main() {
         Server::run(listener, pool, build_app());
     }
     rust_web_server::otel::shutdown();
+    rust_web_server::traffic::save();
 }
 
 /// The server: everything `main` runs once the runtime is up.
@@ -570,6 +571,7 @@ async fn serve() {
         );
     }
     let _ = tokio::task::spawn_blocking(rust_web_server::otel::shutdown).await;
+    let _ = tokio::task::spawn_blocking(rust_web_server::traffic::save).await;
 }
 
 /// The server: everything `main` runs once the runtime is up.
@@ -612,6 +614,7 @@ async fn serve() {
     // Last metrics and spans out before the process ends; blocking, so off
     // the runtime's workers.
     let _ = tokio::task::spawn_blocking(rust_web_server::otel::shutdown).await;
+    let _ = tokio::task::spawn_blocking(rust_web_server::traffic::save).await;
 }
 
 /// A multi-threaded tokio runtime, as `#[tokio::main]` builds one.
