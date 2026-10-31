@@ -175,7 +175,11 @@ Change a running server without editing files, and extend it without recompiling
 
 ## 18.12.0 — Faster page loads
 
-- **#38** **103 Early Hints and compression dictionaries** — Early Hints from config and upstream `103`s (RFC 8297), h2/h3 by default; `dcb` / `dcz` dictionary compression for static files (RFC 9842). Plan: [EARLY_HINTS_DICTIONARY.md](EARLY_HINTS_DICTIONARY.md) (2026-10-31).
+- **#38** ✅ *18.12.0 (2026-10-31); plan and history: [EARLY_HINTS_DICTIONARY.md](EARLY_HINTS_DICTIONARY.md)* **103 Early Hints and compression dictionaries** — Early Hints from handlers, config routes and upstream `103`s (RFC 8297), h2/h3 by default, HTTP/1.1 opt-in; `dcz` / `dcb` dictionary compression for static files (RFC 9842).
+
+## 18.13.0 — HTTP/3 upstreams
+
+- **#37** **HTTP/3 to upstreams** — `[[upstream]] protocol = "h3"` for config proxy routes and `H3ReverseProxy` in code, falling back to TCP when QUIC can't connect (HAProxy 3.3, experimental). Plan: [HTTP3_UPSTREAMS.md](HTTP3_UPSTREAMS.md) (2026-10-31).
 
 ## 19.0.0 — Breaking changes
 
@@ -190,7 +194,6 @@ Valuable, but blocked on an upstream dependency or waiting for a user who needs 
 - **#34** **WASM shim remainder** — a `wasm32-wasip2` CI smoke test first, then stateful middleware, then WASI 0.3 ([WASM_SHIM.md](WASM_SHIM.md)).
 - **#35** **`storage-gcs`** — the third cloud backend next to S3 and Azure.
 - **#36** **Encrypted Client Hello** — once rustls has a server-side API; publish ECH configs in DNS HTTPS records (Caddy 2.10 automates it; nginx 1.29 and HAProxy 3.3 ship it).
-- **#37** **HTTP/3 to upstreams** (HAProxy 3.3, experimental).
 
 ## Not planned (for 18.x)
 
