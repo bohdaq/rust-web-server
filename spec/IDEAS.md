@@ -10,7 +10,6 @@ Updated 2026-10-25.
 
 ## Protocol
 
-- **`Proxy-Status` / `Cache-Status` headers** (RFC 9209 / 9211) and **problem+json** bodies for rws-generated errors (RFC 9457).
 - **`Forwarded` header** (RFC 7239) next to `X-Forwarded-For` (Caddy #3262).
 - **WebTransport / MASQUE** once the Rust h3 crates leave experimental status.
 - **Native gRPC server**, only if mounting tonic through tower compatibility falls short.
@@ -22,9 +21,7 @@ Updated 2026-10-25.
 
 ## AI
 
-- **A2A server module** — JSON-RPC + SSE binding and an Agent Card at `/.well-known/agent-card.json` ([A2A 1.0](https://a2a-protocol.org/latest/specification/)); Agent Card rewriting in the proxy.
 - **MCP Server Card**, behind a flag, once SEP-2127 settles the discovery path.
-- **OpenAPI → MCP tools** conversion (Kong's MCP proxy does it).
 - **MCP tools generated** from routes, ORM models or jobs.
 
 ## Framework
