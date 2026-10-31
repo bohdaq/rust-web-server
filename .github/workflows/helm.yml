@@ -44,13 +44,28 @@ jobs:
           cluster_name: rws
       - name: Package
         run: helm package helm/rws -d dist
+      # A release bump moves appVersion before the tag publishes that image:
+      # until then, install the newest published one (this job tests the chart).
+      - name: Pick the image
+        run: |
+          app=$(awk '/^appVersion:/ {gsub(/"/, "", $2); print $2}' helm/rws/Chart.yaml)
+          if docker manifest inspect "ghcr.io/bohdaq/rws:$app" >/dev/null 2>&1; then
+            echo "IMAGE_TAG=$app" >> "$GITHUB_ENV"; exit 0
+          fi
+          for tag in $(git ls-remote --tags --refs origin | awk -F/ '{print $3}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1,1nr -k2,2nr -k3,3nr | head -5); do
+            if docker manifest inspect "ghcr.io/bohdaq/rws:$tag" >/dev/null 2>&1; then
+              echo "ghcr.io/bohdaq/rws:$app isn't published yet; installing $tag"
+              echo "IMAGE_TAG=$tag" >> "$GITHUB_ENV"; exit 0
+            fi
+          done
+          echo "no published image found"; exit 1
       - name: Install with TLS
         run: |
           openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
             -subj /CN=localhost -keyout tls.key -out tls.crt
           kubectl create secret tls rws-tls --cert=tls.crt --key=tls.key
           helm install tls dist/rws-*.tgz --set replicaCount=1 --set podDisruptionBudget.enabled=false \
-            --wait --timeout 5m
+            --set image.tag="$IMAGE_TAG" --wait --timeout 5m
           kubectl port-forward svc/tls-rws 8443:443 & sleep 3
           curl -sSfk https://localhost:8443/healthz
           curl -sSfk https://localhost:8443/metrics | grep '^rws_requests_total'
@@ -58,7 +73,7 @@ jobs:
       - name: Install without TLS
         run: |
           helm install plain dist/rws-*.tgz --set replicaCount=1 --set podDisruptionBudget.enabled=false \
-            --set tls.enabled=false --set quic.enabled=false --wait --timeout 5m
+            --set image.tag="$IMAGE_TAG" --set tls.enabled=false --set quic.enabled=false --wait --timeout 5m
           kubectl port-forward svc/plain-rws 8080:80 & sleep 3
           curl -sSf http://localhost:8080/healthz
           kill %1
