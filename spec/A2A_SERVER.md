@@ -1,6 +1,8 @@
 [Read Me](../README.md) > [Spec](.) > A2A server
 
-# A2A server module (18.18.0)
+# A2A server module (18.17.0–18.18.0)
+
+Tranches 1–2 shipped in 18.17.0 (the user's call, 2026-10-31: the release went out with them rather than rewriting history to leave them out).
 
 Planned 2026-10-31. [Agent2Agent (A2A) 1.0](https://a2a-protocol.org/latest/specification/)
 lets one AI agent call another: discover it by its Agent Card, send it a

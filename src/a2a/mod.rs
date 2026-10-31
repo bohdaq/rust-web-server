@@ -1,4 +1,4 @@
-//! A2A (Agent2Agent) 1.0 server, JSON-RPC binding (18.18.0, #65): other
+//! A2A (Agent2Agent) 1.0 server, JSON-RPC binding (18.17.0, #65): other
 //! agents discover this one by its Agent Card at
 //! `/.well-known/agent-card.json` and talk to it with `SendMessage`,
 //! `GetTask`, `ListTasks`, `CancelTask`.

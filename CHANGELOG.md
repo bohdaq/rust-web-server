@@ -5,7 +5,31 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
+## 18.17.0 — 2026-10-31
+
+### Changed
+
+- Errors rws produces itself (proxy `502`/`503`/`504`, `413`, `431`,
+  `408`, `401`/`403` from the auth and filter layers, `429`, maintenance,
+  misconfigured routes, `AppError`) answer with RFC 9457 problem details,
+  `application/problem+json`
+  (`{"type":"about:blank","title":"Bad Gateway","status":502}`), instead of
+  a plain-text line. Status codes and headers are unchanged. Set
+  `error_format = "text"` (`RWS_CONFIG_ERROR_FORMAT`) for the old bodies.
+  [Error responses](https://rws8.tech/reference/errors/) lists them.
+- Proxied responses carry `Proxy-Status` (RFC 9209): `rws; received-status=200`,
+  or on failure the reason, `rws; error=connection_refused` (DNS, refused,
+  timeouts, TLS, terminated, incomplete, protocol errors, no backend in
+  rotation). Config-file routes, `ReverseProxy`, HTTP/2 and HTTP/3 reverse
+  proxies, canary, ingress, gRPC routes and the Gateway API router.
+  `proxy_status = "errors"` or `"off"` limits it, `proxy_name` names the
+  hop, `proxy_status_next_hop = true` adds the backend address and error
+  text (off by default: they reveal internal addresses).
+- Responses through a response cache (`CacheLayer`, memory or disk, and
+  `[route.middleware.cache]`) carry `Cache-Status` (RFC 9211):
+  `rws; hit; ttl=42`, `rws; fwd=uri-miss; stored`, `fwd=stale`,
+  `fwd=request`, `fwd=method`, `fwd=bypass; detail=private`. An upstream's
+  `Cache-Status` is kept. `cache_status = false` leaves it out.
 
 ### Added
 
@@ -32,32 +56,6 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   to git.rws8.tech). HTTP/3 requests now carry `:authority` as `Host`, as
   HTTP/2 ones did. `Router::with_host` also ignores case and a port it doesn't
   name, as config routes already did.
-
-## 18.17.0 — 2026-10-31
-
-### Changed
-
-- Errors rws produces itself (proxy `502`/`503`/`504`, `413`, `431`,
-  `408`, `401`/`403` from the auth and filter layers, `429`, maintenance,
-  misconfigured routes, `AppError`) answer with RFC 9457 problem details,
-  `application/problem+json`
-  (`{"type":"about:blank","title":"Bad Gateway","status":502}`), instead of
-  a plain-text line. Status codes and headers are unchanged. Set
-  `error_format = "text"` (`RWS_CONFIG_ERROR_FORMAT`) for the old bodies.
-  [Error responses](https://rws8.tech/reference/errors/) lists them.
-- Proxied responses carry `Proxy-Status` (RFC 9209): `rws; received-status=200`,
-  or on failure the reason, `rws; error=connection_refused` (DNS, refused,
-  timeouts, TLS, terminated, incomplete, protocol errors, no backend in
-  rotation). Config-file routes, `ReverseProxy`, HTTP/2 and HTTP/3 reverse
-  proxies, canary, ingress, gRPC routes and the Gateway API router.
-  `proxy_status = "errors"` or `"off"` limits it, `proxy_name` names the
-  hop, `proxy_status_next_hop = true` adds the backend address and error
-  text (off by default: they reveal internal addresses).
-- Responses through a response cache (`CacheLayer`, memory or disk, and
-  `[route.middleware.cache]`) carry `Cache-Status` (RFC 9211):
-  `rws; hit; ttl=42`, `rws; fwd=uri-miss; stored`, `fwd=stale`,
-  `fwd=request`, `fwd=method`, `fwd=bypass; detail=private`. An upstream's
-  `Cache-Status` is kept. `cache_status = false` leaves it out.
 
 ## 18.16.0 — 2026-10-31
 

@@ -18811,7 +18811,7 @@ Upstream notifications (`listChanged`, resource updates, progress) aren't follow
 [Agent2Agent (A2A)](https://a2a-protocol.org/latest/specification/) lets one
 AI agent call another: it reads the other's **Agent Card**, sends it a
 **message**, and follows the **task** that starts. MCP connects an agent to
-tools; A2A connects agents to agents. `A2aServer` (since 18.18.0) serves the
+tools; A2A connects agents to agents. `A2aServer` (since 18.17.0) serves the
 A2A 1.0 JSON-RPC binding; you write what the agent does.
 
 ```rust,no_run
