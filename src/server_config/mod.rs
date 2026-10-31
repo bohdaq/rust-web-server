@@ -119,6 +119,11 @@ pub struct ServerConfig {
     /// `If-None-Match` / `If-Modified-Since` (a 304). An empty value keeps
     /// the `no-store` default for static files too.
     pub static_cache_control: String,
+    /// `RWS_CONFIG_EARLY_HINTS_HTTP1` — also send `103 Early Hints` to
+    /// HTTP/1.1 clients. Default `false`: browsers use them only over HTTP/2
+    /// and HTTP/3, and some old HTTP/1.1 clients mishandle extra `1xx`
+    /// responses (18.12.0).
+    pub early_hints_http1: bool,
     /// `RWS_CONFIG_DIRECTORY_LISTING` — list a directory that has no
     /// `index.html`. Default `true`; `false` answers 404 instead (18.8.4).
     pub directory_listing: bool,
@@ -148,6 +153,7 @@ impl Default for ServerConfig {
             nanos_headers: false,
             client_hints: false,
             static_cache_control: STATIC_CACHE_CONTROL_DEFAULT.to_string(),
+            early_hints_http1: false,
             directory_listing: true,
             log_format: Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE.to_string(),
             request_allocation_size: *Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES,
@@ -184,6 +190,7 @@ impl ServerConfig {
             client_hints: read("RWS_CONFIG_CLIENT_HINTS").eq_ignore_ascii_case("true"),
             static_cache_control: std::env::var("RWS_CONFIG_STATIC_CACHE_CONTROL")
                 .unwrap_or_else(|_| STATIC_CACHE_CONTROL_DEFAULT.to_string()),
+            early_hints_http1: read("RWS_CONFIG_EARLY_HINTS_HTTP1").eq_ignore_ascii_case("true"),
             directory_listing: !read("RWS_CONFIG_DIRECTORY_LISTING").eq_ignore_ascii_case("false"),
             log_format: read(Config::RWS_CONFIG_LOG_FORMAT),
             request_allocation_size: std::env::var(

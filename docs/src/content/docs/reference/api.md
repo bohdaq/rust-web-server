@@ -121,6 +121,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `MaintenanceLayer` / `MAINTENANCE_MODE` | `maintenance` | While the `AtomicBool` is `true`, answers `503` for everything but `/healthz` and `/readyz` |
 | `RequestLog` | `request_log` | In-memory buffer of recent requests (`request_log::global()`, capacity 1000); `.recent(n)` / `.recent_errors(n)` |
 | `LogLayer` | `request_log` | Records each request into `RequestLog` |
+| `EarlyHintsLayer` / `early_hints::send` | `early_hints` | `103 Early Hints` with `Link` values before the response, on HTTP/2 and HTTP/3 (HTTP/1.1 opt-in) (18.12.0). See [Early Hints](/features/early-hints/) |
 | `RequestIdLayer` | `request_id` | Correlation-ID middleware — echoes or generates `X-Request-Id` (`generate_request_id()`, UUID-v4-shaped, not crypto-random). See [Request ID](/features/request-id/) |
 | `CsrfLayer` | `csrf` (`csrf`) | Double-submit cookie CSRF protection; 403 on mismatch. See [CSRF](/features/csrf/) |
 | `CsrfToken` | `csrf` (`csrf`) | Extractor for the current token in a GET handler; implements `Display` |

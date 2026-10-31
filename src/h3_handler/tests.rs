@@ -24,6 +24,11 @@ impl Application for H3App {
     fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
         match request.request_uri.as_str() {
             "/hello" => Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "hello over h3")),
+            "/hints" => {
+                crate::early_hints::send(&["</a.css>; rel=preload; as=style"]);
+                crate::early_hints::send(&["</b.js>; rel=preload; as=script", "<https://cdn.example>; rel=preconnect"]);
+                Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "hinted"))
+            }
             "/echo" => {
                 let body = format!("{} {}", request.method, String::from_utf8_lossy(&request.body));
                 Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &body))
@@ -184,4 +189,31 @@ async fn mcp_sse_stream_over_http3() {
     }
     let text = String::from_utf8_lossy(&text);
     assert!(text.contains("data: ") && text.contains("notifications/test"), "{text}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn early_hints_come_before_the_http3_response() {
+    let cert_file = TempPath::new("h3_hints_cert.pem");
+    let key_file = TempPath::new("h3_hints_key.pem");
+    let (addr, cert_der) = start_server(H3App { big_file: String::new() }, &cert_file, &key_file);
+    let (mut send_request, endpoint) = connect(addr, cert_der).await;
+    let request = http::Request::get("https://localhost/hints").body(()).unwrap();
+    let mut stream = send_request.send_request(request).await.unwrap();
+    stream.finish().await.unwrap();
+    let mut hints = Vec::new();
+    let response = loop {
+        let head = stream.recv_response().await.unwrap();
+        if head.status() != 103 {
+            break head;
+        }
+        hints.push(head.headers().get_all("link").iter().map(|v| v.to_str().unwrap().to_string()).collect::<Vec<_>>());
+    };
+    assert_eq!(response.status(), 200);
+    assert_eq!(hints, [vec!["</a.css>; rel=preload; as=style"], vec!["</b.js>; rel=preload; as=script", "<https://cdn.example>; rel=preconnect"]]);
+    let mut body = Vec::new();
+    while let Some(mut chunk) = stream.recv_data().await.unwrap() {
+        body.extend_from_slice(&chunk.copy_to_bytes(chunk.remaining()));
+    }
+    assert_eq!(body, b"hinted");
+    endpoint.close(0u32.into(), b"done");
 }

@@ -144,6 +144,10 @@
         "link": "/features/compression/"
       },
       {
+        "label": "Early Hints",
+        "link": "/features/early-hints/"
+      },
+      {
         "label": "HTTPS / TLS",
         "link": "/features/https-tls/"
       },

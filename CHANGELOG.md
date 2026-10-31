@@ -5,6 +5,16 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- 103 Early Hints: `early_hints::send(links)` from any handler or middleware,
+  and `EarlyHintsLayer` for a fixed list, write a `103` head with `Link`
+  values before the response. HTTP/2 and HTTP/3 by default; HTTP/1.1 with
+  `early_hints_http1 = true` (`RWS_CONFIG_EARLY_HINTS_HTTP1`); never
+  HTTP/1.0. At most 4 per request.
+
 ## 18.11.0 — 2026-10-31
 
 ### Added

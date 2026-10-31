@@ -278,9 +278,32 @@ where
         let keep_alive = framing::keep_alive(&request);
 
         let started = std::time::Instant::now();
-        let (request, result) = execute_request(app.clone(), request, &connection)
-            .await
-            .map_err(|e| format!("request handler panicked: {}", e))?;
+        let (request, result) = if crate::early_hints::http1_wanted(&request) {
+            // `103`s are written as the handler sends them, and any still
+            // queued when it returns go out before the final head.
+            let (hint_tx, mut hint_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<String>>();
+            let sink = crate::early_hints::Sink::new(move |links| {
+                let _ = hint_tx.send(links);
+            });
+            let mut handler = std::pin::pin!(execute_request(app.clone(), request, &connection, Some(sink)));
+            let done = loop {
+                tokio::select! {
+                    biased;
+                    done = &mut handler => break done,
+                    Some(links) = hint_rx.recv() => {
+                        stream.write_all(&crate::early_hints::http1_head(&links)).await.map_err(|e| e.to_string())?;
+                        stream.flush().await.map_err(|e| e.to_string())?;
+                    }
+                }
+            };
+            while let Ok(links) = hint_rx.try_recv() {
+                stream.write_all(&crate::early_hints::http1_head(&links)).await.map_err(|e| e.to_string())?;
+            }
+            done
+        } else {
+            execute_request(app.clone(), request, &connection, None).await
+        }
+        .map_err(|e| format!("request handler panicked: {}", e))?;
 
         let mut response = match result {
             Ok(r) => r,
@@ -370,20 +393,27 @@ pub(crate) async fn execute_request<A: Application + Send + 'static>(
     app: A,
     request: Request,
     connection: &ConnectionInfo,
+    hints: Option<std::sync::Arc<crate::early_hints::Sink>>,
 ) -> Result<(Request, Result<Response, String>), String> {
     let async_result = match app.execute_async(&request, connection) {
-        Some(future) => Some(CatchUnwind(future).await?),
+        Some(future) => {
+            // `pin!` keeps the scoped future on the stack: no allocation.
+            let scoped = std::pin::pin!(crate::early_hints::scope(hints.clone(), future));
+            Some(CatchUnwind(scoped).await?)
+        }
         None => None,
     };
     if let Some(result) = async_result {
         return Ok((request, result));
     }
     if app.runs_inline(&request, connection) {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, connection)))
-            .map_err(panic_message)?;
+        let result = crate::early_hints::with_sink(hints, || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, connection)))
+        })
+        .map_err(panic_message)?;
         return Ok((request, result));
     }
-    execute_blocking(app, request, connection.clone()).await
+    execute_blocking(app, request, connection.clone(), hints).await
 }
 
 /// Polls a boxed future, turning a panic into an error (one request lost,
@@ -420,9 +450,10 @@ pub(crate) async fn execute_blocking<A: Application + Send + 'static>(
     app: A,
     request: Request,
     connection: ConnectionInfo,
+    hints: Option<std::sync::Arc<crate::early_hints::Sink>>,
 ) -> Result<(Request, Result<Response, String>), String> {
     tokio::task::spawn_blocking(move || {
-        let result = app.execute(&request, &connection);
+        let result = crate::early_hints::with_sink(hints, || app.execute(&request, &connection));
         (request, result)
     })
     .await
@@ -833,6 +864,55 @@ mod tests {
         String::from_utf8_lossy(&out).to_string()
     }
 
+    /// Sends two `103`s (one inline, one from the blocking pool for `/slow`)
+    /// before answering.
+    #[derive(Clone)]
+    struct Hinting;
+
+    impl Application for Hinting {
+        fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+            crate::early_hints::send(&["</a.css>; rel=preload; as=style"]);
+            crate::early_hints::send(&["</b.js>; rel=preload; as=script", "<https://cdn.example>; rel=preconnect"]);
+            Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("page {}", request.request_uri)))
+        }
+
+        fn runs_inline(&self, request: &Request, _connection: &ConnectionInfo) -> bool {
+            request.request_uri != "/slow"
+        }
+    }
+
+    async fn hinted_exchange(raw: &[u8]) -> String {
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Hinting));
+        client.write_all(raw).await.unwrap();
+        let mut out = Vec::new();
+        client.read_to_end(&mut out).await.unwrap();
+        let _ = task.await;
+        String::from_utf8_lossy(&out).to_string()
+    }
+
+    #[tokio::test]
+    async fn early_hints_reach_http1_clients_only_when_enabled() {
+        let _g = crate::test_env::lock();
+        std::env::remove_var("RWS_CONFIG_EARLY_HINTS_HTTP1");
+        crate::server_config::invalidate();
+        let off = hinted_exchange(b"GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await;
+        assert!(off.starts_with("HTTP/1.1 200") && !off.contains("103"), "{off}");
+
+        std::env::set_var("RWS_CONFIG_EARLY_HINTS_HTTP1", "true");
+        crate::server_config::invalidate();
+        for path in ["/", "/slow"] {
+            let on = hinted_exchange(format!("GET {path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").as_bytes()).await;
+            let expected = "HTTP/1.1 103 Early Hints\r\nLink: </a.css>; rel=preload; as=style\r\n\r\nHTTP/1.1 103 Early Hints\r\nLink: </b.js>; rel=preload; as=script\r\nLink: <https://cdn.example>; rel=preconnect\r\n\r\nHTTP/1.1 200";
+            assert!(on.starts_with(expected), "{path}: {on}");
+            assert!(on.ends_with(&format!("page {path}")), "{on}");
+        }
+        let http10 = hinted_exchange(b"GET / HTTP/1.0\r\nHost: x\r\n\r\n").await;
+        assert!(http10.starts_with("HTTP/1.1 200"), "never to HTTP/1.0: {http10}");
+        std::env::remove_var("RWS_CONFIG_EARLY_HINTS_HTTP1");
+        crate::server_config::invalidate();
+    }
+
     #[tokio::test]
     async fn keep_alive_serves_several_requests_on_one_connection() {
         let (mut client, server) = tokio::io::duplex(64 * 1024);
@@ -1107,7 +1187,7 @@ mod tests {
         let here = std::thread::current().id();
         for (inline, expect_here) in [(true, true), (false, false)] {
             let probe = ThreadProbe { inline, ran_on: Default::default() };
-            let (_, result) = execute_request(probe.clone(), probe_request("/"), &probe_connection()).await.unwrap();
+            let (_, result) = execute_request(probe.clone(), probe_request("/"), &probe_connection(), None).await.unwrap();
             assert!(result.is_ok());
             let ran_on = probe.ran_on.lock().unwrap().unwrap();
             assert_eq!(ran_on == here, expect_here, "inline = {inline}");
@@ -1117,7 +1197,7 @@ mod tests {
     #[tokio::test]
     async fn inline_handler_panic_is_caught() {
         let probe = ThreadProbe { inline: true, ran_on: Default::default() };
-        let err = execute_request(probe, probe_request("/panic"), &probe_connection()).await.unwrap_err();
+        let err = execute_request(probe, probe_request("/panic"), &probe_connection(), None).await.unwrap_err();
         assert!(err.contains("inline handler bug"), "{err}");
     }
 

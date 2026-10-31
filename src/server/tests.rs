@@ -1983,3 +1983,25 @@ fn server_process_without_a_socket_to_hand_over_refuses_the_upgrade() {
     assert!(Server::process(&mut stream, make_connection(), websocket_echo_app()).is_err());
     assert!(String::from_utf8_lossy(&stream.write_data).starts_with("HTTP/1.1 500 "));
 }
+
+#[test]
+fn the_sync_server_writes_early_hints_before_the_response_when_enabled() {
+    let _g = crate::test_env::lock();
+    let app = crate::middleware::WithMiddleware::new(crate::app::App::new())
+        .wrap(crate::early_hints::EarlyHintsLayer::new(["</a.css>; rel=preload; as=style"]));
+    let run = |app| {
+        let mut stream = SequentialMockStream::new(vec![raw_get_request("/static/test.txt", VERSION.http_1_1, &[])]);
+        Server::process(&mut stream, make_connection(), app).unwrap();
+        String::from_utf8_lossy(&stream.written).to_string()
+    };
+    std::env::remove_var("RWS_CONFIG_EARLY_HINTS_HTTP1");
+    crate::server_config::invalidate();
+    let off = run(app.clone());
+    assert!(off.starts_with("HTTP/1.1 200"), "{off}");
+    std::env::set_var("RWS_CONFIG_EARLY_HINTS_HTTP1", "true");
+    crate::server_config::invalidate();
+    let on = run(app);
+    std::env::remove_var("RWS_CONFIG_EARLY_HINTS_HTTP1");
+    crate::server_config::invalidate();
+    assert!(on.starts_with("HTTP/1.1 103 Early Hints\r\nLink: </a.css>; rel=preload; as=style\r\n\r\nHTTP/1.1 200"), "{on}");
+}

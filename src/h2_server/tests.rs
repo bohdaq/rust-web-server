@@ -28,6 +28,10 @@ impl Application for TestApp {
         if request.request_uri == "/panic" {
             panic!("test handler bug");
         }
+        if request.request_uri == "/hints" {
+            crate::early_hints::send(&["</a.css>; rel=preload; as=style"]);
+            crate::early_hints::send(&["</b.js>; rel=preload; as=script"]);
+        }
         let mut response = if request.method == "POST" {
             let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
             r.content_range_list[0].body = request.body.to_vec();
@@ -465,4 +469,34 @@ async fn the_authority_is_the_requests_host() {
     let (response, _) = send.ready().await.unwrap().send_request(request, true).unwrap();
     let (parts, _) = read(response).await;
     assert_eq!("other.example", parts.headers["x-seen-host"], "a host field is kept");
+}
+
+/// The `103`s a request got (via `poll_informational`), then its final
+/// response.
+async fn hinted(send: &mut h2::client::SendRequest<Bytes>, method: &str, path: &str) -> (Vec<Vec<String>>, u16, Vec<u8>) {
+    let request = http::Request::builder().method(method).uri(format!("https://x{}", path)).body(()).unwrap();
+    let (mut response, mut body) = send.clone().ready().await.unwrap().send_request(request, method == "GET").unwrap();
+    if method != "GET" {
+        body.send_data(Bytes::from_static(b"x"), true).unwrap();
+    }
+    let mut hints = Vec::new();
+    while let Some(head) = std::future::poll_fn(|cx| response.poll_informational(cx)).await {
+        let head = head.unwrap();
+        assert_eq!(head.status(), 103);
+        hints.push(head.headers().get_all("link").iter().map(|v| v.to_str().unwrap().to_string()).collect());
+    }
+    let (parts, body) = read(response).await;
+    (hints, parts.status.as_u16(), body)
+}
+
+#[tokio::test]
+async fn early_hints_arrive_before_the_response_inline_and_spawned() {
+    let mut send = client(TestApp(None)).await;
+    for method in ["GET", "POST"] {
+        let (hints, status, _) = hinted(&mut send, method, "/hints").await;
+        assert_eq!(status, 200, "{method}");
+        assert_eq!(hints, [vec!["</a.css>; rel=preload; as=style".to_string()], vec!["</b.js>; rel=preload; as=script".to_string()]], "{method}");
+    }
+    let (hints, status, body) = hinted(&mut send, "GET", "/plain").await;
+    assert_eq!((hints.len(), status, body), (0, 200, b"hello /plain".to_vec()));
 }

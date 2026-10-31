@@ -63,6 +63,7 @@ pub mod ip_filter;
 pub mod macros;
 pub mod blocklist;
 pub mod cache;
+pub mod early_hints;
 pub mod config_reload;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod config_watch;

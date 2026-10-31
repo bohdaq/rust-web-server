@@ -83,8 +83,8 @@ and `http1`-only test runs before pushing.
 
 ## Risks
 
-- `h3` 0.0.8 `send_response` may refuse a second HEADERS on a stream; then
-  HTTP/3 hints wait for an `h3` change (documented, not faked).
+- ~~`h3` 0.0.8 `send_response` may refuse a second HEADERS on a stream~~ —
+  it keeps no response state; a `103` then the final head works (tested).
 - Chromium's Compression Dictionary Transport needs HTTPS (or localhost) and
   may sit behind a flag in the Playwright build; the e2e pins a version and
   enables the feature if needed.
@@ -93,7 +93,7 @@ and `http1`-only test runs before pushing.
 
 | # | State |
 |---|---|
-| 1 | — |
+| 1 | **done 2026-10-31**: `early_hints` module — `send(links)`, `available()`, `valid()`, `EarlyHintsLayer` (runs inline), `MAX_PER_REQUEST` 4; crate-private `Sink` (closure + per-request count, `reset` for reuse), thread-local `with_sink` (restored on panic) and task-local `scope` (http2). `execute_request` / `execute_blocking` take the sink and install it for the async (`pin!`, no allocation), inline and blocking paths. HTTP/1.1 async: only when `http1_wanted` (HTTP/1.1 + `RWS_CONFIG_EARLY_HINTS_HTTP1`, `ServerConfig::early_hints_http1`) — a per-request channel, `select!` writes each `103` as it comes, leftovers before the final head; streamed-upload requests get none (the pump holds the socket). Sync server: same gate, hints written after the handler returns, before the response. HTTP/2: inline requests reuse one per-connection sink and write hints before `respond`; spawned and streamed-body handlers send `Outcome::Hints` over the response channel (so order is kept), `send_early_hints` = HEADERS without END_STREAM, skipped once responded. HTTP/3: per-request channel, `select!`, `send_response(103)`. Tests: 8 unit + h1 async (off by default, on: inline and blocking, never HTTP/1.0) + sync server + h2 via the `h2` crate's `poll_informational` (inline and spawned, none for a plain page) + h3 with the quinn/h3 client. h2spec 146/146. Docs: new `features/early-hints.md` (sidebar), env var, config file, api.md row, CHANGELOG. 2183 default / 2003 http1 |
 | 2 | — |
 | 3 | — |
 | 4 | — |

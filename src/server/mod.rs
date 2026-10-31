@@ -446,7 +446,23 @@ impl Server {
             let keep_alive = framing::keep_alive(&request);
 
             let started = std::time::Instant::now();
-            let mut response = match app.execute(&request, &connection) {
+            // The handler runs on this thread, which owns the socket: its
+            // `103`s are written once it returns, before the response.
+            let result = if crate::early_hints::http1_wanted(&request) {
+                let hints: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>> = Default::default();
+                let queue = std::sync::Arc::clone(&hints);
+                let sink = crate::early_hints::Sink::new(move |links| queue.lock().unwrap_or_else(|e| e.into_inner()).push(links));
+                let result = crate::early_hints::with_sink(Some(sink), || app.execute(&request, &connection));
+                for links in std::mem::take(&mut *hints.lock().unwrap_or_else(|e| e.into_inner())) {
+                    if stream.write_all(&crate::early_hints::http1_head(&links)).is_err() {
+                        return Err("client closed the connection".to_string());
+                    }
+                }
+                result
+            } else {
+                app.execute(&request, &connection)
+            };
+            let mut response = match result {
                 Ok(r) => r,
                 Err(message) => {
                     crate::metrics::http::observe(&request.method, 400, false, &request.http_version, started);

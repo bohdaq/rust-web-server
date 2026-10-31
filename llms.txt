@@ -62,6 +62,7 @@ Use it as:
 - [Static Files, Directory Listing & SPA Fallback](https://rws8.tech/features/static-files/): How rust-web-server serves files from disk, the default directory listing page for directories without an index.html, and the opt-in SPA fallback for client-side routers.
 - [Rate Limiting](https://rws8.tech/features/rate-limiting/): Per-IP sliding-window rate limiting with a global singleton, per-route custom limiters, and a Redis-backed distributed limiter for multi-instance deployments.
 - [Compression](https://rws8.tech/features/compression/): Automatic brotli, zstd and gzip compression for text responses, negotiated per request, with static files compressed once.
+- [Early Hints](https://rws8.tech/features/early-hints/): Send 103 Early Hints so browsers start loading stylesheets, scripts and connections while the page is still being made.
 - [HTTPS / TLS](https://rws8.tech/features/https-tls/): Serve traffic over TLS with HTTP/2 and HTTP/1.1 on the same port using rustls and aws-lc-rs.
 - [Automatic HTTPS (ACME)](https://rws8.tech/features/acme/): Get and auto-renew Let's Encrypt certificates with one config section — no certbot, no cron, no restarts.
 - [Mutual TLS (mTLS)](https://rws8.tech/features/mtls/): Require clients to present a certificate signed by a trusted CA on every HTTPS and QUIC connection.

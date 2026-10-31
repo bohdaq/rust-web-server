@@ -29,6 +29,7 @@ mod tests;
 
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -166,7 +167,14 @@ impl Stream {
 }
 
 /// A response finished by a spawned task: `None` for a 500.
-type Completed = (u32, Option<(Response, bool)>);
+type Completed = (u32, Outcome);
+
+/// What a spawned handler sends back: `103` hints (any number, first), then
+/// its response once.
+enum Outcome {
+    Hints(Vec<String>),
+    Response(Option<(Response, bool)>),
+}
 
 struct Conn {
     /// Over TLS (not h2c).
@@ -194,6 +202,10 @@ struct Conn {
     in_flight: usize,
     /// Streamed-body handlers report bytes read here: `(stream, bytes)`.
     credit_tx: mpsc::UnboundedSender<(u32, usize)>,
+    /// `103` hints from requests answered inline, written before their
+    /// response; one sink per connection, reset per request.
+    inline_hints: Arc<std::sync::Mutex<Vec<Vec<String>>>>,
+    inline_sink: Arc<crate::early_hints::Sink>,
 }
 
 /// Serve one HTTP/2 connection (after ALPN chose `h2`).
@@ -231,6 +243,7 @@ where
         tls: https,
     };
     let (credit_tx, mut credit_rx) = mpsc::unbounded_channel::<(u32, usize)>();
+    let inline_hints: Arc<std::sync::Mutex<Vec<Vec<String>>>> = Arc::default();
     let mut conn = Conn {
         out: Vec::with_capacity(16 * 1024),
         decoder: hpack::Decoder::new(hpack::DEFAULT_TABLE_SIZE),
@@ -250,6 +263,8 @@ where
         in_flight: 0,
         credit_tx,
         https,
+        inline_hints: Arc::clone(&inline_hints),
+        inline_sink: crate::early_hints::Sink::new(move |links| inline_hints.lock().unwrap_or_else(|e| e.into_inner()).push(links)),
     };
     let (done_tx, mut done_rx) = mpsc::unbounded_channel::<Completed>();
 
@@ -313,9 +328,8 @@ where
                 }
                 conn.read_frames(&mut input, &app, &connection, peer_addr, &done_tx)
             }
-            Event::Done((id, response)) => {
-                conn.in_flight -= 1;
-                conn.respond(id, response);
+            Event::Done((id, outcome)) => {
+                conn.complete(id, outcome);
                 Ok(())
             }
             Event::Chunk((id, chunk)) => {
@@ -336,9 +350,8 @@ where
         if let Err(e) = step {
             break Err(e);
         }
-        while let Ok((id, response)) = done_rx.try_recv() {
-            conn.in_flight -= 1;
-            conn.respond(id, response);
+        while let Ok((id, outcome)) = done_rx.try_recv() {
+            conn.complete(id, outcome);
         }
         conn.credit_windows();
     };
@@ -778,15 +791,19 @@ impl Conn {
         self.in_flight += 1;
         let (app, connection, done, https) = (app.clone(), connection.clone(), done.clone(), self.https);
         let started = Instant::now();
+        let hint_done = done.clone();
+        let sink = crate::early_hints::Sink::new(move |links| {
+            let _ = hint_done.send((stream, Outcome::Hints(links)));
+        });
         tokio::spawn(async move {
-            let response = match crate::server::http1_async::execute_blocking(app, request, connection).await {
+            let response = match crate::server::http1_async::execute_blocking(app, request, connection, Some(sink)).await {
                 Ok((request, result)) => finish(request, Ok(result), peer, started, https),
                 Err(e) => {
                     eprintln!("Handler panicked on H2 stream: {}", e);
                     None
                 }
             };
-            let _ = done.send((stream, response));
+            let _ = done.send((stream, Outcome::Response(response)));
         });
     }
 
@@ -929,23 +946,37 @@ impl Conn {
         // may block) in its own.
         let started = Instant::now();
         if request.body.is_empty() && app.runs_inline(&request, connection) {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, connection)))
-                .map_err(|_| "handler panicked".to_string());
+            // Hints sent while answering inline are written first.
+            self.inline_sink.reset();
+            let result = crate::early_hints::with_sink(Some(Arc::clone(&self.inline_sink)), || {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, connection)))
+            })
+            .map_err(|_| "handler panicked".to_string());
+            let queued = std::mem::take(&mut *self.inline_hints.lock().unwrap_or_else(|e| e.into_inner()));
+            for links in queued {
+                self.send_early_hints(stream, &links);
+            }
             let response = finish(request, result, peer, started, self.https);
             self.respond(stream, response);
             return Ok(());
         }
         self.in_flight += 1;
         let (app, connection, done, https) = (app.clone(), connection.clone(), done.clone(), self.https);
+        // Hints go over the same channel as the response, so they arrive
+        // before it (`Event::Hints`).
+        let hint_done = done.clone();
+        let sink = crate::early_hints::Sink::new(move |links| {
+            let _ = hint_done.send((stream, Outcome::Hints(links)));
+        });
         tokio::spawn(async move {
-            let response = match crate::server::http1_async::execute_request(app, request, &connection).await {
+            let response = match crate::server::http1_async::execute_request(app, request, &connection, Some(sink)).await {
                 Ok((request, result)) => finish(request, Ok(result), peer, started, https),
                 Err(e) => {
                     eprintln!("Handler panicked on H2 stream: {}", e);
                     None
                 }
             };
-            let _ = done.send((stream, response));
+            let _ = done.send((stream, Outcome::Response(response)));
         });
         Ok(())
     }
@@ -998,6 +1029,34 @@ impl Conn {
         } else {
             self.pump(stream);
         }
+    }
+
+    /// A spawned handler's hints or response.
+    fn complete(&mut self, stream: u32, outcome: Outcome) {
+        match outcome {
+            Outcome::Hints(links) => self.send_early_hints(stream, &links),
+            Outcome::Response(response) => {
+                self.in_flight -= 1;
+                self.respond(stream, response);
+            }
+        }
+    }
+
+    /// A `103 Early Hints` HEADERS frame (no END_STREAM), unless the stream
+    /// is gone or already has its response.
+    fn send_early_hints(&mut self, stream: u32, links: &[String]) {
+        if self.streams.get(&stream).is_none_or(|s| s.responded) {
+            return;
+        }
+        let mut block = Vec::with_capacity(64);
+        self.encoder.begin(&mut block);
+        self.encoder.status(&mut block, 103);
+        for link in links {
+            if link.bytes().all(is_value_byte) {
+                self.encoder.field(&mut block, b"link", link.as_bytes(), false);
+            }
+        }
+        self.send_header_block(stream, &block, false);
     }
 
     /// A bodiless response with just a status (431, 413, 500).

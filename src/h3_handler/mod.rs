@@ -131,8 +131,28 @@ async fn handle_stream(
 
     let started = std::time::Instant::now();
     let method = rws_request.method.clone();
+    // `103`s are sent as the handler queues them; any left when it returns
+    // go out before the final head.
+    let (hint_tx, mut hint_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<String>>();
+    let sink = crate::early_hints::Sink::new(move |links| {
+        let _ = hint_tx.send(links);
+    });
+    let executed = {
+        let mut handler = std::pin::pin!(crate::server::http1_async::execute_request(app, rws_request, &connection, Some(sink)));
+        let done = loop {
+            tokio::select! {
+                biased;
+                done = &mut handler => break done,
+                Some(links) = hint_rx.recv() => send_early_hints(&mut stream, &links).await,
+            }
+        };
+        while let Ok(links) = hint_rx.try_recv() {
+            send_early_hints(&mut stream, &links).await;
+        }
+        done
+    };
     let (rws_request, result) =
-        match crate::server::http1_async::execute_request(app, rws_request, &connection).await {
+        match executed {
             Ok(done) => done,
             Err(e) => {
                 eprintln!("Handler panicked on H3 stream: {}", e);
@@ -162,6 +182,24 @@ async fn handle_stream(
 
     let is_head = rws_request.method == crate::request::METHOD.head;
     send_h3_response(stream, rws_response, is_head).await;
+}
+
+/// A `103 Early Hints` head with these `Link` values.
+async fn send_early_hints(
+    stream: &mut h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>,
+    links: &[String],
+) {
+    let mut builder = http::Response::builder().status(StatusCode::EARLY_HINTS);
+    for link in links {
+        if let Ok(value) = http::header::HeaderValue::from_str(link) {
+            builder = builder.header(http::header::LINK, value);
+        }
+    }
+    if let Ok(head) = builder.body(()) {
+        if let Err(e) = stream.send_response(head).await {
+            eprintln!("H3 early hints error: {}", e);
+        }
+    }
 }
 
 async fn send_h3_response(
