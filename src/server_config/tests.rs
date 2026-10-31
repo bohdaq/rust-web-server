@@ -86,3 +86,13 @@ fn config_reload_refreshes_the_snapshot() {
     crate::config_reload::reload();
     assert!(!std::sync::Arc::ptr_eq(&before, &crate::server_config::ServerConfig::current()), "reload must rebuild the snapshot");
 }
+
+#[test]
+fn compression_dictionary_patterns_must_be_paths_without_line_breaks() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_COMPRESSION_DICTIONARIES", "/js/app.*.js, css/*.css, /x\r\nSet-Cookie: a=1,, /css/*.css");
+    let config = crate::server_config::ServerConfig::from_env();
+    std::env::remove_var("RWS_CONFIG_COMPRESSION_DICTIONARIES");
+    assert_eq!(config.compression_dictionaries, ["/js/app.*.js", "/css/*.css"]);
+    assert!(crate::server_config::ServerConfig::from_env().compression_dictionaries.is_empty());
+}

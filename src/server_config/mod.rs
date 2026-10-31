@@ -200,7 +200,7 @@ impl ServerConfig {
             compression_dictionaries: read("RWS_CONFIG_COMPRESSION_DICTIONARIES")
                 .split(',')
                 .map(|p| p.trim().to_string())
-                .filter(|p| p.starts_with('/'))
+                .filter(|p| p.starts_with('/') && crate::early_hints::valid(p))
                 .collect(),
             directory_listing: !read("RWS_CONFIG_DIRECTORY_LISTING").eq_ignore_ascii_case("false"),
             log_format: read(Config::RWS_CONFIG_LOG_FORMAT),

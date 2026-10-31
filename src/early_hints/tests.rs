@@ -186,3 +186,17 @@ fn rws_check_reports_bad_hint_values() {
     assert!(report(r#"[" "]"#).errors.join("\n").contains("early_hints value"));
     assert!(report(r#"["a.css; rel=preload"]"#).warnings.join("\n").contains("doesn't start with <URL>"));
 }
+
+#[test]
+fn a_global_middleware_table_sends_its_hints_for_every_request() {
+    let toml = "[middleware]\nearly_hints = [\"</site.css>; rel=preload; as=style\"]\n\n\
+                [[route]]\n[route.match]\npath = \"/r\"\n[route.action]\ntype = \"respond\"\nbody = \"r\"\n";
+    assert!(crate::config_check::check_str_offline(toml).errors.is_empty());
+    let (app, _handles) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(toml));
+    for path in ["/r", "/healthz"] {
+        let (sink, seen) = collecting();
+        let request = Request::parse(format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes()).unwrap();
+        with_sink(Some(sink), || app.execute(&request, &ConnectionInfo::default())).unwrap();
+        assert_eq!(*seen.lock().unwrap(), [vec!["</site.css>; rel=preload; as=style".to_string()]], "{path}");
+    }
+}

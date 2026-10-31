@@ -888,10 +888,18 @@ struct Generation {
 impl Generation {
     fn new(routes: Arc<Vec<CompiledRoute>>, fallback: App, config: ProxyConfig, health_stop: Arc<AtomicBool>, source: Option<String>) -> Self {
         let dispatch = RouteDispatch { routes, fallback };
-        let entry = if config.global_middleware.is_empty() {
+        let global = &config.global_middleware;
+        let entry = if global.is_empty() && global.early_hints.is_empty() {
             None
         } else {
-            Some(builder::apply_middleware(arc_app(dispatch.clone()), &config.global_middleware))
+            let mut entry = builder::apply_middleware(arc_app(dispatch.clone()), global);
+            // Global early hints go out first, for every request (routes,
+            // static files, health checks alike).
+            if !global.early_hints.is_empty() {
+                let layer = crate::early_hints::EarlyHintsLayer::new(global.early_hints.iter().cloned());
+                entry = arc_app(crate::middleware::WithMiddleware::new(builder::ArcApp(entry)).wrap(layer));
+            }
+            Some(entry)
         };
         Generation { dispatch, entry, config, source, health_stop }
     }

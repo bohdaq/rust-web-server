@@ -16,7 +16,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   HTTP/1.0. At most 4 per request.
 - Early hints from the config file: `[route.middleware] early_hints =
   ["</app.css>; rel=preload; as=style"]` on any route (proxy routes keep the
-  async forwarder), and proxies pass a backend's own `103` on (its `Link`
+  async forwarder) or in the global `[middleware]` table, and proxies pass a backend's own `103` on (its `Link`
   values) instead of dropping it. `rws --check` checks the values;
   `rws_early_hints_total{source}` on `/metrics`; `ci/e2e/early_hints.sh`.
 - Dictionary compression codec (RFC 9842): `compression::dictionary` encodes

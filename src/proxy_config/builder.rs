@@ -571,7 +571,7 @@ fn apply_response_rewrite_rule(
 
 /// Wraps `Arc<dyn Application + Send + Sync>` to implement `Application`
 /// (needed because you can't implement a foreign trait on a foreign type).
-struct ArcApp(Arc<dyn crate::application::Application + Send + Sync>);
+pub(crate) struct ArcApp(pub(crate) Arc<dyn crate::application::Application + Send + Sync>);
 
 impl crate::application::Application for ArcApp {
     fn execute(
