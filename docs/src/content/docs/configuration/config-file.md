@@ -492,6 +492,7 @@ Per-route middleware applied before the action. All sub-sections are optional.
 [route.middleware]
 timeout_ms    = 5000      # 504 Gateway Timeout past this (0/unset = none)
 max_body_size = 1048576   # 413 above this many bytes (0/unset = only the global limit)
+early_hints   = ["</app.css>; rel=preload; as=style"]   # sent as a 103 before the route answers (18.12.0)
 
 [route.middleware.rate_limit]
 max_requests = 100

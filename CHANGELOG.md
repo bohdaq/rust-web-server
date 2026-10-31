@@ -14,6 +14,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   values before the response. HTTP/2 and HTTP/3 by default; HTTP/1.1 with
   `early_hints_http1 = true` (`RWS_CONFIG_EARLY_HINTS_HTTP1`); never
   HTTP/1.0. At most 4 per request.
+- Early hints from the config file: `[route.middleware] early_hints =
+  ["</app.css>; rel=preload; as=style"]` on any route (proxy routes keep the
+  async forwarder), and proxies pass a backend's own `103` on (its `Link`
+  values) instead of dropping it. `rws --check` checks the values;
+  `rws_early_hints_total{source}` on `/metrics`; `ci/e2e/early_hints.sh`.
 
 ## 18.11.0 — 2026-10-31
 

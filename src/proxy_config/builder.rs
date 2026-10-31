@@ -147,7 +147,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     )
                     .with_trust(upstream_trust.get(upstream.as_str()).cloned())
                     .with_policy(upstream, upstream_policies.get(upstream.as_str()).cloned())
-                    .with_mirror(mirror.clone()));
+                    .with_mirror(mirror.clone())
+                    .with_early_hints(&route.middleware.early_hints));
                     if proxy.supports_async() && route.middleware.is_empty() {
                         async_proxy = Some(Arc::clone(&proxy));
                     }
@@ -211,14 +212,18 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
             };
 
         // Wrap the base handler with middleware layers. A proxy route sends
-        // its mirror copies itself (so it keeps the async forwarder); any
-        // other action gets a MirrorLayer.
-        let handler = if matches!(route.action, ActionConfig::Proxy { .. }) || mirror.is_none() {
-            apply_middleware_named(base_handler, &route.middleware, &cache_name, &mut caches)
-        } else {
-            let handler = apply_middleware_named(base_handler, &route.middleware, &cache_name, &mut caches);
-            arc_app(WithMiddleware::new(ArcApp(handler)).wrap(crate::proxy::mirror::MirrorLayer::new(mirror.clone().expect("checked"))))
-        };
+        // its mirror copies and early hints itself (so it keeps the async
+        // forwarder); any other action gets a MirrorLayer / EarlyHintsLayer.
+        let mut handler = apply_middleware_named(base_handler, &route.middleware, &cache_name, &mut caches);
+        if !matches!(route.action, ActionConfig::Proxy { .. }) {
+            if let Some(mirror) = &mirror {
+                handler = arc_app(WithMiddleware::new(ArcApp(handler)).wrap(crate::proxy::mirror::MirrorLayer::new(mirror.clone())));
+            }
+            if !route.middleware.early_hints.is_empty() {
+                let layer = crate::early_hints::EarlyHintsLayer::new(route.middleware.early_hints.iter().cloned());
+                handler = arc_app(WithMiddleware::new(ArcApp(handler)).wrap(layer));
+            }
+        }
 
         compiled.push(CompiledRoute { matcher, handler, async_proxy });
     }

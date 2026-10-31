@@ -1098,13 +1098,15 @@ fn read_response_head<S: Read>(stream: &mut S, tmp: &mut [u8]) -> Result<(Vec<u8
 }
 
 /// The final response head: interim `1xx` heads (`100 Continue`,
-/// `103 Early Hints`, …) are read past (RFC 9110 §15.2). Returning one as
+/// `103 Early Hints`, …) are read past (RFC 9110 §15.2); a `103`'s `Link`
+/// values are passed on to the client (`early_hints::forward_upstream`). Returning one as
 /// the response left the real response in the connection, and once pooled
 /// the next request — possibly another client's — received it.
 fn read_final_response_head<S: Read>(stream: &mut S, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), HeadError> {
     let (mut head, mut rest) = read_response_head(stream, tmp)?;
     let mut interim = 0;
     while is_interim_response(&head) {
+        crate::early_hints::forward_upstream(&head);
         interim += 1;
         if interim > MAX_INTERIM_RESPONSES {
             return Err(HeadError::Partial("too many interim (1xx) responses from the backend".to_string()));

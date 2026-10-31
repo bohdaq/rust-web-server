@@ -23,7 +23,7 @@ tranche by tranche; this file is updated as each lands. Target release:
 
 User, 2026-10-31:
 - **Hints come from config and from upstreams**: per route
-  `[route.middleware.early_hints] links = ["</app.css>; rel=preload; as=style", …]`
+  `[route.middleware] early_hints = ["</app.css>; rel=preload; as=style", …]`
   sent before the handler runs; a backend's own `103` is forwarded instead
   of dropped; `EarlyHintsLayer` (and `early_hints::send`) for library apps.
 - **HTTP/2 and HTTP/3 by default, HTTP/1.1 opt-in**
@@ -49,8 +49,8 @@ Implementation (defaults):
   HTTP/1.0, at most `MAX_EARLY_HINTS` (4) per request. Values checked for
   CR/LF/NUL.
 - **Upstream `103`s** are forwarded with their `Link` headers only (other
-  fields dropped), by the sync and async forwarders; Gateway API routes keep
-  dropping them (no filter asks for it).
+  fields dropped), by the sync and async forwarders (shared with Gateway
+  API routes, which pass them on too).
 - **Dictionaries** (RFC 9842): setting `compression_dictionaries` = URL
   patterns (`/js/app.*.js`, `*` only, same-origin paths) →
   `RWS_CONFIG_COMPRESSION_DICTIONARIES`. A static file matching one gets
@@ -94,7 +94,7 @@ and `http1`-only test runs before pushing.
 | # | State |
 |---|---|
 | 1 | **done 2026-10-31**: `early_hints` module — `send(links)`, `available()`, `valid()`, `EarlyHintsLayer` (runs inline), `MAX_PER_REQUEST` 4; crate-private `Sink` (closure + per-request count, `reset` for reuse), thread-local `with_sink` (restored on panic) and task-local `scope` (http2). `execute_request` / `execute_blocking` take the sink and install it for the async (`pin!`, no allocation), inline and blocking paths. HTTP/1.1 async: only when `http1_wanted` (HTTP/1.1 + `RWS_CONFIG_EARLY_HINTS_HTTP1`, `ServerConfig::early_hints_http1`) — a per-request channel, `select!` writes each `103` as it comes, leftovers before the final head; streamed-upload requests get none (the pump holds the socket). Sync server: same gate, hints written after the handler returns, before the response. HTTP/2: inline requests reuse one per-connection sink and write hints before `respond`; spawned and streamed-body handlers send `Outcome::Hints` over the response channel (so order is kept), `send_early_hints` = HEADERS without END_STREAM, skipped once responded. HTTP/3: per-request channel, `select!`, `send_response(103)`. Tests: 8 unit + h1 async (off by default, on: inline and blocking, never HTTP/1.0) + sync server + h2 via the `h2` crate's `poll_informational` (inline and spawned, none for a plain page) + h3 with the quinn/h3 client. h2spec 146/146. Docs: new `features/early-hints.md` (sidebar), env var, config file, api.md row, CHANGELOG. 2183 default / 2003 http1 |
-| 2 | — |
+| 2 | **done 2026-10-31**: `[route.middleware] early_hints = [...]` (a key, not a sub-table: `MiddlewareConfig.early_hints`, ignored by `is_empty`); proxy routes send them from `DynamicProxy` in both execute paths (async forwarder kept), other actions get an outermost `EarlyHintsLayer`. Upstream `103`: `early_hints::forward_upstream` in `read_final_response_head` (sync, also used by `ReverseProxy`) and the async forwarder's interim loop — `Link` values only; the shared forwarder code means Gateway API routes pass them on too. `rws --check`: empty / line-break values are errors, no `<URL>` a warning. `rws_early_hints_total{source=handler|configured|upstream}`. Tests: upstream head parsing, config respond + proxy route with a hinting backend through the sync and the async forwarder, metric, check errors. `ci/e2e/early_hints.sh` (5 checks: h2c config + backend 103, none on HTTP/1.1 by default, metric, HTTP/1.1 opt-in) in CI as `early-hints`; HTTP/3 left to the unit test (no QUIC curl). 2186 default / 2006 http1 |
 | 3 | — |
 | 4 | — |
 | 5 | — |

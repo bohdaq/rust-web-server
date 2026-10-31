@@ -64,7 +64,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.llm" => super::llm::LLM_KEYS.to_vec(),
         "route.action.llm.provider" => super::llm::PROVIDER_KEYS.to_vec(),
         "route.action.llm.key" => super::llm::KEY_KEYS.to_vec(),
-        "route.middleware" => vec!["timeout_ms", "max_body_size"],
+        "route.middleware" => vec!["timeout_ms", "max_body_size", "early_hints"],
         "route.middleware.rate_limit" => vec!["max_requests", "window_secs"],
         "route.middleware.cache" => vec!["ttl_secs", "vary_by", "dir", "max_size", "purge_token_env"],
         "route.middleware.auth" => vec!["type", "token_env", "secret_env", "htpasswd_file"],
@@ -312,6 +312,13 @@ impl ProxyConfig {
 }
 
 fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigReport) {
+    for link in &mw.early_hints {
+        if !crate::early_hints::valid(link) {
+            report.error(format!("{label}: early_hints value {link:?} is empty or holds a line break"));
+        } else if !link.trim_start().starts_with('<') {
+            report.warn(format!("{label}: early_hints value {link:?} doesn't start with <URL>; browsers will ignore it"));
+        }
+    }
     if let Some(m) = &mw.mirror {
         match (m.upstream.is_empty(), m.backends.is_empty()) {
             (true, true) => report.error(format!("{label}: [middleware.mirror] needs `upstream` or `backends`")),

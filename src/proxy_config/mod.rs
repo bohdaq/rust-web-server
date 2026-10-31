@@ -184,6 +184,9 @@ pub struct MiddlewareConfig {
     /// `[route.middleware.wasm]`: a WebAssembly plugin (feature
     /// `wasm-plugins`, 18.10.0).
     pub wasm: Option<WasmConfig>,
+    /// `early_hints = ["</app.css>; rel=preload; as=style", …]`: `Link`
+    /// values sent as a `103 Early Hints` before the route answers (18.12.0).
+    pub early_hints: Vec<String>,
     /// `[route.middleware.mirror]`: copy a share of requests to other
     /// backends (18.11.0).
     pub mirror: Option<MirrorConfig>,
@@ -687,6 +690,7 @@ fn parse_middleware_config(
     MiddlewareConfig {
         rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny,
         timeout_ms, max_body_size, wasm, mirror,
+        early_hints: get_array(map, mw_sec, "early_hints"),
     }
 }
 
@@ -923,8 +927,8 @@ impl Application for RouteDispatch {
 }
 
 impl MiddlewareConfig {
-    /// `true` when no layer is configured. A mirror doesn't count: proxy
-    /// routes send copies from `DynamicProxy` itself, so a mirrored proxy
+    /// `true` when no layer is configured. A mirror and early hints don't
+    /// count: proxy routes send both from `DynamicProxy` itself, so such a
     /// route keeps the non-blocking forwarder.
     pub fn is_empty(&self) -> bool {
         self.rate_limit.is_none() && self.cache.is_none() && self.auth.is_none()
@@ -1367,6 +1371,8 @@ pub(crate) struct DynamicProxy {
     /// `[route.middleware.mirror]`: copies of requests, sent once per
     /// request (not per retry).
     mirror: Option<crate::proxy::mirror::Mirror>,
+    /// `early_hints`: sent once per request, before the first attempt.
+    early_hints: Option<Arc<Vec<String>>>,
 }
 
 impl DynamicProxy {
@@ -1378,6 +1384,13 @@ impl DynamicProxy {
 
     /// Apply the upstream's weights, stickiness, circuit breaker, retries
     /// and metrics.
+    /// Send these `Link` values as a `103` for each request (once, not per
+    /// retry).
+    pub(crate) fn with_early_hints(mut self, links: &[String]) -> Self {
+        self.early_hints = (!links.is_empty()).then(|| Arc::new(links.to_vec()));
+        self
+    }
+
     /// Send a copy of each request to `mirror` (once, not per retry).
     pub(crate) fn with_mirror(mut self, mirror: Option<crate::proxy::mirror::Mirror>) -> Self {
         self.mirror = mirror;
@@ -1413,6 +1426,7 @@ impl DynamicProxy {
             upstream: Arc::new(String::new()),
             policy: None,
             mirror: None,
+            early_hints: None,
         }
     }
 
@@ -1625,6 +1639,9 @@ impl DynamicProxy {
         if let Some(mirror) = &self.mirror {
             mirror.send(request, conn);
         }
+        if let Some(links) = &self.early_hints {
+            crate::early_hints::send_from(crate::early_hints::Source::Configured, links);
+        }
         let mut tried: Vec<String> = Vec::new();
         let mut last: Option<Response> = None;
         for attempt in 0..self.attempts(request) {
@@ -1676,6 +1693,9 @@ impl Application for DynamicProxy {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
         if let Some(mirror) = &self.mirror {
             mirror.send(request, conn);
+        }
+        if let Some(links) = &self.early_hints {
+            crate::early_hints::send_from(crate::early_hints::Source::Configured, links);
         }
         let mut tried: Vec<String> = Vec::new();
         let mut last: Option<Response> = None;

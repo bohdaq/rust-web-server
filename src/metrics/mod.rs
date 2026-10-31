@@ -260,6 +260,12 @@ fn prometheus_text_without_http() -> String {
         }
     }
 
+    let hints_text = crate::early_hints::prometheus_text();
+    if !hints_text.is_empty() {
+        out.push('\n');
+        out.push_str(&hints_text);
+    }
+
     #[cfg(feature = "wasm-plugins")]
     {
         let wasm_text = crate::wasm_plugin::metrics::prometheus_text();

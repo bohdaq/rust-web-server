@@ -114,13 +114,80 @@ pub fn available() -> bool {
 /// docs), the request already sent [`MAX_PER_REQUEST`], or a value is empty
 /// or holds CR, LF or NUL.
 pub fn send<S: AsRef<str>>(links: &[S]) -> bool {
+    send_from(Source::Handler, links)
+}
+
+/// Where a hint came from, for `rws_early_hints_total{source}`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Source {
+    /// [`send`] called by application code.
+    Handler,
+    /// A fixed list: [`EarlyHintsLayer`] or a config route's `early_hints`.
+    Configured,
+    /// A backend's own `103`, passed on by a proxy.
+    Upstream,
+}
+
+impl Source {
+    fn label(self) -> &'static str {
+        match self {
+            Source::Handler => "handler",
+            Source::Configured => "configured",
+            Source::Upstream => "upstream",
+        }
+    }
+}
+
+static SENT: [AtomicUsize; 3] = [AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0)];
+
+pub(crate) fn send_from<S: AsRef<str>>(source: Source, links: &[S]) -> bool {
     if links.is_empty() || !links.iter().all(|l| valid(l.as_ref())) {
         return false;
     }
-    match current() {
-        Some(sink) => sink.send(links.iter().map(|l| l.as_ref().to_string()).collect()),
-        None => false,
+    let Some(sink) = current() else { return false };
+    let sent = sink.send(links.iter().map(|l| l.as_ref().to_string()).collect());
+    if sent {
+        SENT[source as usize].fetch_add(1, Ordering::Relaxed);
     }
+    sent
+}
+
+/// The `Link` values of a backend's `103` head; empty for any other head.
+pub(crate) fn upstream_links(head: &[u8]) -> Vec<String> {
+    let text = String::from_utf8_lossy(head);
+    let mut lines = text.split("\r\n");
+    let is_103 = lines.next().and_then(|l| l.split(' ').nth(1)) == Some("103");
+    if !is_103 {
+        return Vec::new();
+    }
+    lines
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(name, _)| name.trim().eq_ignore_ascii_case("link"))
+        .map(|(_, value)| value.trim().to_string())
+        .filter(|value| valid(value))
+        .collect()
+}
+
+/// Pass a backend's `103` on to the client, when the head is one and
+/// there is somewhere to send it.
+pub(crate) fn forward_upstream(head: &[u8]) {
+    let links = upstream_links(head);
+    if !links.is_empty() {
+        send_from(Source::Upstream, &links);
+    }
+}
+
+/// `rws_early_hints_total{source}`; empty until a hint is sent.
+pub(crate) fn prometheus_text() -> String {
+    let counts: Vec<usize> = SENT.iter().map(|c| c.load(Ordering::Relaxed)).collect();
+    if counts.iter().all(|n| *n == 0) {
+        return String::new();
+    }
+    let mut out = String::from("# HELP rws_early_hints_total 103 Early Hints responses sent, by where the hints came from\n# TYPE rws_early_hints_total counter\n");
+    for source in [Source::Handler, Source::Configured, Source::Upstream] {
+        out.push_str(&format!("rws_early_hints_total{{source=\"{}\"}} {}\n", source.label(), counts[source as usize]));
+    }
+    out
 }
 
 /// A usable `Link` value: not empty, no CR, LF or NUL.
@@ -172,7 +239,7 @@ impl EarlyHintsLayer {
 impl Middleware for EarlyHintsLayer {
     fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
         if !self.links.is_empty() {
-            send(&self.links);
+            send_from(Source::Configured, &self.links);
         }
         next.execute(request, connection)
     }

@@ -292,6 +292,7 @@ async fn exchange<S: UpstreamConn>(
     // The final response head, bounded by the read timeout as a whole.
     // Interim 1xx heads are dropped (see `read_final_response_head`): taking
     // one as the response left the real one for the next pooled request.
+    // A `103`'s `Link` values go on to the client.
     let head = tokio::time::timeout(read_timeout, async {
         let mut interim = 0;
         loop {
@@ -299,6 +300,7 @@ async fn exchange<S: UpstreamConn>(
                 if !is_interim_response(&buf[..pos + 4]) {
                     return Ok(pos + 4);
                 }
+                crate::early_hints::forward_upstream(&buf[..pos + 4]);
                 interim += 1;
                 if interim > MAX_INTERIM_RESPONSES {
                     return Err((false, "too many interim (1xx) responses from the backend".to_string()));

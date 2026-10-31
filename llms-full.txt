@@ -1779,6 +1779,7 @@ Per-route middleware applied before the action. All sub-sections are optional.
 [route.middleware]
 timeout_ms    = 5000      # 504 Gateway Timeout past this (0/unset = none)
 max_body_size = 1048576   # 413 above this many bytes (0/unset = only the global limit)
+early_hints   = ["</app.css>; rel=preload; as=style"]   # sent as a 103 before the route answers (18.12.0)
 
 [route.middleware.rate_limit]
 max_requests = 100
@@ -6176,6 +6177,25 @@ early_hints::send(&["</product.css>; rel=preload; as=style"]);
 ```
 
 `send` returns `false` and does nothing when there is nowhere to send the hint: under `TestClient`, for an app called directly, on HTTP/1.1 unless enabled (below), on HTTP/1.0, after `early_hints::MAX_PER_REQUEST` (4) `103`s for the request, or for a value that is empty or contains CR, LF or NUL. `early_hints::available()` says whether a `send` would reach the client.
+
+## In the config file
+
+```toml
+[[route]]
+[route.match]
+path = "/shop/*"
+[route.action]
+type = "proxy"
+upstream = "shop"
+[route.middleware]
+early_hints = ["</shop.css>; rel=preload; as=style"]
+```
+
+See [Early hints](/proxy/config-driven/#early-hints) on the config-driven proxy page. A proxy route — and `ReverseProxy` in code — also passes on a backend's own `103`, keeping only its `Link` values.
+
+## Metrics
+
+`rws_early_hints_total{source}` counts the `103`s sent: `configured` (`EarlyHintsLayer`, a route's `early_hints`), `upstream` (a backend's `103` passed on) and `handler` (`early_hints::send`).
 
 ## Protocols
 
@@ -12333,6 +12353,15 @@ timeout_ms = 5000   # 504 if this route (including its other middleware) doesn't
 ```
 
 `0`/absent means no route-specific timeout. Bounds this route's *total* time — every other middleware layer runs inside it. See [Timeouts](/features/timeouts/) for the underlying mechanism and its one honest limitation (a synchronous handler that ignores its deadline keeps running in the background; only the client's wait is bounded).
+
+#### Early hints
+
+```toml
+[route.middleware]
+early_hints = ["</app.css>; rel=preload; as=style", "<https://cdn.example.com>; rel=preconnect"]
+```
+
+Sends these `Link` values as a [`103 Early Hints`](/features/early-hints/) before the route answers, so the browser fetches them while the backend works (since 18.12.0). On every action; a proxy route keeps the non-blocking forwarder. A proxy route also passes a backend's own `103` on (its `Link` values only), with or without this key. Sent over HTTP/2 and HTTP/3; over HTTP/1.1 only with `early_hints_http1 = true`. `rws --check` fails on an empty value or one with a line break, and warns when a value doesn't start with ``. `/metrics`: `rws_early_hints_total{source}` (`configured`, `upstream`, `handler`).
 
 #### Per-route max body size
 

@@ -32,6 +32,25 @@ early_hints::send(&["</product.css>; rel=preload; as=style"]);
 
 `send` returns `false` and does nothing when there is nowhere to send the hint: under `TestClient`, for an app called directly, on HTTP/1.1 unless enabled (below), on HTTP/1.0, after `early_hints::MAX_PER_REQUEST` (4) `103`s for the request, or for a value that is empty or contains CR, LF or NUL. `early_hints::available()` says whether a `send` would reach the client.
 
+## In the config file
+
+```toml
+[[route]]
+[route.match]
+path = "/shop/*"
+[route.action]
+type = "proxy"
+upstream = "shop"
+[route.middleware]
+early_hints = ["</shop.css>; rel=preload; as=style"]
+```
+
+See [Early hints](/proxy/config-driven/#early-hints) on the config-driven proxy page. A proxy route — and `ReverseProxy` in code — also passes on a backend's own `103`, keeping only its `Link` values.
+
+## Metrics
+
+`rws_early_hints_total{source}` counts the `103`s sent: `configured` (`EarlyHintsLayer`, a route's `early_hints`), `upstream` (a backend's `103` passed on) and `handler` (`early_hints::send`).
+
 ## Protocols
 
 | Connection | Sent |
