@@ -27,6 +27,7 @@ pub struct TokenResponse {
 }
 
 /// A thin OIDC / OAuth 2.0 client that performs the authorization code flow.
+#[derive(Clone)]
 pub struct OidcClient {
     config: OidcConfig,
 }

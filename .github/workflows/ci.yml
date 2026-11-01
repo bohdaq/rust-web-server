@@ -54,14 +54,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, wasm-shim, systemd, mtls-crl, tls-internal, fastcgi, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, wasm-shim, systemd, mtls-crl, tls-internal, fastcgi, oidc, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           key: e2e
-      - run: cargo build --bin rws --features "acme auth mimalloc"
+      - run: cargo build --bin rws --features "acme auth sso mimalloc"
       - name: ACME against Pebble (Let's Encrypt's test CA)
         if: matrix.check == 'acme-pebble'
         env:
@@ -182,6 +182,9 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq php-fpm
           ci/e2e/fastcgi.sh target/debug/rws "$(ls /usr/sbin/php-fpm* | head -1)"
+      - name: OIDC sign-in against Keycloak and forward-auth (config file)
+        if: matrix.check == 'oidc'
+        run: ci/e2e/oidc.sh target/debug/rws
       - name: WebAssembly plugins (unit tests with the feature; the example plugin through the binary)
         if: matrix.check == 'wasm-plugins'
         run: |

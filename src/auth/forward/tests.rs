@@ -144,13 +144,43 @@ fn copied_header_replaces_client_forged_header_not_append() {
 }
 
 #[test]
-fn copy_header_absent_from_auth_response_leaves_original_untouched() {
+fn copy_header_absent_from_auth_response_drops_the_clients_copy() {
+    // Since 18.21.0: a header named in copy_header only ever comes from the
+    // auth service, or upstream would trust a client-chosen X-User-Id.
     let port = spawn_mock_auth_server(http_response(200, "OK", &[], ""));
     let layer = ForwardAuthLayer::new(format!("http://127.0.0.1:{}/verify", port)).copy_header("X-User-Id");
-    let req = with_header(get("/"), "X-User-Id", "original");
+    let req = with_header(get("/"), "X-User-Id", "forged");
     let resp = layer.handle(&req, &conn(), &EchoHeaderApp("X-User-Id")).unwrap();
     let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_ref());
-    assert_eq!(Some("original"), echoed);
+    assert_ne!(Some("forged"), echoed);
+}
+
+#[test]
+fn the_auth_service_sees_x_forwarded_headers_the_client_cant_choose() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().unwrap().port();
+    let handle = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0u8; 4096];
+        let n = stream.read(&mut buf).unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]).to_lowercase();
+        let _ = stream.write_all(http_response(200, "OK", &[], "").as_bytes());
+        text
+    });
+    let layer = ForwardAuthLayer::new(format!("http://127.0.0.1:{}/verify", port));
+    let mut req = Request { method: "POST".to_string(), ..get("/admin/users?page=2") };
+    req = with_header(req, "Host", "app.example.com");
+    req = with_header(req, "X-Forwarded-Uri", "/public");
+    req = with_header(req, "Content-Length", "10");
+    assert_eq!(200, layer.handle(&req, &conn(), &OkApp).unwrap().status_code);
+    let seen = handle.join().unwrap();
+    assert!(seen.contains("x-forwarded-method: post"), "{seen}");
+    assert!(seen.contains("x-forwarded-host: app.example.com"), "{seen}");
+    assert!(seen.contains("x-forwarded-uri: /admin/users?page=2"), "{seen}");
+    assert!(seen.contains("x-forwarded-proto: http"), "{seen}");
+    assert!(!seen.contains("x-forwarded-uri: /public"), "the client's own value is replaced: {seen}");
+    assert!(!seen.contains("content-length: 10"), "{seen}");
 }
 
 #[test]

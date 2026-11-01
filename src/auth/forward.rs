@@ -133,9 +133,26 @@ impl Middleware for ForwardAuthLayer {
         // silently followed and replaced with whatever it points to.
         let client = Client::new().timeout_ms(self.timeout_ms).max_redirects(0);
         let mut builder = client.get(&self.auth_url);
+        // The request's headers, minus framing ones that describe this
+        // request rather than the GET sent, and minus the X-Forwarded-*
+        // set below (a client mustn't choose what the auth service sees).
+        const NOT_FORWARDED: [&str; 10] = [
+            "host", "content-length", "transfer-encoding", "connection", "expect",
+            "x-forwarded-method", "x-forwarded-proto", "x-forwarded-host", "x-forwarded-uri", "x-forwarded-for",
+        ];
         for h in &request.headers {
-            builder = builder.header(&h.name, &h.value);
+            if !NOT_FORWARDED.contains(&h.name.to_ascii_lowercase().as_str()) {
+                builder = builder.header(&h.name, &h.value);
+            }
         }
+        // What Traefik, Authelia, Authentik and oauth2-proxy read (since 18.21.0).
+        let host = request.header("Host").map(|h| h.value.to_string()).unwrap_or_default();
+        builder = builder
+            .header("X-Forwarded-Method", &request.method)
+            .header("X-Forwarded-Proto", if connection.tls { "https" } else { "http" })
+            .header("X-Forwarded-Host", &host)
+            .header("X-Forwarded-Uri", &request.request_uri)
+            .header("X-Forwarded-For", &connection.client.ip);
 
         let auth_response = match builder.send() {
             Ok(r) => r,
@@ -146,10 +163,12 @@ impl Middleware for ForwardAuthLayer {
             return Ok(passthrough_response(&auth_response));
         }
 
+        // A copied header comes only from the auth service: a client's own
+        // copy is dropped even when the service doesn't send one (since 18.21.0).
         let mut forwarded = request.clone();
         for name in &self.copy_headers {
+            forwarded.headers.retain(|h| !h.name.eq_ignore_ascii_case(name));
             if let Some(value) = auth_response.header(name) {
-                forwarded.headers.retain(|h| !h.name.eq_ignore_ascii_case(name));
                 forwarded.headers.push(Header { name: name.clone().into(), value: value.to_string().into() });
             }
         }

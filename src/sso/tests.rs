@@ -1311,6 +1311,153 @@ mod oidc_auth_tests {
         assert_eq!(OidcAuth::email(&req), None);
         assert!(OidcAuth::claims(&req).is_none());
     }
+
+    // ── 18.21.0: signed cookies, allow-lists, forwarded headers ─────────────
+
+    fn id_token_with(nonce: &str, extra: &str) -> String {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"my-client-id","exp":{},"iat":{},"nonce":"{nonce}"{extra}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        jwks_tests::build_jwt(r#"{"alg":"RS256","kid":"rsa-key-1"}"#, &claims, jwks_tests::sign_rs256)
+    }
+
+    /// A config whose token endpoint answers with an ID token carrying `extra`
+    /// claims for whatever nonce the login put in the authorization URL.
+    fn idp(extra: &'static str) -> (OidcConfig, Arc<Mutex<String>>) {
+        let nonce = Arc::new(Mutex::new(String::new()));
+        let seen = Arc::clone(&nonce);
+        let token_url = start_fake_token_server(move |_req| {
+            let body = format!(r#"{{"access_token":"tok","token_type":"Bearer","id_token":"{}"}}"#, id_token_with(&seen.lock().unwrap(), extra));
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let jwks_url = jwks_tests::jwks_server(&jwks_tests::rsa_jwk_json("rsa-key-1"));
+        (config_with_token_endpoint(&token_url, &jwks_url), nonce)
+    }
+
+    /// The value of cookie `name` set by `response` (`Set-Cookie: name=v; …`).
+    fn set_cookie(response: &Response, name: &str) -> Option<String> {
+        response.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("set-cookie")).find_map(|h| {
+            let first = h.value.split(';').next()?;
+            let (k, v) = first.split_once('=')?;
+            (k == name).then(|| v.to_string())
+        })
+    }
+
+    fn query(url: &str, key: &str) -> String {
+        url.split_once('?').map(|(_, q)| q).unwrap_or("").split('&').find_map(|p| p.strip_prefix(&format!("{key}="))).unwrap_or("").to_string()
+    }
+
+    /// Log in through `oidc` (login → IdP → callback); the callback response.
+    fn sign_in(oidc: &OidcAuth, nonce: &Arc<Mutex<String>>) -> Response {
+        let login = oidc.handle(&get("/auth/login?return_to=/app"), &conn(), &OkApp).unwrap();
+        let location = header(&login, "Location").unwrap();
+        *nonce.lock().unwrap() = query(&location, "nonce");
+        let pre = set_cookie(&login, "_rws_oidc_pre").expect("pre-auth cookie");
+        let state = query(&location, "state");
+        oidc.handle(&with_cookie(get(&format!("/auth/callback?code=c&state={state}")), "_rws_oidc_pre", &pre), &conn(), &OkApp).unwrap()
+    }
+
+    #[test]
+    fn signed_cookie_sessions_need_no_store_and_survive_a_new_instance() {
+        let (config, nonce) = idp(r#","email":"ann@example.com","email_verified":true,"groups":["staff","ops"]"#);
+        let oidc = OidcAuth::new(config.clone(), Arc::new(SessionStore::new(60))).signed_cookies("k1".as_bytes().to_vec()).forward_headers(true);
+        let callback = sign_in(&oidc, &nonce);
+        assert_eq!(callback.status_code, 302, "{:?}", callback.headers);
+        assert_eq!(header(&callback, "Location").as_deref(), Some("/app"));
+        let session = set_cookie(&callback, "_rws_oidc").expect("session cookie");
+
+        // A new instance (a restart, another replica) with the same secret.
+        let again = OidcAuth::new(config.clone(), Arc::new(SessionStore::new(60))).signed_cookies("k1".as_bytes().to_vec()).forward_headers(true);
+        let app = CapturingApp::new();
+        let req = with_cookie(get("/app"), "_rws_oidc", &session);
+        let mut req = req;
+        req.headers.push(Header { name: "X-Auth-Request-Email".into(), value: "evil@attacker.test".into() });
+        assert_eq!(again.handle(&req, &conn(), &app).unwrap().status_code, 200);
+        let seen = app.captured.lock().unwrap().clone().unwrap();
+        let values = |n: &str| seen.headers.iter().filter(|h| h.name.eq_ignore_ascii_case(n)).map(|h| h.value.to_string()).collect::<Vec<_>>();
+        assert_eq!(values("X-Auth-Request-Email"), ["ann@example.com"], "the client's copy is dropped");
+        assert_eq!(values("X-Auth-Request-User"), ["user1"]);
+        assert_eq!(values("X-Auth-Request-Groups"), ["staff,ops"]);
+        assert!(values("X-Rws-Oidc-Claims")[0].contains("ann@example.com"));
+
+        // Another secret, a tampered cookie: back to the login.
+        let other = OidcAuth::new(config, Arc::new(SessionStore::new(60))).signed_cookies("k2".as_bytes().to_vec());
+        assert_eq!(other.handle(&with_cookie(get("/app"), "_rws_oidc", &session), &conn(), &OkApp).unwrap().status_code, 302);
+        let tampered = session.replacen('A', "B", 1);
+        assert_eq!(again.handle(&with_cookie(get("/app"), "_rws_oidc", &tampered), &conn(), &OkApp).unwrap().status_code, 302);
+
+        // Logout clears the cookie.
+        let out = again.handle(&with_cookie(get("/auth/logout"), "_rws_oidc", &session), &conn(), &OkApp).unwrap();
+        assert_eq!(set_cookie(&out, "_rws_oidc").as_deref(), Some(""));
+    }
+
+    #[test]
+    fn allow_lists_admit_by_email_domain_or_group() {
+        // The fake IdP answers one token request: a new one per sign-in.
+        let run = |configure: &dyn Fn(OidcAuth) -> OidcAuth| {
+            let (config, nonce) = idp(r#","email":"bob@corp.example","email_verified":true,"groups":["eng"]"#);
+            sign_in(&configure(OidcAuth::new(config, Arc::new(SessionStore::new(60))).signed_cookies("k".as_bytes().to_vec())), &nonce)
+        };
+        assert_eq!(run(&|o| o.allow_emails(["Bob@Corp.Example"])).status_code, 302);
+        assert_eq!(run(&|o| o.allow_domains(["corp.example"])).status_code, 302);
+        assert_eq!(run(&|o| o.allow_groups("groups", ["eng"])).status_code, 302);
+        let denied = run(&|o| o.allow_domains(["other.example"]).allow_groups("groups", ["admins"]));
+        assert_eq!(denied.status_code, 403);
+        assert!(set_cookie(&denied, "_rws_oidc").is_none(), "no session for a refused user");
+    }
+
+    #[test]
+    fn unverified_emails_dont_pass_email_or_domain_lists() {
+        let (config, nonce) = idp(r#","email":"eve@corp.example","email_verified":false"#);
+        let oidc = OidcAuth::new(config, Arc::new(SessionStore::new(60))).signed_cookies("k".as_bytes().to_vec()).allow_domains(["corp.example"]);
+        assert_eq!(sign_in(&oidc, &nonce).status_code, 403);
+    }
+
+    #[test]
+    fn session_store_mode_also_keeps_groups_and_checks_lists() {
+        let (config, nonce) = idp(r#","email":"ann@example.com","groups":["ops"]"#);
+        let sessions = Arc::new(SessionStore::new(60));
+        let oidc = OidcAuth::new(config, Arc::clone(&sessions)).allow_groups("groups", ["ops"]).forward_headers(true);
+        let login = oidc.handle(&get("/auth/login"), &conn(), &OkApp).unwrap();
+        let location = header(&login, "Location").unwrap();
+        *nonce.lock().unwrap() = query(&location, "nonce");
+        let sid = set_cookie(&login, SID_COOKIE).unwrap();
+        let cb = oidc.handle(&with_cookie(get(&format!("/auth/callback?code=c&state={}", query(&location, "state"))), SID_COOKIE, &sid), &conn(), &OkApp).unwrap();
+        assert_eq!(cb.status_code, 302);
+        let app = CapturingApp::new();
+        assert_eq!(oidc.handle(&with_cookie(get("/x"), SID_COOKIE, &sid), &conn(), &app).unwrap().status_code, 200);
+        let seen = app.captured.lock().unwrap().clone().unwrap();
+        assert!(seen.headers.iter().any(|h| h.name == "X-Auth-Request-Groups" && &*h.value == "ops"));
+    }
+
+    #[test]
+    fn an_empty_redirect_uri_follows_the_request_host_and_return_to_stays_local() {
+        let (mut config, _) = idp("");
+        config.redirect_uri = String::new();
+        let oidc = OidcAuth::new(config, Arc::new(SessionStore::new(60))).signed_cookies("k".as_bytes().to_vec());
+        let mut req = get("/auth/login?return_to=https://evil.example/");
+        req.headers.push(Header { name: "Host".into(), value: "app.test:8080".into() });
+        let login = oidc.handle(&req, &conn(), &OkApp).unwrap();
+        let location = header(&login, "Location").unwrap();
+        assert!(location.contains("redirect_uri=http%3A%2F%2Fapp.test%3A8080%2Fauth%2Fcallback"), "{location}");
+        let pre = set_cookie(&login, "_rws_oidc_pre").unwrap();
+        let payload = String::from_utf8(super::super::pkce::base64url_decode(pre.split('.').next().unwrap()).unwrap()).unwrap();
+        assert!(payload.contains(r#""return_to":"/""#), "an absolute return_to is replaced: {payload}");
+    }
+
+    #[test]
+    fn excluded_paths_still_lose_spoofed_identity_headers() {
+        let oidc = OidcAuth::new(google_config(), Arc::new(SessionStore::new(60))).exclude("/public");
+        let app = CapturingApp::new();
+        let mut req = get("/public/x");
+        req.headers.push(Header { name: "X-Rws-Oidc-Claims".into(), value: r#"{"sub":"admin"}"#.into() });
+        req.headers.push(Header { name: "x-auth-request-user".into(), value: "admin".into() });
+        assert_eq!(oidc.handle(&req, &conn(), &app).unwrap().status_code, 200);
+        let seen = app.captured.lock().unwrap().clone().unwrap();
+        assert!(!seen.headers.iter().any(|h| h.name.to_ascii_lowercase().starts_with("x-auth-request") || h.name.eq_ignore_ascii_case("x-rws-oidc-claims")));
+    }
 }
 
 // ── Provider presets and OidcConfig::from_env (Phase 5) ─────────────────────────

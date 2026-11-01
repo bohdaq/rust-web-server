@@ -71,7 +71,14 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.middleware" => vec!["timeout_ms", "max_body_size", "early_hints"],
         "route.middleware.rate_limit" => vec!["max_requests", "window_secs"],
         "route.middleware.cache" => vec!["ttl_secs", "vary_by", "dir", "max_size", "purge_token_env"],
-        "route.middleware.auth" => vec!["type", "token_env", "secret_env", "previous_secret_env", "htpasswd_file"],
+        "route.middleware.auth" => vec![
+            "type", "token_env", "secret_env", "previous_secret_env", "htpasswd_file",
+            // oidc
+            "issuer", "provider", "tenant", "client_id", "client_secret_env", "redirect_uri", "scopes", "allowed_emails",
+            "allowed_domains", "allowed_groups", "groups_claim", "cookie_secret_env", "session_ttl_secs", "exclude", "forward_headers",
+            // forward
+            "url", "copy_headers", "timeout_ms",
+        ],
         "route.middleware.ip_filter" => vec!["allow", "deny"],
         "route.middleware.mirror" => vec!["upstream", "backends", "percent"],
         "route.middleware.authz" => vec!["relation", "object"],
@@ -437,6 +444,40 @@ fn validate_middleware(
             } else if !crate::config_check::offline() && std::env::var(token_env).unwrap_or_default().is_empty() {
                 report.error(format!("{label}: auth secret env var '{token_env}' is unset or empty; the route answers 503 until it is set"));
             }
+        }
+        Some(AuthConfig::Oidc(o)) => {
+            if o.client_id.is_empty() {
+                report.error(format!("{label}: oidc auth has no `client_id`; the route answers 503"));
+            }
+            match (o.issuer.is_empty(), o.provider.as_str()) {
+                (true, "") => report.error(format!("{label}: oidc auth needs `issuer` (discovery URL) or `provider` (google, microsoft, github); the route answers 503")),
+                (true, "google" | "microsoft" | "github") => {}
+                (true, other) => report.error(format!("{label}: oidc provider {other:?}: expected google, microsoft or github (others: set `issuer`)")),
+                (false, _) if !o.issuer.starts_with("https://") && !o.issuer.starts_with("http://") => report.error(format!("{label}: oidc issuer {:?} is not a URL", o.issuer)),
+                _ => {}
+            }
+            if o.client_secret_env.is_empty() {
+                report.warn(format!("{label}: oidc auth has no `client_secret_env`: a public client (PKCE only), which most providers refuse for web apps"));
+            } else if !crate::config_check::offline() && std::env::var(&o.client_secret_env).unwrap_or_default().is_empty() {
+                report.error(format!("{label}: oidc client secret env var '{}' is unset or empty; the route answers 503", o.client_secret_env));
+            }
+            if o.cookie_secret_env.is_empty() {
+                report.warn(format!("{label}: oidc auth without `cookie_secret_env`: sign-ins are lost on restart and don't work across replicas"));
+            } else if !crate::config_check::offline() && std::env::var(&o.cookie_secret_env).unwrap_or_default().len() < 32 {
+                report.error(format!("{label}: oidc cookie secret env var '{}' must hold at least 32 characters; the route answers 503", o.cookie_secret_env));
+            }
+            #[cfg(not(feature = "sso"))]
+            report.error(format!("{label}: oidc auth needs the `sso` feature, which this build doesn't include; the route answers 503"));
+        }
+        Some(AuthConfig::Unknown(kind)) => {
+            report.error(format!("{label}: auth type {kind:?} is not one of bearer, jwt, basic, oidc, forward; the route answers 503"));
+        }
+        Some(AuthConfig::Forward { url, .. }) => {
+            if !(url.starts_with("http://") || url.starts_with("https://")) {
+                report.error(format!("{label}: forward auth `url` {url:?} is not an http(s) URL; the route answers 503"));
+            }
+            #[cfg(not(feature = "auth"))]
+            report.error(format!("{label}: forward auth needs the `auth` feature, which this build doesn't include; the route answers 503"));
         }
         Some(AuthConfig::Basic { htpasswd_file }) => {
             #[cfg(feature = "auth")]

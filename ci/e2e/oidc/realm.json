@@ -1,0 +1,36 @@
+{
+  "realm": "rws",
+  "enabled": true,
+  "sslRequired": "none",
+  "groups": [{ "name": "ops" }],
+  "users": [
+    {
+      "username": "ann", "enabled": true, "email": "ann@example.com", "emailVerified": true,
+      "firstName": "Ann", "lastName": "Ops", "groups": ["/ops"],
+      "credentials": [{ "type": "password", "value": "ann-pass", "temporary": false }]
+    },
+    {
+      "username": "bob", "enabled": true, "email": "bob@other.test", "emailVerified": true,
+      "firstName": "Bob", "lastName": "Other",
+      "credentials": [{ "type": "password", "value": "bob-pass", "temporary": false }]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "rws",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "rws-e2e-secret",
+      "standardFlowEnabled": true,
+      "redirectUris": ["http://127.0.0.1:18501/*"],
+      "webOrigins": ["+"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "groups", "protocol": "openid-connect", "protocolMapper": "oidc-group-membership-mapper",
+          "config": { "claim.name": "groups", "full.path": "false", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" }
+        }
+      ]
+    }
+  ]
+}

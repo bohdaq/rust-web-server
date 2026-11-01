@@ -40,7 +40,6 @@ use crate::server::ConnectionInfo;
 
 pub(crate) const VERSION: u8 = 1;
 pub(crate) const BEGIN_REQUEST: u8 = 1;
-pub(crate) const ABORT_REQUEST: u8 = 2;
 pub(crate) const END_REQUEST: u8 = 3;
 pub(crate) const PARAMS: u8 = 4;
 pub(crate) const STDIN: u8 = 5;

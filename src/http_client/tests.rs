@@ -370,3 +370,22 @@ fn localhost_reaches_a_server_listening_on_ipv4_only() {
     let response = crate::http_client::Client::new().get(&format!("http://localhost:{port}/")).send().expect("reached over IPv4");
     assert_eq!((200, "ok"), (response.status(), response.text().unwrap().as_str()));
 }
+
+#[test]
+fn the_host_header_carries_a_non_default_port() {
+    // Servers that build absolute URLs from Host (OIDC discovery documents)
+    // need the port; found by the Keycloak end-to-end test (18.21.0).
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let seen = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0u8; 1024];
+        let n = stream.read(&mut buf).unwrap();
+        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        String::from_utf8_lossy(&buf[..n]).to_string()
+    });
+    crate::http_client::Client::new().get(&format!("http://127.0.0.1:{port}/x")).send().unwrap();
+    let request = seen.join().unwrap();
+    assert!(request.contains(&format!("Host: 127.0.0.1:{port}\r\n")), "{request}");
+}

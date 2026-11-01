@@ -505,6 +505,25 @@ pub(crate) fn apply_middleware_named(
             AuthConfig::Basic { .. } => {
                 deny("basic auth requires the 'auth' feature, which this build doesn't include".to_string())
             }
+            #[cfg(feature = "sso")]
+            AuthConfig::Oidc(oidc) => match crate::proxy_config::oidc_route::LazyOidc::new((**oidc).clone()) {
+                Ok(layer) => arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer)),
+                Err(e) => deny(e),
+            },
+            #[cfg(not(feature = "sso"))]
+            AuthConfig::Oidc(_) => deny("oidc auth requires the 'sso' feature, which this build doesn't include".to_string()),
+            #[cfg(feature = "auth")]
+            AuthConfig::Forward { url, copy_headers, timeout_ms } => {
+                if url.starts_with("http://") || url.starts_with("https://") {
+                    let layer = copy_headers.iter().fold(crate::auth::forward::ForwardAuthLayer::new(url.clone()).timeout_ms(*timeout_ms), |l, h| l.copy_header(h.clone()));
+                    arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer))
+                } else {
+                    deny(format!("forward auth: url {url:?} is not an http(s) URL"))
+                }
+            }
+            AuthConfig::Unknown(kind) => deny(format!("auth type {kind:?} is not one of bearer, jwt, basic, oidc, forward")),
+            #[cfg(not(feature = "auth"))]
+            AuthConfig::Forward { .. } => deny("forward auth requires the 'auth' feature, which this build doesn't include".to_string()),
         };
     }
 

@@ -2526,3 +2526,60 @@ fn fastcgi_action_is_validated() {
     assert!(text.contains("fastcgi action has no `root`"), "{text}");
     assert!(!text.contains("unknown"), "params take any key: {text}");
 }
+
+#[test]
+fn oidc_forward_and_unknown_auth_types_parse() {
+    let route = |auth: &str| format!("[[route]]\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"respond\"\nstatus = 200\n[route.middleware.auth]\n{auth}\n");
+    let cfg = ProxyConfig::from_str(&route(r#"type = "oidc"
+issuer = "https://id.example.com/realms/main/"
+client_id = "rws"
+client_secret_env = "OIDC_SECRET"
+allowed_domains = ["example.com"]
+allowed_groups = ["ops", "sre"]
+groups_claim = "roles"
+cookie_secret_env = "OIDC_COOKIE"
+exclude = ["/healthz"]
+forward_headers = false"#));
+    let Some(crate::proxy_config::AuthConfig::Oidc(o)) = &cfg.routes[0].middleware.auth else { panic!("{:?}", cfg.routes[0].middleware.auth) };
+    assert_eq!(o.issuer, "https://id.example.com/realms/main", "trailing slash trimmed");
+    assert_eq!((o.client_id.as_str(), o.client_secret_env.as_str(), o.groups_claim.as_str()), ("rws", "OIDC_SECRET", "roles"));
+    assert_eq!(o.allowed_groups, ["ops", "sre"]);
+    assert_eq!(o.exclude, ["/healthz"]);
+    assert!(!o.forward_headers);
+    assert_eq!(o.session_ttl_secs, 86_400);
+
+    let cfg = ProxyConfig::from_str(&route("type = \"forward\"\nurl = \"http://authelia:9091/api/verify\"\ncopy_headers = [\"Remote-User\", \"Remote-Groups\"]"));
+    assert_eq!(
+        cfg.routes[0].middleware.auth,
+        Some(crate::proxy_config::AuthConfig::Forward { url: "http://authelia:9091/api/verify".to_string(), copy_headers: vec!["Remote-User".to_string(), "Remote-Groups".to_string()], timeout_ms: 5000 })
+    );
+
+    let cfg = ProxyConfig::from_str(&route("type = \"oauth\""));
+    assert_eq!(cfg.routes[0].middleware.auth, Some(crate::proxy_config::AuthConfig::Unknown("oauth".to_string())));
+}
+
+#[test]
+fn oidc_forward_and_unknown_auth_are_validated() {
+    let route = |auth: &str| format!("[[route]]\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"respond\"\nstatus = 200\n[route.middleware.auth]\n{auth}\n");
+    let text = |toml: String| format!("{:?}", crate::config_check::check_str_offline(&toml));
+    let t = text(route("type = \"oidc\"\nprovider = \"yahoo\""));
+    assert!(t.contains("no `client_id`") && t.contains("oidc provider \\\"yahoo\\\""), "{t}");
+    assert!(t.contains("without `cookie_secret_env`"), "{t}");
+    let report = crate::config_check::check_str_offline(&route("type = \"oidc\"\nprovider = \"google\"\nclient_id = \"x\"\nclient_secret_env = \"S\"\ncookie_secret_env = \"C\""));
+    let errors: Vec<_> = format!("{report:?}").lines().map(str::to_string).collect();
+    if cfg!(feature = "sso") {
+        assert!(report.is_ok(), "{errors:?}");
+    } else {
+        assert!(format!("{report:?}").contains("needs the `sso` feature"), "{errors:?}");
+    }
+    assert!(text(route("type = \"forward\"\nurl = \"authelia:9091\"")).contains("not an http(s) URL"));
+    assert!(text(route("type = \"oauth\"")).contains("auth type \\\"oauth\\\" is not one of"));
+}
+
+#[test]
+fn an_unknown_auth_type_fails_closed() {
+    let cfg = ProxyConfig::from_str("[[route]]\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"respond\"\nstatus = 200\nbody = \"secret\"\n[route.middleware.auth]\ntype = \"oauth\"\n");
+    let app = crate::proxy_config::builder::build(cfg).0;
+    let res = crate::test_client::TestClient::new(app).get("/x").send();
+    assert_eq!(res.status(), 503);
+}

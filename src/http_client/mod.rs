@@ -113,6 +113,15 @@ struct ParsedUrl {
 }
 
 impl ParsedUrl {
+    /// The `Host` header value: the host, with the port when it isn't the
+    /// scheme's default (RFC 9110 §7.2) — servers that build absolute URLs
+    /// from it (OIDC discovery documents) need it.
+    fn host_header(&self) -> String {
+        let default_port = if self.scheme == "https" { 443 } else { 80 };
+        let host = if self.host.contains(':') && !self.host.starts_with('[') { format!("[{}]", self.host) } else { self.host.clone() };
+        if self.port == default_port { host } else { format!("{host}:{}", self.port) }
+    }
+
     fn parse(url: &str) -> Result<Self, HttpClientError> {
         // Expect "scheme://rest"
         let rest = if let Some(r) = url.strip_prefix("https://") {
@@ -537,7 +546,7 @@ fn send_once(
         .map_err(|e| HttpClientError(e.to_string()))?;
 
     let request_bytes =
-        build_request_bytes(method, &parsed.path_and_query, &parsed.host, headers, body);
+        build_request_bytes(method, &parsed.path_and_query, &parsed.host_header(), headers, body);
 
     let is_head = method.eq_ignore_ascii_case("HEAD");
 
@@ -1047,7 +1056,7 @@ mod async_impl {
         let addr = format!("{}:{}", parsed.host, parsed.port);
         let dur = Duration::from_millis(timeout_ms);
         let request_bytes =
-            build_request_bytes(method, &parsed.path_and_query, &parsed.host, headers, body);
+            build_request_bytes(method, &parsed.path_and_query, &parsed.host_header(), headers, body);
         let is_head = method.eq_ignore_ascii_case("HEAD");
 
         let tcp = timeout(dur, TcpStream::connect(&addr))

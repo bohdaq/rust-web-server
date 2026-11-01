@@ -351,7 +351,79 @@ The htpasswd files are re-read when they change (checked at most once a
 second, since 18.20.0): adding or removing a user takes effect without a
 restart, and a file that can't be read keeps the users read before.
 
-See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Auth config fails closed: an unset/empty `token_env`/`secret_env`, a missing `htpasswd_file`, or a build without the `auth` feature makes that route answer `503 Service Unavailable` (with an error in the startup log) instead of serving it unprotected. Other routes keep working. Bearer tokens are compared in constant time.
+### Sign in with Google, Okta, Keycloak… (`type = "oidc"`)
+
+Since 18.21.0 a route can require an OpenID Connect sign-in — an internal
+tool, a staging site, a dashboard without its own login:
+
+```toml
+[[route]]
+name = "grafana"
+[route.match]
+host = "grafana.example.com"
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "grafana"
+[route.middleware.auth]
+type              = "oidc"
+issuer            = "https://id.example.com/realms/main"  # discovery: <issuer>/.well-known/openid-configuration
+# provider        = "google"         # or google / microsoft (tenant = "…") / github instead of issuer
+client_id         = "grafana-proxy"
+client_secret_env = "OIDC_CLIENT_SECRET"
+cookie_secret_env = "OIDC_COOKIE_SECRET"  # ≥ 32 characters; signs the session cookie
+allowed_domains   = ["example.com"]  # verified email in these domains…
+# allowed_emails  = ["ann@partner.test"]  # …or these addresses…
+allowed_groups    = ["sre"]          # …or one of these groups (from the ID token)
+# groups_claim    = "groups"         # the claim holding groups (Keycloak, Okta, Authentik, Azure AD)
+# redirect_uri    = "https://grafana.example.com/auth/callback"  # default: from the request's Host
+# scopes          = ["openid", "email", "profile"]
+# session_ttl_secs = 86400
+# exclude         = ["/api/health"]  # paths served without signing in
+# forward_headers = true             # X-Auth-Request-User / -Email / -Groups upstream
+```
+
+Register `https://<host>/auth/callback` as the redirect URI with the
+provider. An unauthenticated request goes to `/auth/login`, then to the
+provider, and back to the page it asked for (only local paths are accepted
+as `return_to`); `/auth/logout` signs out. With no allow-list everyone who
+can sign in at the provider is admitted; with lists, a user needs a verified
+email on `allowed_emails`, its domain on `allowed_domains`, or a group on
+`allowed_groups` — anyone else gets `403` after signing in.
+
+The session is an HMAC-signed, `HttpOnly`, `SameSite=Lax` cookie (`Secure`
+over HTTPS), so nothing is stored in rws: sign-ins survive restarts and work
+on every replica that shares `cookie_secret_env`. Without it rws makes up a
+key at startup (sign-ins end with the process; `rws --check` warns).
+Upstream gets `X-Auth-Request-User` (the subject), `X-Auth-Request-Email`
+and `X-Auth-Request-Groups` — the names oauth2-proxy uses, so Grafana's
+auth proxy and similar integrations work — and copies a client sends itself
+are removed. The provider's discovery document is fetched on the first
+request; while it can't be reached, requests get `503` with `Retry-After`.
+Needs the `sso` feature (in the release binaries since 18.21.0).
+
+### An auth service decides (`type = "forward"`)
+
+Authelia, Authentik, oauth2-proxy or your own service answer each request
+(the nginx `auth_request` / Traefik ForwardAuth pattern):
+
+```toml
+[route.middleware.auth]
+type         = "forward"
+url          = "http://authelia:9091/api/verify"
+copy_headers = ["Remote-User", "Remote-Groups", "Remote-Email"]
+# timeout_ms = 5000
+```
+
+rws sends a `GET` with the request's headers plus `X-Forwarded-Method`,
+`-Proto`, `-Host`, `-Uri` and `-For` (set by rws, never taken from the
+client). A `2xx` lets the request through with the `copy_headers` from the
+auth service's answer — a client's own copies of those headers are always
+dropped (since 18.21.0); anything else (a `302` to a login page, a `401`) is
+returned to the client as is. An unreachable service is a `502`. Same as
+[`ForwardAuthLayer`](#forward-auth-delegate-to-an-external-service).
+
+See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Auth config fails closed: an unset/empty `token_env`/`secret_env`, a missing `htpasswd_file`, an `auth` table with an unknown `type`, or a build without the feature a type needs makes that route answer `503 Service Unavailable` (with an error in the startup log and from `rws --check`) instead of serving it unprotected. Other routes keep working. Bearer tokens are compared in constant time.
 
 ## Password hashing (`crypto` feature)
 

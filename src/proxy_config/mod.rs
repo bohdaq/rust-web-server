@@ -35,6 +35,8 @@ pub mod validate;
 pub mod mcp_gateway;
 pub mod a2a_gateway;
 pub mod llm;
+#[cfg(feature = "sso")]
+pub(crate) mod oidc_route;
 
 #[cfg(test)]
 mod tests;
@@ -297,7 +299,7 @@ pub struct CacheConfig {
     pub purge_token_env: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AuthConfig {
     /// `auth = { type = "basic", htpasswd_file = ".htpasswd" }`. See
     /// `crate::auth::BasicAuthLayer::from_htpasswd_file` for the supported
@@ -310,6 +312,39 @@ pub enum AuthConfig {
     /// rotating; tokens signed with either verify.
     Jwt { secret_env: String, previous_secret_env: String },
     Bearer { token_env: String },
+    /// `type = "oidc"` (18.21.0): sign in with an OpenID Connect provider.
+    Oidc(Box<OidcRouteAuth>),
+    /// `type = "forward"` (18.21.0): ask an auth service (Authelia,
+    /// Authentik, oauth2-proxy) — `crate::auth::ForwardAuthLayer`.
+    Forward { url: String, copy_headers: Vec<String>, timeout_ms: u64 },
+    /// An auth table with a `type` rws doesn't know (a typo): the route
+    /// answers 503 rather than going unprotected (since 18.21.0).
+    Unknown(String),
+}
+
+/// `[route.middleware.auth] type = "oidc"`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OidcRouteAuth {
+    /// Discovery URL base (`https://accounts.example.com/realms/main`).
+    pub issuer: String,
+    /// `google`, `microsoft` or `github` instead of an issuer.
+    pub provider: String,
+    /// Azure AD tenant for `provider = "microsoft"` (default `common`).
+    pub tenant: String,
+    pub client_id: String,
+    pub client_secret_env: String,
+    /// Empty: `<scheme>://<Host>/auth/callback` of the request.
+    pub redirect_uri: String,
+    pub scopes: Vec<String>,
+    pub allowed_emails: Vec<String>,
+    pub allowed_domains: Vec<String>,
+    pub allowed_groups: Vec<String>,
+    pub groups_claim: String,
+    /// Signs the session cookie; unset: a random key per process.
+    pub cookie_secret_env: String,
+    pub session_ttl_secs: u64,
+    pub exclude: Vec<String>,
+    pub forward_headers: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -745,7 +780,29 @@ fn parse_middleware_config(
             "basic" => Some(AuthConfig::Basic {
                 htpasswd_file: get_str(map, &a_sec, "htpasswd_file"),
             }),
-            _ => None,
+            "oidc" => Some(AuthConfig::Oidc(Box::new(OidcRouteAuth {
+                issuer: get_str(map, &a_sec, "issuer").trim_end_matches('/').to_string(),
+                provider: get_str(map, &a_sec, "provider").to_ascii_lowercase(),
+                tenant: get_str(map, &a_sec, "tenant"),
+                client_id: get_str(map, &a_sec, "client_id"),
+                client_secret_env: get_str(map, &a_sec, "client_secret_env"),
+                redirect_uri: get_str(map, &a_sec, "redirect_uri"),
+                scopes: get_array(map, &a_sec, "scopes"),
+                allowed_emails: get_array(map, &a_sec, "allowed_emails"),
+                allowed_domains: get_array(map, &a_sec, "allowed_domains"),
+                allowed_groups: get_array(map, &a_sec, "allowed_groups"),
+                groups_claim: get_str(map, &a_sec, "groups_claim"),
+                cookie_secret_env: get_str(map, &a_sec, "cookie_secret_env"),
+                session_ttl_secs: get_u64(map, &a_sec, "session_ttl_secs", 86_400),
+                exclude: get_array(map, &a_sec, "exclude"),
+                forward_headers: get_str(map, &a_sec, "forward_headers") != "false",
+            }))),
+            "forward" => Some(AuthConfig::Forward {
+                url: get_str(map, &a_sec, "url"),
+                copy_headers: get_array(map, &a_sec, "copy_headers"),
+                timeout_ms: get_u64(map, &a_sec, "timeout_ms", 5000),
+            }),
+            other => Some(AuthConfig::Unknown(other.to_string())),
         }
     } else {
         None

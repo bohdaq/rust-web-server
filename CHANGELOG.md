@@ -7,6 +7,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Security
+
+- `ForwardAuthLayer`: a header named in `copy_header` now only ever comes
+  from the auth service — a client's own copy is dropped even when the
+  service doesn't send one (it used to pass through). The auth service also
+  gets `X-Forwarded-Method/Proto/Host/Uri/For` set by rws, not the client's.
+- `OidcAuth` removes `X-Rws-Oidc-Claims` and `X-Auth-Request-*` headers a
+  client sends, on excluded paths too; `return_to` must be a local path.
+- An `[route.middleware.auth]` table with an unknown `type` makes the route
+  answer `503` (and `rws --check` fail) instead of leaving it unprotected.
+
 ### Added
 
 - Local HTTPS (#71): `tls = "internal"` (`--tls=internal`) makes rws its
@@ -19,9 +30,21 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   Unix socket, kept-alive connections) with front-controller routing,
   `PATH_INFO`, static files served by rws, scripts confined to the root
   and httpoxy-safe variables; `rust_web_server::fastcgi::FastCgi` for code.
+- Sign-in in the config file (#73): `[route.middleware.auth] type = "oidc"`
+  (an issuer's discovery, or `provider = "google" | "microsoft" | "github"`)
+  with `allowed_emails` / `allowed_domains` / `allowed_groups`, signed-cookie
+  sessions that survive restarts and work across replicas, and
+  `X-Auth-Request-User/Email/Groups` upstream; `type = "forward"` asks an
+  auth service (Authelia, Authentik, oauth2-proxy). `OidcAuth` gains
+  `signed_cookies`, `allow_emails`, `allow_domains`, `allow_groups`,
+  `forward_headers`, `session_ttl`, and an empty `redirect_uri` follows the
+  request's host. Release binaries now include the `sso` feature.
 
 ### Fixed
 
+- The outbound HTTP client sends the port in `Host` when it isn't the
+  scheme's default (OIDC discovery behind Keycloak on `:8080` built URLs
+  without it).
 - The admin API's IP blocklist (and `rws ctl block`) now applies in proxy
   mode too; it only covered the static-file server. Clients that aren't
   blocked still take the non-blocking proxy path.
