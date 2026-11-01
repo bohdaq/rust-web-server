@@ -29,7 +29,20 @@ impl RespConn {
     }
 
     fn connect(&self) -> std::io::Result<std::net::TcpStream> {
-        let stream = std::net::TcpStream::connect(&self.addr)?;
+        // A bounded connect (18.24.0): an unreachable Redis costs 2 s per
+        // address, not the OS's minute-long SYN retries.
+        let mut last = std::io::Error::other(format!("no address for {}", self.addr));
+        let mut connected = None;
+        for addr in std::net::ToSocketAddrs::to_socket_addrs(self.addr.as_str())? {
+            match std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(2)) {
+                Ok(s) => {
+                    connected = Some(s);
+                    break;
+                }
+                Err(e) => last = e,
+            }
+        }
+        let stream = connected.ok_or(last)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
         Ok(stream)

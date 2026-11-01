@@ -66,6 +66,7 @@ fn a_change_on_one_replica_reaches_the_other() {
     b.tick(true);
     a.publish(Op::Block("198.51.100.4".into()));
     a.publish(Op::Maintenance(true));
+    a.tick(false);
     b.tick(false);
     let state = rec_b.last();
     assert!(state.maintenance && state.blocked.contains("198.51.100.4"), "{state:?}");
@@ -85,6 +86,7 @@ fn changes_made_while_the_store_is_down_are_sent_later() {
     let (a, _) = replica(&store, "web-1");
     let (b, rec_b) = replica(&store, "web-2");
     a.publish(Op::Maintenance(false)); // the document exists before Redis goes away
+    a.tick(false);
     store.down.store(true, std::sync::atomic::Ordering::SeqCst);
     a.publish(Op::Flag { name: "checkout-v2".into(), enabled: true });
     a.publish(Op::Block("192.0.2.77".into()));
@@ -105,12 +107,14 @@ fn a_new_replica_adopts_the_state_but_not_old_purges() {
     let (a, _) = replica(&store, "web-1");
     a.publish(Op::Purge { cache: "app".into(), path: None, prefix: None });
     a.publish(Op::Maintenance(true));
+    a.tick(false);
     let (late, rec) = replica(&store, "web-3");
     late.tick(false);
     let (state, purges_after) = rec.seen.lock().unwrap().last().cloned().unwrap();
     assert!(state.maintenance);
     assert_eq!(purges_after, 1, "the existing purge is not replayed");
     a.publish(Op::Purge { cache: "app".into(), path: Some("/x".into()), prefix: None });
+    a.tick(false);
     late.tick(false);
     let (state, purges_after) = rec.seen.lock().unwrap().last().cloned().unwrap();
     assert_eq!((purges_after, state.purges.len()), (1, 2), "the new purge (id 2) is after 1");
@@ -155,4 +159,18 @@ fn an_empty_store_is_seeded_from_a_replica_s_state() {
     let seeded = fresh.state().unwrap().expect("seeded");
     assert!(seeded.blocked.contains("192.0.2.9") && seeded.drained.contains("web|10.0.0.5:80"), "{seeded:?}");
     assert!(rec_a2.last().blocked.contains("192.0.2.9"), "nothing was undone");
+}
+
+#[test]
+fn publish_never_waits_on_the_store() {
+    let store = Arc::new(MemoryStore::default());
+    store.down.store(true, std::sync::atomic::Ordering::SeqCst);
+    let (a, _) = replica(&store, "web-1");
+    let start = std::time::Instant::now();
+    for i in 0..100 {
+        a.publish(Op::Block(format!("192.0.2.{i}")));
+    }
+    assert!(start.elapsed() < std::time::Duration::from_millis(50));
+    a.tick(false);
+    assert!(a.status_json().contains(r#""pending":100"#), "{}", a.status_json());
 }

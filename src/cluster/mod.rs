@@ -403,6 +403,11 @@ pub struct ClusterSync {
     local: Box<dyn Local>,
     node: String,
     inner: Mutex<SyncState>,
+    /// Changes made here, waiting for the sync thread (18.24.0: `publish`
+    /// never waits on Redis, so an admin change doesn't hang when it's
+    /// down); `wake` starts a round at once.
+    queue: Mutex<Vec<Op>>,
+    wake: std::sync::Condvar,
 }
 
 #[derive(Default)]
@@ -417,14 +422,21 @@ struct SyncState {
 
 impl ClusterSync {
     pub fn new(store: Box<dyn Store>, local: Box<dyn Local>, node: &str) -> ClusterSync {
-        ClusterSync { store, local, node: node.to_string(), inner: Mutex::new(SyncState::default()) }
+        ClusterSync { store, local, node: node.to_string(), inner: Mutex::new(SyncState::default()), queue: Mutex::new(Vec::new()), wake: std::sync::Condvar::new() }
     }
 
     /// Send a change made here (already applied locally).
     pub fn publish(&self, op: Op) {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if !inner.pending.is_empty() || self.store.apply(&op).is_err() {
-            inner.pending.push(op);
+        self.queue.lock().unwrap_or_else(|e| e.into_inner()).push(op);
+        self.wake.notify_one();
+    }
+
+    /// Wait up to `timeout` for a published change (the sync thread's pause
+    /// between rounds).
+    fn wait(&self, timeout: Duration) {
+        let queue = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        if queue.is_empty() {
+            let _ = self.wake.wait_timeout(queue, timeout);
         }
     }
 
@@ -432,15 +444,17 @@ impl ClusterSync {
     /// one. `heartbeat` also writes this node's heartbeat.
     pub fn tick(&self, heartbeat: bool) {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let published = std::mem::take(&mut *self.queue.lock().unwrap_or_else(|e| e.into_inner()));
+        inner.pending.extend(published);
         let result = (|| -> std::io::Result<()> {
             if self.store.state()?.is_none() {
-                // An empty store: seed it with what this replica has (its
-                // unsent changes included), so a Redis that lost its data
-                // doesn't undo drains and blocks.
+                // An empty store: seed it with what this replica has, so a
+                // Redis that lost its data doesn't undo drains and blocks.
                 for op in self.local.snapshot().to_ops() {
                     self.store.apply(&op)?;
                 }
-                inner.pending.clear();
+                // The queued changes are sent after it: each one sets a
+                // value, so replaying what the snapshot already has is harmless.
             }
             while let Some(op) = inner.pending.first().cloned() {
                 self.store.apply(&op)?;
@@ -525,13 +539,18 @@ pub fn start_from_env() {
     }
     println!("[cluster] sharing runtime state through Redis at {addr} as node {node}");
     let _ = std::thread::Builder::new().name("rws-cluster".into()).spawn(|| {
-        let mut round: u64 = 0;
+        let mut last_heartbeat: Option<std::time::Instant> = None;
         loop {
             if let Some(sync) = global().get() {
-                sync.tick(round % (HEARTBEAT.as_secs() / POLL.as_secs()).max(1) == 0);
+                let heartbeat = last_heartbeat.is_none_or(|t| t.elapsed() >= HEARTBEAT);
+                sync.tick(heartbeat);
+                if heartbeat {
+                    last_heartbeat = Some(std::time::Instant::now());
+                }
+                sync.wait(POLL);
+            } else {
+                std::thread::sleep(POLL);
             }
-            round += 1;
-            std::thread::sleep(POLL);
         }
     });
 }
