@@ -7,6 +7,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Changed
+
+- Licensed under MIT only. `LICENSE` is now a single MIT file; earlier
+  releases also offered Apache-2.0, CC BY 4.0, ISC and LGPL-3.0, and those
+  releases keep that choice. `CONTRIBUTING.md` says contributions are accepted
+  under MIT.
+
 ### Added
 
 - `mcp::openapi_tools` (#66): OpenAPI 3.0/3.1 operations as MCP tools —

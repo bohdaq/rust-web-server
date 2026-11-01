@@ -69,3 +69,8 @@ CI also runs, on every push:
 
 Small, focused PRs get reviewed fastest. If you're planning something large,
 open an issue or a discussion first so we can agree on the approach.
+
+## License of contributions
+
+Contributions are accepted under the project's [MIT license](LICENSE). By
+opening a pull request you agree that your contribution is licensed under it.
