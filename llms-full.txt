@@ -12175,7 +12175,8 @@ The path, query arguments, form fields, JSON string values, the non-file
 fields of multipart forms (and uploaded file names), cookie values, the
 `User-Agent`, and every header for Log4Shell. Values are decoded first —
 percent-encoding (also double), HTML entities, `\x` / `\u` escapes, SQL
-`/* comments */` — so encoded attacks are seen as what they decode to.
+`/* comments */` (whose content is kept for MySQL's `/*! … */`, which the
+database runs) — so encoded attacks are seen as what they decode to.
 
 | Rules | Detects | Paranoia |
 |---|---|---|

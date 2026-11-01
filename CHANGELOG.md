@@ -22,6 +22,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   instance back; a fetched config can't change the `[fleet]` settings; when
   the reload refuses a fetched config the previous file is restored. 18.23
   signature files still verify; re-sign to get rollback protection.
+- WAF (#77): MySQL's executable comments (`union/*!select*/`) no longer hide
+  SQL from rule 942120; command injection after `;` or `|` needs a
+  shell-like argument, so text like "tired; head hurts" isn't blocked;
+  `rws --check` warns when a WAF route has no body size limit.
 
 ## 18.23.1 — 2026-11-01
 
