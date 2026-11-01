@@ -157,12 +157,14 @@ pub(crate) fn xml_text<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
 
 /// The host part of a URL (no scheme, port or path) — what the HTTP client
 /// sends as `Host`, so what is signed.
+/// The `Host` header the HTTP client sends for `url` — the host, with the
+/// port when it isn't the scheme's default (since 18.21.0 the client sends
+/// it, so SigV4 must sign the same value).
 fn url_host(url: &str) -> &str {
-    let authority = url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or("");
-    if authority.starts_with('[') {
-        return authority.split(']').next().map_or(authority, |h| &authority[..h.len() + 1]);
-    }
-    authority.split(':').next().unwrap_or(authority)
+    let (scheme, rest) = url.split_once("://").unwrap_or(("https", url));
+    let authority = rest.split('/').next().unwrap_or("");
+    let default = if scheme.eq_ignore_ascii_case("http") { ":80" } else { ":443" };
+    authority.strip_suffix(default).unwrap_or(authority)
 }
 
 async fn route53_send(credentials: &AwsCredentials, api: &str, method: &str, path: &str, query: &str, body: Option<String>) -> Result<String, String> {
@@ -365,8 +367,11 @@ mod tests {
     #[test]
     fn hosts_are_signed_as_sent() {
         assert_eq!("route53.amazonaws.com", url_host(ROUTE53_API));
-        assert_eq!("127.0.0.1", url_host("http://127.0.0.1:9181/x"));
-        assert_eq!("[::1]", url_host("http://[::1]:9181"));
+        // The Host header the client sends: a non-default port included.
+        assert_eq!("127.0.0.1:9181", url_host("http://127.0.0.1:9181/x"));
+        assert_eq!("[::1]:9181", url_host("http://[::1]:9181"));
+        assert_eq!("example.test", url_host("http://example.test:80/x"));
+        assert_eq!("example.test", url_host("https://example.test:443"));
     }
 
     #[test]
