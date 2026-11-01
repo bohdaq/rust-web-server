@@ -85,11 +85,11 @@ start_fpm() { # <config file> <name>
   if [ "$PHP_FPM" = docker ]; then
     CONTAINER=$(docker run -d --rm --network host --user "$(id -u):$(id -g)" -v "$WORK:$WORK" php:8.3-fpm php-fpm --nodaemonize --fpm-config "$1")
   else
-    "$PHP_FPM" --nodaemonize --fpm-config "$1" >"fpm-$2.log" 2>&1 & PIDS+=($!)
+    "$PHP_FPM" --nodaemonize --fpm-config "$1" >"fpm-$2.log" 2>&1 & FPM_PID=$!; PIDS+=($FPM_PID)
   fi
 }
 stop_fpm() {
-  if [ "$PHP_FPM" = docker ]; then docker rm -f "$CONTAINER" >/dev/null; CONTAINER=""; else kill "${PIDS[-1]}"; wait "${PIDS[-1]}" 2>/dev/null || true; fi
+  if [ "$PHP_FPM" = docker ]; then docker rm -f "$CONTAINER" >/dev/null; CONTAINER=""; else kill "$FPM_PID"; wait "$FPM_PID" 2>/dev/null || true; fi
 }
 
 cat > rws.config.toml <<TOML
