@@ -5,6 +5,16 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## 18.23.2 — 2026-11-01
+
+### Fixed
+
+- ACME: a chunked reply from the CA is decoded properly. The decoder skipped
+  the first chunk-size line and read data as a size, so the body came back
+  empty; Let's Encrypt chunks large orders (12 names here), and rws then waited
+  for a status it never saw ("order timed out with status ''"). The framing now
+  comes from the Transfer-Encoding header.
+
 ## 18.23.1 — 2026-11-01
 
 ### Fixed

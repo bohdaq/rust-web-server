@@ -203,41 +203,12 @@ async fn read_response_head_only<S: AsyncReadExt + Unpin>(stream: &mut S) -> Res
 }
 
 fn parse_http_response(buf: &[u8]) -> Result<HttpResp, String> {
-    let raw = String::from_utf8_lossy(buf);
-    let sep = raw.find("\r\n\r\n").unwrap_or(raw.len());
-    let header_part = &raw[..sep];
-    let body = if sep + 4 < raw.len() {
-        // strip chunked encoding if present — just take everything after the blank line
-        let body_raw = &raw[sep + 4..];
-        // If first line looks like a hex chunk size, strip the framing
-        if let Some(nl) = body_raw.find("\r\n") {
-            let first = body_raw[..nl].trim();
-            if first.chars().all(|c| c.is_ascii_hexdigit()) && !first.is_empty() {
-                // chunked: collect all chunks
-                let mut out = String::new();
-                let mut rest = &body_raw[nl + 2..];
-                loop {
-                    let nl2 = rest.find("\r\n").unwrap_or(rest.len());
-                    let size_s = rest[..nl2].trim();
-                    let size = usize::from_str_radix(size_s, 16).unwrap_or(0);
-                    if size == 0 { break; }
-                    let data_start = nl2 + 2;
-                    if data_start + size <= rest.len() {
-                        out.push_str(&rest[data_start..data_start + size]);
-                        rest = &rest[data_start + size + 2..]; // skip trailing \r\n
-                    } else { break; }
-                }
-                out
-            } else {
-                body_raw.to_string()
-            }
-        } else {
-            body_raw.to_string()
-        }
-    } else {
-        String::new()
+    let sep = buf.windows(4).position(|w| w == b"\r\n\r\n");
+    let (head, rest) = match sep {
+        Some(i) => (&buf[..i], &buf[i + 4..]),
+        None => (buf, &[][..]),
     };
-
+    let header_part = String::from_utf8_lossy(head);
     let mut lines = header_part.lines();
     let status_line = lines.next().unwrap_or("");
     let status = status_line.split_whitespace().nth(1)
@@ -248,7 +219,37 @@ fn parse_http_response(buf: &[u8]) -> Result<HttpResp, String> {
         Some((l[..colon].trim().to_ascii_lowercase(), l[colon + 1..].trim().to_string()))
     }).collect();
 
+    // Decide the framing from the header, not by guessing at the body: a body
+    // whose first line merely looks like hex isn't chunked, and a chunked one
+    // must be decoded from its very first size line.
+    let chunked = headers.iter().any(|(k, v)| k == "transfer-encoding" && v.to_ascii_lowercase().contains("chunked"));
+    let body_bytes = if chunked { decode_chunked(rest) } else { rest.to_vec() };
+    let body = String::from_utf8_lossy(&body_bytes).into_owned();
+
     Ok(HttpResp { status, headers, body })
+}
+
+/// Joins the chunks of a `Transfer-Encoding: chunked` body (RFC 9112 §7.1);
+/// chunk extensions and trailers are ignored. Stops at the last chunk or at
+/// the end of what was read.
+fn decode_chunked(mut rest: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    loop {
+        let Some(nl) = rest.windows(2).position(|w| w == b"\r\n") else { break };
+        let size_line = String::from_utf8_lossy(&rest[..nl]);
+        let size_hex = size_line.split(';').next().unwrap_or("").trim();
+        let Ok(size) = usize::from_str_radix(size_hex, 16) else { break };
+        if size == 0 { break; }
+        let start = nl + 2;
+        let end = start + size;
+        if end > rest.len() {
+            out.extend_from_slice(&rest[start..]);
+            break;
+        }
+        out.extend_from_slice(&rest[start..end]);
+        rest = rest.get(end + 2..).unwrap_or(&[]);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -256,6 +257,35 @@ mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+
+    #[test]
+    fn a_chunked_order_reply_is_decoded_from_its_first_chunk() {
+        // Let's Encrypt sends a large order (12 names) chunked; the old decoder
+        // skipped the first size line, read data as a size and returned "".
+        let json = r#"{"status":"valid","certificate":"https://ca.test/cert/1","identifiers":[{"type":"dns","value":"a.test"}]}"#;
+        let (a, b) = json.split_at(20);
+        let raw = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n{a}\r\n{:x}\r\n{b}\r\n0\r\n\r\n",
+            a.len(),
+            b.len()
+        );
+        let resp = parse_http_response(raw.as_bytes()).unwrap();
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.body, json);
+        assert_eq!(crate::acme::json_str(&resp.body, "status").as_deref(), Some("valid"));
+    }
+
+    #[test]
+    fn chunk_extensions_and_a_cut_short_body_are_handled() {
+        let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;name=x\r\nhello\r\n6\r\n wor";
+        assert_eq!(parse_http_response(raw).unwrap().body, "hello wor");
+    }
+
+    #[test]
+    fn a_plain_body_that_starts_with_hex_digits_is_not_treated_as_chunked() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nabc\r\nxyz-end";
+        assert_eq!(parse_http_response(raw).unwrap().body, "abc\r\nxyz-end");
+    }
 
     // A TLS server that behaves like Let's Encrypt's front end: it reads the
     // request head, and if the client then closes its side (close_notify /
