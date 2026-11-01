@@ -42,6 +42,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- ACME: a chunked reply from the CA is decoded properly. The decoder skipped
+  the first chunk-size line and read data as a size, so the body came back
+  empty; Let's Encrypt chunks large orders (12 names here), and rws then waited
+  for a status it never saw ("order timed out with status ''"). The framing now
+  comes from the Transfer-Encoding header.
+
 - Cluster sync (#76): an admin change no longer waits on Redis — it's
   queued for the sync thread, which sends it at once; a Redis connect gives
   up after 2 s per address instead of the OS's long retry.
