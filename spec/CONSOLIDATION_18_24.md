@@ -27,9 +27,9 @@ compile error found by the release build).
 | 5 | `trusted_proxies`; WebSocket upgrades send one `X-Forwarded-For` | **done**: `ip_filter::TrustedProxies` (default list, `*`, `none`), `ServerConfig::trusted_proxies`, `proxy::from_peer` drops XFF/XFP/XFH/Forwarded from untrusted peers in build_request (h1 sync+async), h2/h3 upstreams and upgrades; upgrade XFF chained once; `--check` errors on bad entries, warns on `*`; docs reverse-proxy/env-vars/config-file/migrating-18. Tests: trust matrix, header replacement, `*`/`none` |
 | 6 | OIDC `return_to`: reject control characters and whitespace, UTF-8 percent-decoding | **done**: `oidc_auth::local_path`; local Latin-1 decoder replaced by new shared `URL::form_decode` (UTF-8 lossy, `+`, lone `%` kept). Tests: 6 hostile `return_to`s, decoding |
 | 7 | Cluster: `publish` only enqueues; Redis connect timeout | **done**: `ClusterSync.queue` + `Condvar` wakes the thread (round at once, else every second; heartbeat by elapsed time); `RespConn::connect` uses `connect_timeout` 2 s per address (all Redis users); pending changes kept after seeding an empty store. Tests: 100 publishes with the store down < 50 ms; real-Redis e2e green |
-| 8 | Fuzz targets: fleet signature file, PKCS#11 URI | — |
-| 9 | Shared helpers: one percent-decoder, one JSON escaper outside `mcp` | — |
-| 10 | FastCGI serves `/.well-known/` | — |
+| 8 | Fuzz targets: fleet signature file, PKCS#11 URI | **done**: `fuzz_api::fleet_signature` (never verifies against a fixed key), `pkcs11_uri` (+ masking), seeds, README rows; fuzz crate gets `pkcs11`; stack-depth case. Found: `core::base64::Base64::decode` is very slow on long input (200 KB took minutes) → signature files over 256 characters are refused before decoding; the decoder itself is a follow-up |
+| 9 | Shared helpers: one percent-decoder, one JSON escaper outside `mcp` | **done (partly)**: `core::json::escape` used by every module (mcp keeps a thin alias; sso/server + aws secrets had no control-char escaping); `URL::form_decode` added (OIDC); PKCS#11 has its own byte decoder. Left as is on purpose: the WAF's decoder (also `%u`), otel baggage's (strict, `Option`), the static-path decoder; 7 private base64 decoders (different alphabets/padding rules) — later, with tests per caller |
+| 10 | FastCGI serves `/.well-known/` | **done**: dot segments other than `.well-known` still refused; test |
 
 Not in 18.24 (L, later): splitting the crate into a workspace, a
 `cargo public-api` gate.

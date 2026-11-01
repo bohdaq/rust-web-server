@@ -19,7 +19,7 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::sync::{Mutex, OnceLock};
 
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 
 /// Entries kept in memory.
 pub const AUDIT_CAPACITY: usize = 1000;

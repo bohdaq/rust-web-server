@@ -51,7 +51,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::application::Application;
 use crate::header::Header;
 use crate::mcp::json_rpc;
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;

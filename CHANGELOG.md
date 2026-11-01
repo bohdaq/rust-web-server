@@ -45,6 +45,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - Cluster sync (#76): an admin change no longer waits on Redis — it's
   queued for the sync thread, which sends it at once; a Redis connect gives
   up after 2 s per address instead of the OS's long retry.
+- FastCGI routes serve `/.well-known/` (security.txt, app links); other
+  dot-files stay refused.
+- The JSON escaping in the OAuth server, AWS Secrets Manager client and ACME
+  shares one implementation (`core::json::escape`); the first two left
+  control characters unescaped.
 - WebSocket upgrades through proxy routes sent the client's
   `X-Forwarded-For` and rws's own as two headers; they're one chain now.
 - PKCS#11: handshakes no longer wait on one shared session per key — up to

@@ -1314,13 +1314,8 @@ pub(crate) fn new_order_payload(domains: &[String], replaces: Option<&str>, prof
     payload
 }
 
-fn json_escape(value: &str) -> String {
-    value.chars().flat_map(|c| match c {
-        '"' => vec!['\\', '"'],
-        '\\' => vec!['\\', '\\'],
-        c if (c as u32) < 0x20 => format!("\\u{:04x}", c as u32).chars().collect(),
-        c => vec![c],
-    }).collect()
+fn json_escape(s: &str) -> String {
+    crate::core::json::escape(s)
 }
 
 /// The renewal loop's state, for the admin API.

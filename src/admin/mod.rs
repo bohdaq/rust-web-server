@@ -31,7 +31,7 @@ use std::time::{Duration, Instant};
 use crate::application::Application;
 use crate::entry_point::Config;
 use crate::header::Header;
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::{Address, ConnectionInfo};

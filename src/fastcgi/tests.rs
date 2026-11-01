@@ -146,6 +146,10 @@ fn paths_map_to_scripts_static_files_and_the_front_controller() {
     assert_eq!(script(app.resolve("/uploads/x.jpg/a.php")), "/index.php|");
     assert_eq!(app.resolve("/../etc/passwd"), Target::NotFound);
     assert_eq!(app.resolve("/.git/config.php"), Target::NotFound);
+    std::fs::create_dir_all(root.join(".well-known")).unwrap();
+    std::fs::write(root.join(".well-known/security.txt"), "Contact: x").unwrap();
+    assert_eq!(app.resolve("/.well-known/security.txt"), Target::Static, ".well-known is served");
+    assert_eq!(script(app.resolve("/.env")), "NotFound");
     // Kept literal (no file of that name): the front controller, never outside the root.
     assert_eq!(script(app.resolve("/%2e%2e/x")), "/index.php|");
 

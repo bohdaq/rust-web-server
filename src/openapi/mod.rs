@@ -350,7 +350,7 @@ fn path_param_names(pattern: &str) -> Vec<String> {
 }
 
 fn json_escape(s: &str) -> String {
-    crate::mcp::json_escape(s)
+    crate::core::json::escape(s)
 }
 
 /// Self-contained Swagger UI HTML page, loading the `swagger-ui-dist` bundle

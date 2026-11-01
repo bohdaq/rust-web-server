@@ -137,13 +137,5 @@ pub(super) fn resolve(rest: &str) -> Result<String, SecretsError> {
 /// body — secret names are rarely anything but `[A-Za-z0-9/_+=.@-]` (AWS's
 /// own allowed character set), but escape defensively rather than assume.
 fn json_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            _ => out.push(c),
-        }
-    }
-    out
+    crate::core::json::escape(s)
 }

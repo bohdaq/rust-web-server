@@ -2,6 +2,7 @@
 //! used across the crate, much like `Default`).
 
 pub mod base64;
+pub mod json;
 pub mod sha256;
 pub mod x509;
 

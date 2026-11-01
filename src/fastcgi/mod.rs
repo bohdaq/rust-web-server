@@ -377,7 +377,9 @@ impl FastCgi {
     pub(crate) fn resolve(&self, uri_path: &str) -> Target {
         let decoded = crate::url::URL::percent_decode(uri_path);
         let segments: Vec<&str> = decoded.split('/').collect();
-        if segments.iter().any(|s| *s == ".." || (s.starts_with('.') && !s.is_empty())) || decoded.contains('\0') {
+        // Dot-files (`.env`, `.git/`) are never served or run; `.well-known/`
+        // (ACME, security.txt, app links) is (18.24.0).
+        if segments.iter().any(|s| *s == ".." || (s.starts_with('.') && *s != ".well-known")) || decoded.contains('\0') {
             return Target::NotFound;
         }
         let path = if decoded.starts_with('/') { decoded.clone() } else { format!("/{decoded}") };

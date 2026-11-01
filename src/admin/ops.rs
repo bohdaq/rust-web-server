@@ -9,7 +9,7 @@ use std::sync::atomic::Ordering;
 use std::sync::{OnceLock, RwLock};
 
 use crate::cache::CacheLayer;
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 
 fn quoted(s: &str) -> String {
     format!("\"{}\"", json_escape(s))

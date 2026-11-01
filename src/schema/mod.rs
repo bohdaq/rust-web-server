@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 
 /// A type with a JSON Schema.
 pub trait JsonSchema {

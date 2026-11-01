@@ -22,7 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 
 /// `[cluster]` settings.
 pub const RWS_CONFIG_CLUSTER_REDIS: &str = "RWS_CONFIG_CLUSTER_REDIS";

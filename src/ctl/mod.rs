@@ -371,7 +371,7 @@ fn elements(json: &str) -> Vec<String> {
 }
 
 fn quoted(s: &str) -> String {
-    format!("\"{}\"", crate::mcp::json_escape(s))
+    format!("\"{}\"", crate::core::json::escape(s))
 }
 
 fn percent_encode(s: &str) -> String {

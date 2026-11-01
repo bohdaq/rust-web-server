@@ -65,7 +65,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::application::Application;
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 use crate::middleware::Middleware;
 use crate::request::Request;
 use crate::response::Response;
