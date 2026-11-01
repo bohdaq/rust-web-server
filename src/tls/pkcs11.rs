@@ -274,7 +274,8 @@ impl std::fmt::Debug for Pkcs11Signer {
 impl Signer for Pkcs11Signer {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, rustls::Error> {
         let fail = |e: String| rustls::Error::General(format!("PKCS#11 signing: {e}"));
-        let pss = |hash: MechanismType, mgf: PkcsMgfType, len: u64| PkcsPssParams { hash_alg: hash, mgf, s_len: len.into() };
+        // CK_ULONG is 32 bits on Windows: convert from usize, which fits either way.
+        let pss = |hash: MechanismType, mgf: PkcsMgfType, len: usize| PkcsPssParams { hash_alg: hash, mgf, s_len: cryptoki::types::Ulong::try_from(len).expect("a salt length fits CK_ULONG") };
         match self.scheme {
             SignatureScheme::ECDSA_NISTP256_SHA256 | SignatureScheme::ECDSA_NISTP384_SHA384 => {
                 let algorithm = if self.scheme == SignatureScheme::ECDSA_NISTP256_SHA256 { &aws_lc_rs::digest::SHA256 } else { &aws_lc_rs::digest::SHA384 };

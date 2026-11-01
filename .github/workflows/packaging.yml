@@ -8,9 +8,9 @@ name: Packages
 on:
   push:
     branches: [main]
-    paths: ["packaging/**", "src/main.rs", ".github/workflows/packaging.yml"]
+    paths: ["packaging/**", "src/main.rs", "src/tls/**", "Cargo.toml", ".github/workflows/packaging.yml"]
   pull_request:
-    paths: ["packaging/**", "src/main.rs", ".github/workflows/packaging.yml"]
+    paths: ["packaging/**", "src/main.rs", "src/tls/**", "Cargo.toml", ".github/workflows/packaging.yml"]
   workflow_dispatch:
 
 env:
@@ -121,7 +121,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: windows-service
-      - run: cargo build --release --bin rws --features "acme auth sso mimalloc wasm-plugins storage-s3"
+      # The release's Windows features, so a Windows-only break shows before a tag.
+      - run: cargo build --release --bin rws --features "acme auth sso mimalloc wasm-plugins storage-s3 pkcs11"
       - name: Install, start, serve, stop
         shell: pwsh
         run: |
