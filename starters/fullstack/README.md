@@ -22,7 +22,9 @@ in another (http://127.0.0.1:5173, `/api` proxied to the app).
    `create_managed_service`, create a PostgreSQL named `<app>-db` (plan
    `postgresql-development`, parameter `database: <app>`). Its credentials
    arrive in Secret `<app>-db-owner`, which the app reads; without it notes
-   are kept in memory. `<app>` is the repository name in lower case.
+   are kept in memory. `<app>` is the repository name in lower case. For a
+   database with another name, set the repository variable
+   `KUBE_DC_DB_SECRET` to its Secret (`<database>-owner`).
 3. **Machine identity.** Organization → Access → Machine identities: create
    one in an Organization group with the `developer` role in both projects
    (`admin` if the image is private: the pull Secret needs it), and open
