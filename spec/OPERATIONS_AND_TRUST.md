@@ -50,9 +50,11 @@ connections while the new process binds.
   `Forwarded: for=192.0.2.60;proto=https;host=example.com;by=…` next to
   the `X-Forwarded-*` headers rws already sends (IPv6 quoted and
   bracketed, an incoming `Forwarded` extended like `X-Forwarded-For`).
-  Setting `forwarded_header = "add"` (`RWS_CONFIG_FORWARDED_HEADER`;
-  `"off"` default — see the decision below), per route
-  `[route.action.proxy] forwarded = …`.
+  On by default (decided 2026-11-01, standards first as with problem+json):
+  `forwarded_header = "off"` (`RWS_CONFIG_FORWARDED_HEADER`) leaves it out;
+  CHANGELOG "Changed" says so, since backends that trust `Forwarded`
+  (Spring, Rails) start reading it — with the values `X-Forwarded-*`
+  already carry.
 - **CRLs for inbound mTLS**: `tls_client_crl_file` (`RWS_CONFIG_TLS_CLIENT_CRL_FILE`,
   PEM or DER, several files comma-separated) → `WebPkiClientVerifier::with_crls`
   (rustls checks them; revoked client certificates fail the handshake),
@@ -102,7 +104,8 @@ rwsctl traffic [--week|--month] [--host h]
 ```
 
 - **Shape**: `rws ctl …` inside the existing binary (no second artifact
-  to package; `rwsctl` is a symlink the packages install — decision below).
+  to package; `rwsctl` is a symlink the packages install, and `rws`
+  run as `rwsctl` acts as `rws ctl`).
 - **Connection**: `--admin http://127.0.0.1:9901` (default from
   `[admin] listen` in `RWS_CONFIG_FILE`/`rws.config.toml`), token from
   `RWS_ADMIN_TOKEN` or the env var `[admin] token_env` names, or
@@ -112,15 +115,10 @@ rwsctl traffic [--week|--month] [--host h]
 - **Tests**: each command against an in-process admin API; `ci/e2e/admin.sh`
   drives `rws ctl` against the binary.
 
-## Decisions to take
+## Decisions (2026-11-01, the user's)
 
-1. `Forwarded` by default: off (opt-in) or added alongside `X-Forwarded-*`.
-   Some frameworks (Spring's `ForwardedHeaderFilter`, Rails) trust
-   `Forwarded` to set scheme and host, so adding it changes what existing
-   backends see — off by default matches "never break existing
-   deployments".
-2. `rwsctl`: a subcommand of `rws` (`rws ctl`, one binary, symlink) or a
-   separate binary.
+1. `Forwarded` is sent by default, alongside `X-Forwarded-*`; `forwarded_header = "off"` to leave it out.
+2. `rwsctl` is `rws ctl` in the main binary; packages install an `rwsctl` symlink.
 
 ## Tranches
 
