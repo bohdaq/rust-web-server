@@ -62,4 +62,6 @@ jobs:
         env:
           PULL_USER: ${{ github.repository_owner }}
           PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          # The managed database's binding Secret; empty: <app>-db-owner.
+          DB_SECRET: ${{ vars.KUBE_DC_DB_SECRET }}
         run: deploy/deploy.sh "${{ vars.KUBE_DC_NAMESPACE }}" "${{ steps.names.outputs.app }}" "${{ steps.names.outputs.image }}"
