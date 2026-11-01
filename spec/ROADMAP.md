@@ -236,6 +236,13 @@ Plan: [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) (2026-11-01).
 - **#79** **TLS keys in an HSM** — PKCS#11 URIs for `tls_key_file`.
 - **#80** **Fleet config pull** — instances pull signed config from HTTPS, S3 or git and report back.
 
+## 18.24.0 — Consolidation (released 2026-11-01)
+
+No new features: the fixes and release gating from the review of 18.20–18.23. Plan: [CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md).
+
+- **#83** **Release gating** — CI-gated tags, `--locked`, actionlint, a Windows check.
+- **#84** **`trusted_proxies`** — forwarding headers believed only from trusted peers.
+
 ## 19.0.0 — Breaking changes
 
 - **#63** **Proxy response pass-through.** On the 18.0.0 benchmarks rws leads nginx in most scenarios, but on proxy-1k it is level or slightly behind (EPYC 7763: 48.7 vs 45.3 µs CPU per request; the one Intel run: −2% requests per second, +9% CPU per request). The remaining cost is rws parsing every upstream response into a `Response` and writing it out again, about 7% of a proxied request's CPU in the per-core profile. Carry a simple upstream head through unparsed instead, keeping what the parse does for safety: dropping hop-by-hop and duplicate `Content-Length` headers and rejecting CR/LF. That needs a new field on `Response`, whose fields are all public and built by struct literal, so it breaks apps; mark `Response` `#[non_exhaustive]` (with constructors) in the same release so later fields don't. Judge it by same-run A/B against 18.x on proxy-1k. *Planned 2026-10-26.* **Shelved 2026-10-30**: re-measured (proxy-1k level with nginx on throughput, +4.6% CPU/request); a same-run A/B of the cheap non-breaking half was noise, so a major version for the rest isn't worth it ([RELEASE_19_0.md](RELEASE_19_0.md)).
