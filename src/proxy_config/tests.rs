@@ -2477,3 +2477,52 @@ previous_secret_env = "RWS_TEST_JWT_OLD"
     std::env::remove_var("RWS_TEST_JWT_NEW");
     std::env::remove_var("RWS_TEST_JWT_OLD");
 }
+
+#[test]
+fn fastcgi_action_parses_short_and_nested_forms_with_params() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+[route.match]
+path = "/*"
+[route.action]
+type = "fastcgi"
+address = "unix:/run/php/fpm.sock"
+root = "/var/www/app/public"
+front_controller = ""
+[route.action.params]
+APP_ENV = "prod"
+APP_DEBUG = "0"
+"#);
+    let ActionConfig::FastCgi(f) = &cfg.routes[0].action else { panic!("{:?}", cfg.routes[0].action) };
+    assert_eq!(f.address, "unix:/run/php/fpm.sock");
+    assert_eq!(f.root, "/var/www/app/public");
+    assert_eq!(f.index, ["index.php"]);
+    assert_eq!(f.split_path, ".php");
+    assert_eq!(f.front_controller, "", "an explicit empty value turns it off");
+    assert_eq!(f.read_timeout_ms, 60000);
+    assert!(f.params.contains(&("APP_ENV".to_string(), "prod".to_string())) && f.params.len() == 2, "{:?}", f.params);
+
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+[route.match]
+path = "/*"
+[route.action]
+type = "fastcgi"
+[route.action.fastcgi]
+address = "127.0.0.1:9000"
+root = "public"
+index = ["index.php", "app.php"]
+read_timeout_ms = 5000
+"#);
+    let ActionConfig::FastCgi(f) = &cfg.routes[0].action else { panic!() };
+    assert_eq!((f.address.as_str(), f.index.len(), f.read_timeout_ms, f.front_controller.as_str()), ("127.0.0.1:9000", 2, 5000, "index.php"));
+}
+
+#[test]
+fn fastcgi_action_is_validated() {
+    let report = crate::config_check::check_str_offline("[[route]]\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"fastcgi\"\naddress = \"php\"\n[route.action.params]\nANY_NAME = \"x\"\n");
+    let text = format!("{report:?}");
+    assert!(text.contains("expected unix:/path or host:port"), "{text}");
+    assert!(text.contains("fastcgi action has no `root`"), "{text}");
+    assert!(!text.contains("unknown"), "params take any key: {text}");
+}

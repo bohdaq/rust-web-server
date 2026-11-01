@@ -12961,6 +12961,49 @@ file returns `404`. Directory requests (or any path resolving to a directory)
 try each `index` entry in order and 404 if none exist. MIME type is detected
 from the file extension, matching the built-in static-file controller.
 
+#### `type = "fastcgi"` — PHP and other FastCGI apps
+
+Since 18.21.0 rws speaks FastCGI itself, so php-fpm needs no second web
+server:
+
+```toml
+[[route]]
+name = "laravel"
+[route.match]
+host = "shop.example.com"
+path = "/*"
+[route.action]
+type    = "fastcgi"
+address = "unix:/run/php/php8.3-fpm.sock"   # or "127.0.0.1:9000"
+root    = "/var/www/shop/public"
+# index            = ["index.php"]   # directory index scripts
+# split_path       = ".php"          # /script.php/path/info → PATH_INFO
+# front_controller = "index.php"     # paths that match no file; "" = 404
+# connect_timeout_ms = 5000
+# read_timeout_ms    = 60000         # per read: how long a slow script may take
+# max_idle           = 16            # kept-alive connections to php-fpm
+[route.action.params]                # extra CGI variables ($_SERVER)
+APP_ENV = "production"
+```
+
+For each request rws picks, in order: a file under `root` that isn't a
+script, served by rws itself (CSS, images, downloads never reach php-fpm); a
+directory's index script (`/admin` → `301` to `/admin/`, then
+`/admin/index.php`); `/script.php/rest` with `rest` as `PATH_INFO`; else the
+front controller with `REQUEST_URI` unchanged — the routing Laravel, Symfony,
+WordPress and most PHP frameworks expect. A script must be a regular file
+under `root` ending in `split_path`, so `/uploads/avatar.jpg/x.php` never
+runs an upload as PHP, and dot-files (`.env`, `.git/`) are never served or
+run.
+
+PHP sees the usual CGI/1.1 variables: `SCRIPT_FILENAME`, `SCRIPT_NAME`,
+`REQUEST_URI`, `QUERY_STRING`, `PATH_INFO`, `DOCUMENT_ROOT`, `REMOTE_ADDR`,
+`SERVER_NAME`, `HTTPS=on` over TLS, and every request header as `HTTP_*` —
+except `Proxy`, which never becomes `HTTP_PROXY` (httpoxy). `Status:` and
+`Location:` from the script set the response status, `Set-Cookie` headers
+are all kept. php-fpm unreachable → `502`; its stderr goes to rws's log.
+Bodies are buffered (uploads up to `max_body_size`); responses too.
+
 ### `[route.middleware]` — per-route middleware
 
 Middleware is applied only to requests that match this route.

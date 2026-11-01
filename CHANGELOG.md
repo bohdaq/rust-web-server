@@ -15,6 +15,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `tls_internal_names`, re-issued weekly without a restart. `rws trust`
   puts the CA in the system trust store (Linux, macOS, Windows, and the
   NSS database browsers use on Linux); `rws untrust` removes it.
+- FastCGI (#72): `type = "fastcgi"` routes run PHP through php-fpm (TCP or
+  Unix socket, kept-alive connections) with front-controller routing,
+  `PATH_INFO`, static files served by rws, scripts confined to the root
+  and httpoxy-safe variables; `rust_web_server::fastcgi::FastCgi` for code.
 
 ### Fixed
 

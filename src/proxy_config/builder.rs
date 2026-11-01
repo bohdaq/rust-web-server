@@ -209,6 +209,23 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     }
                 }
 
+                ActionConfig::FastCgi(f) => {
+                    let mut cfg = crate::fastcgi::FastCgiConfig::new(f.address.clone(), f.root.clone());
+                    cfg.index = f.index.clone();
+                    cfg.split_path = f.split_path.clone();
+                    cfg.front_controller = f.front_controller.clone();
+                    cfg.params = f.params.clone();
+                    cfg.connect_timeout = std::time::Duration::from_millis(f.connect_timeout_ms);
+                    cfg.read_timeout = std::time::Duration::from_millis(f.read_timeout_ms);
+                    cfg.max_idle = f.max_idle as usize;
+                    match crate::fastcgi::FastCgi::new(cfg) {
+                        Ok(app) => arc_app(app.with_static(arc_app(StaticAdapter::new(f.root.clone(), Vec::new())))),
+                        Err(e) => {
+                            eprintln!("[config] route {cache_name}: {e}; it answers 502");
+                            arc_app(RespondAdapter::new(502, "Bad Gateway".to_string(), "text/plain".to_string()))
+                        }
+                    }
+                }
                 ActionConfig::Mcp(gateway) => arc_app(crate::proxy_config::mcp_gateway::GatewayAdapter::start(
                     (**gateway).clone(),
                     route.match_.path.clone().unwrap_or_else(|| "/mcp".to_string()),

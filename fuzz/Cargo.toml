@@ -281,3 +281,10 @@ path = "fuzz_targets/openapi_to_mcp.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fastcgi_record"
+path = "fuzz_targets/fastcgi_record.rs"
+test = false
+doc = false
+bench = false

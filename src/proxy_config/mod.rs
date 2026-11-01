@@ -187,6 +187,8 @@ pub enum ActionConfig {
         body: String,
         content_type: String,
     },
+    /// FastCGI ([`crate::fastcgi`]): php-fpm and other FastCGI servers.
+    FastCgi(Box<FastCgiAction>),
     /// The MCP gateway ([`mcp_gateway`]).
     Mcp(Box<mcp_gateway::McpGatewayConfig>),
     /// The A2A gateway ([`a2a_gateway`]).
@@ -194,6 +196,20 @@ pub enum ActionConfig {
     /// The LLM proxy ([`llm`]).
     Llm(Box<llm::LlmConfig>),
     Unknown(String),
+}
+
+/// `type = "fastcgi"`: the [`crate::fastcgi::FastCgiConfig`] fields.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FastCgiAction {
+    pub address: String,
+    pub root: String,
+    pub index: Vec<String>,
+    pub split_path: String,
+    pub front_controller: String,
+    pub params: Vec<(String, String)>,
+    pub connect_timeout_ms: u64,
+    pub read_timeout_ms: u64,
+    pub max_idle: u64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -544,6 +560,29 @@ impl ProxyConfig {
                             if ct.is_empty() { "text/plain".to_string() } else { ct }
                         },
                     }
+                }
+                "fastcgi" => {
+                    let f_sec = format!("{}.action.fastcgi", sec);
+                    let or = |key: &str, default: &str| parser::get(&map, &f_sec, key).unwrap_or_else(|| default.to_string());
+                    let mut params: Vec<(String, String)> = Vec::new();
+                    for table in [format!("{a_sec}.params"), format!("{f_sec}.params")] {
+                        for (k, v) in map.get(&table).cloned().unwrap_or_default() {
+                            params.retain(|(name, _)| *name != k);
+                            params.push((k, v));
+                        }
+                    }
+                    let index = get_array(&map, &f_sec, "index");
+                    ActionConfig::FastCgi(Box::new(FastCgiAction {
+                        address: get_str(&map, &f_sec, "address"),
+                        root: get_str(&map, &f_sec, "root"),
+                        index: if index.is_empty() { vec!["index.php".to_string()] } else { index },
+                        split_path: or("split_path", ".php"),
+                        front_controller: or("front_controller", "index.php"),
+                        params,
+                        connect_timeout_ms: get_u64(&map, &f_sec, "connect_timeout_ms", 5000),
+                        read_timeout_ms: get_u64(&map, &f_sec, "read_timeout_ms", 60000),
+                        max_idle: get_u64(&map, &f_sec, "max_idle", 16),
+                    }))
                 }
                 "mcp" => ActionConfig::Mcp(Box::new(mcp_gateway::parse(&map, &a_sec))),
                 "a2a" => ActionConfig::A2a(Box::new(a2a_gateway::parse(&map, &a_sec))),

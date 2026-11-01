@@ -16,6 +16,7 @@ const PROXY_ACTION_KEYS: &[&str] = &["upstream", "connect_timeout_ms", "read_tim
 const GRPC_ACTION_KEYS: &[&str] = &["upstream", "connect_timeout_ms", "read_timeout_ms"];
 const STATIC_ACTION_KEYS: &[&str] = &["root", "index"];
 const REDIRECT_ACTION_KEYS: &[&str] = &["location", "status"];
+const FASTCGI_ACTION_KEYS: &[&str] = &["address", "root", "index", "split_path", "front_controller", "connect_timeout_ms", "read_timeout_ms", "max_idle"];
 const RESPOND_ACTION_KEYS: &[&str] = &["status", "body", "content_type"];
 const REWRITE_RULE_KEYS: &[&str] = &["type", "name", "value", "prefix", "from", "to", "code", "reason"];
 
@@ -42,7 +43,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         // `[route.action]` takes `type` plus the short form of every action's keys.
         "route.action" => {
             let mut keys = vec!["type"];
-            for group in [PROXY_ACTION_KEYS, GRPC_ACTION_KEYS, STATIC_ACTION_KEYS, REDIRECT_ACTION_KEYS, RESPOND_ACTION_KEYS] {
+            for group in [PROXY_ACTION_KEYS, GRPC_ACTION_KEYS, STATIC_ACTION_KEYS, REDIRECT_ACTION_KEYS, RESPOND_ACTION_KEYS, FASTCGI_ACTION_KEYS] {
                 for key in group {
                     if !keys.contains(key) {
                         keys.push(key);
@@ -54,6 +55,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.proxy" => PROXY_ACTION_KEYS.to_vec(),
         "route.action.grpc" => GRPC_ACTION_KEYS.to_vec(),
         "route.action.static" => STATIC_ACTION_KEYS.to_vec(),
+        "route.action.fastcgi" => FASTCGI_ACTION_KEYS.to_vec(),
         "route.action.redirect" => REDIRECT_ACTION_KEYS.to_vec(),
         "route.action.respond" => RESPOND_ACTION_KEYS.to_vec(),
         "route.action.mcp" => super::mcp_gateway::GATEWAY_KEYS.to_vec(),
@@ -111,7 +113,7 @@ pub fn check_unknown_keys(toml: &str, report: &mut ConfigReport) {
         }
         let shape = strip_indices(section);
         // Header names, relation names: any key.
-        if shape == "route.action.mcp.upstream.headers_env" || shape == "route.action.mcp.openapi.headers_env" || shape == "route.action.a2a.headers_env" || shape.starts_with("authz.type.") {
+        if shape == "route.action.mcp.upstream.headers_env" || shape == "route.action.mcp.openapi.headers_env" || shape == "route.action.a2a.headers_env" || shape.starts_with("authz.type.") || shape == "route.action.params" || shape == "route.action.fastcgi.params" {
             continue;
         }
         match known_keys(&shape) {
@@ -285,6 +287,18 @@ impl ProxyConfig {
                         report.error(format!("{label}: static action has no `root`"));
                     } else if !crate::config_check::offline() && !std::path::Path::new(root).is_dir() {
                         report.warn(format!("{label}: static root '{root}' is not a directory (yet)"));
+                    }
+                }
+                ActionConfig::FastCgi(f) => {
+                    if f.address.is_empty() {
+                        report.error(format!("{label}: fastcgi action has no `address` (unix:/run/php/php-fpm.sock or host:port)"));
+                    } else if let Err(e) = crate::fastcgi::Address::parse(&f.address) {
+                        report.error(format!("{label}: {e}"));
+                    }
+                    if f.root.is_empty() {
+                        report.error(format!("{label}: fastcgi action has no `root`"));
+                    } else if !crate::config_check::offline() && !std::path::Path::new(&f.root).is_dir() {
+                        report.error(format!("{label}: fastcgi root '{}' is not a directory", f.root));
                     }
                 }
                 ActionConfig::Redirect { location, status } => {

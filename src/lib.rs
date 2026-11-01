@@ -149,6 +149,9 @@ pub mod proxy_config;
 pub mod llm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod admin;
+/// FastCGI client: PHP through php-fpm (18.21.0).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod fastcgi;
 /// `rws ctl` / `rwsctl`: the admin API from the command line (18.20.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ctl;
