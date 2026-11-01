@@ -276,6 +276,23 @@ const COMMANDS: [&str; 46] = [
     "more", "busybox", "xterm",
 ];
 
+/// Whether what follows a command name after `sep` reads like a shell
+/// command line rather than prose: nothing, another operator, or an
+/// argument that looks like a path, flag or variable. After `;` or `|`
+/// (common in text: "tired; head hurts"), a word argument doesn't count.
+fn shell_like(sep: &str, rest: &str) -> bool {
+    if rest.is_empty() || rest.starts_with([';', '|', '&', '`', ')', '<', '>', '$']) {
+        return true;
+    }
+    let Some(arg) = rest.strip_prefix(' ') else { return false };
+    let arg = arg.trim_start();
+    if arg.is_empty() || arg.starts_with(['/', '-', '.', '$', '~', '\'', '"', '*', '<', '>', '|', ';', '&', '`']) || arg.starts_with(|c: char| c.is_ascii_digit()) {
+        return true;
+    }
+    // `$(cmd word)` and `` `cmd word` `` are commands whatever the argument.
+    matches!(sep, "`" | "$(")
+}
+
 fn commands(v: &str, hits: &mut Vec<u32>) {
     if !v.bytes().any(|b| b";|&`$\n".contains(&b)) {
         return;
@@ -287,7 +304,7 @@ fn commands(v: &str, hits: &mut Vec<u32>) {
             let w: String = after.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '/' || *c == '.').collect();
             let name = w.rsplit('/').next().unwrap_or("");
             let rest = &after[w.len()..];
-            if COMMANDS.contains(&name) && (rest.is_empty() || rest.starts_with([' ', ';', '|', '&', '`', ')', '<', '>', '$'])) {
+            if COMMANDS.contains(&name) && shell_like(sep, rest) {
                 hits.push(932100);
                 return;
             }

@@ -502,6 +502,11 @@ fn validate_middleware(
         for e in &waf.errors {
             report.error(format!("{label}: {e}"));
         }
+        // Inspected bodies arrive whole (not streamed): without a limit an
+        // upload is held in memory in full.
+        if waf.config.inspect_body_bytes > 0 && mw.max_body_size.is_none() && std::env::var("RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES").map_or(true, |v| v.trim().is_empty() || v.trim() == "0") {
+            report.warn(format!("{label}: [waf] reads request bodies whole; set max_body_size on the route (or max_body_size_in_bytes globally) so uploads have a limit"));
+        }
         if waf.config.mode == crate::waf::Mode::Detect {
             report.warn(format!("{label}: [waf] mode = \"detect\": matches are logged, nothing is refused"));
         }

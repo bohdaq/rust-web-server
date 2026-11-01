@@ -69,8 +69,10 @@ refuses whatever the mode.
 
 Per route the WAF runs after the IP filter and rate limit and before auth,
 so login pages are covered. A request without matches costs a few
-microseconds in a release build; bodies are read whole up to
-`inspect_body_bytes` instead of streamed. Routes with a WAF (like any
+microseconds in a release build. Request bodies on a WAF route are read
+whole rather than streamed (only the first `inspect_body_bytes` are
+inspected), so give such routes a `max_body_size`; `rws --check` warns when
+neither it nor the global `max_body_size_in_bytes` is set. Routes with a WAF (like any
 middleware) use the blocking path rather than the non-blocking proxy
 forwarder. It's a layer, not a substitute for parameterized queries and
 output escaping in the app.

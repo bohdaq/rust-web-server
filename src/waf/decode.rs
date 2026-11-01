@@ -169,12 +169,18 @@ pub fn strip_sql_comments(s: &str) -> String {
     while let Some(start) = rest.find("/*") {
         out.push_str(&rest[..start]);
         out.push(' ');
-        match rest[start + 2..].find("*/") {
-            Some(end) => rest = &rest[start + 2 + end + 2..],
-            None => {
-                rest = "";
-            }
+        let inner_and_rest = &rest[start + 2..];
+        let (inner, after) = match inner_and_rest.find("*/") {
+            Some(end) => (&inner_and_rest[..end], &inner_and_rest[end + 2..]),
+            None => (inner_and_rest, ""),
+        };
+        // MySQL runs what's inside `/*! … */` (and `/*!50000 … */`): keep it,
+        // or `union/*!select*/` would hide the SELECT (18.24.0).
+        if let Some(code) = inner.strip_prefix('!') {
+            out.push_str(code.trim_start_matches(|c: char| c.is_ascii_digit()));
+            out.push(' ');
         }
+        rest = after;
     }
     out.push_str(rest);
     out

@@ -32,6 +32,8 @@ const ATTACKS: &[(&str, u32)] = &[
     ("-1 UNION ALL SELECT NULL,NULL,@@version", 942120),
     ("1 un/**/ion se/**/lect 1", 0), // split keywords stay harmless as SQL
     ("1 union/**/select 1,2", 942120),
+    ("1 union/*!select*/ 1,2", 942120),
+    ("1 union/*!50000select*/ password from users", 942120),
     ("1%20UNION%20SELECT%201", 942120),
     ("1; drop table users", 942130),
     ("1'; exec xp_cmdshell 'dir'--", 942110),
@@ -113,6 +115,10 @@ const BENIGN: &[&str] = &[
     "conversion=12%",
     "We'll meet at the cat café",
     "SSO via OIDC; see ${docs}",
+    "see details; more below",
+    "tired; head hurts",
+    "pick one | id card or passport",
+    "Lunch; cat food for the office",
 ];
 
 #[test]
@@ -236,7 +242,7 @@ fn decoding_undoes_the_usual_encodings() {
     assert_eq!(decode::normalize("%253Cscript%253E"), "<script>");
     assert_eq!(decode::normalize("&#x3c;&#60&lt;&quot;"), "<<<\"");
     assert_eq!(decode::normalize("\\x3cscript\\u003e"), "<script>");
-    assert_eq!(decode::normalize("UN/**/ION/*!50000SELECT*/"), "un ion ");
+    assert_eq!(decode::normalize("UN/**/ION/*!50000SELECT*/"), "un ion select ", "MySQL runs /*! */ content: it stays");
     assert_eq!(decode::normalize("a\u{0}b\t\n  c"), "ab c");
     assert_eq!(decode::normalize("%u003cimg"), "<img");
     fuzz::inspect(b"%%%u12&#x;\\u12${${lower:${::-j}");
