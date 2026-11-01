@@ -1,4 +1,4 @@
-//! `rws ctl` (18.21.0, #70): the admin API from the command line.
+//! `rws ctl` (18.20.0, #70): the admin API from the command line.
 //!
 //! ```text
 //! rws ctl status                         # version, uptime, listeners, disks

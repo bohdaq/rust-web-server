@@ -290,7 +290,7 @@ pub enum AuthConfig {
     Basic { htpasswd_file: String },
     /// `auth = { type = "jwt", secret_env = "JWT_SECRET" }`. Requires the
     /// `auth` feature; verifies HS256 JWTs via `crate::auth::JwtLayer`.
-    /// `previous_secret_env` (18.21.0): a second accepted secret while
+    /// `previous_secret_env` (18.20.0): a second accepted secret while
     /// rotating; tokens signed with either verify.
     Jwt { secret_env: String, previous_secret_env: String },
     Bearer { token_env: String },

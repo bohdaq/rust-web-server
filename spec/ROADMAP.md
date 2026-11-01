@@ -207,15 +207,12 @@ Change a running server without editing files, and extend it without recompiling
 
 - **#66** **MCP tools from OpenAPI** — an upstream API's OpenAPI operations as MCP gateway tools, and an app's own described routes as in-process tools. Plan: [OPENAPI_TO_MCP.md](OPENAPI_TO_MCP.md) (2026-10-31).
 
-## 18.20.0 — systemd, Forwarded, CRLs
+## 18.20.0 — Operations and trust (released 2026-11-01)
 
 - **#67** **systemd `Type=notify` and socket activation** — readiness, reload and watchdog notifications; listeners inherited from systemd so restarts refuse nothing.
 - **#68** **`Forwarded` (RFC 7239) and CRLs for inbound mTLS**. Plan: [OPERATIONS_AND_TRUST.md](OPERATIONS_AND_TRUST.md) (2026-11-01).
-
-## 18.21.0 — Key rotation, rwsctl
-
 - **#69** **Key rotation for HS256 and Basic** — several JWT secrets with `kid`, htpasswd re-read on change.
-- **#70** **`rwsctl`** — the admin API from the command line.
+- **#70** **`rws ctl` / `rwsctl`** — the admin API from the command line. 18.21.0's planned scope, shipped in 18.20.0 (the user's call).
 
 ## 19.0.0 — Breaking changes
 

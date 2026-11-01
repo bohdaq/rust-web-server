@@ -94,7 +94,7 @@ Tokens with a past `exp` claim are rejected. Any token that fails format validat
 ### Rotating the secret
 
 Several secrets can verify at once, so a secret can be replaced without
-logging everyone out (since 18.21.0):
+logging everyone out (since 18.20.0):
 
 ```rust,ignore
 // Sign new tokens with the new secret; the old one verifies until its tokens expire.
@@ -348,7 +348,7 @@ htpasswd_file = ".htpasswd"   # or several: "admins.htpasswd, team.htpasswd"
 ```
 
 The htpasswd files are re-read when they change (checked at most once a
-second, since 18.21.0): adding or removing a user takes effect without a
+second, since 18.20.0): adding or removing a user takes effect without a
 restart, and a file that can't be read keeps the users read before.
 
 See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Auth config fails closed: an unset/empty `token_env`/`secret_env`, a missing `htpasswd_file`, or a build without the `auth` feature makes that route answer `503 Service Unavailable` (with an error in the startup log) instead of serving it unprotected. Other routes keep working. Bearer tokens are compared in constant time.

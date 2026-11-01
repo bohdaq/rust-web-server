@@ -5,7 +5,7 @@
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.19.0
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.20.0
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
@@ -1897,7 +1897,7 @@ object   = "doc:{path:2}"
 type      = "bearer"        # "bearer" | "jwt" | "basic"
 token_env = "API_TOKEN"     # env var name holding the expected token (bearer)
 # secret_env = "JWT_SECRET" # env var name holding the JWT secret (jwt)
-# previous_secret_env = "JWT_SECRET_OLD" # also accepted while rotating (jwt, 18.21.0)
+# previous_secret_env = "JWT_SECRET_OLD" # also accepted while rotating (jwt, 18.20.0)
 # htpasswd_file = "users.htpasswd" # path to htpasswd file (basic)
 
 [route.middleware.ip_filter]
@@ -8019,7 +8019,7 @@ Tokens with a past `exp` claim are rejected. Any token that fails format validat
 ### Rotating the secret
 
 Several secrets can verify at once, so a secret can be replaced without
-logging everyone out (since 18.21.0):
+logging everyone out (since 18.20.0):
 
 ```rust,ignore
 // Sign new tokens with the new secret; the old one verifies until its tokens expire.
@@ -8273,7 +8273,7 @@ htpasswd_file = ".htpasswd"   # or several: "admins.htpasswd, team.htpasswd"
 ```
 
 The htpasswd files are re-read when they change (checked at most once a
-second, since 18.21.0): adding or removing a user takes effect without a
+second, since 18.20.0): adding or removing a user takes effect without a
 restart, and a file that can't be read keeps the users read before.
 
 See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Auth config fails closed: an unset/empty `token_env`/`secret_env`, a missing `htpasswd_file`, or a build without the `auth` feature makes that route answer `503 Service Unavailable` (with an error in the startup log) instead of serving it unprotected. Other routes keep working. Bearer tokens are compared in constant time.
@@ -20518,7 +20518,7 @@ Keep it on loopback and reach it through an SSH tunnel (`ssh -L 9901:127.0.0.1:9
 
 ## From the command line: `rws ctl`
 
-`rws ctl` (since 18.21.0) drives the same API from a shell. The deb and rpm
+`rws ctl` (since 18.20.0) drives the same API from a shell. The deb and rpm
 packages also install it as `rwsctl`, and the binary run under that name acts
 the same.
 

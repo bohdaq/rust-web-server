@@ -26,7 +26,7 @@ Keep it on loopback and reach it through an SSH tunnel (`ssh -L 9901:127.0.0.1:9
 
 ## From the command line: `rws ctl`
 
-`rws ctl` (since 18.21.0) drives the same API from a shell. The deb and rpm
+`rws ctl` (since 18.20.0) drives the same API from a shell. The deb and rpm
 packages also install it as `rwsctl`, and the binary run under that name acts
 the same.
 

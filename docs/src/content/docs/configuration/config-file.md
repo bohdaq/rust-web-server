@@ -596,7 +596,7 @@ object   = "doc:{path:2}"
 type      = "bearer"        # "bearer" | "jwt" | "basic"
 token_env = "API_TOKEN"     # env var name holding the expected token (bearer)
 # secret_env = "JWT_SECRET" # env var name holding the JWT secret (jwt)
-# previous_secret_env = "JWT_SECRET_OLD" # also accepted while rotating (jwt, 18.21.0)
+# previous_secret_env = "JWT_SECRET_OLD" # also accepted while rotating (jwt, 18.20.0)
 # htpasswd_file = "users.htpasswd" # path to htpasswd file (basic)
 
 [route.middleware.ip_filter]

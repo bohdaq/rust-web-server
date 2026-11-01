@@ -416,7 +416,7 @@ impl BasicAuthLayer<Box<dyn Fn(&str, &str) -> bool + Send + Sync>> {
     ///
     /// Returns `Err` if `path` can't be read.
     ///
-    /// The file is re-read when it changes (18.21.0): adding or removing a
+    /// The file is re-read when it changes (18.20.0): adding or removing a
     /// user takes effect within a second, without a restart. Several files,
     /// comma-separated, are read together (one per team, say).
     pub fn from_htpasswd_file(path: &str) -> Result<Self, String> {
@@ -612,7 +612,7 @@ impl JwtLayer {
     }
 
     /// Create a layer that verifies HS256 JWTs signed with any of `secrets`
-    /// (18.21.0): rotate by adding the new secret, keeping the old one until
+    /// (18.20.0): rotate by adding the new secret, keeping the old one until
     /// the tokens it signed have expired, then removing it.
     pub fn secrets<I, S>(secrets: I) -> Self
     where
