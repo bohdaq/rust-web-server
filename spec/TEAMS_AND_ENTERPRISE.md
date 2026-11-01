@@ -12,6 +12,7 @@ need. Each release serves one of those audiences.
 | #72 | FastCGI (php-fpm) | solo | 18.21.0 |
 | #73 | OIDC login and forward-auth in the config file | startup | 18.21.0 |
 | #74 | Cookbook: configs for common stacks | startup | 18.21.0 |
+| #82 | WebSocket upgrades through proxy routes (found while writing #74) | startup | 18.21.0 |
 | #75 | Admin users, roles, audit log, OIDC sign-in | small company | 18.22.0 |
 | #76 | Runtime state shared across replicas (Redis) | small company | 18.22.0 |
 | #77 | Web application firewall (native rules) | small company | 18.22.0 |
@@ -106,6 +107,16 @@ assets), Rails/Django/FastAPI (upstream + static + websockets), Laravel /
 WordPress (#72), Grafana/Gitea behind OIDC (#73), API gateway (JWT + rate
 limits + CORS), Docker Compose, Kubernetes. Each config is checked by
 `rws --check` in CI (`ci/check_cookbook.sh` extracts the TOML blocks).
+
+## #82 WebSocket upgrades through proxy routes
+
+Found while writing the cookbook: `type = "proxy"` routes dropped `Upgrade`
+as a hop-by-hop header, so Rails Action Cable, Phoenix LiveView, Socket.IO
+and dev-server hot reload needed a separate `[[ws_proxy]]` listener. The
+Gateway API controller already relayed upgrades (`gateway_api::upgrade`);
+that moves to `proxy::upgrade` and `DynamicProxy::execute` uses it for
+`Connection: upgrade` requests (the async forwarder defers them to the
+blocking path, which hands the connection over). Plain-HTTP backends only.
 
 ## #75 Admin users, roles, audit log, OIDC sign-in
 
@@ -243,6 +254,7 @@ limits + CORS), Docker Compose, Kubernetes. Each config is checked by
 | 1 | **done 2026-11-01**: `tls::internal` — `LocalCa` (rcgen; CA P-256 10 y in the per-user data dir or `tls_internal_dir`, `ca.key` 0600, issuer rebuilt from `ca.name` since rcgen can't parse without x509-parser), leaf 7 d for loopback + listen address + vhosts + `tls_internal_names` (names validated; no single-label wildcards), written key-first, `start_from_env` before ACME fills empty TLS paths, renewal thread at half-life → `request_reload` (unless `watch`). `rws trust [--print]`/`untrust` (update-ca-certificates / update-ca-trust / trust, sudo when not root; macOS System keychain; Windows user Root; NSS db optional). `--tls` flag, `--check` validates. rcgen moved into `http2`. Tests: 7 unit (CA reuse, 0600, handshake per name via rustls, foreign CA refused, bad names, names(), start_from_env); `ci/e2e/tls_internal.sh` (CI `tls-internal`, runs `rws trust` only on CI). Per-vhost `tls = "internal"` dropped: vhosts without files fall back to this certificate | done |
 | 2 | **done 2026-11-01**: `src/fastcgi` — records/params codec, CGI header parsing (Status, Location → 302), `Address` (unix:/path, host:port), pooled keep-conn connections (retry once on a stale pooled one), `FastCgi` app: resolve order file → dir index (redirect without slash) → `/x.php/info` → front controller; scripts must be regular files under the canonical root ending in `split_path`, no dot segments; CGI/1.1 vars incl. HTTPS, `HTTP_*` minus `Proxy` (httpoxy), `REDIRECT_STATUS`; stderr to the log; 502 on failure. Config `type = "fastcgi"` (short or nested; `[route.action.params]` any keys), static files via `StaticAdapter`, `--check` validates address/root. Bodies and responses buffered (no `try_files` list: the fixed order above covers the frameworks). Tests: 7 unit (in-process responder: vars, keep-alive reuse, status/location, 502, static, redirect), 2 config; fuzz `fastcgi_record`; `ci/e2e/fastcgi.sh` against real php-fpm (CI apt php-fpm; locally `docker` php:8.3-fpm): front controller, PATH_INFO, dir index, form + 300 KB upload, cookies, redirects, 404, static not sent to fpm, upload-as-PHP refused, fpm down 502, Unix socket | done |
 | 3 | **done 2026-11-01**: `OidcAuth` — `signed_cookies` (HMAC-SHA256 `_rws_oidc`, pre-auth `_rws_oidc_pre` 10 min), `allow_emails/domains/groups` (verified email only; groups from the verified ID token's claim), `forward_headers` (X-Auth-Request-*), `session_ttl`, host-derived redirect_uri, client identity headers stripped everywhere, local-only return_to. Config `type = "oidc"` via `proxy_config::oidc_route::LazyOidc` (discovery on first request, 503 + retry 10 s), `type = "forward"` (ForwardAuthLayer: copied headers only from the service, X-Forwarded-* set by rws), unknown auth type → 503 + check error. Release + CI binaries add `sso`. Found + fixed: http_client `Host` lacked non-default ports. Tests: 6 OidcAuth (signed flow across instances, tamper/other key, allow lists, unverified email, store mode groups, redirect_uri/return_to, spoofed headers), 2 forward, 3 config, Host port; `ci/e2e/oidc.sh` (CI `oidc`): Keycloak 26 in docker, curl through the login form, groups allow, 403 for others, restart keeps session, logout, forward-auth with a Python service. Not done: provider presets okta/auth0/keycloak (use `issuer`) | done |
+| 4a | **done 2026-11-01** #82: relay moved to `proxy::upgrade` (gateway re-exports it), `WebSocket::upgrade_raw` ungated, `ConfigDrivenApp::execute_async` returns `None` for upgrades, `DynamicProxy::forward_upgrade` (prepare → backend, host override, read timeout; TLS backends 502). Tests: 2 unit (101 + relay with path rewrite and X-Forwarded-For, dead backend 502); `ci/e2e/ws_upgrade.sh` (CI `ws-upgrade`): Python RFC 6455 echo backend + client through rws, plain and TLS (`tls = "internal"`), 8 concurrent sockets, ordinary requests on the same route, dead backend 502 | done |
 | 4 | #74 cookbook → release 18.21.0 (with the user's go) | — |
 | 5 | #75 admin users/roles/audit/OIDC | — |
 | 6 | #76 cluster state via Redis | — |

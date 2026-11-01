@@ -2583,3 +2583,73 @@ fn an_unknown_auth_type_fails_closed() {
     let res = crate::test_client::TestClient::new(app).get("/x").send();
     assert_eq!(res.status(), 503);
 }
+
+#[test]
+fn proxy_routes_relay_websocket_upgrades() {
+    use std::io::{Read, Write};
+    // A backend that answers the handshake with 101, then echoes bytes.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen_by_backend = std::sync::Arc::clone(&seen);
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap() == 1 {
+            head.push(byte[0]);
+        }
+        *seen_by_backend.lock().unwrap() = String::from_utf8_lossy(&head).to_string();
+        stream.write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: abc\r\n\r\nhello").unwrap();
+        let mut buf = [0u8; 64];
+        while let Ok(n) = stream.read(&mut buf) {
+            if n == 0 || stream.write_all(&buf[..n]).is_err() {
+                break;
+            }
+        }
+    });
+    let cfg = ProxyConfig::from_str(&format!("[[route]]\n[route.match]\npath = \"/ws/*\"\n[route.action]\ntype = \"proxy\"\nupstream = \"127.0.0.1:{port}\"\nstrip_path_prefix = \"/ws\"\n"));
+    let app = crate::proxy_config::builder::build(cfg).0;
+    let mut req = make_request("GET", "/ws/chat?room=1");
+    for (n, v) in [("Host", "app.test"), ("Connection", "Upgrade"), ("Upgrade", "websocket"), ("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="), ("Sec-WebSocket-Version", "13")] {
+        req.headers.push(Header { name: n.into(), value: v.into() });
+    }
+    let mut response = app.execute(&req, &make_conn("203.0.113.9")).unwrap();
+    assert_eq!(response.status_code, 101);
+    assert!(response.headers.iter().any(|h| h.name.eq_ignore_ascii_case("sec-websocket-accept") && &*h.value == "abc"));
+    let head = seen.lock().unwrap().clone();
+    assert!(head.starts_with("GET /chat?room=1 HTTP/1.1\r\n"), "path rewriting applies: {head}");
+    assert!(head.contains("Upgrade: websocket") && head.contains("Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=="), "{head}");
+    assert!(head.contains("X-Forwarded-For: 203.0.113.9"), "{head}");
+
+    // The server would now hand the client connection to the relay.
+    let upgrade = crate::websocket::take_upgrade(&mut response).expect("a relay waits for the connection");
+    let client_to_backend = std::io::Cursor::new(b"ping".to_vec());
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    struct Sink(std::sync::mpsc::Sender<Vec<u8>>);
+    impl Write for Sink {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            let _ = self.0.send(b.to_vec());
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    std::thread::spawn(move || upgrade.run(Box::new(client_to_backend), Box::new(Sink(tx))));
+    let mut got = Vec::new();
+    while !got.ends_with(b"helloping") {
+        got.extend(rx.recv_timeout(std::time::Duration::from_secs(5)).expect("relayed bytes"));
+    }
+    assert_eq!(got, b"helloping", "bytes after the 101, then the echo");
+}
+
+#[test]
+fn an_upgrade_to_a_dead_backend_is_a_502() {
+    let cfg = ProxyConfig::from_str("[[route]]\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"proxy\"\nupstream = \"127.0.0.1:1\"\n");
+    let app = crate::proxy_config::builder::build(cfg).0;
+    let mut req = make_request("GET", "/ws");
+    req.headers.push(Header { name: "Connection".into(), value: "keep-alive, Upgrade".into() });
+    req.headers.push(Header { name: "Upgrade".into(), value: "websocket".into() });
+    assert_eq!(app.execute(&req, &make_conn("127.0.0.1")).unwrap().status_code, 502);
+}

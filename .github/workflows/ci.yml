@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, wasm-shim, systemd, mtls-crl, tls-internal, fastcgi, oidc, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, wasm-shim, systemd, mtls-crl, tls-internal, fastcgi, oidc, ws-upgrade, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -185,6 +185,9 @@ jobs:
       - name: OIDC sign-in against Keycloak and forward-auth (config file)
         if: matrix.check == 'oidc'
         run: ci/e2e/oidc.sh target/debug/rws
+      - name: WebSocket upgrades through config proxy routes (plain and TLS)
+        if: matrix.check == 'ws-upgrade'
+        run: ci/e2e/ws_upgrade.sh target/debug/rws
       - name: WebAssembly plugins (unit tests with the feature; the example plugin through the binary)
         if: matrix.check == 'wasm-plugins'
         run: |

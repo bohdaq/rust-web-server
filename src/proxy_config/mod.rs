@@ -1376,7 +1376,8 @@ impl Application for ConfigDrivenApp {
     #[cfg(feature = "http2")]
     fn execute_async<'a>(&'a self, request: &'a Request, conn: &'a ConnectionInfo) -> Option<crate::application::AsyncResponse<'a>> {
         let generation = self.current();
-        if generation.entry.is_some() {
+        // An upgrade hands the connection over: the blocking path does that.
+        if generation.entry.is_some() || crate::proxy::upgrade::is_upgrade(request) {
             return None;
         }
         let request = normalized(request);
@@ -1798,6 +1799,30 @@ enum Attempt {
 }
 
 impl DynamicProxy {
+    /// An upgrade request (`Connection: upgrade`) to a live backend over its
+    /// own connection. Plain-HTTP backends only: a TLS backend gets `502`.
+    fn forward_upgrade(&self, request: &Request, conn: &ConnectionInfo) -> Response {
+        let prepared = match self.prepare(request, conn, &[]) {
+            Ok(p) => p,
+            Err(response) => return response,
+        };
+        if self.tls || prepared.backend.starts_with("https://") || prepared.backend.starts_with("wss://") {
+            eprintln!("[proxy] upgrade to {}: TLS backends can't take upgraded connections yet", prepared.backend);
+            return bad_gateway();
+        }
+        let default_host = if prepared.port == 80 { prepared.host.clone() } else { format!("{}:{}", prepared.host, prepared.port) };
+        let host_header = self.host_override(request).map(str::to_string).unwrap_or(default_host);
+        match crate::proxy::upgrade::forward(&prepared.request, crate::proxy::Peer::of(conn), &prepared.host, prepared.port, &host_header, self.read_timeout) {
+            Ok(response) => response,
+            Err(e) => {
+                eprintln!("[proxy] upgrade to {}: {e}", prepared.backend);
+                let mut response = bad_gateway();
+                crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ConnectionRefused, Some(&prepared.backend), None);
+                response
+            }
+        }
+    }
+
     /// Pick a backend (not one of `tried`) and apply the path rewriting;
     /// `Err` is the response to send instead (no backend in rotation — `503`
     /// when the circuit breaker took them out, `502` otherwise — or an
@@ -1985,6 +2010,11 @@ impl DynamicProxy {
 
 impl Application for DynamicProxy {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        // WebSocket and other upgrades (18.21.0): the backend's `101` hands
+        // the client connection to a byte relay with it.
+        if crate::proxy::upgrade::is_upgrade(request) {
+            return Ok(self.forward_upgrade(request, conn));
+        }
         if let Some(mirror) = &self.mirror {
             mirror.send(request, conn);
         }

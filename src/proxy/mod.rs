@@ -29,6 +29,10 @@ pub mod status;
 pub(crate) mod async_upstream;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mirror;
+/// Upgraded connections (WebSocket) relayed to a backend (moved from the
+/// Gateway API controller in 18.21.0; config proxy routes use it too).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod upgrade;
 #[cfg(feature = "http2")]
 pub(crate) mod h2_upstream;
 #[cfg(feature = "http3")]

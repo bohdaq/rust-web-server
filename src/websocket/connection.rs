@@ -321,7 +321,6 @@ impl WebSocket {
 
     /// Like [`WebSocket::upgrade`] for a proxy: `response` is the backend's
     /// `101`, and `relay` gets the client connection's raw bytes.
-    #[cfg(feature = "gateway-api")]
     pub(crate) fn upgrade_raw<F>(mut response: Response, relay: F) -> Response
     where
         F: FnOnce(Box<dyn Read + Send>, Box<dyn Write + Send>) + Send + 'static,

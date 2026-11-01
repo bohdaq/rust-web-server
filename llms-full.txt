@@ -12971,6 +12971,14 @@ strip_path_prefix  = "/api"     # strip this prefix before forwarding (optional)
 add_path_prefix    = "/v2"      # prepend this prefix before forwarding (optional)
 ```
 
+WebSocket (and other `Connection: upgrade`) requests are relayed too, since
+18.21.0: the backend's `101 Switching Protocols` hands the client connection
+to a byte relay with that backend, over plain HTTP or TLS on rws's side —
+Rails Action Cable, Phoenix LiveView, Socket.IO, GraphQL subscriptions and
+dev-server hot reload work through the same route as the app. The backend
+must speak plain HTTP (an `https://` backend answers upgrades with `502`),
+and a connection is pinned to the backend it started on.
+
 #### `type = "grpc"` — forward gRPC to an HTTP/2 upstream
 
 ```toml
@@ -14776,6 +14784,12 @@ DNS responses larger than the buffer size (usually 512 bytes over plain UDP) may
 <https://rws8.tech/proxy/websocket-proxy/>
 
 `WsProxy` listens for incoming HTTP/1.1 connections, validates that each connection is a WebSocket upgrade, forwards the upgrade handshake to a backend, and then tunnels all subsequent WebSocket frames bidirectionally.
+
+A config-file `type = "proxy"` route relays WebSocket upgrades on its own
+since 18.21.0 (see [Config-Driven Proxy](/proxy/config-driven/#type--proxy--forward-to-an-upstream)),
+on the main listener and with the route's matching, auth and rate limits.
+`WsProxy` / `[[ws_proxy]]` below is a separate listener for when you want
+one just for WebSockets.
 
 ## Basic usage
 

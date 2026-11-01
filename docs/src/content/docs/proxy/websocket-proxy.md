@@ -5,6 +5,12 @@ description: Proxy WebSocket upgrade requests to backend servers and relay all f
 
 `WsProxy` listens for incoming HTTP/1.1 connections, validates that each connection is a WebSocket upgrade, forwards the upgrade handshake to a backend, and then tunnels all subsequent WebSocket frames bidirectionally.
 
+A config-file `type = "proxy"` route relays WebSocket upgrades on its own
+since 18.21.0 (see [Config-Driven Proxy](/proxy/config-driven/#type--proxy--forward-to-an-upstream)),
+on the main listener and with the route's matching, auth and rate limits.
+`WsProxy` / `[[ws_proxy]]` below is a separate listener for when you want
+one just for WebSockets.
+
 ## Basic usage
 
 ```rust

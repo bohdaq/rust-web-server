@@ -27,7 +27,7 @@ pub mod routes;
 pub mod services;
 pub mod translate;
 pub mod types;
-pub mod upgrade;
+pub use crate::proxy::upgrade;
 
 /// The `controllerName` GatewayClasses name to be handled by rws.
 pub const CONTROLLER_NAME: &str = "rws8.tech/gateway-controller";

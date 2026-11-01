@@ -1,4 +1,5 @@
-//! Upgraded connections (WebSocket) through a Gateway route: the request
+//! Upgraded connections (WebSocket) through a proxy (a Gateway API route, or
+//! a config-file `type = "proxy"` route since 18.21.0): the request
 //! goes to the backend over its own connection; a `101` hands the client's
 //! connection to a byte relay with the backend, anything else is answered
 //! as a normal response.

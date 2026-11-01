@@ -39,6 +39,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `signed_cookies`, `allow_emails`, `allow_domains`, `allow_groups`,
   `forward_headers`, `session_ttl`, and an empty `redirect_uri` follows the
   request's host. Release binaries now include the `sso` feature.
+- WebSockets through proxy routes (#82): a `type = "proxy"` route relays
+  `Connection: upgrade` requests to a plain-HTTP backend (Action Cable,
+  LiveView, Socket.IO, hot reload) on the main listener; the relay moved
+  from the Gateway API controller to `proxy::upgrade`.
 
 ### Fixed
 

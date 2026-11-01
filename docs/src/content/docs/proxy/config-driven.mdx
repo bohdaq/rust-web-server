@@ -237,6 +237,14 @@ strip_path_prefix  = "/api"     # strip this prefix before forwarding (optional)
 add_path_prefix    = "/v2"      # prepend this prefix before forwarding (optional)
 ```
 
+WebSocket (and other `Connection: upgrade`) requests are relayed too, since
+18.21.0: the backend's `101 Switching Protocols` hands the client connection
+to a byte relay with that backend, over plain HTTP or TLS on rws's side —
+Rails Action Cable, Phoenix LiveView, Socket.IO, GraphQL subscriptions and
+dev-server hot reload work through the same route as the app. The backend
+must speak plain HTTP (an `https://` backend answers upgrades with `502`),
+and a connection is pinned to the backend it started on.
+
 #### `type = "grpc"` — forward gRPC to an HTTP/2 upstream
 
 ```toml
