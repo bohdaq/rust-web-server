@@ -7282,8 +7282,10 @@ tls_key_file  = "pkcs11:token=rws;object=web-key?module-path=/usr/lib/softhsm/li
 | `pin-source=env:VAR` | the PIN from an environment variable (or `file:/run/secrets/pin`); `pin-value=` works but puts the PIN in the config |
 
 Keys: ECDSA P-256 and P-384, RSA (RSA-PSS for TLS 1.3, PKCS#1 v1.5 also for
-TLS 1.2 clients). The module loads at startup, one session per key is kept
-logged in and reopened if the token drops it, and `rws --check` opens the
+TLS 1.2 clients). The module loads at startup; each key keeps a pool of up
+to 8 logged-in sessions (handshakes sign in parallel), reopened if the token
+drops them; a `pin-value=` is hidden in the startup output and the admin
+API's config; and `rws --check` opens the
 key, so a wrong PIN or label shows up before a restart. Tested with
 SoftHSM2; the same works with AWS CloudHSM (`libcloudhsm_pkcs11.so`),
 Google Cloud KMS (`libkmsp11.so`, with its config file in the environment),

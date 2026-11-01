@@ -57,8 +57,25 @@ impl PinSource {
     }
 }
 
+/// RFC 3986 percent-decoding to bytes (`id=` values are raw bytes); a `%`
+/// not followed by two hex digits stays as it is.
 fn pct(s: &str) -> Vec<u8> {
-    crate::waf::decode::percent_decode(s).into_bytes()
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = |c: u8| (c as char).to_digit(16);
+        if b[i] == b'%' {
+            if let (Some(h), Some(l)) = (b.get(i + 1).and_then(|c| hex(*c)), b.get(i + 2).and_then(|c| hex(*c))) {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    out
 }
 
 impl Pkcs11Uri {
@@ -142,8 +159,13 @@ pub struct Pkcs11Key {
     slot: Slot,
     uri: Pkcs11Uri,
     kind: Kind,
-    session: Mutex<Option<(Session, ObjectHandle)>>,
+    /// Logged-in sessions not in use; handshakes take one each, so they
+    /// sign in parallel (18.24.0; one shared session serialized them).
+    idle: Mutex<Vec<(Session, ObjectHandle)>>,
 }
+
+/// Idle sessions kept per key.
+const MAX_IDLE_SESSIONS: usize = 8;
 
 impl std::fmt::Debug for Pkcs11Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -167,7 +189,7 @@ impl Pkcs11Key {
                 None => true,
             })
             .ok_or_else(|| format!("PKCS#11: no token {:?} in {}", uri.token.as_deref().unwrap_or("(any)"), uri.module_path))?;
-        let mut key = Pkcs11Key { ctx, slot, uri, kind: Kind::Rsa, session: Mutex::new(None) };
+        let mut key = Pkcs11Key { ctx, slot, uri, kind: Kind::Rsa, idle: Mutex::new(Vec::new()) };
         key.kind = key.with_session(|session, handle| {
             let attrs = session.get_attributes(handle, &[AttributeType::KeyType, AttributeType::EcParams]).map_err(|e| e.to_string())?;
             let mut kind = None;
@@ -187,18 +209,27 @@ impl Pkcs11Key {
     /// Run `f` with a logged-in session and the key's handle; a session the
     /// token dropped is reopened once.
     fn with_session<T>(&self, f: impl Fn(&Session, ObjectHandle) -> Result<T, String>) -> Result<T, String> {
-        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
         for attempt in 0..2 {
-            if guard.is_none() {
-                *guard = Some(self.login()?);
-            }
-            let (session, handle) = guard.as_ref().expect("just opened");
-            match f(session, *handle) {
-                Ok(v) => return Ok(v),
+            // The pool's lock is held only to take or return a session, never
+            // while the token works.
+            let pooled = if attempt == 0 { self.idle.lock().unwrap_or_else(|e| e.into_inner()).pop() } else { None };
+            let (session, handle) = match pooled {
+                Some(s) => s,
+                None => self.login()?,
+            };
+            match f(&session, handle) {
+                Ok(v) => {
+                    let mut idle = self.idle.lock().unwrap_or_else(|e| e.into_inner());
+                    if idle.len() < MAX_IDLE_SESSIONS {
+                        idle.push((session, handle));
+                    }
+                    return Ok(v);
+                }
                 Err(e) if attempt == 0 => {
-                    // Session closed, logged out, token reinserted: start over.
+                    // Session closed, logged out, token reinserted: drop the
+                    // pooled ones and start over with a fresh session.
                     eprintln!("[pkcs11] {e}; reopening the session");
-                    *guard = None;
+                    self.idle.lock().unwrap_or_else(|e| e.into_inner()).clear();
                 }
                 Err(e) => return Err(e),
             }

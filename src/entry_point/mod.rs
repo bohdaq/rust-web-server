@@ -17,10 +17,15 @@ use crate::entry_point::environment_variables::read_system_environment_variables
 pub fn shown<'a>(name: &str, value: &'a str) -> std::borrow::Cow<'a, str> {
     let upper = name.to_ascii_uppercase();
     if ["SECRET", "PASSWORD", "TOKEN"].iter().any(|word| upper.contains(word)) && !value.is_empty() {
-        std::borrow::Cow::Borrowed("(hidden)")
-    } else {
-        std::borrow::Cow::Borrowed(value)
+        return std::borrow::Cow::Borrowed("(hidden)");
     }
+    // A PIN inside a PKCS#11 URI (`tls_key_file = "pkcs11:…?pin-value=1234"`).
+    if let Some(at) = value.find("pin-value=") {
+        let start = at + "pin-value=".len();
+        let end = value[start..].find(['&', ';']).map_or(value.len(), |n| start + n);
+        return std::borrow::Cow::Owned(format!("{}(hidden){}", &value[..start], &value[end..]));
+    }
+    std::borrow::Cow::Borrowed(value)
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]

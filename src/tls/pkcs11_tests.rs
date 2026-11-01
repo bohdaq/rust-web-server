@@ -42,3 +42,18 @@ fn signs_with_a_softhsm_key_when_available() {
     let sig = signer.sign(b"hello").expect("signs");
     assert!(!sig.is_empty());
 }
+
+#[test]
+fn percent_decoding_is_rfc_3986_bytes() {
+    assert_eq!(pct("%01%ff%41"), vec![1, 0xff, b'A']);
+    assert_eq!(pct("%u0041"), b"%u0041".to_vec(), "no %u escapes");
+    assert_eq!(pct("a%2"), b"a%2".to_vec());
+}
+
+#[test]
+fn pins_are_hidden_in_output() {
+    let uri = "pkcs11:object=k?module-path=/m.so&pin-value=1234&x=1";
+    assert_eq!(crate::entry_point::shown("RWS_CONFIG_TLS_KEY_FILE", uri), "pkcs11:object=k?module-path=/m.so&pin-value=(hidden)&x=1");
+    assert_eq!(crate::entry_point::shown("RWS_CONFIG_TLS_KEY_FILE", "pkcs11:object=k?pin-value=9"), "pkcs11:object=k?pin-value=(hidden)");
+    assert_eq!(crate::entry_point::shown("RWS_CONFIG_TLS_KEY_FILE", "/etc/key.pem"), "/etc/key.pem");
+}

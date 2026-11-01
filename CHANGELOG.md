@@ -26,6 +26,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   SQL from rule 942120; command injection after `;` or `|` needs a
   shell-like argument, so text like "tired; head hurts" isn't blocked;
   `rws --check` warns when a WAF route has no body size limit.
+- PKCS#11 (#79): a `pin-value=` in a key URI is hidden in the startup output
+  and `GET /admin/api/v1/config`; URIs are percent-decoded per RFC 3986.
+
+### Fixed
+
+- PKCS#11: handshakes no longer wait on one shared session per key — up to
+  8 sessions sign in parallel.
 
 ## 18.23.1 — 2026-11-01
 
