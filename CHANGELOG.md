@@ -77,6 +77,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   startup, and says `(FIPS)` in `--version`; a
   `rws-<version>-x86_64-unknown-linux-gnu-fips.tar.gz` release artifact.
   Every rustls config now names `crypto_provider()` explicitly.
+- TLS keys in an HSM (#79): with the `pkcs11` feature `tls_key_file` takes a
+  `pkcs11:` URI (RFC 7512: token, object/id, module-path, pin-source) and
+  handshakes are signed on the token — ECDSA P-256/P-384, RSA-PSS and
+  PKCS#1; `rws --check` opens the key. In the macOS, Windows and glibc FIPS
+  release binaries.
 
 ### Fixed
 

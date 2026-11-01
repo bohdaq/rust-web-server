@@ -123,6 +123,39 @@ module too, keep authentication in a FIPS-validated identity provider and
 use the TLS side of rws. The FIPS build is glibc-only (aws-lc's FIPS module
 doesn't build for musl), so there's no FIPS container image yet.
 
+## Keys in an HSM or cloud KMS (PKCS#11)
+
+Since 18.23.0 the private key can stay on a hardware security module, a
+smart card or a cloud KMS: `tls_key_file` (or a virtual host's `key_file`)
+takes an RFC 7512 `pkcs11:` URI instead of a path, and rws asks the token to
+sign each handshake.
+
+```toml
+tls_cert_file = "/etc/rws/cert.pem"          # the certificate stays a file
+tls_key_file  = "pkcs11:token=rws;object=web-key?module-path=/usr/lib/softhsm/libsofthsm2.so&pin-source=env:HSM_PIN"
+```
+
+| URI part | Meaning |
+|---|---|
+| `token=` | the token's label |
+| `object=` / `id=` | the key's label / its `CKA_ID` (percent-encoded bytes) |
+| `module-path=` | the vendor's PKCS#11 library |
+| `pin-source=env:VAR` | the PIN from an environment variable (or `file:/run/secrets/pin`); `pin-value=` works but puts the PIN in the config |
+
+Keys: ECDSA P-256 and P-384, RSA (RSA-PSS for TLS 1.3, PKCS#1 v1.5 also for
+TLS 1.2 clients). The module loads at startup, one session per key is kept
+logged in and reopened if the token drops it, and `rws --check` opens the
+key, so a wrong PIN or label shows up before a restart. Tested with
+SoftHSM2; the same works with AWS CloudHSM (`libcloudhsm_pkcs11.so`),
+Google Cloud KMS (`libkmsp11.so`, with its config file in the environment),
+Azure Managed HSM and YubiHSM's PKCS#11 libraries.
+
+Needs the `pkcs11` feature: in the macOS, Windows and Linux glibc
+(`…-linux-gnu-fips`) release binaries, not in the static musl ones (they
+can't load a library at runtime) — or `cargo install rust-web-server
+--features "pkcs11 acme auth"`. With `fips` too, TLS runs on aws-lc's FIPS
+module and the key never leaves the HSM.
+
 ## ALPN negotiation
 
 When a TLS certificate is configured, the server advertises both `h2` and

@@ -10,6 +10,8 @@ use tokio_rustls::TlsAcceptor;
 use crate::virtual_host::VirtualHostConfig;
 
 pub mod internal;
+#[cfg(feature = "pkcs11")]
+pub mod pkcs11;
 
 #[cfg(test)]
 mod tests;
@@ -182,10 +184,24 @@ pub(crate) fn certified_key_from_pem(cert: &[u8], key: &[u8]) -> Result<Certifie
 
 pub(crate) fn load_certified_key(cert_path: &str, key_path: &str) -> Result<CertifiedKey, String> {
     let certs = load_certs(cert_path)?;
+    // A key on a token: `pkcs11:` URI (18.23.0).
+    if pkcs11_uri(key_path) {
+        #[cfg(feature = "pkcs11")]
+        return Ok(CertifiedKey::new(certs, pkcs11::signing_key(key_path)?));
+        #[cfg(not(feature = "pkcs11"))]
+        return Err(format!("'{key_path}' is a PKCS#11 URI, but this rws was built without the pkcs11 feature"));
+    }
     let key = load_key(key_path)?;
-    let signing_key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key)
+    let signing_key = crate::crypto_provider()
+        .key_provider
+        .load_private_key(key)
         .map_err(|e| format!("unsupported key type in '{}': {}", key_path, e))?;
     Ok(CertifiedKey::new(certs, signing_key))
+}
+
+/// Whether a key setting is a `pkcs11:` URI rather than a file.
+pub fn pkcs11_uri(key: &str) -> bool {
+    key.trim_start().get(..7).is_some_and(|p| p.eq_ignore_ascii_case("pkcs11:"))
 }
 
 fn load_certs(path: &str) -> Result<Vec<CertificateDer<'static>>, String> {

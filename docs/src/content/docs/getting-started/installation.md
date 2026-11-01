@@ -114,6 +114,8 @@ cargo build --release --no-default-features --features http1
 
 `fips` (since 18.23.0) builds TLS on aws-lc's FIPS 140-3 validated module
 and needs CMake and Go; see [FIPS 140-3](/features/https-tls/#fips-140-3).
+`pkcs11` (since 18.23.0) lets `tls_key_file` name a key on an HSM or cloud
+KMS; see [PKCS#11](/features/https-tls/#keys-in-an-hsm-or-cloud-kms-pkcs11).
 
 
 | Feature | What it adds | Required deps |

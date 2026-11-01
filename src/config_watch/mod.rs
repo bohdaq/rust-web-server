@@ -43,6 +43,8 @@ pub fn watched_paths() -> Vec<PathBuf> {
             paths.extend(var(&format!("RWS_CONFIG_VIRTUAL_HOST_{i}_{suffix}")).map(PathBuf::from));
         }
     }
+    // A key on a token (`pkcs11:`) isn't a file.
+    paths.retain(|p| !p.to_string_lossy().trim_start().to_ascii_lowercase().starts_with("pkcs11:"));
     paths.sort();
     paths.dedup();
     paths

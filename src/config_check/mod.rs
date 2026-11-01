@@ -501,7 +501,11 @@ fn check_tls_pair(label: &str, cert: &str, key: &str, report: &mut ConfigReport)
         return;
     }
     let mut missing = false;
+    let token_key = key.trim_start().get(..7).is_some_and(|p| p.eq_ignore_ascii_case("pkcs11:"));
     for (what, path) in [("certificate", cert), ("key", key)] {
+        if what == "key" && token_key {
+            continue;
+        }
         if !Path::new(path).is_file() {
             report.error(format!("{label}: {what} file '{path}' not found"));
             missing = true;

@@ -395,6 +395,7 @@ impl Application for AdminApi {
 enum Authenticated {
     Yes(access::Principal),
     /// Signed in (OIDC), but no role maps to them.
+    #[cfg_attr(not(feature = "sso"), allow(dead_code))]
     NoRole(String),
     No,
 }

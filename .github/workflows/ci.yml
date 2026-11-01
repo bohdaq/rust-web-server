@@ -61,6 +61,21 @@ jobs:
       - run: cargo build --bin rws --features "fips acme auth sso"
       - run: ci/e2e/fips.sh target/debug/rws
 
+  # TLS keys on a PKCS#11 token (SoftHSM2).
+  pkcs11:
+    name: pkcs11 (SoftHSM2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pkcs11
+      - run: sudo apt-get update -q && sudo apt-get install -y -q softhsm2
+      - run: cargo test --lib --features pkcs11 pkcs11
+      - run: cargo build --bin rws --features pkcs11
+      - run: ci/e2e/pkcs11.sh target/debug/rws
+
   # End-to-end checks against real external implementations — see ci/e2e/.
   e2e:
     name: e2e (${{ matrix.check }})
