@@ -214,7 +214,7 @@ Change a running server without editing files, and extend it without recompiling
 - **#69** **Key rotation for HS256 and Basic** — several JWT secrets with `kid`, htpasswd re-read on change.
 - **#70** **`rws ctl` / `rwsctl`** — the admin API from the command line. 18.21.0's planned scope, shipped in 18.20.0 (the user's call).
 
-## 18.21.0 — Solo developers and startups
+## 18.21.0 — Solo developers and startups (released 2026-11-01)
 
 Plan: [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) (2026-11-01).
 
