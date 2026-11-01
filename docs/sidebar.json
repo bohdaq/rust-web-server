@@ -424,6 +424,10 @@
       {
         "label": "A2A agents",
         "link": "/mcp/a2a/"
+      },
+      {
+        "label": "Tools from OpenAPI",
+        "link": "/mcp/openapi-tools/"
       }
     ]
   },

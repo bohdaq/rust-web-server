@@ -309,6 +309,19 @@ pub mod fuzz_api {
         }
     }
 
+    /// OpenAPI documents to MCP tools (#66): any bytes. Must never panic;
+    /// every tool's schemas are JSON and its requests build or err cleanly.
+    pub fn openapi_to_mcp(data: &[u8]) {
+        let Ok(spec) = std::str::from_utf8(data) else { return };
+        let options = crate::mcp::openapi_tools::ToolOptions::default();
+        let Ok(found) = crate::mcp::openapi_tools::tools(spec, &options) else { return };
+        for tool in found {
+            assert!(crate::service_discovery::json_lite::parse(&tool.input_schema).is_ok());
+            assert!(tool.name.len() <= 64 && tool.name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'), "{}", tool.name);
+            let _ = tool.request(r#"{"id":"1","body":{"a":[1,2]},"q":["x","y"]}"#);
+        }
+    }
+
     /// An A2A JSON-RPC request body (#65): any bytes. Must never panic, and
     /// the answer is always a JSON-RPC response (or a 413).
     pub fn a2a_request(data: &[u8]) {

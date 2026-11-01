@@ -83,7 +83,7 @@ with a depth and size cap) — a stack-depth case and a fuzz target
 
 | # | Scope | Status |
 |---|---|---|
-| 1 | Spec parser + `$ref` resolution + operation → tool mapping (pure, tested on real specs: Petstore 3.0/3.1, GitHub's, Stripe's subset) + fuzz target | — |
+| 1 | **done 2026-11-01**: `mcp::openapi_tools` — `tools(spec, &ToolOptions)` (3.0/3.1 JSON; Swagger 2 and others refused; 16 MB cap), names (operationId sanitized ≤ 64, else method_path, prefix, `_2` suffixes), path-level + operation parameters merged (op wins), cookie params dropped, JSON body as `body`, `outputSchema` only for object 2xx JSON, annotations by method, GET-only default + include/exclude; `$ref` local only, resolved with depth 24, schemas inlined with cycle → `{}`, nesting cap 64 and a 50,000-node budget (fan-out bombs); `OpenApiTool::request` (percent-encoded path params, repeated array query params, header control chars refused, body JSON). Tests: 4 (Petstore 3.0 with refs/cycle, include/exclude/prefix/collisions, request building, refused docs + 2^30 fan-out bomb + remote ref) + stack-depth case + fuzz `openapi_to_mcp`; docs `mcp/openapi-tools.md` | done |
 | 2 | Upstream source in the MCP gateway (`[[route.action.openapi]]`): fetch, tools, forwarding, auth header, include/exclude, reload; e2e with a Python API + the MCP conformance client | — |
 | 3 | In-process tools from `AppWithState` routes + `OpenApiConfig` operations | — |
 | 4 | Docs (`mcp/openapi-tools.md`), example, CHANGELOG, release 18.19.0 | — |

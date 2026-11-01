@@ -90,6 +90,7 @@
 pub(crate) mod json_rpc;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod gateway;
+pub mod openapi_tools;
 mod modern;
 mod tasks;
 

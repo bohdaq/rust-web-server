@@ -9,6 +9,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- `mcp::openapi_tools` (#66): OpenAPI 3.0/3.1 operations as MCP tools —
+  input schemas from path, query and header parameters and the JSON body,
+  output schemas from object responses, annotations from the method, and
+  `request(arguments)` building each call's HTTP request. Only `GET`
+  operations unless included by operationId; local `$ref`s inlined with
+  depth, cycle and size limits. Fuzz target `openapi_to_mcp`.
 - Config proxy routes choose the upstream `Host`: `preserve_host = true`
   sends the client's, `upstream_host = "…"` a fixed name (`:authority` over
   HTTP/3 upstreams). It was always the backend's address, and a `header_set`

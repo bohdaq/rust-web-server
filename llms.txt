@@ -137,6 +137,7 @@ Use it as:
 - [Build agent tools on your app](https://rws8.tech/mcp/agent-tools/): Expose an app's domain functions to AI agents as MCP tools — typed schemas, OAuth and live updates from the code the REST API already uses.
 - [MCP gateway](https://rws8.tech/mcp/gateway/): Put one authenticated MCP endpoint in front of several MCP servers — prefixed tool names, a per-caller allow-list, and upstream credentials that never leave the gateway.
 - [A2A agents](https://rws8.tech/mcp/a2a/): Serve an agent other AI agents can call over the Agent2Agent (A2A) 1.0 protocol, with an Agent Card, messages and tasks.
+- [Tools from OpenAPI](https://rws8.tech/mcp/openapi-tools/): Turn an OpenAPI 3 document's operations into MCP tools, with input schemas from its parameters and body and HTTP requests built from each call.
 
 ## Testing
 

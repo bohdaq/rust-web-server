@@ -75,6 +75,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Query` | `extract` | Parsed query string as `HashMap<String, String>` |
 | `RequestHeaders` | `extract` | All request headers with case-insensitive `.get(name)` |
 | `RequestId` | `extract` / `request_id` | The ID `RequestIdLayer` put on the request; empty string without it (never fails) |
+| `openapi_tools::tools` | `mcp` | OpenAPI 3.0/3.1 operations as MCP tools (`OpenApiTool`: schemas, annotations, `request(arguments)` → `ToolRequest`); `ToolOptions` (prefix, include, exclude). See [Tools from OpenAPI](/mcp/openapi-tools/) |
 | `A2aServer` | `a2a` | A2A 1.0 agent (JSON-RPC): Agent Card, `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`; `on_message`, `at`, `wrap`. See [A2A agents](/mcp/a2a/) |
 | `AgentCard` / `Skill` | `a2a` | The agent's card at `/.well-known/agent-card.json` and the skills on it |
 | `A2aContext` / `A2aReply` | `a2a` | What a message handler gets (task, context, the continued task) and returns (a message or a task) |

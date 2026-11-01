@@ -274,3 +274,10 @@ path = "fuzz_targets/a2a_request.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "openapi_to_mcp"
+path = "fuzz_targets/openapi_to_mcp.rs"
+test = false
+doc = false
+bench = false

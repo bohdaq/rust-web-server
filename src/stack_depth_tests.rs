@@ -215,3 +215,16 @@ fn json_lite_refuses_deep_nesting() {
         assert!(crate::service_discovery::json_lite::parse(&ok).is_ok());
     });
 }
+
+#[test]
+fn openapi_schemas_nested_and_referenced_deeply() {
+    on_small_stack(|| {
+        let nested = "{\"type\":\"object\",\"properties\":{\"a\":".repeat(60) + "{}" + &"}}".repeat(60);
+        let spec = format!(r#"{{"openapi":"3.1.0","paths":{{"/x":{{"get":{{"operationId":"x","parameters":[{{"name":"p","in":"query","schema":{nested}}}]}}}}}}}}"#);
+        let found = crate::mcp::openapi_tools::tools(&spec, &Default::default()).unwrap();
+        assert_eq!(1, found.len());
+        let chain: String = (0..200).map(|i| format!(r##""S{i}":{{"$ref":"#/components/schemas/S{}"}},"##, i + 1)).collect();
+        let refs = format!(r##"{{"openapi":"3.1.0","paths":{{"/y":{{"get":{{"operationId":"y","parameters":[{{"name":"p","in":"query","schema":{{"$ref":"#/components/schemas/S0"}}}}]}}}}}},"components":{{"schemas":{{{chain}"S200":{{"type":"string"}}}}}}}}"##);
+        assert_eq!(1, crate::mcp::openapi_tools::tools(&refs, &Default::default()).unwrap().len());
+    });
+}
