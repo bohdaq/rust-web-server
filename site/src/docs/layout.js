@@ -93,6 +93,7 @@ function shell({ path, sidebar, base, content, toc = [], version }) {
       </form>
       <div class="search-results" aria-live="polite"></div>
     </dialog>
+    <lit-material-back-to-top target="main" threshold="800"></lit-material-back-to-top>
     ${footer()}`;
 }
 
