@@ -90,6 +90,9 @@ jobs:
           # A plan such as postgresql-development gives every preview a fresh, empty
           # database of its own, removed with the preview.
           PREVIEW_DATABASE: ${{ vars.KUBE_DC_PREVIEW_DATABASE }}
+          # Or a copy of this managed service's latest backup (previews then deploy
+          # into its project: KUBE_DC_PREVIEW_NAMESPACE = the production namespace).
+          PREVIEW_DATABASE_FROM: ${{ vars.KUBE_DC_PREVIEW_DATABASE_FROM }}
           # kube-dc removes the preview after 72 hours without a deploy, or once
           # GitHub reports the pull request closed, even if this workflow's
           # cleanup on close does not run.

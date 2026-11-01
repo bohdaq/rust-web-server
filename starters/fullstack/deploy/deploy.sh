@@ -12,7 +12,9 @@
 # PREVIEW_REPOSITORY + PREVIEW_PULL_REQUEST (and when that pull request
 # closes; public repositories), and PREVIEW_DATABASE: a plan such as
 # postgresql-development for a fresh, empty database of the preview's own
-# (<app>-db, removed with the preview; the app gets <app>-db-owner).
+# (<app>-db, removed with the preview; the app gets <app>-db-owner), or
+# PREVIEW_DATABASE_FROM: a managed service in the same project whose latest
+# backup is restored into <app>-db (a copy of its data, minutes).
 set -euo pipefail
 
 NAMESPACE="$1" APP="$2" IMAGE="$3"
@@ -20,12 +22,49 @@ export APP IMAGE DB_SECRET="${DB_SECRET:-$APP-db-owner}"
 TIMEOUT="${TIMEOUT:-300}"
 cd "$(dirname "$0")"
 
-if [ -n "${PREVIEW_DATABASE:-}" ]; then
-  # A fresh, empty database of the preview's own, labelled like the rest of
-  # it so it goes when the preview goes; Delete frees its data and capacity.
+if [ -n "${PREVIEW_DATABASE:-}" ] || [ -n "${PREVIEW_DATABASE_FROM:-}" ]; then
+  # The preview's own database, labelled like the rest of it so it goes when
+  # the preview goes; Delete frees its data and capacity. Either a fresh,
+  # empty one (PREVIEW_DATABASE: a plan) or a copy of an existing service's
+  # latest backup (PREVIEW_DATABASE_FROM: its name, in this same project).
   db="$APP-db"
   label="${PREVIEW_HOURS:+preview.kube-dc.com/name: $APP}"
-  kubectl -n "$NAMESPACE" apply -f - <<MANIFEST
+  if [ -n "${PREVIEW_DATABASE_FROM:-}" ]; then
+    src=$(kubectl -n "$NAMESPACE" get managedservice "$PREVIEW_DATABASE_FROM" -o json 2>/dev/null) || {
+      echo "No managed service $PREVIEW_DATABASE_FROM in $NAMESPACE: a copy is restored into the source's project, so previews must deploy there."; exit 1; }
+    backup=$(kubectl -n "$NAMESPACE" get servicebackups -o json | jq -c --arg s "$PREVIEW_DATABASE_FROM" \
+      '[.items[] | select(.spec.serviceRef.name == $s and .status.backup.phase == "Completed")] | sort_by(.status.backup.completedAt) | last // empty')
+    [ -n "$backup" ] || { echo "$PREVIEW_DATABASE_FROM has no completed backup to copy yet."; exit 1; }
+    if ! kubectl -n "$NAMESPACE" get managedservice "$db" >/dev/null 2>&1; then
+      kubectl -n "$NAMESPACE" apply -f - <<MANIFEST
+apiVersion: services.kube-dc.com/v1alpha1
+kind: ServiceOperation
+metadata:
+  name: $db-copy
+  labels: { $label }
+spec:
+  type: RestoreToNew
+  serviceRef: { name: $PREVIEW_DATABASE_FROM }
+  serviceUID: $(jq -r .metadata.uid <<<"$src")
+  idempotencyKey: $db-copy-$(jq -r .metadata.uid <<<"$backup")
+  restore:
+    backupRef: { name: $(jq -r .metadata.name <<<"$backup"), uid: $(jq -r .metadata.uid <<<"$backup") }
+    target:
+      name: $db
+      planRef: { name: $(jq -r .spec.planRef.name <<<"$src") }
+      engineVersion: "$(jq -r .spec.engineVersion <<<"$src")"
+      placement: $(jq -c .spec.placement <<<"$src")
+      connectivity: $(jq -c .spec.connectivity <<<"$src")
+      parameters: $(jq -c '.spec.parameters // {}' <<<"$src")
+MANIFEST
+      echo "Restoring $PREVIEW_DATABASE_FROM's backup of $(jq -r .status.backup.completedAt <<<"$backup") into $db..."
+      for _ in $(seq 1 60); do kubectl -n "$NAMESPACE" get managedservice "$db" >/dev/null 2>&1 && break; sleep 5; done
+    fi
+    # A restored service is born Retain; a preview's copy is disposable.
+    kubectl -n "$NAMESPACE" patch managedservice "$db" --type merge \
+      -p "{\"metadata\":{\"labels\":{${PREVIEW_HOURS:+\"preview.kube-dc.com/name\":\"$APP\"}}},\"spec\":{\"deletionPolicy\":\"Delete\"}}"
+  else
+    kubectl -n "$NAMESPACE" apply -f - <<MANIFEST
 apiVersion: services.kube-dc.com/v1alpha1
 kind: ManagedService
 metadata:
@@ -39,6 +78,7 @@ spec:
   topology: { instances: 1 }
   deletionPolicy: Delete
 MANIFEST
+  fi
   uid=$(kubectl -n "$NAMESPACE" get managedservice "$db" -o jsonpath='{.metadata.uid}')
   kubectl -n "$NAMESPACE" apply -f - <<MANIFEST
 apiVersion: services.kube-dc.com/v1alpha1
@@ -54,9 +94,9 @@ spec:
   delivery: { mode: DataPlaneLocalSecret, secretName: $db-owner }
 MANIFEST
   DB_SECRET="$db-owner"
-  # A new database takes a few minutes; the app starts once its credentials exist.
+  # A new database takes a few minutes, a copy longer; the app starts once its credentials exist.
   echo "Waiting for the preview database $db..."
-  for _ in $(seq 1 $((${DB_TIMEOUT:-600} / 10))); do
+  for _ in $(seq 1 $((${DB_TIMEOUT:-900} / 10))); do
     kubectl -n "$NAMESPACE" get secret "$DB_SECRET" >/dev/null 2>&1 && break
     sleep 10
   done

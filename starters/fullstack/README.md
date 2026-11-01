@@ -56,6 +56,8 @@ in another (http://127.0.0.1:5173, `/api` proxied to the app).
    72 hours without a deploy, or once the PR is closed, if that cleanup fails.
    With `KUBE_DC_PREVIEW_DATABASE` the preview has its own empty database
    (`<app>-pr-<n>-db`, a few minutes to start), removed with it; otherwise
-   preview notes live in memory.
+   preview notes live in memory. `KUBE_DC_PREVIEW_DATABASE_FROM=<database>`
+   instead restores that database's latest backup into the preview (a copy
+   of production data; previews must then deploy into its project).
 
 By hand: `KUBECONFIG=$(deploy/kubeconfig.sh) deploy/deploy.sh <namespace> <app> <image>`.
