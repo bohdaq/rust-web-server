@@ -1,0 +1,132 @@
+[Read Me](../README.md) > [Spec](.) > Operations and trust
+
+# Operations and trust (18.20.0–18.21.0)
+
+Planned 2026-11-01. Four gaps operators run into once rws is the front door:
+
+| # | What | Release |
+|---|---|---|
+| #67 | systemd `Type=notify` and socket activation | 18.20.0 |
+| #68 | `Forwarded` (RFC 7239) and CRLs for inbound mTLS | 18.20.0 |
+| #69 | Key rotation for HS256 JWTs and Basic auth | 18.21.0 |
+| #70 | `rwsctl`: the admin API from the command line | 18.21.0 |
+
+## #67 systemd notify and socket activation
+
+Today the unit is `Type=simple`: systemd calls rws started the moment the
+process exists, before certificates load or listeners bind, so `systemctl
+restart` reports success for a server that then fails, and a restart drops
+connections while the new process binds.
+
+- **`Type=notify`**: when `NOTIFY_SOCKET` is set, rws sends `READY=1` once
+  every listener is bound and the first certificate is loaded (ACME
+  included), `RELOADING=1` + `MONOTONIC_USEC` / `READY=1` around a SIGHUP
+  reload, `STOPPING=1` on shutdown, and `STATUS=` lines ("serving 3
+  listeners", "renewing certificate…"). With `WatchdogSec=` it pings
+  `WATCHDOG=1` at half the interval from the main runtime, so a wedged
+  process is restarted. A datagram to a Unix socket path or abstract name:
+  no libsystemd, ~60 lines.
+- **Socket activation**: when `LISTEN_FDS`/`LISTEN_PID` name this process,
+  rws takes its TCP and UDP listeners from fds 3… (matched by
+  `LISTEN_FDNAMES`, `http`/`https`/`quic`/`redirect`/`admin`, else by local
+  address) instead of binding. systemd holds the sockets across restarts:
+  nothing is refused while the new process starts, and rws needs no
+  `CAP_NET_BIND_SERVICE`. Per-core runtimes (`SO_REUSEPORT` per worker)
+  get each worker a `try_clone` of the inherited socket.
+- **Packaging**: `packaging/linux/rws.service` → `Type=notify`,
+  `NotifyAccess=main`, `WatchdogSec=30`; an optional `rws.socket`
+  (`ListenStream=80`, `443`, `ListenDatagram=443`); docs
+  `deployment/systemd.md`. Existing units keep working (`Type=simple`
+  ignores the notifications).
+- **Tests**: a Unix datagram socket standing in for systemd (the messages
+  and their order); `ci/e2e/systemd.sh` runs rws under
+  `systemd-run --user` (`Type=notify`, then a `.socket` unit) on the CI
+  runner and checks `systemctl --user show -p ActiveState`, a request
+  answered during a restart, and the watchdog.
+
+## #68 Forwarded and CRLs
+
+- **`Forwarded`**: proxied requests may carry RFC 7239's
+  `Forwarded: for=192.0.2.60;proto=https;host=example.com;by=…` next to
+  the `X-Forwarded-*` headers rws already sends (IPv6 quoted and
+  bracketed, an incoming `Forwarded` extended like `X-Forwarded-For`).
+  Setting `forwarded_header = "add"` (`RWS_CONFIG_FORWARDED_HEADER`;
+  `"off"` default — see the decision below), per route
+  `[route.action.proxy] forwarded = …`.
+- **CRLs for inbound mTLS**: `tls_client_crl_file` (`RWS_CONFIG_TLS_CLIENT_CRL_FILE`,
+  PEM or DER, several files comma-separated) → `WebPkiClientVerifier::with_crls`
+  (rustls checks them; revoked client certificates fail the handshake),
+  re-read on SIGHUP / `watch = true` like certificates, `rws --check`
+  validates them (parse, signed by a configured CA, `nextUpdate` not past —
+  a stale CRL warns; `tls_client_crl_strict = true` refuses to start/reload
+  with one). Metric `rws_tls_client_crl_next_update_seconds`.
+- **Tests**: XFF/Forwarded composition (unit, every forwarder);
+  rcgen-made CA, client certs and a CRL revoking one → handshake accepted /
+  refused; `ci/e2e/mtls_crl.sh` with curl.
+
+## #69 Key rotation for HS256 and Basic
+
+JWKS rotates RS256/ES256 keys already; HS256 secrets and htpasswd files are
+single and read once.
+
+- **HS256**: `JwtLayer::new(secret)` keeps working; `JwtLayer::secrets([…])`
+  verifies against each (first signs, if rws issues tokens), and
+  `[route.middleware.auth] type = "jwt"` takes `secret_env` *and*
+  `previous_secret_env` (or `secrets_env = ["A", "B"]`): rotate by adding
+  the new secret, moving the old one to `previous`, removing it after the
+  longest token lifetime. Tokens can name their key with `kid` →
+  exact match first, then each.
+- **Basic**: the htpasswd file is re-read when it changes (size+mtime
+  checked at most once a second, like config `watch`), so adding or
+  removing a user needs no restart; a file that fails to parse keeps the old
+  list and logs. Several `htpasswd_file`s may be listed (one per team).
+- **Tests**: tokens under old/new/unknown secrets and `kid`s; htpasswd
+  edited under a running layer (add, remove, broken file kept).
+
+## #70 rwsctl
+
+The admin API (`/admin/api/v1`, bearer token, its own listener) covers
+status, reload, maintenance, blocklist, flags, caches, upstream drain,
+certificates, logs and traffic; the web UI and MCP use it. A CLI does too:
+
+```text
+rwsctl status                       # version, uptime, listeners, disks
+rwsctl reload                       # waits; prints errors and exits 1 on a bad config
+rwsctl drain web http://10.0.0.5:8080 [--undo]
+rwsctl maintenance on|off
+rwsctl block 203.0.113.9 | unblock …
+rwsctl purge <cache> [--path /p | --prefix /p/]
+rwsctl certs                        # expiry, ACME state; `renew` orders now
+rwsctl logs [-f]                    # tail, or follow the SSE stream
+rwsctl traffic [--week|--month] [--host h]
+```
+
+- **Shape**: `rws ctl …` inside the existing binary (no second artifact
+  to package; `rwsctl` is a symlink the packages install — decision below).
+- **Connection**: `--admin http://127.0.0.1:9901` (default from
+  `[admin] listen` in `RWS_CONFIG_FILE`/`rws.config.toml`), token from
+  `RWS_ADMIN_TOKEN` or the env var `[admin] token_env` names, or
+  `--token-file`; never on the command line (it would show in `ps`).
+- **Output**: human tables by default, `--json` for scripts; exit codes
+  0 ok, 1 refused/failed, 2 unreachable/auth.
+- **Tests**: each command against an in-process admin API; `ci/e2e/admin.sh`
+  drives `rws ctl` against the binary.
+
+## Decisions to take
+
+1. `Forwarded` by default: off (opt-in) or added alongside `X-Forwarded-*`.
+   Some frameworks (Spring's `ForwardedHeaderFilter`, Rails) trust
+   `Forwarded` to set scheme and host, so adding it changes what existing
+   backends see — off by default matches "never break existing
+   deployments".
+2. `rwsctl`: a subcommand of `rws` (`rws ctl`, one binary, symlink) or a
+   separate binary.
+
+## Tranches
+
+| # | Scope | Status |
+|---|---|---|
+| 1 | #67 notify (READY/RELOADING/STOPPING/STATUS/WATCHDOG) + socket activation + unit/socket files + docs + e2e | — |
+| 2 | #68 Forwarded + CRLs + docs + e2e; release 18.20.0 | — |
+| 3 | #69 HS256 secret lists + htpasswd reload + docs | — |
+| 4 | #70 `rws ctl` + docs + e2e; release 18.21.0 | — |

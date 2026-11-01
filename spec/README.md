@@ -11,6 +11,7 @@ at https://rws8.tech); API docs are rustdoc.
 | [PROXY_STATUS_PROBLEM_JSON.md](PROXY_STATUS_PROBLEM_JSON.md) | Proxy-Status, Cache-Status, problem+json (18.17.0) |
 | [A2A_SERVER.md](A2A_SERVER.md) | A2A 1.0 server and gateway (18.18.0) |
 | [OPENAPI_TO_MCP.md](OPENAPI_TO_MCP.md) | MCP tools from OpenAPI documents and routes (18.19.0) |
+| [OPERATIONS_AND_TRUST.md](OPERATIONS_AND_TRUST.md) | systemd notify/socket activation, Forwarded + CRLs, key rotation, rwsctl (18.20–18.21) |
 | [DEMOS_TODO.md](DEMOS_TODO.md) | Planned demo applications |
 | [KAFKA_ROADMAP.md](KAFKA_ROADMAP.md) | Kafka integration plan (unbuilt) |
 | [WASM_SHIM.md](WASM_SHIM.md) | `wasm32-wasip2` guest component (mostly shipped) |

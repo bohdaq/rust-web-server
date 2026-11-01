@@ -6,11 +6,9 @@ Updated 2026-10-25.
 
 ## TLS and certificates
 
-- **CRL checking for inbound mTLS** (a top Traefik request, #3433).
 
 ## Protocol
 
-- **`Forwarded` header** (RFC 7239) next to `X-Forwarded-For` (Caddy #3262).
 - **WebTransport / MASQUE** once the Rust h3 crates leave experimental status.
 - **Native gRPC server**, only if mounting tonic through tower compatibility falls short.
 
@@ -35,13 +33,10 @@ Updated 2026-10-25.
 ## Auth
 
 - **HTTP Message Signatures** ([RFC 9421](https://www.rfc-editor.org/rfc/rfc9421.html)) as an `HttpSigLayer`.
-- **Key rotation for HS256 and Basic** — several valid keys with a grace period (JWKS already rotates RS256 / ES256).
 - **`groups` in `OidcClaims`**; exclusive XML canonicalization for SAML.
 
 ## Operations and distribution
 
-- **`rwsctl`** over the admin API or MCP.
-- **systemd socket activation and `Type=notify`**.
 - **OpenSSF Scorecard**, reproducible builds, automated crates.io publishing.
 - **kTLS and CPU affinity** (HAProxy 3.3, Ferron).
 
