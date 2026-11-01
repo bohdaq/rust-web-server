@@ -20,6 +20,7 @@
 //! [`MAX_CONNECTIONS`] at once), apart from the server's own workers, so a
 //! saturated server can still be administered.
 
+pub mod access;
 pub mod ops;
 mod ui;
 
@@ -51,7 +52,46 @@ pub struct AdminConfig {
     pub token_env: String,
     /// Browser origins allowed besides the listener's own.
     pub allowed_origins: Vec<String>,
+    /// More users: `name:ENV_VAR:role`, comma-separated (18.22.0).
+    pub users: String,
+    /// Append the audit log here (empty: memory only).
+    pub audit_log: String,
+    /// OIDC sign-in to the admin UI (empty issuer and provider: off).
+    pub oidc: AdminOidcConfig,
 }
+
+/// `[admin] oidc_*` (18.22.0): sign in to the admin UI with an OIDC provider.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AdminOidcConfig {
+    pub issuer: String,
+    pub provider: String,
+    pub tenant: String,
+    pub client_id: String,
+    pub client_secret_env: String,
+    pub cookie_secret_env: String,
+    /// `group=role`, comma-separated; `*` matches anyone signed in.
+    pub roles: String,
+    /// The ID-token claim holding groups (default `groups`).
+    pub role_claim: String,
+}
+
+impl AdminOidcConfig {
+    pub fn enabled(&self) -> bool {
+        !self.issuer.is_empty() || !self.provider.is_empty()
+    }
+}
+
+/// Settings without a CLI flag (`[admin] users`, `audit_log`, `oidc_*`).
+pub const RWS_CONFIG_ADMIN_USERS: &str = "RWS_CONFIG_ADMIN_USERS";
+pub const RWS_CONFIG_ADMIN_AUDIT_LOG: &str = "RWS_CONFIG_ADMIN_AUDIT_LOG";
+pub const RWS_CONFIG_ADMIN_OIDC_ISSUER: &str = "RWS_CONFIG_ADMIN_OIDC_ISSUER";
+pub const RWS_CONFIG_ADMIN_OIDC_PROVIDER: &str = "RWS_CONFIG_ADMIN_OIDC_PROVIDER";
+pub const RWS_CONFIG_ADMIN_OIDC_TENANT: &str = "RWS_CONFIG_ADMIN_OIDC_TENANT";
+pub const RWS_CONFIG_ADMIN_OIDC_CLIENT_ID: &str = "RWS_CONFIG_ADMIN_OIDC_CLIENT_ID";
+pub const RWS_CONFIG_ADMIN_OIDC_CLIENT_SECRET_ENV: &str = "RWS_CONFIG_ADMIN_OIDC_CLIENT_SECRET_ENV";
+pub const RWS_CONFIG_ADMIN_OIDC_COOKIE_SECRET_ENV: &str = "RWS_CONFIG_ADMIN_OIDC_COOKIE_SECRET_ENV";
+pub const RWS_CONFIG_ADMIN_OIDC_ROLES: &str = "RWS_CONFIG_ADMIN_OIDC_ROLES";
+pub const RWS_CONFIG_ADMIN_OIDC_ROLE_CLAIM: &str = "RWS_CONFIG_ADMIN_OIDC_ROLE_CLAIM";
 
 impl AdminConfig {
     pub fn from_env() -> AdminConfig {
@@ -65,6 +105,18 @@ impl AdminConfig {
                 .map(|o| o.trim().trim_end_matches('/').to_string())
                 .filter(|o| !o.is_empty())
                 .collect(),
+            users: read(RWS_CONFIG_ADMIN_USERS),
+            audit_log: read(RWS_CONFIG_ADMIN_AUDIT_LOG),
+            oidc: AdminOidcConfig {
+                issuer: read(RWS_CONFIG_ADMIN_OIDC_ISSUER).trim_end_matches('/').to_string(),
+                provider: read(RWS_CONFIG_ADMIN_OIDC_PROVIDER).to_ascii_lowercase(),
+                tenant: read(RWS_CONFIG_ADMIN_OIDC_TENANT),
+                client_id: read(RWS_CONFIG_ADMIN_OIDC_CLIENT_ID),
+                client_secret_env: read(RWS_CONFIG_ADMIN_OIDC_CLIENT_SECRET_ENV),
+                cookie_secret_env: read(RWS_CONFIG_ADMIN_OIDC_COOKIE_SECRET_ENV),
+                roles: read(RWS_CONFIG_ADMIN_OIDC_ROLES),
+                role_claim: read(RWS_CONFIG_ADMIN_OIDC_ROLE_CLAIM),
+            },
         }
     }
 
@@ -96,10 +148,20 @@ pub struct AdminApi {
 type Reloader = Arc<dyn Fn() + Send + Sync>;
 
 struct Inner {
-    token: String,
+    users: Vec<access::TokenUser>,
     allowed_origins: Vec<String>,
     reloader: Reloader,
     reload_wait: Duration,
+    #[cfg(feature = "sso")]
+    oidc: Option<Arc<AdminOidc>>,
+}
+
+/// OIDC sign-in for the admin UI: the lazily discovered layer and the
+/// group → role map.
+#[cfg(feature = "sso")]
+struct AdminOidc {
+    layer: crate::proxy_config::oidc_route::LazyOidc,
+    roles: Vec<(String, access::Role)>,
 }
 
 impl AdminApi {
@@ -109,23 +171,55 @@ impl AdminApi {
         crate::log::tail::enable();
         AdminApi {
             inner: Arc::new(Inner {
-                token: token.into(),
+                users: vec![access::TokenUser { name: "admin".to_string(), token: token.into(), role: access::Role::Admin }],
                 allowed_origins: Vec::new(),
                 reloader: Arc::new(crate::config_reload::request_reload),
                 reload_wait: Duration::from_secs(10),
+                #[cfg(feature = "sso")]
+                oidc: None,
             }),
         }
     }
 
     fn edit(self, f: impl FnOnce(&mut Inner)) -> AdminApi {
         let mut inner = Inner {
-            token: self.inner.token.clone(),
+            users: self.inner.users.clone(),
             allowed_origins: self.inner.allowed_origins.clone(),
             reloader: Arc::clone(&self.inner.reloader),
             reload_wait: self.inner.reload_wait,
+            #[cfg(feature = "sso")]
+            oidc: self.inner.oidc.clone(),
         };
         f(&mut inner);
         AdminApi { inner: Arc::new(inner) }
+    }
+
+    /// More users with their own tokens and roles (18.22.0).
+    pub fn users(self, users: Vec<access::TokenUser>) -> AdminApi {
+        self.edit(|i| i.users.extend(users))
+    }
+
+    /// Sign-in to the admin UI with an OIDC provider; `roles` maps groups
+    /// (or emails, or `*`) to roles (18.22.0).
+    #[cfg(feature = "sso")]
+    pub fn oidc(self, config: &AdminOidcConfig) -> Result<AdminApi, String> {
+        let roles = access::parse_role_map(&config.roles)?;
+        if roles.is_empty() {
+            return Err("[admin] oidc_roles is empty: nobody signed in would get a role".to_string());
+        }
+        let layer = crate::proxy_config::oidc_route::LazyOidc::new(crate::proxy_config::OidcRouteAuth {
+            issuer: config.issuer.clone(),
+            provider: config.provider.clone(),
+            tenant: config.tenant.clone(),
+            client_id: config.client_id.clone(),
+            client_secret_env: config.client_secret_env.clone(),
+            cookie_secret_env: config.cookie_secret_env.clone(),
+            groups_claim: config.role_claim.clone(),
+            session_ttl_secs: 12 * 3600,
+            path_prefix: "/admin".to_string(),
+            ..Default::default()
+        })?;
+        Ok(self.edit(|i| i.oidc = Some(Arc::new(AdminOidc { layer, roles }))))
     }
 
     /// Browser origins allowed besides the listener's own.
@@ -167,11 +261,37 @@ impl AdminApi {
         }
     }
 
-    fn authorized(&self, request: &Request) -> bool {
-        let Some(sent) = request.header("Authorization").and_then(|h| h.value.strip_prefix("Bearer ").map(str::trim)) else {
-            return false;
-        };
-        crate::proxy_config::constant_time_eq(sent.as_bytes(), self.inner.token.as_bytes())
+    /// Who sent `request`: a bearer token's user, else (with OIDC sign-in)
+    /// the signed-in user with the role the group map gives them.
+    fn authenticate(&self, request: &Request) -> Authenticated {
+        if let Some(sent) = request.header("Authorization").and_then(|h| h.value.strip_prefix("Bearer ").map(str::trim)) {
+            // Every user compared, so timing doesn't tell which name matched.
+            let mut found = None;
+            for user in &self.inner.users {
+                if crate::proxy_config::constant_time_eq(sent.as_bytes(), user.token.as_bytes()) {
+                    found = Some(access::Principal { user: user.name.clone(), role: user.role, via: "token" });
+                }
+            }
+            return found.map_or(Authenticated::No, Authenticated::Yes);
+        }
+        #[cfg(feature = "sso")]
+        if let Some(oidc) = &self.inner.oidc {
+            if let Some(user) = oidc.layer.auth().and_then(|auth| auth.signed_in(request)) {
+                let name = user.email.clone().unwrap_or_else(|| user.sub.clone());
+                return match access::role_for(&oidc.roles, user.email.as_deref(), &user.groups) {
+                    Some(role) => Authenticated::Yes(access::Principal { user: name, role, via: "oidc" }),
+                    None => Authenticated::NoRole(name),
+                };
+            }
+        }
+        Authenticated::No
+    }
+
+    fn oidc_enabled(&self) -> bool {
+        #[cfg(feature = "sso")]
+        return self.inner.oidc.is_some();
+        #[cfg(not(feature = "sso"))]
+        false
     }
 
     /// A browser on another origin is refused; non-browser clients send none.
@@ -209,15 +329,89 @@ impl Application for AdminApi {
                 return Ok(file);
             }
         }
-        if !self.authorized(request) {
-            let mut response = error(STATUS_CODE_REASON_PHRASE.n401_unauthorized, "missing or wrong bearer token");
-            response.headers.push(Header::new("WWW-Authenticate", r#"Bearer realm="rws admin""#));
-            return Ok(response);
+        // OIDC sign-in: /admin/auth/login, /callback, /logout.
+        if path.starts_with("/admin/auth/") {
+            #[cfg(feature = "sso")]
+            if let Some(oidc) = &self.inner.oidc {
+                return match oidc.layer.auth() {
+                    Some(auth) => crate::middleware::Middleware::handle(&*auth, request, connection, &NotFound),
+                    None => Ok(error(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "the identity provider can't be reached; try again shortly")),
+                };
+            }
+            return Ok(error(STATUS_CODE_REASON_PHRASE.n404_not_found, "OIDC sign-in isn't configured"));
         }
-        let Some(route) = path.strip_prefix(API_PREFIX) else {
+        let route = path.strip_prefix(API_PREFIX).map(|r| r.trim_end_matches('/'));
+        // How to sign in, for the UI's login page: no credentials needed.
+        if route == Some("/auth") && request.method == "GET" {
+            return Ok(ok(format!(r#"{{"token":true,"oidc":{}}}"#, self.oidc_enabled())));
+        }
+        let address = connection.client.ip.clone();
+        let principal = match self.authenticate(request) {
+            Authenticated::Yes(p) => p,
+            Authenticated::NoRole(name) => {
+                let response = error(STATUS_CODE_REASON_PHRASE.n403_forbidden, &format!("{name} is signed in but has no admin role (see [admin] oidc_roles)"));
+                if !is_read(&request.method) {
+                    access::record_change(&access::Principal { user: name, role: access::Role::Viewer, via: "oidc" }, &address, &request.method, path, &request.body, 403);
+                }
+                return Ok(response);
+            }
+            Authenticated::No => {
+                if !is_read(&request.method) && request.header("Authorization").is_some() {
+                    access::record_change(&access::Principal { user: "(bad token)".to_string(), role: access::Role::Viewer, via: "token" }, &address, &request.method, path, &request.body, 401);
+                }
+                let mut response = error(STATUS_CODE_REASON_PHRASE.n401_unauthorized, "missing or wrong bearer token");
+                response.headers.push(Header::new("WWW-Authenticate", r#"Bearer realm="rws admin""#));
+                return Ok(response);
+            }
+        };
+        let Some(route) = route else {
             return Ok(error(STATUS_CODE_REASON_PHRASE.n404_not_found, "not found"));
         };
-        Ok(self.route(request, connection, route.trim_end_matches('/')))
+        // A browser signed in with a cookie: changes need the header only
+        // this origin's script can set (CSRF), besides the Origin check.
+        if principal.via == "oidc" && !is_read(&request.method) && request.header("X-Rws-Admin").is_none() {
+            access::record_change(&principal, &address, &request.method, path, &request.body, 403);
+            return Ok(error(STATUS_CODE_REASON_PHRASE.n403_forbidden, "missing X-Rws-Admin header"));
+        }
+        let needed = access::required_role(&request.method, route);
+        if principal.role < needed {
+            access::record_change(&principal, &address, &request.method, path, &request.body, 403);
+            return Ok(error(STATUS_CODE_REASON_PHRASE.n403_forbidden, &format!("{} has role {}; this needs {}", principal.user, principal.role.as_str(), needed.as_str())));
+        }
+        let response = match (request.method.as_str(), route) {
+            ("GET", "/whoami") => ok(format!(r#"{{"user":"{}","role":"{}","via":"{}"}}"#, json_escape(&principal.user), principal.role.as_str(), principal.via)),
+            ("GET", "/audit") => ok(access::recent_json(query(request, "n").and_then(|n| n.parse().ok()).unwrap_or(100).min(access::AUDIT_CAPACITY))),
+            (_, "/whoami" | "/audit") => wrong_method("GET"),
+            _ => self.route(request, connection, route),
+        };
+        if !is_read(&request.method) && !(request.method == "POST" && route == "/authz/check") {
+            access::record_change(&principal, &address, &request.method, path, &request.body, response.status_code as u16);
+        }
+        Ok(response)
+    }
+}
+
+/// The outcome of [`AdminApi::authenticate`].
+enum Authenticated {
+    Yes(access::Principal),
+    /// Signed in (OIDC), but no role maps to them.
+    NoRole(String),
+    No,
+}
+
+fn is_read(method: &str) -> bool {
+    matches!(method, "GET" | "HEAD" | "OPTIONS")
+}
+
+/// The rest of the stack behind the OIDC layer on `/admin/auth/*`: the
+/// layer answers those paths itself.
+#[cfg(feature = "sso")]
+struct NotFound;
+
+#[cfg(feature = "sso")]
+impl Application for NotFound {
+    fn execute(&self, _: &Request, _: &ConnectionInfo) -> Result<Response, String> {
+        Ok(error(STATUS_CODE_REASON_PHRASE.n404_not_found, "not found"))
     }
 }
 
@@ -507,6 +701,39 @@ pub(crate) fn validate(get: &dyn Fn(&str) -> Option<String>, report: &mut crate:
             report.error(format!("[admin] allowed_origins: {origin:?} is not an origin (scheme://host[:port])"));
         }
     }
+    // 18.22.0: users, the audit log, OIDC sign-in.
+    let users = get(RWS_CONFIG_ADMIN_USERS).unwrap_or_default();
+    let env = |name: &str| if crate::config_check::offline() { Some("offline-check-placeholder".to_string()) } else { std::env::var(name).ok() };
+    if let Err(e) = access::parse_users(&users, &env) {
+        report.error(e);
+    }
+    let audit_log = get(RWS_CONFIG_ADMIN_AUDIT_LOG).unwrap_or_default();
+    if let Some(dir) = std::path::Path::new(audit_log.trim()).parent().filter(|d| !audit_log.trim().is_empty() && !d.as_os_str().is_empty()) {
+        if !crate::config_check::offline() && !dir.is_dir() {
+            report.error(format!("[admin] audit_log: directory {} doesn't exist", dir.display()));
+        }
+    }
+    let issuer = get(RWS_CONFIG_ADMIN_OIDC_ISSUER).unwrap_or_default();
+    let provider = get(RWS_CONFIG_ADMIN_OIDC_PROVIDER).unwrap_or_default();
+    if !issuer.trim().is_empty() || !provider.trim().is_empty() {
+        if get(RWS_CONFIG_ADMIN_OIDC_CLIENT_ID).unwrap_or_default().trim().is_empty() {
+            report.error("[admin] oidc sign-in has no oidc_client_id");
+        }
+        match access::parse_role_map(&get(RWS_CONFIG_ADMIN_OIDC_ROLES).unwrap_or_default()) {
+            Ok(map) if map.is_empty() => report.error("[admin] oidc sign-in needs oidc_roles (e.g. [\"rws-admins=admin\", \"*=viewer\"]): nobody would get a role"),
+            Ok(_) => {}
+            Err(e) => report.error(e),
+        }
+        if !provider.trim().is_empty() && !matches!(provider.trim().to_ascii_lowercase().as_str(), "google" | "microsoft" | "github") {
+            report.error(format!("[admin] oidc_provider = {provider:?}: expected google, microsoft or github (others: set oidc_issuer)"));
+        }
+        let cookie = get(RWS_CONFIG_ADMIN_OIDC_COOKIE_SECRET_ENV).unwrap_or_default();
+        if cookie.trim().is_empty() {
+            report.warn("[admin] oidc sign-in without oidc_cookie_secret_env: sign-ins end when rws restarts");
+        }
+        #[cfg(not(feature = "sso"))]
+        report.error("[admin] oidc sign-in needs the sso feature, which this build doesn't include; the admin API won't start");
+    }
 }
 
 /// Start the admin listener `config` describes, on a thread of its own.
@@ -525,7 +752,18 @@ pub fn start(config: &AdminConfig) -> Result<Option<std::net::SocketAddr>, Strin
         None => std::net::TcpListener::bind(&config.listen).map_err(|e| format!("can't listen on {}: {e}", config.listen))?,
     };
     let local = listener.local_addr().map_err(|e| e.to_string())?;
-    let api = AdminApi::new(token).allowed_origins(config.allowed_origins.clone());
+    let users = access::parse_users(&config.users, &|name| std::env::var(name).ok())?;
+    access::set_audit_file(&config.audit_log);
+    #[allow(unused_mut)]
+    let mut api = AdminApi::new(token).allowed_origins(config.allowed_origins.clone()).users(users);
+    if config.oidc.enabled() {
+        #[cfg(feature = "sso")]
+        {
+            api = api.oidc(&config.oidc)?;
+        }
+        #[cfg(not(feature = "sso"))]
+        return Err("[admin] oidc_* needs the sso feature, which this build doesn't include".to_string());
+    }
     std::thread::Builder::new()
         .name("rws-admin".to_string())
         .spawn(move || serve(listener, api))

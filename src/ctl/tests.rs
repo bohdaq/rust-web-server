@@ -10,7 +10,7 @@ fn server() -> &'static (String, String, TempPath) {
     static SERVER: OnceLock<(String, String, TempPath)> = OnceLock::new();
     SERVER.get_or_init(|| {
         std::env::set_var("RWS_TEST_CTL_TOKEN", TOKEN);
-        let config = AdminConfig { listen: "127.0.0.1:0".to_string(), token_env: "RWS_TEST_CTL_TOKEN".to_string(), allowed_origins: Vec::new() };
+        let config = AdminConfig { listen: "127.0.0.1:0".to_string(), token_env: "RWS_TEST_CTL_TOKEN".to_string(), ..AdminConfig::default() };
         let addr = crate::admin::start(&config).expect("admin API").expect("listening");
         let file = TempPath::new("rws-ctl-test-token");
         std::fs::write(&*file, format!("{TOKEN}\n")).unwrap();
@@ -192,4 +192,14 @@ fn traffic_prints_totals_and_top_pages() {
     assert!(out.starts_with("last 24 h\n"), "{out}");
     assert!(out.contains("people     10        4      3"), "{out}");
     assert!(out.contains("top pages\n         3  /\n"), "{out}");
+}
+
+#[test]
+fn whoami_and_audit() {
+    let _g = crate::test_env::lock();
+    assert_eq!(ctl(&["whoami"]).1, "admin (admin, via token)\n");
+    ctl(&["maintenance", "off"]);
+    let (code, out, err) = ctl(&["audit", "-n", "5"]);
+    assert_eq!(code, EXIT_OK, "{err}");
+    assert!(out.starts_with("TIME") && out.contains("admin (admin)") && out.contains("PUT /maintenance"), "{out}");
 }

@@ -345,6 +345,9 @@ pub struct OidcRouteAuth {
     pub session_ttl_secs: u64,
     pub exclude: Vec<String>,
     pub forward_headers: bool,
+    /// Where `/auth/login`, `/auth/callback` and `/auth/logout` live (the
+    /// admin API uses `/admin`); empty for routes.
+    pub path_prefix: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -796,6 +799,7 @@ fn parse_middleware_config(
                 session_ttl_secs: get_u64(map, &a_sec, "session_ttl_secs", 86_400),
                 exclude: get_array(map, &a_sec, "exclude"),
                 forward_headers: get_str(map, &a_sec, "forward_headers") != "false",
+                path_prefix: String::new(),
             }))),
             "forward" => Some(AuthConfig::Forward {
                 url: get_str(map, &a_sec, "url"),

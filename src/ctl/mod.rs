@@ -11,6 +11,8 @@
 //! rws ctl certs [renew]
 //! rws ctl logs [-n 100] [-f]
 //! rws ctl traffic [--week | --month | --hours N] [--host example.com]
+//! rws ctl whoami                         # the token's user and role (18.22.0)
+//! rws ctl audit [-n 50]                  # recent changes: who, what, when (18.22.0)
 //! ```
 //!
 //! The binary run as `rwsctl` (the packages install that symlink) acts as
@@ -54,6 +56,8 @@ Commands:
   certs [renew]                        certificates and ACME state; renew orders now
   logs [-n N] [-f]                     recent access-log lines; -f follows
   traffic [--week|--month|--hours N] [--host H]  who visited
+  whoami                               the token's user and role
+  audit [-n N]                         recent changes: who did what, when
 
 The admin address comes from --admin, else [admin] listen in RWS_CONFIG_FILE or
 rws.config.toml, else 127.0.0.1:9901. The token from --token-file, else the
@@ -588,6 +592,27 @@ fn execute(cmd: &Command, out: &mut dyn Write) -> Result<(), Failure> {
                 return json_out(out, &r);
             }
             print_traffic(out, &r.body).map_err(io)
+        }
+        ["whoami"] => {
+            let r = api.call("GET", "/whoami", None)?;
+            if cmd.json {
+                return json_out(out, &r);
+            }
+            writeln!(out, "{} ({}, via {})", field(&r.body, "user"), field(&r.body, "role"), field(&r.body, "via")).map_err(io)
+        }
+        ["audit"] => {
+            let r = api.call("GET", &format!("/audit?n={}", cmd.lines.unwrap_or(50)), None)?;
+            if cmd.json {
+                return json_out(out, &r);
+            }
+            let rows: Vec<Vec<String>> = elements(&r.body)
+                .iter()
+                .map(|e| vec![field(e, "time"), format!("{} ({})", field(e, "user"), field(e, "role")), format!("{} {}", field(e, "method"), field(e, "path").trim_start_matches(API_PREFIX)), field(e, "status"), field(e, "address")])
+                .collect();
+            if rows.is_empty() {
+                return writeln!(out, "no changes recorded").map_err(io);
+            }
+            table(out, &["TIME", "USER", "CHANGE", "STATUS", "FROM"], &rows).map_err(io)
         }
         _ => Err(usage(format!("unknown command: {}", words.join(" ")))),
     }

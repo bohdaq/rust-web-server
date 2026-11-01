@@ -214,6 +214,14 @@ The [admin API](/deployment/admin/) on a listener of its own (since 18.10.0). Of
 listen          = "127.0.0.1:9901"            # host:port (an IP address)
 token_env       = "RWS_ADMIN_TOKEN"           # default
 allowed_origins = ["https://ops.example.com"] # browser origins besides the listener's own
+# users         = ["deploy-bot:RWS_ADMIN_DEPLOY:operator"]  # more tokens: name:ENV_VAR:role (viewer, operator, admin)
+# audit_log     = "/var/log/rws/audit.log"     # append every change here too (JSON lines)
+# oidc_issuer   = "https://id.example.com/realms/main"     # single sign-on for the admin UI (or oidc_provider)
+# oidc_client_id = "rws-admin"
+# oidc_client_secret_env = "RWS_ADMIN_OIDC_SECRET"
+# oidc_cookie_secret_env = "RWS_ADMIN_COOKIE_SECRET"
+# oidc_roles    = ["rws-admins=admin", "sre=operator", "*=viewer"]  # group (or email, or *) = role
+# oidc_role_claim = "groups"
 ```
 
 

@@ -81,7 +81,7 @@ fn config_from_env_and_the_token() {
 fn the_listener_serves_the_api_over_tcp() {
     let _g = crate::test_env::lock();
     std::env::set_var("RWS_TEST_ADMIN_TCP_TOKEN", "tcp-token");
-    let config = AdminConfig { listen: "127.0.0.1:0".into(), token_env: "RWS_TEST_ADMIN_TCP_TOKEN".into(), allowed_origins: vec![] };
+    let config = AdminConfig { listen: "127.0.0.1:0".into(), token_env: "RWS_TEST_ADMIN_TCP_TOKEN".into(), ..AdminConfig::default() };
     let addr = start(&config).unwrap().unwrap();
     std::env::remove_var("RWS_TEST_ADMIN_TCP_TOKEN");
     let call = |token: &str| {
@@ -351,4 +351,152 @@ fn traffic_is_404_while_off_and_a_summary_while_on() {
     assert!(text.contains(r#""hours":168"#) && text.contains(r#""bucket":"day""#) && text.contains(r#""host":"example.com""#), "{text}");
     assert!(text.contains(r#""totals":{"people":"#), "{text}");
     assert_eq!(call(&api, "POST", "/admin/api/v1/traffic", "").0, 405);
+}
+
+// ── 18.22.0: users, roles, audit log ──────────────────────────────────────
+
+fn call_as(api: &AdminApi, token: &str, method: &str, path: &str, body: &str) -> (u16, String) {
+    let raw = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:9901\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+    let response = api.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap();
+    (response.status_code as u16, body_of(&response))
+}
+
+fn team() -> AdminApi {
+    let env = |name: &str| match name {
+        "RWS_TEST_VIEW" => Some("viewer-token-0123456789".to_string()),
+        "RWS_TEST_OPS" => Some("operator-token-0123456789".to_string()),
+        _ => None,
+    };
+    let users = access::parse_users("grafana:RWS_TEST_VIEW:viewer, deploy-bot:RWS_TEST_OPS:operator", &env).unwrap();
+    AdminApi::new("admin-token").users(users)
+}
+
+#[test]
+fn users_parse_and_bad_entries_are_named() {
+    let env = |name: &str| (name == "SET").then(|| "a-long-enough-token-1".to_string());
+    let users = access::parse_users("ci:SET:Operator", &env).unwrap();
+    assert_eq!(users, [access::TokenUser { name: "ci".into(), token: "a-long-enough-token-1".into(), role: access::Role::Operator }]);
+    assert!(access::parse_users("", &env).unwrap().is_empty());
+    assert!(access::parse_users("ci:SET", &env).unwrap_err().contains("name:ENV_VAR:role"));
+    assert!(access::parse_users("ci:SET:root", &env).unwrap_err().contains("viewer, operator or admin"));
+    assert!(access::parse_users("ci:UNSET:viewer", &env).unwrap_err().contains("UNSET is unset"));
+    let short = |_: &str| Some("short".to_string());
+    assert!(access::parse_users("ci:X:viewer", &short).unwrap_err().contains("shorter than 16"));
+}
+
+#[test]
+fn role_maps_match_groups_emails_and_anyone() {
+    let map = access::parse_role_map("sre=operator, rws-admins=admin, ann@example.com=admin, *=viewer").unwrap();
+    assert_eq!(access::role_for(&map, None, &["sre".to_string()]), Some(access::Role::Operator));
+    assert_eq!(access::role_for(&map, Some("ANN@example.com"), &[]), Some(access::Role::Admin));
+    assert_eq!(access::role_for(&map, None, &["sre".into(), "rws-admins".into()]), Some(access::Role::Admin), "the highest match");
+    assert_eq!(access::role_for(&map, None, &[]), Some(access::Role::Viewer));
+    let strict = access::parse_role_map("sre=operator").unwrap();
+    assert_eq!(access::role_for(&strict, Some("x@y.z"), &["dev".into()]), None);
+    assert!(access::parse_role_map("sre").is_err());
+    assert!(access::parse_role_map("sre=god").is_err());
+}
+
+#[test]
+fn roles_decide_what_each_user_may_do() {
+    let _g = crate::test_env::lock();
+    let api = team();
+    // Everyone reads.
+    for token in ["viewer-token-0123456789", "operator-token-0123456789", "admin-token"] {
+        assert_eq!(call_as(&api, token, "GET", "/admin/api/v1/maintenance", "").0, 200);
+    }
+    // The viewer can't change anything.
+    let (status, text) = call_as(&api, "viewer-token-0123456789", "PUT", "/admin/api/v1/maintenance", r#"{"active":true}"#);
+    assert_eq!(status, 403);
+    assert!(text.contains("grafana has role viewer; this needs operator"), "{text}");
+    // The operator changes the server, but not authorization tuples.
+    assert_eq!(call_as(&api, "operator-token-0123456789", "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#).0, 200);
+    assert_eq!(call_as(&api, "operator-token-0123456789", "POST", "/admin/api/v1/authz/tuples", r#"{"tuple":"doc:1#viewer@user:ann"}"#).0, 403);
+    // whoami
+    let (status, text) = call_as(&api, "operator-token-0123456789", "GET", "/admin/api/v1/whoami", "");
+    assert_eq!((status, text.as_str()), (200, r#"{"user":"deploy-bot","role":"operator","via":"token"}"#));
+    assert_eq!(call_as(&api, "admin-token", "GET", "/admin/api/v1/whoami", "").1, r#"{"user":"admin","role":"admin","via":"token"}"#);
+    assert_eq!(call_as(&api, "nobody-token", "GET", "/admin/api/v1/whoami", "").0, 401);
+}
+
+#[test]
+fn changes_and_refusals_are_audited_with_secrets_redacted() {
+    let _g = crate::test_env::lock();
+    let api = team();
+    let marker = format!("203.0.113.{}", std::process::id() % 200 + 1);
+    call_as(&api, "operator-token-0123456789", "POST", "/admin/api/v1/blocklist", &format!(r#"{{"ip":"{marker}","api_token":"hunter2"}}"#));
+    call_as(&api, "viewer-token-0123456789", "DELETE", &format!("/admin/api/v1/blocklist/{marker}"), "");
+    call_as(&api, "wrong-token-zzzzzzzzzz", "DELETE", &format!("/admin/api/v1/blocklist/{marker}"), "");
+    call_as(&api, "operator-token-0123456789", "GET", "/admin/api/v1/status", "");
+    let (status, audit) = call_as(&api, "viewer-token-0123456789", "GET", "/admin/api/v1/audit?n=1000", "");
+    assert_eq!(status, 200);
+    let entries: Vec<&str> = audit.split("},{").filter(|e| e.contains(&marker)).collect();
+    assert_eq!(entries.len(), 3, "{audit}");
+    let block = entries.iter().find(|e| e.contains(r#""method":"POST""#)).unwrap();
+    assert!(block.contains(r#""user":"deploy-bot""#) && block.contains(r#""status":200"#) && block.contains(r#""via":"token""#), "{block}");
+    assert!(block.contains("(redacted)") && !block.contains("hunter2"), "{block}");
+    assert!(entries.iter().any(|e| e.contains(r#""user":"grafana""#) && e.contains(r#""status":403"#)));
+    assert!(entries.iter().any(|e| e.contains(r#""user":"(bad token)""#) && e.contains(r#""status":401"#)));
+    assert!(!audit.contains(r#""path":"/admin/api/v1/status""#), "reads aren't audited");
+    call_as(&api, "admin-token", "DELETE", &format!("/admin/api/v1/blocklist/{marker}"), "");
+}
+
+#[test]
+fn the_audit_log_is_appended_to_a_file() {
+    let _g = crate::test_env::lock();
+    let file = crate::test_env::TempPath::new("admin-audit.log");
+    access::set_audit_file(file.as_str());
+    call_as(&team(), "operator-token-0123456789", "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#);
+    access::set_audit_file("");
+    let text = std::fs::read_to_string(&*file).unwrap();
+    let line = text.lines().last().unwrap();
+    assert!(line.starts_with('{') && line.contains(r#""path":"/admin/api/v1/maintenance""#) && line.contains(r#""user":"deploy-bot""#), "{line}");
+}
+
+#[test]
+fn redaction_keeps_ordinary_values() {
+    assert_eq!(access::redact(br#"{"ip":"1.2.3.4","password":"x","drained":true}"#), r#"{"ip":"1.2.3.4","password":"(redacted)","drained":true}"#);
+    assert_eq!(access::redact(b"not json"), "not json");
+    assert!(access::redact(&vec![b'a'; 5000]).len() < 2100);
+}
+
+#[test]
+fn the_login_page_learns_the_sign_in_methods_without_a_token() {
+    let response = get(&AdminApi::new("t"), "/admin/api/v1/auth", "");
+    assert_eq!((response.status_code, body(&response).as_str()), (200, r#"{"token":true,"oidc":false}"#));
+    assert_eq!(get(&AdminApi::new("t"), "/admin/auth/login", "").status_code, 404);
+}
+
+#[test]
+fn admin_users_and_oidc_settings_are_checked() {
+    let report = check_str_offline("[admin]\nlisten = \"127.0.0.1:9901\"\nusers = [\"ci:CI_TOKEN:superuser\"]\noidc_issuer = \"https://id.example.com\"\n");
+    let text = format!("{report:?}");
+    assert!(text.contains("viewer, operator or admin"), "{text}");
+    assert!(text.contains("no oidc_client_id"), "{text}");
+    assert!(text.contains("needs oidc_roles"), "{text}");
+    let report = check_str_offline("[admin]\nlisten = \"127.0.0.1:9901\"\nusers = [\"ci:CI_TOKEN:operator\"]\naudit_log = \"/var/log/rws/audit.log\"\n");
+    assert!(report.is_ok(), "{report:?}");
+}
+
+#[test]
+fn mcp_tool_changes_are_audited() {
+    use crate::middleware::Middleware;
+    struct Ok200;
+    impl Application for Ok200 {
+        fn execute(&self, _: &Request, _: &ConnectionInfo) -> Result<Response, String> {
+            Ok(error(STATUS_CODE_REASON_PHRASE.n200_ok, "ok"))
+        }
+    }
+    let layer = access::McpAuditLayer::new(["block_ip"]);
+    let marker = format!("198.51.100.{}", std::process::id() % 200 + 1);
+    let body = format!(r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"block_ip","arguments":{{"ip":"{marker}","token":"x"}}}}}}"#);
+    let raw = format!("POST /mcp HTTP/1.1\r\nHost: h\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+    layer.handle(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default(), &Ok200).unwrap();
+    let read = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"server_metrics","arguments":{}}}"#;
+    let raw = format!("POST /mcp HTTP/1.1\r\nHost: h\r\nContent-Length: {}\r\n\r\n{read}", read.len());
+    layer.handle(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default(), &Ok200).unwrap();
+    let audit = access::recent_json(1000);
+    let entry = audit.split("},{").find(|e| e.contains(&marker)).expect("the tool call is audited");
+    assert!(entry.contains(r#""user":"mcp""#) && entry.contains(r#""path":"block_ip""#) && entry.contains("(redacted)"), "{entry}");
+    assert!(!audit.contains(r#""path":"server_metrics""#));
 }

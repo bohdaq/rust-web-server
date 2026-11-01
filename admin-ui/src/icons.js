@@ -19,6 +19,8 @@ import arrow_clockwise from "../node_modules/@phosphor-icons/core/assets/regular
 import trash from "../node_modules/@phosphor-icons/core/assets/regular/trash.svg?raw";
 import plus from "../node_modules/@phosphor-icons/core/assets/regular/plus.svg?raw";
 import lock_key from "../node_modules/@phosphor-icons/core/assets/regular/lock-key.svg?raw";
+import clipboard_text from "../node_modules/@phosphor-icons/core/assets/regular/clipboard-text.svg?raw";
+import user_circle from "../node_modules/@phosphor-icons/core/assets/regular/user-circle.svg?raw";
 
 registerIcons({
   "gauge": gauge,
@@ -38,6 +40,8 @@ registerIcons({
   "trash": trash,
   "plus": plus,
   "lock-key": lock_key,
+  "clipboard-text": clipboard_text,
+  "user-circle": user_circle,
 });
 
 /** The icon `name` as a template value (a `lit-material-icon`). */

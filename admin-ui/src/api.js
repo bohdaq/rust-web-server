@@ -34,9 +34,13 @@ export async function api(path, { method = "GET", body } = {}) {
   const response = await fetch(`/admin/api/v1${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${token()}`,
+      // Without a token the OIDC sign-in cookie goes instead; X-Rws-Admin
+      // marks the request as this page's (the server's CSRF check).
+      ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+      "X-Rws-Admin": "1",
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
+    credentials: "same-origin",
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
@@ -57,7 +61,8 @@ export async function api(path, { method = "GET", body } = {}) {
  */
 export async function followLogs(onLine, signal) {
   const response = await fetch("/admin/api/v1/logs/stream", {
-    headers: { Authorization: `Bearer ${token()}` },
+    headers: { ...(token() ? { Authorization: `Bearer ${token()}` } : {}), "X-Rws-Admin": "1" },
+    credentials: "same-origin",
     signal,
     cache: "no-store",
   });

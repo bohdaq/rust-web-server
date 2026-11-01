@@ -61,8 +61,17 @@ python3 -I auth.py & PIDS+=($!)
 
 export OIDC_SECRET=rws-e2e-secret
 export OIDC_COOKIE="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+export RWS_ADMIN_TOKEN="e2e-admin-token-$RANDOM-$RANDOM"
 cat > rws.config.toml <<TOML
 port = 18501
+
+[admin]
+listen = "127.0.0.1:18504"
+oidc_issuer = "$ISSUER"
+oidc_client_id = "rws"
+oidc_client_secret_env = "OIDC_SECRET"
+oidc_cookie_secret_env = "OIDC_COOKIE"
+oidc_roles = ["ops=operator"]
 
 [[upstream]]
 name = "app"
@@ -151,5 +160,30 @@ seen=$(curl -s -H "X-Token: good" -H "Remote-User: mallory" http://127.0.0.1:185
 grep -qi "^Remote-User: carol$" <<<"$seen" || fail "forward auth: Remote-User from the auth service missing: $seen"
 ! grep -qi "mallory" <<<"$seen" || fail "forward auth: the client's Remote-User reached the app"
 pass "forward auth: 401 passed through, Remote-User from the auth service only"
+
+# ── the admin UI's OIDC sign-in: roles from groups ──────────────────────────
+admin_login() { # <user> <password> <jar> → the callback's status line
+  local jar=$3 idp form action callback
+  rm -f "$jar"
+  idp=$(curl -s -c "$jar" -b "$jar" -o /dev/null -w '%{redirect_url}' "http://127.0.0.1:18504/admin/auth/login")
+  [[ "$idp" == "$ISSUER/protocol/openid-connect/auth?"* ]] || fail "admin login didn't go to Keycloak: $idp"
+  form=$(curl -s -c "$jar" -b "$jar" "$idp")
+  action=$(grep -o 'action="[^"]*login-actions/authenticate[^"]*"' <<<"$form" | head -1 | sed 's/action="//; s/"$//; s/&amp;/\&/g')
+  callback=$(curl -s -c "$jar" -b "$jar" -o /dev/null -w '%{redirect_url}' --data-urlencode "username=$1" --data-urlencode "password=$2" --data "credentialId=" "$action")
+  [[ "$callback" == "http://127.0.0.1:18504/admin/auth/callback?"* ]] || fail "Keycloak didn't redirect back to the admin listener: $callback"
+  curl -s -c "$jar" -b "$jar" -o /dev/null -w '%{http_code} %{redirect_url}' "$callback"
+}
+[ "$(curl -s http://127.0.0.1:18504/admin/api/v1/auth)" = '{"token":true,"oidc":true}' ] || fail "the login page doesn't learn about OIDC"
+got=$(admin_login ann ann-pass admin-ann.jar)
+[ "$got" = "302 http://127.0.0.1:18504/admin/" ] || fail "admin sign-in: $got"
+[ "$(curl -s -b admin-ann.jar http://127.0.0.1:18504/admin/api/v1/whoami)" = '{"user":"ann@example.com","role":"operator","via":"oidc"}' ] || fail "whoami: $(curl -s -b admin-ann.jar http://127.0.0.1:18504/admin/api/v1/whoami)"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -b admin-ann.jar -X PUT -d '{"active":false}' http://127.0.0.1:18504/admin/api/v1/maintenance)" = 403 ] || fail "a cookie-signed change without X-Rws-Admin was accepted"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -b admin-ann.jar -H 'X-Rws-Admin: 1' -X PUT -d '{"active":false}' http://127.0.0.1:18504/admin/api/v1/maintenance)" = 200 ] || fail "ann (operator) couldn't change maintenance"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -b admin-ann.jar -H 'X-Rws-Admin: 1' -X POST -d '{"tuple":"doc:1#viewer@user:x"}' http://127.0.0.1:18504/admin/api/v1/authz/tuples)" = 403 ] || fail "an operator changed authorization tuples"
+admin_login bob bob-pass admin-bob.jar >/dev/null
+[ "$(curl -s -o /dev/null -w '%{http_code}' -b admin-bob.jar http://127.0.0.1:18504/admin/api/v1/status)" = 403 ] || fail "bob (no mapped group) got into the admin API"
+audit=$(curl -s -H "Authorization: Bearer $RWS_ADMIN_TOKEN" "http://127.0.0.1:18504/admin/api/v1/audit?n=50")
+grep -q '"user":"ann@example.com","role":"operator","via":"oidc"' <<<"$audit" || fail "audit: $audit"
+pass "admin UI sign-in through Keycloak: ops → operator, CSRF header required, tuples refused, unmapped user refused, audited"
 
 echo "all OIDC and forward-auth end-to-end checks passed"

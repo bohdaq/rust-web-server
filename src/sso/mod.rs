@@ -62,7 +62,7 @@ pub use client::{OidcClient, TokenResponse};
 pub use config::OidcConfig;
 pub use discovery::OidcProvider;
 pub use jwks::{JwksCache, OidcClaims, VerifyOptions};
-pub use oidc_auth::OidcAuth;
+pub use oidc_auth::{OidcAuth, SignedIn};
 pub use pkce::{PkceChallenge, PkceVerifier};
 
 #[cfg(feature = "sso-server")]

@@ -12,6 +12,7 @@ const VIEWS = [
   { id: "controls", label: "Controls", icon: "sliders-horizontal" },
   { id: "config", label: "Config", icon: "list-bullets" },
   { id: "logs", label: "Logs", icon: "terminal-window" },
+  { id: "audit", label: "Audit", icon: "clipboard-text" },
 ];
 
 const SAMPLES = 60;
@@ -82,6 +83,8 @@ export class RwsAdmin extends LitElement {
     busy: { state: true },
     trafficHours: { state: true },
     trafficHost: { state: true },
+    me: { state: true },
+    sso: { state: true },
   };
 
   constructor() {
@@ -96,6 +99,8 @@ export class RwsAdmin extends LitElement {
     this.trafficHost = "";
     this.busy = "";
     this.lastTotal = null;
+    this.me = null;
+    this.sso = false;
   }
 
   createRenderRoot() {
@@ -106,7 +111,9 @@ export class RwsAdmin extends LitElement {
     super.connectedCallback();
     this.onHash = () => this.show(viewFromHash());
     addEventListener("hashchange", this.onHash);
-    if (token()) this.check();
+    // A token in this tab, or an OIDC sign-in cookie: try either.
+    this.check({ quiet: !token() });
+    api("/auth").then((m) => (this.sso = Boolean(m?.oidc))).catch(() => {});
   }
 
   disconnectedCallback() {
@@ -116,16 +123,21 @@ export class RwsAdmin extends LitElement {
   }
 
   // ── session ───────────────────────────────────────────────────────────
-  async check() {
+  async check({ quiet = false } = {}) {
     try {
-      const info = await api("/status");
+      const [me, info] = await Promise.all([api("/whoami"), api("/status")]);
+      this.me = me;
       this.data = { ...this.data, status: info };
       this.authed = true;
       this.loginError = "";
       this.show(this.view);
     } catch (e) {
       this.authed = false;
-      this.loginError = e instanceof ApiError && e.status === 401 ? "That token isn't the admin token. Check RWS_ADMIN_TOKEN (or your token_env) on the server." : `The admin API didn't answer: ${e.message}`;
+      if (quiet && e instanceof ApiError && e.status === 401) return;
+      this.loginError =
+        e instanceof ApiError && e.status === 401 ? "That token isn't an admin token. Check RWS_ADMIN_TOKEN (or your token_env) on the server."
+        : e instanceof ApiError && e.status === 403 ? e.message
+        : `The admin API didn't answer: ${e.message}`;
       if (e instanceof ApiError && e.status === 401) setToken("");
     }
   }
@@ -143,10 +155,13 @@ export class RwsAdmin extends LitElement {
   }
 
   logout() {
+    const viaSso = this.me?.via === "oidc";
     setToken("");
     this.stop();
     this.authed = false;
     this.data = {};
+    this.me = null;
+    if (viaSso) location.assign("/admin/auth/logout");
   }
 
   /** An API call from a view: errors land in the page, 401 signs out. */
@@ -176,7 +191,7 @@ export class RwsAdmin extends LitElement {
     this.view = view;
     if (location.hash !== `#/${view}`) history.replaceState(null, "", `#/${view}`);
     this.error = "";
-    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, traffic: 30000 }[view];
+    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, traffic: 30000, audit: 10000 }[view];
     this.load(view);
     if (every) this.timer = setInterval(() => this.load(view), every);
     if (view === "logs") this.updateComplete.then(() => this.follow());
@@ -220,6 +235,8 @@ export class RwsAdmin extends LitElement {
       await this.loadTraffic();
     } else if (view === "config") {
       await get("config", "/config");
+    } else if (view === "audit") {
+      await get("audit", "/audit?n=200");
     }
   }
 
@@ -339,6 +356,7 @@ export class RwsAdmin extends LitElement {
           ${info ? (info.ready ? status("ok", "Ready") : status("error", "Not ready")) : nothing}
           <span class="spacer"></span>
           ${info ? html`<span class="meta">${info.version} · ${info.listeners?.main?.address ?? ""}</span>` : nothing}
+          ${this.me ? html`<span class="meta" title="Signed in ${this.me.via === "oidc" ? "with single sign-on" : "with a token"}"><span class="icon">${icon("user-circle")}</span> ${this.me.user} · ${this.me.role}</span>` : nothing}
           <lit-material-button variant="text" @click=${() => this.logout()}><span slot="icon" class="icon">${icon("sign-out")}</span>Sign out</lit-material-button>
         </header>
         <lit-material-adaptive-navigation class="nav" label="Sections" .destinations=${destinations}
@@ -358,7 +376,9 @@ export class RwsAdmin extends LitElement {
       <div class="login">
         <section class="login-card tile" aria-labelledby="login-title">
           <h1 id="login-title"><span class="icon">${icon("lock-key")}</span>Sign in to rws admin</h1>
-          <p>Paste the admin token: the value of <code>RWS_ADMIN_TOKEN</code> (or the variable your <code>[admin] token_env</code> names). It stays in this tab only.</p>
+          ${this.sso ? html`<lit-material-button href="/admin/auth/login" style="width: 100%">Sign in with single sign-on</lit-material-button>
+            <p class="lede" style="text-align: center">or with a token</p>` : nothing}
+          <p>Paste an admin token: the value of <code>RWS_ADMIN_TOKEN</code> (or the variable your <code>[admin] token_env</code> names), or your own from <code>[admin] users</code>. It stays in this tab only.</p>
           <form @submit=${(e) => this.login(e)} novalidate>
             <lit-material-text-field id="token" variant="outlined" label="Admin token" type="password" autocomplete="current-password" required
               ?error=${Boolean(this.loginError)} error-text=${this.loginError ?? ""}></lit-material-text-field>
@@ -377,6 +397,7 @@ export class RwsAdmin extends LitElement {
       case "traffic": return this.renderTraffic();
       case "config": return this.renderConfig();
       case "logs": return this.renderLogs();
+      case "audit": return this.renderAudit();
       default: return this.renderOverview();
     }
   }
@@ -673,6 +694,26 @@ export class RwsAdmin extends LitElement {
       ${rows.length === 0
         ? html`<lit-material-empty-state size="compact" headline="No setting matches “${this.filter}”">Clear the filter to see all ${Object.keys(config).length}.</lit-material-empty-state>`
         : html`<lit-material-table caption="Settings in effect" caption-hidden density="compact" .columns=${columns} .rows=${rows}></lit-material-table>`}
+    `;
+  }
+
+  renderAudit() {
+    const entries = this.data.audit;
+    if (!entries) return html`<h1>Audit</h1>${this.skeleton(2)}`;
+    const columns = [
+      { key: "time", label: "When", render: (e) => new Date(e.at * 1000).toLocaleString() },
+      { key: "user", label: "Who", render: (e) => html`${e.user} <span class="meta">${e.role}${e.via === "oidc" ? " · SSO" : e.via === "mcp" ? " · MCP" : ""}</span>` },
+      { key: "change", label: "Change", mono: true, render: (e) => `${e.method === "TOOL" ? "tool" : e.method} ${e.path.replace("/admin/api/v1", "")}` },
+      { key: "detail", label: "Details", mono: true, render: (e) => (e.detail ? html`<lit-material-truncate style="max-width: min(40ch, 30vw)" .value=${e.detail}></lit-material-truncate>` : nothing) },
+      { key: "status", label: "Result", render: (e) => (e.status < 300 ? status("ok", "Done") : e.status === 401 || e.status === 403 ? status("error", "Refused") : status("warning", String(e.status))) },
+      { key: "address", label: "From", mono: true },
+    ];
+    return html`
+      <h1>Audit</h1>
+      <p class="lede">Every change made through the admin API, the UI or MCP tools, and every refused attempt, newest first. Kept in memory (the last 1000); <code>[admin] audit_log</code> also writes them to a file.</p>
+      ${entries.length === 0
+        ? html`<lit-material-empty-state size="compact" headline="No changes yet">Changes appear here as people reload, drain, block or purge.</lit-material-empty-state>`
+        : html`<lit-material-table caption="Recent changes" caption-hidden density="compact" .columns=${columns} .rows=${entries}></lit-material-table>`}
     `;
   }
 

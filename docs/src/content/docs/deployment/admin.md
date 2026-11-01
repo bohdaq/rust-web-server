@@ -41,6 +41,8 @@ rws ctl caches | upstreams
 rws ctl certs [renew]                  # expiry and ACME state; renew orders now
 rws ctl logs [-n 100] [-f]             # recent access-log lines; -f follows
 rws ctl traffic [--week | --month | --hours N] [--host example.com]
+rws ctl whoami                         # the token's user and role
+rws ctl audit [-n 50]                  # recent changes: who, what, when
 ```
 
 It finds the server the way the server finds its settings: `--admin
@@ -78,6 +80,65 @@ Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) an
 
 The token stays in the browser tab (`sessionStorage`), and the page talks only to the API below with it. The UI's own files (`/admin/`, `/admin/admin.js`, `/admin/admin.css`) are served without the token: they hold no data. They are built into the binary, so there is nothing to deploy, and they're served with a strict `Content-Security-Policy` (scripts and connections to the listener itself only, no framing).
 
+## Users, roles and the audit log
+
+Since 18.22.0 a team can share the admin API without sharing one token.
+The `token_env` token is user `admin` with role `admin`; `users` adds
+named tokens, each in its own environment variable:
+
+```toml
+[admin]
+listen    = "127.0.0.1:9901"
+token_env = "RWS_ADMIN_TOKEN"                    # user "admin", role admin
+users     = ["deploy-bot:RWS_ADMIN_DEPLOY:operator", "grafana:RWS_ADMIN_GRAFANA:viewer"]
+audit_log = "/var/log/rws/audit.log"             # also keep the audit log in a file
+```
+
+| Role | May |
+|---|---|
+| `viewer` | read everything: status, config (secrets hidden), metrics, logs, traffic, upstreams, certificates, the audit log |
+| `operator` | also reload, drain backends, switch maintenance mode, block IPs, flip feature flags, purge caches, renew certificates |
+| `admin` | also add and remove authorization tuples |
+
+A refused request is `403` saying which role it needs. Tokens must be at
+least 16 characters; `rws --check` names an entry that isn't
+`name:ENV_VAR:role` or whose variable is unset.
+
+Every change — through the API, the UI, `rws ctl` or the built-in MCP tools
+(user `mcp`) — and every refused attempt is recorded: time, user, role, how
+they signed in, source address, method, path, the request body with
+anything that looks like a secret redacted, and the result. The last 1000
+are kept in memory: `GET /admin/api/v1/audit?n=100`, `rws ctl audit`, and the
+**Audit** page. With `audit_log` they're also appended to that file as JSON
+lines (one per change, for your log shipper). Reads aren't recorded.
+`GET /admin/api/v1/whoami` (`rws ctl whoami`) says who a token is.
+
+### Single sign-on for the admin UI
+
+People can sign in with your identity provider instead of pasting a token,
+their role coming from their groups:
+
+```toml
+[admin]
+listen                 = "127.0.0.1:9901"
+oidc_issuer            = "https://id.example.com/realms/main"  # or oidc_provider = "google" | "microsoft" | "github"
+oidc_client_id         = "rws-admin"
+oidc_client_secret_env = "RWS_ADMIN_OIDC_SECRET"
+oidc_cookie_secret_env = "RWS_ADMIN_COOKIE_SECRET"   # ≥ 32 characters; sign-ins survive restarts
+oidc_roles             = ["rws-admins=admin", "sre=operator", "*=viewer"]
+# oidc_role_claim      = "groups"                    # the ID-token claim with the groups
+```
+
+Register `http://127.0.0.1:9901/admin/auth/callback` (or the address you
+reach the UI at) as the redirect URI. The login page then shows **Sign in
+with single sign-on**. `oidc_roles` maps a group, an email address or `*`
+(anyone who can sign in) to a role; a user matching several gets the
+highest, one matching none is refused. The session is a signed `HttpOnly`
+cookie on the admin origin, valid 12 hours; changes made with it also need
+the `X-Rws-Admin` header the UI sends (and pass the origin check), so
+another site can't make them. Tokens keep working for scripts and
+`rws ctl`. Needs the `sso` feature (in the release binaries).
+
 ## Security
 
 - Every request needs `Authorization: Bearer <token>`, on loopback too. A missing or wrong token gets `401`, whatever the path, and the token is compared in constant time.
@@ -92,6 +153,9 @@ All under `/admin/api/v1/`, JSON in and out.
 | Method and path | What it does |
 |---|---|
 | `GET /status` | Version, process id, uptime, readiness, compile-time features, the main, redirect and admin listeners, and `disk`: each directory rws writes to with `free_bytes`, `total_bytes` and `low` (under `min_free_disk`, 18.15.0) |
+| `GET /whoami` | The caller: `{"user":"deploy-bot","role":"operator","via":"token"}` (`via`: `token` or `oidc`; 18.22.0) |
+| `GET /audit?n=100` | The newest changes and refused attempts, newest first (at most 1000): `at`, `time`, `user`, `role`, `via`, `address`, `method`, `path`, `detail` (body, secrets redacted), `status`, `node` |
+| `GET /auth` | Without credentials: how to sign in, `{"token":true,"oidc":false}` (the UI's login page) |
 | `GET /config` | Every `RWS_CONFIG_*` setting in effect; values of names with `SECRET`, `PASSWORD` or `TOKEN` read `(hidden)` |
 | `POST /reload` | Reload the configuration and certificates, as `SIGHUP` does, and wait for it (up to 10 s): `{"reloaded":true,"applied":true,"reloads":3,"errors":[]}`. With errors (a config file that doesn't validate) `applied` is `false`, `errors` lists them and the running configuration stays. `503` while the server starts or stops, `504` when it didn't finish |
 | `GET /metrics` | Request, error and connection counters, thread-pool queue, readiness (`/metrics` on the main port has the full Prometheus set) |

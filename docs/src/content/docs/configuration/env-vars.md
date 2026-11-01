@@ -162,6 +162,17 @@ don't use them.
 | `RWS_CONFIG_ADMIN_LISTEN` | (off) | `host:port` | Listen address of the [admin API](/deployment/admin/) (since 18.10.0). Read at startup. |
 | `RWS_CONFIG_ADMIN_TOKEN_ENV` | `RWS_ADMIN_TOKEN` | variable name | The environment variable holding the admin bearer token. Unset or empty: the admin listener doesn't start. |
 | `RWS_CONFIG_ADMIN_ALLOWED_ORIGINS` | (none) | comma list of origins | Browser origins allowed to call the admin API besides its own. |
+| `RWS_CONFIG_ADMIN_USERS` | (none) | comma list | More admin users, `name:ENV_VAR:role` each (role `viewer`, `operator` or `admin`; since 18.22.0). See [users and roles](/deployment/admin/#users-roles-and-the-audit-log). |
+| `RWS_CONFIG_CLUSTER_NODE` | host name | string | This replica's name in audit entries (`[cluster] node`; since 18.22.0). |
+| `RWS_CONFIG_ADMIN_AUDIT_LOG` | (memory only) | path | Append every admin change to this file as JSON lines. |
+| `RWS_CONFIG_ADMIN_OIDC_ISSUER` | (off) | URL | OIDC provider for signing in to the admin UI (discovery at `<issuer>/.well-known/openid-configuration`). |
+| `RWS_CONFIG_ADMIN_OIDC_PROVIDER` | (off) | `google`, `microsoft`, `github` | A provider preset instead of an issuer. |
+| `RWS_CONFIG_ADMIN_OIDC_TENANT` | `common` | string | Azure AD tenant for `microsoft`. |
+| `RWS_CONFIG_ADMIN_OIDC_CLIENT_ID` | (none) | string | The OIDC client id. |
+| `RWS_CONFIG_ADMIN_OIDC_CLIENT_SECRET_ENV` | (none) | variable name | The variable holding the client secret. |
+| `RWS_CONFIG_ADMIN_OIDC_COOKIE_SECRET_ENV` | (random per start) | variable name | The variable holding the session-cookie key (≥ 32 characters). |
+| `RWS_CONFIG_ADMIN_OIDC_ROLES` | (none) | comma list | `group=role` (a group, an email or `*`) for signed-in users. |
+| `RWS_CONFIG_ADMIN_OIDC_ROLE_CLAIM` | `groups` | claim name | The ID-token claim holding the user's groups. |
 
 ## Logging
 

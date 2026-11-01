@@ -108,6 +108,12 @@ await fetch(`${publicUrl}${marker}`);
 await page.getByText(marker).waitFor({ timeout: 5000 }).catch(() => fail("the request didn't appear in the live log"));
 console.log("ok: live log tail");
 
+// Signed-in user in the header, and the changes above on the Audit page (18.22.0).
+await page.getByText("admin · admin").first().waitFor({ timeout: 5000 }).catch(() => fail("the header doesn't show the signed-in user and role"));
+await page.goto(`${admin}/admin/#/audit`);
+await page.getByText("PUT /maintenance").first().waitFor({ timeout: 5000 }).catch(() => fail("the Audit page doesn't list the maintenance change"));
+console.log("ok: signed-in user shown; Audit page lists the changes made");
+
 await browser.close();
 if (problems.length) fail(problems.join("\n"));
 console.log("ok: no CSP violations or script errors");

@@ -80,6 +80,16 @@ fn unix_now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
+/// A signed-in user ([`OidcAuth::signed_in`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SignedIn {
+    pub sub: String,
+    /// Only when the provider says it's verified.
+    pub email: Option<String>,
+    pub name: Option<String>,
+    pub groups: Vec<String>,
+}
+
 /// Who signed in: the claims kept for a session.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Identity {
@@ -261,6 +271,13 @@ impl OidcAuth {
     pub fn forward_headers(mut self, on: bool) -> Self {
         self.forward = on;
         self
+    }
+
+    /// Who is signed in on `request` (a valid session cookie), without
+    /// redirecting: for callers that check identity themselves, like the
+    /// admin API (18.22.0). Allow-lists are not applied.
+    pub fn signed_in(&self, request: &Request) -> Option<SignedIn> {
+        self.identity(request).map(|i| SignedIn { sub: i.sub, email: i.email.filter(|_| i.email_verified), name: i.name, groups: i.groups })
     }
 
     /// Read the OIDC claims injected by `OidcAuth` from a request.
@@ -555,7 +572,7 @@ impl OidcAuth {
 
     fn handle_logout(&self, request: &Request, connection: &ConnectionInfo) -> Response {
         if self.signed.is_some() {
-            let mut response = Self::redirect("/");
+            let mut response = Self::redirect(&self.config.post_login_redirect);
             response.headers.push(self.cookie(SIGNED_COOKIE, "", 0, connection));
             return response;
         }

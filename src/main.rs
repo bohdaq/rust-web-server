@@ -115,7 +115,11 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
             .mcp("rws", env!("CARGO_PKG_VERSION"))
             .require_bearer(token.trim())
             .allowed_origins(origins);
-        Served::Mcp(rws_mcp_tools(mcp, registered_routes, cache2, cache3))
+        // Changes made through MCP tools land in the admin audit log (18.22.0).
+        let audited = rust_web_server::admin::access::McpAuditLayer::new([
+            "cache_clear", "reload_config", "set_maintenance", "block_ip", "unblock_ip", "feature_set", "authz_write", "authz_delete",
+        ]);
+        Served::Mcp(rust_web_server::middleware::WithMiddleware::new(rws_mcp_tools(mcp, registered_routes, cache2, cache3)).wrap(audited))
     };
 
     // 5. Outermost — for /mcp as well: tracing (when configured), access

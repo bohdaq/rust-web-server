@@ -84,7 +84,7 @@ impl LazyOidc {
             client_secret: self.client_secret.clone(),
             redirect_uri: self.config.redirect_uri.clone(),
             scopes,
-            post_login_redirect: "/".to_string(),
+            post_login_redirect: format!("{}/", self.config.path_prefix),
         };
         let mut auth = OidcAuth::new(config, Arc::new(SessionStore::new(self.config.session_ttl_secs)))
             .signed_cookies(self.cookie_secret.clone())
@@ -96,10 +96,15 @@ impl LazyOidc {
         for prefix in &self.config.exclude {
             auth = auth.exclude(prefix);
         }
+        let prefix = &self.config.path_prefix;
+        if !prefix.is_empty() {
+            auth = auth.login_path(&format!("{prefix}/auth/login")).callback_path(&format!("{prefix}/auth/callback")).logout_path(&format!("{prefix}/auth/logout"));
+        }
         Ok(auth)
     }
 
-    fn auth(&self) -> Option<Arc<OidcAuth>> {
+    /// The built layer, building it (discovery) the first time.
+    pub(crate) fn auth(&self) -> Option<Arc<OidcAuth>> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         match &*state {
             State::Ready(auth) => return Some(Arc::clone(auth)),

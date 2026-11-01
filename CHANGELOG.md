@@ -47,6 +47,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   app with an API, Node, Python/Ruby and PHP apps, internal tools behind
   sign-in, an API gateway and local development — each checked by
   `rws --check` in CI (`cookbook_configs_pass_check`).
+- Admin users, roles and audit log (#75): `[admin] users =
+  ["name:ENV_VAR:role"]` adds named tokens with `viewer`, `operator` or
+  `admin` roles; every change through the API, UI, `rws ctl` or MCP tools
+  (and every refused attempt) goes to an audit log — `GET /audit`,
+  `rws ctl audit`, an Audit page, and `audit_log` for a JSON-lines file;
+  `GET /whoami`. Single sign-on for the admin UI with `oidc_issuer` /
+  `oidc_provider` and `oidc_roles` (groups → roles), cookie changes guarded
+  by an `X-Rws-Admin` header.
 
 ### Fixed
 
