@@ -335,7 +335,7 @@ export class RwsAdmin extends LitElement {
     return html`
       <div class="shell">
         <header class="top">
-          <span class="brand">${brandMark}rws admin</span>
+          <span class="brand">${brandMark}<span class="brand-text">rws admin</span></span>
           ${info ? (info.ready ? status("ok", "Ready") : status("error", "Not ready")) : nothing}
           <span class="spacer"></span>
           ${info ? html`<span class="meta">${info.version} · ${info.listeners?.main?.address ?? ""}</span>` : nothing}

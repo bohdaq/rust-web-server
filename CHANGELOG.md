@@ -34,9 +34,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 ### Fixed
 
 - Admin UI: long config values are shortened in the middle (the full value on
-  hover) instead of widening the page, the layout's column no longer grows past
-  a phone's width, and sizes and uptime are formatted for the reader's locale
-  (1023.97 KiB shows as 1 MiB, not "1024.0 KiB").
+  hover) instead of widening the page, nothing scrolls sideways on a phone any
+  more (the layout's column, the seven-section bottom bar and the header fit),
+  and sizes and uptime are formatted for the reader's locale (1023.97 KiB shows
+  as 1 MiB, not "1024.0 KiB").
 
 - Config-file strings (`rws.config.toml` settings and proxy sections) are
   TOML strings: a basic string's escapes (`\n`, `\r`, `\"`, `\\`, `\uXXXX`, …)

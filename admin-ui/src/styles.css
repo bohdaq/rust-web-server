@@ -41,6 +41,7 @@ body { min-height: 100dvh; }
 }
 .brand { display: flex; align-items: center; gap: var(--space-75); font-weight: 600; font-size: var(--text-base); line-height: var(--leading-base); }
 .brand-mark { width: 24px; height: 24px; flex: none; display: block; }
+.brand, .top lit-material-button { flex: none; white-space: nowrap; }
 .top .spacer { flex: 1; }
 .top .meta { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); font-family: var(--font-mono); }
 .nav { border-right: 1px solid var(--line); padding: var(--space-200) var(--space-75); }
@@ -54,6 +55,8 @@ main:focus { outline: none; }
   main { grid-row: 2; padding: var(--space-300) var(--space-200) var(--space-400); }
   .top { padding: var(--space-100) var(--space-200); }
   .top .meta { display: none; }
+  /* Logo only; the name stays for screen readers. */
+  .brand-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 [slot="icon"] { width: 24px; height: 24px; }
