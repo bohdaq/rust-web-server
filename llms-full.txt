@@ -20592,7 +20592,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /rate-limit/check?ip=…` | That address's remaining quota (counts as one request) |
 | `GET /cors` | The CORS settings in effect |
 | `GET /maintenance`, `PUT /maintenance` `{"active":true}` | Maintenance mode: `503` for everything but health checks |
-| `GET /blocklist`, `POST /blocklist` `{"ip":"…"}`, `DELETE /blocklist/<ip>` | The runtime IP blocklist (`403`). Addresses are checked; the admin listener isn't behind the blocklist |
+| `GET /blocklist`, `POST /blocklist` `{"ip":"…"}`, `DELETE /blocklist/<ip>` | The runtime IP blocklist (`403`), for static files and config-file proxy routes alike (proxy routes since 18.20.1). Addresses are checked; the admin listener isn't behind the blocklist |
 | `GET /flags`, `PUT /flags/<name>` `{"enabled":true}` | Runtime feature flags |
 | `GET /cache`, `DELETE /cache` | Response-cache hits, misses and size; clear it. `404` when the server has no cache |
 | `GET /caches` | Every response cache (18.11.0): `name` (`app` for the binary's own, `route:<name>` per config route, `route:#N` for unnamed ones), `kind` (`memory` or `disk`), `entries`, `bytes` (disk only, else `null`), `hits`, `misses` |

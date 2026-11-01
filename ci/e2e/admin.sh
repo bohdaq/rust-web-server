@@ -185,8 +185,10 @@ for _ in $(seq 1 6); do [ "$(curl -s http://127.0.0.1:18451/)" = "backend-18462"
 ./rwsctl drain web http://127.0.0.1:18461 --undo >/dev/null || fail "rwsctl drain --undo"
 ./rwsctl maintenance on >/dev/null && [ "$(code http://127.0.0.1:18451/)" = 503 ] || fail "rwsctl maintenance on"
 ./rwsctl maintenance off >/dev/null && [ "$(code http://127.0.0.1:18451/)" = 200 ] || fail "rwsctl maintenance off"
-./rwsctl block 192.0.2.7 >/dev/null && ./rwsctl blocklist | grep -qx 192.0.2.7 || fail "rwsctl block"
-./rwsctl unblock 192.0.2.7 >/dev/null && ./rwsctl blocklist | grep -qx "no blocked IPs" || fail "rwsctl unblock"
+./rwsctl block 127.0.0.1 >/dev/null && [ "$(code http://127.0.0.1:18451/)" = 403 ] || fail "rwsctl block (proxy mode)"
+./rwsctl blocklist | grep -qx 127.0.0.1 || fail "rwsctl blocklist"
+./rwsctl unblock 127.0.0.1 >/dev/null && [ "$(code http://127.0.0.1:18451/)" = 200 ] || fail "rwsctl unblock (proxy mode)"
+./rwsctl blocklist | grep -qx "no blocked IPs" || fail "rwsctl blocklist after unblock"
 pass "rwsctl drain, maintenance, block/unblock change the server"
 
 set +e

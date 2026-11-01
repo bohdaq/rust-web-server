@@ -5,6 +5,20 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Fixed
+
+- The admin API's IP blocklist (and `rws ctl block`) now applies in proxy
+  mode too; it only covered the static-file server. Clients that aren't
+  blocked still take the non-blocking proxy path.
+
+### Tests
+
+- `ci/e2e/mtls_crl.sh`: CRLs end to end with an openssl CA and curl —
+  revoked client certificates refused after SIGHUP and with `watch = true`,
+  DER CRLs, `rws --check` on a junk CRL.
+
 ## 18.20.0 — 2026-11-01
 
 ### Added

@@ -59,3 +59,18 @@ fn lock_free_empty_check_tracks_block_unblock_and_clear() {
     list.block("10.0.0.3");
     assert!(list.is_blocked("10.0.0.3"));
 }
+
+#[test]
+fn only_blocked_clients_leave_the_passthrough_path() {
+    use crate::middleware::Middleware;
+    use crate::server::{Address, ConnectionInfo};
+    let client = |ip: &str| ConnectionInfo::new(Address { ip: ip.to_string(), port: 5000 }, Address { ip: "127.0.0.1".to_string(), port: 80 });
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() };
+    let ip = "198.51.100.231"; // only this test uses it
+    assert!(BlocklistLayer.is_passthrough(&request, &client(ip)));
+    global().block(ip);
+    assert!(!BlocklistLayer.is_passthrough(&request, &client(ip)));
+    assert!(BlocklistLayer.is_passthrough(&request, &client("198.51.100.232")));
+    global().unblock(ip);
+    assert!(BlocklistLayer.is_passthrough(&request, &client(ip)));
+}

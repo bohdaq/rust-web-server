@@ -121,4 +121,11 @@ impl Middleware for BlocklistLayer {
     fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         true
     }
+
+    /// Clients that aren't blocked pass straight through, so config proxy
+    /// routes keep the non-blocking forwarder (since 18.20.1, when the
+    /// binary added this layer to proxy mode); an empty list is one atomic load.
+    fn is_passthrough(&self, _request: &Request, connection: &ConnectionInfo) -> bool {
+        !global().is_blocked(&connection.client.ip)
+    }
 }
