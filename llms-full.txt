@@ -1897,6 +1897,7 @@ object   = "doc:{path:2}"
 type      = "bearer"        # "bearer" | "jwt" | "basic"
 token_env = "API_TOKEN"     # env var name holding the expected token (bearer)
 # secret_env = "JWT_SECRET" # env var name holding the JWT secret (jwt)
+# previous_secret_env = "JWT_SECRET_OLD" # also accepted while rotating (jwt, 18.21.0)
 # htpasswd_file = "users.htpasswd" # path to htpasswd file (basic)
 
 [route.middleware.ip_filter]
@@ -8015,6 +8016,27 @@ let app = App::new()
 
 Tokens with a past `exp` claim are rejected. Any token that fails format validation, algorithm check, or signature verification returns `401 Unauthorized`.
 
+### Rotating the secret
+
+Several secrets can verify at once, so a secret can be replaced without
+logging everyone out (since 18.21.0):
+
+```rust,ignore
+// Sign new tokens with the new secret; the old one verifies until its tokens expire.
+let layer = JwtLayer::secrets([new_secret, old_secret]);
+// Or name them: a token whose header says "kid": "2026-11" is checked against that secret only.
+let layer = JwtLayer::new(old_secret).secret_with_kid("2026-11", new_secret);
+```
+
+In the config file, `previous_secret_env` adds the outgoing secret:
+
+```toml
+[route.middleware.auth]
+type = "jwt"
+secret_env = "JWT_SECRET"               # the new secret
+previous_secret_env = "JWT_SECRET_OLD"  # still accepted; remove after the longest token lifetime
+```
+
 ### Building tokens
 
 Use `build_jwt` in a login handler to issue a signed token:
@@ -8247,8 +8269,12 @@ secret_env = "JWT_SECRET"
 ```toml
 [route.middleware.auth]
 type = "basic"
-htpasswd_file = ".htpasswd"
+htpasswd_file = ".htpasswd"   # or several: "admins.htpasswd, team.htpasswd"
 ```
+
+The htpasswd files are re-read when they change (checked at most once a
+second, since 18.21.0): adding or removing a user takes effect without a
+restart, and a file that can't be read keeps the users read before.
 
 See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Auth config fails closed: an unset/empty `token_env`/`secret_env`, a missing `htpasswd_file`, or a build without the `auth` feature makes that route answer `503 Service Unavailable` (with an error in the startup log) instead of serving it unprotected. Other routes keep working. Bearer tokens are compared in constant time.
 

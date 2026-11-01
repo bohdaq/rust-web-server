@@ -461,14 +461,15 @@ pub(crate) fn apply_middleware_named(
                 }
             }
             #[cfg(feature = "auth")]
-            AuthConfig::Jwt { secret_env } => {
+            AuthConfig::Jwt { secret_env, previous_secret_env } => {
                 let secret = std::env::var(secret_env).unwrap_or_default();
+                let previous = (!previous_secret_env.is_empty()).then(|| std::env::var(previous_secret_env).unwrap_or_default()).filter(|s| !s.is_empty());
                 if secret.is_empty() {
                     deny(format!("JWT auth: env var '{secret_env}' is unset or empty"))
                 } else {
                     arc_app(
                         WithMiddleware::new(ArcApp(Arc::clone(&app)))
-                            .wrap(crate::auth::JwtLayer::new(secret)),
+                            .wrap(crate::auth::JwtLayer::secrets(std::iter::once(secret).chain(previous))),
                     )
                 }
             }

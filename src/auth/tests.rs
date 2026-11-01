@@ -621,3 +621,56 @@ fn from_htpasswd_file_missing_authorization_header_returns_401_challenge() {
 
     std::fs::remove_file(&path).ok();
 }
+
+/// An HS256 token with `header_json` (e.g. naming a `kid`).
+fn token_with_header(header_json: &str, secret: &[u8]) -> String {
+    use hmac::{Hmac, Mac};
+    let signing = format!("{}.{}", base64url_encode(header_json.as_bytes()), base64url_encode(br#"{"sub":"alice"}"#));
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret).unwrap();
+    mac.update(signing.as_bytes());
+    format!("{signing}.{}", base64url_encode(&mac.finalize().into_bytes()))
+}
+
+fn status_with_bearer(layer: &JwtLayer, token: &str) -> i16 {
+    let request = with_header(get("/"), "Authorization", &format!("Bearer {token}"));
+    layer.handle(&request, &conn(), &OkApp).unwrap().status_code
+}
+
+#[test]
+fn hs256_secrets_rotate() {
+    let layer = JwtLayer::secrets([b"new-secret".to_vec(), b"old-secret".to_vec()]);
+    assert_eq!(200, status_with_bearer(&layer, &build_jwt(r#"{"sub":"a"}"#, b"new-secret")));
+    assert_eq!(200, status_with_bearer(&layer, &build_jwt(r#"{"sub":"a"}"#, b"old-secret")), "the previous secret still verifies");
+    assert_eq!(401, status_with_bearer(&layer, &build_jwt(r#"{"sub":"a"}"#, b"other")));
+
+    let named = JwtLayer::new(b"default".to_vec()).secret_with_kid("2026-11", b"november".to_vec());
+    assert_eq!(200, status_with_bearer(&named, &token_with_header(r#"{"alg":"HS256","typ":"JWT","kid":"2026-11"}"#, b"november")));
+    assert_eq!(401, status_with_bearer(&named, &token_with_header(r#"{"alg":"HS256","typ":"JWT","kid":"2026-11"}"#, b"default")), "a kid is checked against its secret only");
+    assert_eq!(200, status_with_bearer(&named, &token_with_header(r#"{"alg":"HS256","typ":"JWT","kid":"unknown"}"#, b"default")), "an unknown kid falls back to every secret");
+    assert_eq!(401, status_with_bearer(&JwtLayer::secrets(Vec::<Vec<u8>>::new()), &build_jwt("{}", b"x")), "no secrets, nothing verifies");
+}
+
+#[test]
+fn htpasswd_files_are_read_again_when_they_change() {
+    let file = crate::test_env::TempPath::new("rws_htpasswd_reload");
+    let team = crate::test_env::TempPath::new("rws_htpasswd_team");
+    std::fs::write(file.as_str(), "alice:wonderland\n").unwrap();
+    std::fs::write(team.as_str(), "carol:secret\n").unwrap();
+    let layer = BasicAuthLayer::from_htpasswd_file(&format!("{}, {}", file.as_str(), team.as_str())).unwrap();
+    let status = |user: &str, pass: &str| layer.handle(&with_header(get("/"), "Authorization", &basic_header(user, pass)), &conn(), &OkApp).unwrap().status_code;
+    assert_eq!((200, 200, 401), (status("alice", "wonderland"), status("carol", "secret"), status("bob", "builder")));
+
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    std::fs::write(file.as_str(), "alice:wonderland\nbob:builder\n").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    assert_eq!(200, status("bob", "builder"), "a user added to the file");
+
+    std::fs::write(file.as_str(), "bob:builder\n").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    assert_eq!((401, 200), (status("alice", "wonderland"), status("bob", "builder")), "a user removed");
+
+    std::fs::remove_file(file.as_str()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    assert_eq!(200, status("bob", "builder"), "an unreadable file keeps the users read before");
+    assert!(BasicAuthLayer::from_htpasswd_file("").is_err());
+}

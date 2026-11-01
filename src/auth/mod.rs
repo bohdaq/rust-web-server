@@ -415,19 +415,88 @@ impl BasicAuthLayer<Box<dyn Fn(&str, &str) -> bool + Send + Sync>> {
     /// # Errors
     ///
     /// Returns `Err` if `path` can't be read.
+    ///
+    /// The file is re-read when it changes (18.21.0): adding or removing a
+    /// user takes effect within a second, without a restart. Several files,
+    /// comma-separated, are read together (one per team, say).
     pub fn from_htpasswd_file(path: &str) -> Result<Self, String> {
-        let contents = std::fs::read_to_string(path)
-            .map_err(|e| format!("failed to read htpasswd file '{path}': {e}"))?;
-        let users = parse_htpasswd(&contents);
-
-        let validate: Box<dyn Fn(&str, &str) -> bool + Send + Sync> =
-            Box::new(move |user: &str, pass: &str| match users.get(user) {
-                Some(stored) => verify_htpasswd_credential(pass, stored),
-                None => false,
-            });
-
+        let paths: Vec<String> = path.split(',').map(str::trim).filter(|p| !p.is_empty()).map(str::to_string).collect();
+        if paths.is_empty() {
+            return Err("no htpasswd file given".to_string());
+        }
+        let users = HtpasswdUsers::load(&paths)?;
+        let validate: Box<dyn Fn(&str, &str) -> bool + Send + Sync> = Box::new(move |user: &str, pass: &str| users.check(user, pass));
         Ok(BasicAuthLayer::new(validate))
     }
+}
+
+/// HS256 against the secret the token's `kid` names, else each secret.
+fn verify_with_any(token: &str, secrets: &[(Option<String>, Vec<u8>)]) -> Option<Claims> {
+    let kid = token.split('.').next().and_then(base64_decode).and_then(|h| String::from_utf8(h).ok()).and_then(|h| crate::mcp::json_rpc::extract_str(&h, "kid"));
+    if let Some(kid) = kid.as_deref() {
+        if let Some((_, secret)) = secrets.iter().find(|(k, _)| k.as_deref() == Some(kid)) {
+            return verify_jwt(token, secret);
+        }
+    }
+    secrets.iter().find_map(|(_, secret)| verify_jwt(token, secret))
+}
+
+/// htpasswd files re-read when one changes (size or mtime, looked at most
+/// once a second), so adding or removing a user needs no restart. A file
+/// that can't be read keeps the users read before.
+struct HtpasswdUsers {
+    paths: Vec<String>,
+    state: std::sync::Mutex<HtpasswdState>,
+}
+
+struct HtpasswdState {
+    users: HashMap<String, String>,
+    stamps: Vec<Option<(u64, SystemTime)>>,
+    checked: std::time::Instant,
+}
+
+impl HtpasswdUsers {
+    fn load(paths: &[String]) -> Result<HtpasswdUsers, String> {
+        let mut users = HashMap::new();
+        let mut stamps = Vec::new();
+        for path in paths {
+            let contents = std::fs::read_to_string(path).map_err(|e| format!("failed to read htpasswd file '{path}': {e}"))?;
+            users.extend(parse_htpasswd(&contents));
+            stamps.push(stamp(path));
+        }
+        Ok(HtpasswdUsers { paths: paths.to_vec(), state: std::sync::Mutex::new(HtpasswdState { users, stamps, checked: std::time::Instant::now() }) })
+    }
+
+    fn check(&self, user: &str, password: &str) -> bool {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.checked.elapsed() >= std::time::Duration::from_secs(1) {
+            state.checked = std::time::Instant::now();
+            let now: Vec<_> = self.paths.iter().map(|p| stamp(p)).collect();
+            if now != state.stamps {
+                let mut users = HashMap::new();
+                let mut ok = true;
+                for path in &self.paths {
+                    match std::fs::read_to_string(path) {
+                        Ok(contents) => users.extend(parse_htpasswd(&contents)),
+                        Err(e) => {
+                            eprintln!("basic auth: can't re-read '{path}': {e}; keeping the users read before");
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if ok {
+                    state.users = users;
+                    state.stamps = now;
+                }
+            }
+        }
+        state.users.get(user).is_some_and(|stored| verify_htpasswd_credential(password, stored))
+    }
+}
+
+fn stamp(path: &str) -> Option<(u64, SystemTime)> {
+    std::fs::metadata(path).ok().map(|m| (m.len(), m.modified().unwrap_or(UNIX_EPOCH)))
 }
 
 fn parse_htpasswd(contents: &str) -> HashMap<String, String> {
@@ -528,7 +597,8 @@ pub struct JwtLayer {
 }
 
 enum JwtVerifier {
-    Hs256(Vec<u8>),
+    /// Every accepted secret, with the `kid` that names it (key rotation).
+    Hs256(Vec<(Option<String>, Vec<u8>)>),
     #[cfg(feature = "auth-asymmetric")]
     Rs256(Box<crate::rsa_key::RsaPublicKey>),
     #[cfg(feature = "auth-asymmetric")]
@@ -538,7 +608,30 @@ enum JwtVerifier {
 impl JwtLayer {
     /// Create a layer that verifies HS256 JWTs signed with `secret`.
     pub fn new(secret: impl Into<Vec<u8>>) -> Self {
-        JwtLayer { verifier: JwtVerifier::Hs256(secret.into()), identity_claim: "sub".to_string() }
+        JwtLayer { verifier: JwtVerifier::Hs256(vec![(None, secret.into())]), identity_claim: "sub".to_string() }
+    }
+
+    /// Create a layer that verifies HS256 JWTs signed with any of `secrets`
+    /// (18.21.0): rotate by adding the new secret, keeping the old one until
+    /// the tokens it signed have expired, then removing it.
+    pub fn secrets<I, S>(secrets: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Vec<u8>>,
+    {
+        let list = secrets.into_iter().map(|s| (None, s.into())).filter(|(_, s): &(Option<String>, Vec<u8>)| !s.is_empty()).collect();
+        JwtLayer { verifier: JwtVerifier::Hs256(list), identity_claim: "sub".to_string() }
+    }
+
+    /// Also accept HS256 tokens signed with `secret`; a token whose header
+    /// says `"kid": kid` is checked against this secret only.
+    pub fn secret_with_kid(mut self, kid: impl Into<String>, secret: impl Into<Vec<u8>>) -> Self {
+        // The only kind without `auth-asymmetric`.
+        #[allow(irrefutable_let_patterns)]
+        if let JwtVerifier::Hs256(list) = &mut self.verifier {
+            list.push((Some(kid.into()), secret.into()));
+        }
+        self
     }
 
     /// Create a layer that verifies RS256 JWTs against an RSA public key.
@@ -602,7 +695,7 @@ impl Middleware for JwtLayer {
         next: &dyn Application,
     ) -> Result<Response, String> {
         let claims = extract_bearer_token(request).and_then(|t| match &self.verifier {
-            JwtVerifier::Hs256(secret) => verify_jwt(&t, secret),
+            JwtVerifier::Hs256(secrets) => verify_with_any(&t, secrets),
             #[cfg(feature = "auth-asymmetric")]
             JwtVerifier::Rs256(key) => verify_jwt_rs256(&t, key),
             #[cfg(feature = "auth-asymmetric")]

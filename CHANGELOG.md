@@ -22,6 +22,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   re-read on reload and by `watch`, parsed by `rws --check`;
   `tls_client_crl_strict = true` also refuses stale CRLs and certificates no
   CRL covers.
+- Key rotation (#69): `JwtLayer::secrets([new, old])` and
+  `secret_with_kid(kid, secret)` verify HS256 tokens signed with any of
+  several secrets (a token's `kid` picks one); the config file's jwt auth
+  takes `previous_secret_env`. htpasswd files are re-read when they change
+  (adding or removing a user needs no restart), and `htpasswd_file` may
+  list several.
 
 ### Changed
 

@@ -666,7 +666,7 @@ type = "jwt"
 secret_env = "JWT_SECRET"
 "#);
     match cfg.routes[0].middleware.auth.as_ref().unwrap() {
-        crate::proxy_config::AuthConfig::Jwt { secret_env } => {
+        crate::proxy_config::AuthConfig::Jwt { secret_env, .. } => {
             assert_eq!(secret_env, "JWT_SECRET");
         }
         other => panic!("expected Jwt, got {:?}", other),
@@ -2439,4 +2439,41 @@ fn rws_check_warns_that_a_host_rewrite_does_not_reach_the_upstream() {
     let warns = |toml: &str| crate::config_check::check_str_offline(toml).warnings.join("\n");
     assert!(warns(&format!("{base}{rewrite}")).contains("preserve_host"));
     assert!(!warns(base).contains("preserve_host"));
+}
+
+#[cfg(feature = "auth")]
+#[test]
+fn jwt_auth_accepts_the_previous_secret_while_rotating() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_TEST_JWT_NEW", "new-secret");
+    std::env::set_var("RWS_TEST_JWT_OLD", "old-secret");
+    let toml = r#"
+[[route]]
+[route.match]
+path = "/p"
+[route.action]
+type = "respond"
+[route.action.respond]
+status = 200
+body = "ok"
+[route.middleware.auth]
+type = "jwt"
+secret_env = "RWS_TEST_JWT_NEW"
+previous_secret_env = "RWS_TEST_JWT_OLD"
+"#;
+    let cfg = ProxyConfig::from_str(toml);
+    match cfg.routes[0].middleware.auth.as_ref().unwrap() {
+        crate::proxy_config::AuthConfig::Jwt { previous_secret_env, .. } => assert_eq!(previous_secret_env, "RWS_TEST_JWT_OLD"),
+        other => panic!("{other:?}"),
+    }
+    assert!(!format!("{:?}", crate::config_check::check_str_offline(toml)).contains("unknown key"));
+    let app = crate::proxy_config::builder::build(cfg).0;
+    let call = |secret: &[u8]| {
+        let token = crate::auth::build_jwt(r#"{"sub":"a"}"#, secret);
+        let raw = format!("GET /p HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\n\r\n");
+        app.execute(&crate::request::Request::parse(raw.as_bytes()).unwrap(), &crate::server::ConnectionInfo::default()).unwrap().status_code
+    };
+    assert_eq!((200, 200, 401), (call(b"new-secret"), call(b"old-secret"), call(b"other")));
+    std::env::remove_var("RWS_TEST_JWT_NEW");
+    std::env::remove_var("RWS_TEST_JWT_OLD");
 }

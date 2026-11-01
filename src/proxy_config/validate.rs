@@ -69,7 +69,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.middleware" => vec!["timeout_ms", "max_body_size", "early_hints"],
         "route.middleware.rate_limit" => vec!["max_requests", "window_secs"],
         "route.middleware.cache" => vec!["ttl_secs", "vary_by", "dir", "max_size", "purge_token_env"],
-        "route.middleware.auth" => vec!["type", "token_env", "secret_env", "htpasswd_file"],
+        "route.middleware.auth" => vec!["type", "token_env", "secret_env", "previous_secret_env", "htpasswd_file"],
         "route.middleware.ip_filter" => vec!["allow", "deny"],
         "route.middleware.mirror" => vec!["upstream", "backends", "percent"],
         "route.middleware.authz" => vec!["relation", "object"],
@@ -417,7 +417,7 @@ fn validate_middleware(
         }
     }
     match &mw.auth {
-        Some(AuthConfig::Bearer { token_env }) | Some(AuthConfig::Jwt { secret_env: token_env }) => {
+        Some(AuthConfig::Bearer { token_env }) | Some(AuthConfig::Jwt { secret_env: token_env, .. }) => {
             if token_env.is_empty() {
                 report.error(format!("{label}: auth has no `token_env` / `secret_env`; the route answers 503"));
             } else if !crate::config_check::offline() && std::env::var(token_env).unwrap_or_default().is_empty() {
