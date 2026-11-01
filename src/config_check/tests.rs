@@ -419,3 +419,30 @@ fn offline_check_still_reports_mistakes_in_the_text() {
     assert!(has(&report.errors, "unknown key"), "{:?}", report.errors);
     assert!(has(&report.errors, "unknown strategy"), "{:?}", report.errors);
 }
+
+/// Every TOML block on the cookbook pages is a complete configuration that
+/// `rws --check` accepts (offline: files, env vars and the network aren't
+/// looked at). Recipes stay working as settings change (#74). Needs the
+/// features the recipes use; CI's feature-set run has them.
+#[cfg(all(feature = "acme", feature = "auth", feature = "sso"))]
+#[test]
+fn cookbook_configs_pass_check() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src/content/docs/cookbook");
+    let mut pages: Vec<_> = std::fs::read_dir(&dir).expect("cookbook pages").filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "md")).collect();
+    pages.sort();
+    let mut checked = 0;
+    for page in pages {
+        let text = std::fs::read_to_string(&page).unwrap();
+        let mut rest = text.as_str();
+        while let Some(start) = rest.find("```toml\n") {
+            let body = &rest[start + 8..];
+            let end = body.find("\n```").expect("closed block");
+            let block = &body[..end];
+            let report = super::check_str_offline(block);
+            assert!(report.is_ok() && report.warnings.iter().all(|w| !w.contains("unknown")), "{}:\n{block}\n{report:?}", page.display());
+            checked += 1;
+            rest = &body[end..];
+        }
+    }
+    assert!(checked >= 8, "only {checked} cookbook configs");
+}

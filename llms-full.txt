@@ -908,6 +908,596 @@ All ORM features require at least one of `model-sqlite`, `model-postgres`, or `m
 
 ---
 
+# Cookbook
+
+<https://rws8.tech/cookbook/overview/>
+
+Each recipe is one `rws.config.toml` you can copy, change the names in, and
+run. Every TOML block on these pages is checked by `rws --check` in CI, so
+the recipes keep working as rws changes.
+
+| Recipe | For |
+|---|---|
+| [Static site](/cookbook/static-site/) | A site of files with automatic HTTPS |
+| [Single-page app + API](/cookbook/single-page-app/) | React / Vue / Svelte front end with an API behind `/api` |
+| [Node apps](/cookbook/node-apps/) | Next.js, Nuxt, Remix, SvelteKit, Express |
+| [Python and Ruby apps](/cookbook/python-ruby/) | Django, FastAPI, Flask, Rails — app server, static files, WebSockets |
+| [PHP apps](/cookbook/php/) | Laravel, Symfony, WordPress through php-fpm |
+| [Internal tools behind sign-in](/cookbook/internal-tools/) | Grafana, Gitea, admin panels behind Google / Okta / Keycloak or Authelia |
+| [API gateway](/cookbook/api-gateway/) | Several services behind one host: JWT, rate limits, CORS, caching |
+| [Local development](/cookbook/local-development/) | `https://localhost` and a dev proxy |
+
+Run a recipe with `rws --check` first; it reports unknown keys, missing
+files and unset secrets before anything starts:
+
+```sh
+rws --check=rws.config.toml && rws
+```
+
+---
+
+# Cookbook: static site
+
+<https://rws8.tech/cookbook/static-site/>
+
+rws serves the directory it runs in. With a domain pointed at the server,
+this is the whole configuration:
+
+```toml
+# /var/www/example/rws.config.toml — run rws in /var/www/example
+port = 443
+http_redirect_port = 80          # redirects to HTTPS and answers the ACME challenge
+
+[acme]
+domains = ["example.com", "www.example.com"]
+email   = "ops@example.com"
+```
+
+What you get without more settings: a Let's Encrypt certificate ordered at
+startup and renewed before it expires, HTTP/1.1, HTTP/2 and HTTP/3, gzip /
+Brotli / zstd for text files (precompressed `.br`/`.gz` siblings are used
+when present), `ETag` and `Last-Modified` with `304`s, `index.html` for
+directories, and dot-files (`.git/`, `.env`) never served.
+
+Long-lived caching for fingerprinted assets, a custom 404 page and no
+directory listings:
+
+```toml
+port = 443
+http_redirect_port = 80
+directory_listing = false        # 404 instead of listing a directory without index.html
+
+[acme]
+domains = ["example.com"]
+email   = "ops@example.com"
+
+[[route]]
+name = "assets"
+[route.match]
+path = "/assets/*"
+[route.action]
+type = "static"
+root = "/var/www/example"
+[route.middleware]
+early_hints = ["</assets/app.css>; rel=preload; as=style"]
+```
+
+Hugo, Jekyll, Astro, Eleventy and other generators: build into a directory
+and run rws there (`cd public && rws`). With the [packages](/deployment/systemd/)
+put the files in `/var/www/rws` and the configuration in
+`/etc/rws/rws.config.toml`.
+
+---
+
+# Cookbook: single-page app + API
+
+<https://rws8.tech/cookbook/single-page-app/>
+
+The front end is a directory of built files; deep links like `/orders/42`
+must get `index.html` (the client-side router takes over), while `/api/*`
+goes to the backend:
+
+```toml
+# run rws in the build directory (dist/, build/)
+port = 443
+http_redirect_port = 80
+spa_fallback = "index.html"                 # unknown paths get index.html…
+spa_fallback_exclude_prefixes = ["/api"]    # …but /api keeps its real 404s
+
+[acme]
+domains = ["app.example.com"]
+email   = "ops@example.com"
+
+[[upstream]]
+name = "api"
+backends = ["127.0.0.1:8080"]
+[upstream.health_check]
+path = "/healthz"
+
+[[route]]
+name = "api"
+[route.match]
+path = "/api/*"
+[route.action]
+type = "proxy"
+upstream = "api"
+[route.middleware.rate_limit]
+max_requests = 120
+window_secs  = 60
+```
+
+Requests that match no route — the app's files and its client-side routes —
+fall through to the static server. Same origin, so no CORS settings are
+needed. When the API lives on another host (`api.example.com`), allow the
+app's origin there instead:
+
+```toml
+port = 443
+
+[cors]
+allow_origins     = "https://app.example.com"
+allow_methods     = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+allow_headers     = "content-type,authorization"
+allow_credentials = true
+
+[[upstream]]
+name = "api"
+backends = ["127.0.0.1:8080"]
+
+[[route]]
+[route.match]
+host = "api.example.com"
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "api"
+```
+
+---
+
+# Cookbook: Node apps
+
+<https://rws8.tech/cookbook/node-apps/>
+
+Run the app on a local port (`next start -p 3000`, `node build` for
+SvelteKit, `node .output/server/index.mjs` for Nuxt) and put rws in front:
+
+```toml
+port = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["shop.example.com"]
+email   = "ops@example.com"
+
+[[upstream]]
+name = "web"
+backends = ["127.0.0.1:3000", "127.0.0.1:3001"]   # two processes; rws balances them
+strategy = "least_connections"
+[upstream.health_check]
+path = "/api/health"
+interval_secs = 5
+[upstream.retry]
+attempts = 2                                       # an idempotent request retries the other process
+
+[[route]]
+name = "next-static"
+[route.match]
+path = "/_next/static/*"                           # fingerprinted: cache them in rws
+[route.action]
+type = "proxy"
+upstream = "web"
+[route.middleware.cache]
+ttl_secs = 86400
+
+[[route]]
+name = "web"
+[route.match]
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "web"
+preserve_host = true                               # the app sees shop.example.com, not 127.0.0.1
+```
+
+WebSockets (Socket.IO, GraphQL subscriptions, Next.js / Vite hot reload in
+development) go through the same route: rws relays the upgrade to the
+backend that accepted it. During a deploy, drain a process first so no new
+requests reach it:
+
+```sh
+rws ctl drain web http://127.0.0.1:3000      # restart it, then:
+rws ctl drain web http://127.0.0.1:3000 --undo
+```
+
+---
+
+# Cookbook: Python and Ruby apps
+
+<https://rws8.tech/cookbook/python-ruby/>
+
+The app server (Gunicorn, Uvicorn, Puma) listens on a local port; rws
+terminates HTTPS, serves the collected static files itself and proxies the
+rest:
+
+```toml
+port = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["app.example.com"]
+email   = "ops@example.com"
+
+[[upstream]]
+name = "app"
+backends = ["127.0.0.1:8000"]
+[upstream.health_check]
+path = "/healthz"
+
+# Django: STATIC_ROOT = "/srv/app/public/static" (manage.py collectstatic);
+# Rails: public/assets. The request path is looked up under `root`, so
+# /static/css/site.css is /srv/app/public/static/css/site.css.
+[[route]]
+name = "static"
+[route.match]
+path = "/static/*"
+[route.action]
+type = "static"
+root = "/srv/app/public"
+
+[[route]]
+name = "media"
+[route.match]
+path = "/media/*"
+[route.action]
+type = "static"
+root = "/srv/app/public"
+
+[[route]]
+name = "app"
+[route.match]
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "app"
+read_timeout_ms = 60000          # a slow report may take a minute
+[route.middleware]
+max_body_size = 52428800         # 50 MB uploads on this route
+```
+
+Tell the framework it is behind a proxy so it trusts `X-Forwarded-Proto`
+(rws also sends RFC 7239 `Forwarded`): Django `SECURE_PROXY_SSL_HEADER =
+("HTTP_X_FORWARDED_PROTO", "https")` and `USE_X_FORWARDED_HOST = True`;
+Rails `config.assume_ssl = true`; Uvicorn `--proxy-headers`
+`--forwarded-allow-ips=127.0.0.1`. Django Channels and Rails Action Cable
+WebSockets work through the `app` route.
+
+---
+
+# Cookbook: PHP apps
+
+<https://rws8.tech/cookbook/php/>
+
+rws talks to php-fpm directly ([FastCGI](/proxy/config-driven/#type--fastcgi--php-and-other-fastcgi-apps)).
+Laravel or Symfony, whose web root is `public/` with a front controller:
+
+```toml
+port = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["shop.example.com"]
+email   = "ops@example.com"
+
+[[route]]
+name = "laravel"
+[route.match]
+path = "/*"
+[route.action]
+type    = "fastcgi"
+address = "unix:/run/php/php8.3-fpm.sock"
+root    = "/var/www/shop/public"
+[route.action.params]
+APP_ENV = "production"
+[route.middleware]
+max_body_size = 33554432         # 32 MB uploads (match php.ini's upload_max_filesize)
+```
+
+CSS, JavaScript, images and uploaded files under `public/` are served by
+rws itself; only PHP scripts reach php-fpm, and an upload can never be run
+as PHP. php-fpm must be able to read the files: run its pool as the user
+that owns them, and give rws read access too.
+
+WordPress, with the admin area limited to the office and logins rate
+limited:
+
+```toml
+port = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["blog.example.com"]
+email   = "ops@example.com"
+
+[[route]]
+name = "wp-login"
+[route.match]
+path = "/wp-login.php"
+[route.action]
+type    = "fastcgi"
+address = "127.0.0.1:9000"
+root    = "/var/www/wordpress"
+[route.middleware.rate_limit]
+max_requests = 10
+window_secs  = 60
+
+[[route]]
+name = "wp-admin"
+[route.match]
+path = "/wp-admin/*"
+[route.action]
+type    = "fastcgi"
+address = "127.0.0.1:9000"
+root    = "/var/www/wordpress"
+[route.middleware.ip_filter]
+allow = ["203.0.113.0/24"]
+
+[[route]]
+name = "wordpress"
+[route.match]
+path = "/*"
+[route.action]
+type    = "fastcgi"
+address = "127.0.0.1:9000"
+root    = "/var/www/wordpress"
+```
+
+Pretty permalinks work without rewrite rules: paths that match no file go
+to `index.php` with the original `REQUEST_URI`.
+
+---
+
+# Cookbook: internal tools behind sign-in
+
+<https://rws8.tech/cookbook/internal-tools/>
+
+Sign-in with your identity provider in front of any app
+([`type = "oidc"`](/features/auth/#sign-in-with-google-okta-keycloak-type--oidc)).
+Here Grafana for the SRE group, signed in through Keycloak, with Grafana's
+auth proxy reading the user rws passes on:
+
+```toml
+port = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["grafana.example.com", "staging.example.com"]
+email   = "ops@example.com"
+
+[[upstream]]
+name = "grafana"
+backends = ["127.0.0.1:3000"]
+
+[[upstream]]
+name = "staging"
+backends = ["10.0.2.15:8080"]
+
+[[route]]
+name = "grafana"
+[route.match]
+host = "grafana.example.com"
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "grafana"
+[route.middleware.auth]
+type              = "oidc"
+issuer            = "https://id.example.com/realms/main"
+client_id         = "grafana-proxy"
+client_secret_env = "GRAFANA_OIDC_SECRET"
+cookie_secret_env = "OIDC_COOKIE_SECRET"
+allowed_groups    = ["sre"]
+
+# The staging site for everyone with a company Google account.
+[[route]]
+name = "staging"
+[route.match]
+host = "staging.example.com"
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "staging"
+[route.middleware.auth]
+type              = "oidc"
+provider          = "google"
+client_id         = "1234567890-abc.apps.googleusercontent.com"
+client_secret_env = "GOOGLE_OIDC_SECRET"
+cookie_secret_env = "OIDC_COOKIE_SECRET"
+allowed_domains   = ["example.com"]
+exclude           = ["/healthz"]
+```
+
+In `grafana.ini`: `[auth.proxy] enabled = true`, `header_name =
+X-Auth-Request-Email`, `header_property = email`, `auto_sign_up = true`.
+Register `https://grafana.example.com/auth/callback` (and the staging one)
+as redirect URIs with the provider; put the secrets in the environment
+(`systemctl edit rws` → `Environment=…`). One `OIDC_COOKIE_SECRET` on every
+replica keeps users signed in whichever replica they reach.
+
+Already running Authelia or Authentik? Let it decide
+([`type = "forward"`](/features/auth/#an-auth-service-decides-type--forward)):
+
+```toml
+port = 443
+
+[[upstream]]
+name = "gitea"
+backends = ["127.0.0.1:3001"]
+
+[[route]]
+name = "gitea"
+[route.match]
+host = "git.example.com"
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "gitea"
+[route.middleware.auth]
+type         = "forward"
+url          = "http://127.0.0.1:9091/api/authz/forward-auth"
+copy_headers = ["Remote-User", "Remote-Groups", "Remote-Email", "Remote-Name"]
+```
+
+---
+
+# Cookbook: API gateway
+
+<https://rws8.tech/cookbook/api-gateway/>
+
+One public host, a service per path prefix, JWT on everything but the
+public catalogue, stricter limits on writes, and the catalogue cached:
+
+```toml
+port = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["api.example.com"]
+email   = "ops@example.com"
+
+[cors]
+allow_origins = "https://app.example.com"
+allow_methods = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+allow_headers = "content-type,authorization"
+
+[rate_limit]                        # every client, every route
+max_requests = 600
+window_secs  = 60
+
+[[upstream]]
+name = "catalog"
+backends = ["10.0.1.10:8080", "10.0.1.11:8080"]
+[upstream.health_check]
+path = "/healthz"
+[upstream.circuit_breaker]
+failure_threshold = 5
+recovery_secs     = 30
+
+[[upstream]]
+name = "orders"
+backends = ["10.0.2.10:8080", "10.0.2.11:8080"]
+[upstream.retry]
+attempts = 2
+
+[[route]]
+name = "catalog"
+[route.match]
+path   = "/v1/products/*"
+method = "GET"
+[route.action]
+type = "proxy"
+upstream = "catalog"
+strip_path_prefix = "/v1"
+[route.middleware.cache]
+ttl_secs = 30
+vary_by  = ["Accept-Language"]
+
+[[route]]
+name = "orders"
+[route.match]
+path = "/v1/orders/*"
+[route.action]
+type = "proxy"
+upstream = "orders"
+strip_path_prefix = "/v1"
+[route.middleware.auth]
+type       = "jwt"
+secret_env = "JWT_SECRET"
+[route.middleware.rate_limit]
+max_requests = 60
+window_secs  = 60
+
+[[route]]
+name = "health"
+[route.match]
+path = "/healthz"
+[route.action]
+type   = "respond"
+status = 200
+body   = "ok"
+```
+
+Requests get `Proxy-Status` and errors come back as RFC 9457
+`application/problem+json`; `rws_upstream_*` metrics on `/metrics` show
+each backend's latency, retries and breaker state. Rotate `JWT_SECRET`
+without logging anyone out with `previous_secret_env`
+([key rotation](/features/auth/#rotating-the-secret)).
+
+---
+
+# Cookbook: local development
+
+<https://rws8.tech/cookbook/local-development/>
+
+`https://localhost` that browsers trust — needed for secure cookies,
+service workers, WebAuthn and OAuth redirects — with a Vite / Next dev
+server and an API on one origin:
+
+```toml
+port = 8443
+tls = "internal"                         # certificates from rws's own CA (run `rws trust` once)
+tls_internal_names = "app.localhost"
+
+[[upstream]]
+name = "vite"
+backends = ["127.0.0.1:5173"]
+
+[[upstream]]
+name = "api"
+backends = ["127.0.0.1:8080"]
+
+[[route]]
+name = "api"
+[route.match]
+path = "/api/*"
+[route.action]
+type = "proxy"
+upstream = "api"
+
+[[route]]
+name = "frontend"
+[route.match]
+path = "/*"
+[route.action]
+type = "proxy"
+upstream = "vite"                        # hot reload's WebSocket goes through too
+```
+
+```sh
+rws trust          # once per machine: adds rws's CA to the system and browser stores
+rws                # https://localhost:8443 and https://app.localhost:8443
+```
+
+A PHP project without Docker or Valet — php-fpm from your package manager:
+
+```toml
+port = 8443
+tls = "internal"
+
+[[route]]
+[route.match]
+path = "/*"
+[route.action]
+type    = "fastcgi"
+address = "127.0.0.1:9000"
+root    = "public"
+```
+
+More in [Frontend dev proxy](/getting-started/frontend-dev-proxy/) and
+[HTTPS / TLS](/features/https-tls/#local-https-tls--internal).
+
+---
+
 # Configuration Overview
 
 <https://rws8.tech/configuration/overview/>

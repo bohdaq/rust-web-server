@@ -30,6 +30,18 @@ Use it as:
 - [Frontend Dev Server Proxy (React / Vite / webpack)](https://rws8.tech/getting-started/frontend-dev-proxy/): How to run a React (or Vue/Svelte) dev server side-by-side with rws during local development, so API calls reach the backend and everything else keeps fast HMR.
 - [All Features](https://rws8.tech/getting-started/features/): A complete checklist of rust-web-server capabilities organized by category, with feature flag annotations.
 
+## Cookbook
+
+- [Cookbook](https://rws8.tech/cookbook/overview/): Complete, CI-checked rws configurations for common stacks — static sites, SPAs, Node, Python, Ruby and PHP apps, internal tools behind single sign-on, API gateways and local development.
+- [Cookbook: static site](https://rws8.tech/cookbook/static-site/): Serve a directory of files with automatic HTTPS from Let's Encrypt, HTTP→HTTPS redirects, compression and browser caching.
+- [Cookbook: single-page app + API](https://rws8.tech/cookbook/single-page-app/): A React, Vue or Svelte build served with client-side routing, and an API proxied under /api on the same host.
+- [Cookbook: Node apps](https://rws8.tech/cookbook/node-apps/): Next.js, Nuxt, Remix, SvelteKit or Express behind rws — HTTPS, several app processes, health checks, WebSockets and cached static assets.
+- [Cookbook: Python and Ruby apps](https://rws8.tech/cookbook/python-ruby/): Django, FastAPI, Flask or Rails behind rws — the app server on a port, static and media files served by rws, WebSockets, upload limits and timeouts.
+- [Cookbook: PHP apps](https://rws8.tech/cookbook/php/): Laravel, Symfony and WordPress through php-fpm with rws's FastCGI support — no nginx or Apache.
+- [Cookbook: internal tools behind sign-in](https://rws8.tech/cookbook/internal-tools/): Put Grafana, Gitea, admin panels or a staging site behind Google, Microsoft, Okta or Keycloak sign-in — or behind Authelia / Authentik — with no code in the tools.
+- [Cookbook: API gateway](https://rws8.tech/cookbook/api-gateway/): Several services behind one API host — path routing, JWT auth, per-route rate limits, response caching, CORS, retries and circuit breaking.
+- [Cookbook: local development](https://rws8.tech/cookbook/local-development/): Trusted https://localhost with rws's own certificate authority, one origin for a dev front end and its API, and PHP without Docker.
+
 ## Configuration
 
 - [Configuration Overview](https://rws8.tech/configuration/overview/): How rust-web-server loads, layers, and hot-reloads its configuration at runtime.

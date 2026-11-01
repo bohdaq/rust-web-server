@@ -43,6 +43,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `Connection: upgrade` requests to a plain-HTTP backend (Action Cable,
   LiveView, Socket.IO, hot reload) on the main listener; the relay moved
   from the Gateway API controller to `proxy::upgrade`.
+- Cookbook (#74): complete configurations for a static site, a single-page
+  app with an API, Node, Python/Ruby and PHP apps, internal tools behind
+  sign-in, an API gateway and local development — each checked by
+  `rws --check` in CI (`cookbook_configs_pass_check`).
 
 ### Fixed
 

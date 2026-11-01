@@ -33,6 +33,48 @@
     ]
   },
   {
+    "label": "Cookbook",
+    "collapsed": true,
+    "items": [
+      {
+        "label": "Overview",
+        "link": "/cookbook/overview/"
+      },
+      {
+        "label": "Static site",
+        "link": "/cookbook/static-site/"
+      },
+      {
+        "label": "Single-page app + API",
+        "link": "/cookbook/single-page-app/"
+      },
+      {
+        "label": "Node apps",
+        "link": "/cookbook/node-apps/"
+      },
+      {
+        "label": "Python and Ruby apps",
+        "link": "/cookbook/python-ruby/"
+      },
+      {
+        "label": "PHP apps",
+        "link": "/cookbook/php/"
+      },
+      {
+        "label": "Internal tools behind sign-in",
+        "link": "/cookbook/internal-tools/"
+      },
+      {
+        "label": "API gateway",
+        "link": "/cookbook/api-gateway/"
+      },
+      {
+        "label": "Local development",
+        "link": "/cookbook/local-development/"
+      }
+    ]
+  },
+  {
     "label": "Configuration",
     "items": [
       {
