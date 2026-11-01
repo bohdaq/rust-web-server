@@ -13,7 +13,7 @@ reloads its configuration on `systemctl reload`.
 Since 18.2.0 rws has `.deb` and `.rpm` packages for x86_64 and arm64, from
 signed repositories (so `apt upgrade` / `dnf upgrade` bring new releases) or
 from each [GitHub release page](https://github.com/bohdaq/rust-web-server/releases).
-They install the binary as `/usr/bin/rws`, the unit below, a configuration
+They install the binary as `/usr/bin/rws` (and `/usr/bin/rwsctl`, [`rws ctl`](/deployment/admin/#from-the-command-line-rws-ctl)), the unit below, a configuration
 in `/etc/rws/rws.config.toml` and a placeholder page in `/var/www/rws`,
 create the `rws` user, and start the service on port 7878.
 

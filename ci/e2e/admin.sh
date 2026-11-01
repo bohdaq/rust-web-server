@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The admin API on its own listener, against the rws binary: off without
 # [admin] listen, refused to start without a token, bearer auth, the status
-# endpoint, browser origin checks, and `rws --check`. Grows with each 18.10
+# endpoint, browser origin checks, `rws --check`, and `rws ctl`. Grows with each 18.10
 # admin tranche.
 #
 #   ci/e2e/admin.sh <path-to-rws>
@@ -168,5 +168,55 @@ wait "$TAIL" 2>/dev/null || true
 grep -q "^data: .*tail-marker-$$" stream.txt || fail "the live tail didn't carry the request: $(head -c 400 stream.txt)"
 api GET '/logs?n=50' | grep -q "tail-marker-$$" || fail "recent lines don't have the request"
 pass "access log: recent lines and a live SSE tail"
+
+# ── rws ctl / rwsctl: the same API from the command line ────────────────────
+# Address and token variable come from [admin] in RWS_CONFIG_FILE.
+export RWS_CONFIG_FILE="$WORK/proxy.toml"
+"$RWS" ctl status > ctl.txt || fail "rws ctl status: $(cat ctl.txt)"
+grep -q "^rws .* ready$" ctl.txt && grep -q "^admin     127.0.0.1:18452" ctl.txt || fail "rws ctl status: $(cat ctl.txt)"
+"$RWS" ctl --json status | python3 -c 'import json,sys; assert json.load(sys.stdin)["ready"] is True' || fail "rws ctl --json status"
+ln -s "$RWS" rwsctl
+./rwsctl upstreams | grep -q "^web       http://127.0.0.1:18461" || fail "rwsctl upstreams: $(./rwsctl upstreams)"
+pass "rws ctl status / rwsctl upstreams, configured from [admin]"
+
+./rwsctl drain web http://127.0.0.1:18462 --undo >/dev/null || fail "rwsctl drain --undo"  # drained above
+./rwsctl drain web http://127.0.0.1:18461 >/dev/null || fail "rwsctl drain"
+for _ in $(seq 1 6); do [ "$(curl -s http://127.0.0.1:18451/)" = "backend-18462" ] || fail "rwsctl drain didn't apply"; done
+./rwsctl drain web http://127.0.0.1:18461 --undo >/dev/null || fail "rwsctl drain --undo"
+./rwsctl maintenance on >/dev/null && [ "$(code http://127.0.0.1:18451/)" = 503 ] || fail "rwsctl maintenance on"
+./rwsctl maintenance off >/dev/null && [ "$(code http://127.0.0.1:18451/)" = 200 ] || fail "rwsctl maintenance off"
+./rwsctl block 192.0.2.7 >/dev/null && ./rwsctl blocklist | grep -qx 192.0.2.7 || fail "rwsctl block"
+./rwsctl unblock 192.0.2.7 >/dev/null && ./rwsctl blocklist | grep -qx "no blocked IPs" || fail "rwsctl unblock"
+pass "rwsctl drain, maintenance, block/unblock change the server"
+
+set +e
+./rwsctl drain web http://nope:1 2>err.txt; rc=$?
+[ $rc = 1 ] && grep -q "has no backend" err.txt || fail "unknown backend: exit $rc, $(cat err.txt)"
+E2E_ADMIN_TOKEN=wrong ./rwsctl status 2>err.txt; rc=$?
+[ $rc = 2 ] && grep -q "refused the token" err.txt || fail "wrong token: exit $rc, $(cat err.txt)"
+./rwsctl --admin 127.0.0.1:1 status 2>/dev/null; rc=$?
+[ $rc = 2 ] || fail "unreachable: exit $rc"
+set -e
+pass "exit codes: 1 refused, 2 bad token or unreachable"
+
+curl -s -o /dev/null "http://127.0.0.1:18451/?ctl-marker-$$"; sleep 0.3
+"$RWS" ctl logs -n 50 > logs.txt; grep -q "ctl-marker-$$" logs.txt || fail "rws ctl logs: $(tail -3 logs.txt)"
+timeout 3 "$RWS" ctl logs -f > follow.txt & FOLLOW=$!
+sleep 0.7
+curl -s -o /dev/null "http://127.0.0.1:18451/?follow-marker-$$"
+wait "$FOLLOW" 2>/dev/null || true
+grep -q "follow-marker-$$" follow.txt || fail "rws ctl logs -f: $(head -c 400 follow.txt)"
+pass "rws ctl logs and logs -f"
+
+"$RWS" ctl reload | grep -q "^reloaded$" || fail "rws ctl reload"
+cp proxy.toml proxy.good
+printf '\n[[route]]\n[route.action]\ntype = "proxy"\nupstream = "missing"\n' >> proxy.toml
+set +e
+"$RWS" ctl reload 2>err.txt; rc=$?
+set -e
+[ $rc = 1 ] && grep -q "reload refused" err.txt && grep -q "missing" err.txt || fail "a bad config: exit $rc, $(cat err.txt)"
+[ "$(curl -s http://127.0.0.1:18451/)" != "" ] || fail "the old config should keep serving"
+cp proxy.good proxy.toml
+pass "rws ctl reload: applied, and a bad config refused with its errors (exit 1)"
 
 echo "all admin end-to-end checks passed"

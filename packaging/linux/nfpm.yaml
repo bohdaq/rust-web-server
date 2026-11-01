@@ -20,6 +20,9 @@ contents:
     dst: /usr/bin/rws
     file_info:
       mode: 0755
+  - src: /usr/bin/rws
+    dst: /usr/bin/rwsctl
+    type: symlink
   - src: packaging/linux/rws.service
     dst: /usr/lib/systemd/system/rws.service
   - src: packaging/linux/rws.socket

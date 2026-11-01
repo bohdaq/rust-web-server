@@ -511,6 +511,11 @@ async fn start_acme(listener: Option<&std::net::TcpListener>) {
 /// errors, 1 otherwise.
 fn exit_if_informational_flag() {
     let args: Vec<String> = std::env::args().collect();
+    // `rws ctl …` / `rwsctl …`: a client of the admin API, not a server.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(ctl_args) = rust_web_server::ctl::requested(&args) {
+        std::process::exit(rust_web_server::ctl::run(ctl_args, &mut std::io::stdout(), &mut std::io::stderr()));
+    }
     if let Some(output) = rust_web_server::entry_point::command_line_args::informational_flag_output(&args) {
         print!("{output}");
         std::process::exit(0);

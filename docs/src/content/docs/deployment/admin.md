@@ -24,6 +24,46 @@ The token lives in the environment, never in the file. When the variable is unse
 
 Keep it on loopback and reach it through an SSH tunnel (`ssh -L 9901:127.0.0.1:9901 host`). If you must listen on another address, firewall the port: the token is the only protection.
 
+## From the command line: `rws ctl`
+
+`rws ctl` (since 18.21.0) drives the same API from a shell. The deb and rpm
+packages also install it as `rwsctl`, and the binary run under that name acts
+the same.
+
+```text
+rws ctl status                         # version, uptime, listeners, disks
+rws ctl reload                         # waits; prints the errors and exits 1 on a bad config
+rws ctl drain <upstream> <backend> [--undo]
+rws ctl maintenance [on|off]
+rws ctl block <ip> | unblock <ip> | blocklist
+rws ctl purge <cache> [--path /p | --prefix /p/]
+rws ctl caches | upstreams
+rws ctl certs [renew]                  # expiry and ACME state; renew orders now
+rws ctl logs [-n 100] [-f]             # recent access-log lines; -f follows
+rws ctl traffic [--week | --month | --hours N] [--host example.com]
+```
+
+It finds the server the way the server finds its settings: `--admin
+http://127.0.0.1:9901` if given, else `[admin] listen` in `RWS_CONFIG_FILE` or
+`./rws.config.toml` (a `0.0.0.0` listener is reached on loopback), else
+`127.0.0.1:9901`. The token comes from `--token-file <path>`, else the variable
+`[admin] token_env` names, else `RWS_ADMIN_TOKEN`. There is no `--token`: an
+argument shows up in `ps` and shell history.
+
+```sh
+# on the server, next to its config
+sudo -u rws env RWS_CONFIG_FILE=/etc/rws/rws.config.toml rwsctl status
+# from a laptop, through a tunnel
+ssh -fNL 9901:127.0.0.1:9901 web1
+rws ctl --admin 127.0.0.1:9901 --token-file ~/.config/rws/web1.token certs
+```
+
+Output is for people (aligned tables, one line per change); `--json` prints the
+API's JSON instead. Exit codes: `0` done, `1` the server refused or the
+operation failed (a reload with errors, an unknown backend or cache), `2` bad
+arguments, the admin API unreachable, or the token refused — so a deploy script
+can run `rwsctl reload || rollback`.
+
 ## The web UI
 
 Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) and paste the token. It shows:

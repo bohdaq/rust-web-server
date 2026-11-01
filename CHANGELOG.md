@@ -28,6 +28,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   takes `previous_secret_env`. htpasswd files are re-read when they change
   (adding or removing a user needs no restart), and `htpasswd_file` may
   list several.
+- `rws ctl` (#70): the admin API from the command line — `status`, `reload`
+  (exit 1 with the errors on a bad config), `drain`, `maintenance`,
+  `block`/`unblock`, `purge`, `caches`, `upstreams`, `certs [renew]`,
+  `logs [-f]`, `traffic`; tables for people, `--json` for scripts. Address
+  and token from `[admin]` in the config file, `--admin`, `--token-file` or
+  `RWS_ADMIN_TOKEN` (never an argument). The deb/rpm packages install an
+  `rwsctl` symlink.
 
 ### Changed
 
