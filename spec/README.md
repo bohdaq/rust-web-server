@@ -12,6 +12,7 @@ at https://rws8.tech); API docs are rustdoc.
 | [A2A_SERVER.md](A2A_SERVER.md) | A2A 1.0 server and gateway (18.18.0) |
 | [OPENAPI_TO_MCP.md](OPENAPI_TO_MCP.md) | MCP tools from OpenAPI documents and routes (18.19.0) |
 | [OPERATIONS_AND_TRUST.md](OPERATIONS_AND_TRUST.md) | systemd notify/socket activation, Forwarded + CRLs, key rotation, rwsctl (18.20.0) |
+| [CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md) | 18.24.0: release gating and fixes from the 18.20–18.23 review |
 | [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) | Local HTTPS, FastCGI, config SSO, cookbook, admin roles/audit, cluster state, WAF, FIPS, PKCS#11, fleet config, LTS (18.21–18.23) |
 | [DEMOS_TODO.md](DEMOS_TODO.md) | Planned demo applications |
 | [KAFKA_ROADMAP.md](KAFKA_ROADMAP.md) | Kafka integration plan (unbuilt) |

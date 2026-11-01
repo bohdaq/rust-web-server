@@ -37,7 +37,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.name }}
-      - run: cargo test ${{ matrix.args }}
+      - run: cargo test --locked ${{ matrix.args }}
 
   msrv:
     name: msrv (1.99, all features)
@@ -46,7 +46,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --all-features
+      - run: cargo build --locked --all-features
+
+  # The workflow files themselves: a YAML or expression error silences CI
+  # (it happened for three commits in 18.23).
+  actionlint:
+    name: actionlint (workflow files)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint 1.7.7
+        run: |
+          curl -sSfL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz | tar xz actionlint
+          ./actionlint -color -shellcheck= -pyflakes=
+
+  # The release's Windows features, built on Windows: a Windows-only compile
+  # error must fail CI, not the release.
+  windows:
+    name: windows (release features)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/setup-nasm@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows
+      - run: cargo check --locked --bin rws --features "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3"
 
   # FIPS 140-3 build (aws-lc's validated module; the runner has CMake and Go).
   fips:
@@ -58,8 +84,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: fips
-      - run: "cargo test --lib --features fips tls::"
-      - run: cargo build --bin rws --features "fips acme auth sso"
+      - run: "cargo test --locked --lib --features fips tls::"
+      - run: cargo build --locked --bin rws --features "fips acme auth sso"
       - run: ci/e2e/fips.sh target/debug/rws
 
   # TLS keys on a PKCS#11 token (SoftHSM2).
@@ -73,8 +99,8 @@ jobs:
         with:
           key: pkcs11
       - run: sudo apt-get update -q && sudo apt-get install -y -q softhsm2
-      - run: cargo test --lib --features pkcs11 pkcs11
-      - run: cargo build --bin rws --features pkcs11
+      - run: cargo test --locked --lib --features pkcs11 pkcs11
+      - run: cargo build --locked --bin rws --features pkcs11
       - run: ci/e2e/pkcs11.sh target/debug/rws
 
   # End-to-end checks against real external implementations — see ci/e2e/.
@@ -91,7 +117,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: e2e
-      - run: cargo build --bin rws --features "acme auth sso mimalloc storage-s3"
+      - run: cargo build --locked --bin rws --features "acme auth sso mimalloc storage-s3"
       - name: ACME against Pebble (Let's Encrypt's test CA)
         if: matrix.check == 'acme-pebble'
         env:
@@ -233,15 +259,15 @@ jobs:
         if: matrix.check == 'wasm-plugins'
         run: |
           rustup target add wasm32-unknown-unknown
-          cargo test --lib --features wasm-plugins -- wasm_plugin stack_depth
-          cargo build --bin rws --features "acme auth wasm-plugins"
-          cargo build --release --target wasm32-unknown-unknown --manifest-path examples/wasm_plugin/Cargo.toml
+          cargo test --locked --lib --features wasm-plugins -- wasm_plugin stack_depth
+          cargo build --locked --bin rws --features "acme auth wasm-plugins"
+          cargo build --locked --release --target wasm32-unknown-unknown --manifest-path examples/wasm_plugin/Cargo.toml
           ci/e2e/wasm_plugin.sh target/debug/rws examples/wasm_plugin/target/wasm32-unknown-unknown/release/rws_wasm_plugin_example.wasm
       - name: rws as a wasi:http component (rws-wasm-shim under wasmtime serve)
         if: matrix.check == 'wasm-shim'
         run: |
           rustup target add wasm32-wasip2
-          cargo build --release --target wasm32-wasip2 -p rws-wasm-shim
+          cargo build --locked --release --target wasm32-wasip2 -p rws-wasm-shim
           curl -sSfL https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.4/wasmtime-v49.0.4-x86_64-linux.tar.xz | tar xJ -C "$RUNNER_TEMP"
           ci/e2e/wasm_shim.sh target/wasm32-wasip2/release/rws_wasm_shim.wasm "$RUNNER_TEMP/wasmtime-v49.0.4-x86_64-linux/wasmtime"
       - uses: actions/setup-node@v4
@@ -315,7 +341,7 @@ jobs:
       - name: WebSocket routes and streaming SSE (Node clients; plain/TLS, shared/per-core, SSE over HTTP/2)
         if: matrix.check == 'realtime'
         run: |
-          cargo build --example realtime
+          cargo build --locked --example realtime
           ci/e2e/realtime.sh target/debug/examples/realtime
       - name: Starters build and pass their own tests against this checkout
         if: matrix.check == 'starters'
@@ -325,14 +351,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cargo build --example tower --features tower
+          cargo build --locked --example tower --features tower
           gh release download v1.9.4 --repo fullstorydev/grpcurl --pattern 'grpcurl_1.9.4_linux_x86_64.tar.gz' --dir "$RUNNER_TEMP"
           tar xzf "$RUNNER_TEMP/grpcurl_1.9.4_linux_x86_64.tar.gz" -C "$RUNNER_TEMP" grpcurl
           ci/e2e/tower.sh target/debug/examples/tower "$RUNNER_TEMP/grpcurl"
       - name: OpenAPI 3.1 document validated by openapi-spec-validator
         if: matrix.check == 'openapi'
         run: |
-          cargo build --example mcp_inventory --features "macros serde sso openapi"
+          cargo build --locked --example mcp_inventory --features "macros serde sso openapi"
           python3 -m venv "$RUNNER_TEMP/oasv"
           "$RUNNER_TEMP/oasv/bin/pip" install --quiet openapi-spec-validator==0.9.0
           ci/e2e/openapi.sh target/debug/examples/mcp_inventory "$RUNNER_TEMP/oasv/bin/python"

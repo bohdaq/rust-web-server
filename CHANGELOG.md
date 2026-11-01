@@ -5,6 +5,15 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- Releases are gated (#83): the release workflow refuses a tag whose commit
+  isn't on `main` or a `<major>.<minor>.x` line or whose CI run isn't green;
+  CI builds with `--locked`, lints the workflow files (actionlint) and checks
+  the release's Windows features on Windows. The `18.20.x` LTS branch exists.
+
 ## 18.23.1 — 2026-11-01
 
 ### Fixed

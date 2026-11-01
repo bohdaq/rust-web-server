@@ -67,6 +67,34 @@ jobs:
             exit 1
           fi
 
+      # Only a commit that CI checked and passed is released (18.24.0): it
+      # must be on main or a release line (`<major>.<minor>.x`), and its CI
+      # run must be green. install.sh jobs are left out: they download the
+      # previous release, which may still be uploading.
+      - name: Tagged commit is on main or a release line, with green CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-list -n1 "$TAG")
+          git fetch -q origin '+refs/heads/*:refs/remotes/origin/*'
+          on_line=$(git branch -r --contains "$sha" | grep -E 'origin/(main|[0-9]+\.[0-9]+\.x)$' || true)
+          if [ -z "$on_line" ]; then
+            echo "::error::$TAG ($sha) is not on main or a <major>.<minor>.x branch" >&2
+            exit 1
+          fi
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$sha&per_page=50" --jq '[.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last | .id // empty')
+          if [ -z "$run" ]; then
+            echo "::error::no CI run for $sha — push the commit to its branch and wait for CI before tagging" >&2
+            exit 1
+          fi
+          bad=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '.jobs[] | select(.name | startswith("install.sh") | not) | select(.conclusion != "success" and .conclusion != "skipped") | "\(.name): \(.conclusion // .status)"')
+          if [ -n "$bad" ]; then
+            echo "::error::CI run $run for $sha isn't green:" >&2
+            echo "$bad" >&2
+            exit 1
+          fi
+          echo "CI run $run passed; on $(echo $on_line | tr '\n' ' ')"
+
       # A patch for an older line (e.g. 17.113.1 after 18.0.0) must not become
       # the Latest release, Docker `latest` or the Homebrew formula.
       - name: Is this the highest version?

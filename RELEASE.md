@@ -2,7 +2,7 @@
 
 # Release Info
 
-Make sure you have [Rust](https://www.rust-lang.org/tools/install) 1.88 or later installed.
+Make sure you have [Rust](https://www.rust-lang.org/tools/install) 1.99 or later installed (the MSRV in `Cargo.toml`).
 
 ## Build
 
@@ -34,7 +34,9 @@ for both crates); a version already on crates.io is skipped, so re-runs are safe
 
 ## Publish a GitHub Release
 
-Tag the commit with the exact `Cargo.toml` version (no `v` prefix) and push the tag:
+Tag the commit with the exact `Cargo.toml` version (no `v` prefix) and push the tag. The
+commit must be on `main` or a `<major>.<minor>.x` release line and its CI run must be green
+(install.sh jobs aside): since 18.24.0 the release workflow refuses anything else.
 
 ```bash
 git tag 17.110.0
