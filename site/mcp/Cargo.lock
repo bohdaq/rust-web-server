@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "rust-web-server"
-version = "18.23.1"
+version = "18.23.2"
 dependencies = [
  "aws-lc-rs",
  "bytes",
