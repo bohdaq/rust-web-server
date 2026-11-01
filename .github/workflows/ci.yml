@@ -47,6 +47,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --all-features
 
+  # FIPS 140-3 build (aws-lc's validated module; the runner has CMake and Go).
+  fips:
+    name: fips (aws-lc FIPS module)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fips
+      - run: cargo test --lib --features fips tls::
+      - run: cargo build --bin rws --features "fips acme auth sso"
+      - run: ci/e2e/fips.sh target/debug/rws
+
   # End-to-end checks against real external implementations — see ci/e2e/.
   e2e:
     name: e2e (${{ matrix.check }})

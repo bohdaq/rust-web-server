@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::{self, RootCertStore};
+use tokio_rustls::rustls::RootCertStore;
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
 
@@ -69,7 +69,7 @@ impl AcmeHttpClient {
     }
 
     pub fn new() -> Result<Self, String> {
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let _ = crate::crypto_provider().install_default();
         let mut root_store = RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
         };
@@ -264,7 +264,7 @@ mod tests {
         let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
         let der = CertificateDer::from(cert.cert.der().to_vec());
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()));
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let _ = crate::crypto_provider().install_default();
         let config = rustls::ServerConfig::builder().with_no_client_auth().with_single_cert(vec![der.clone()], key).unwrap();
         let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

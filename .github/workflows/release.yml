@@ -176,6 +176,9 @@ jobs:
           - { target: x86_64-apple-darwin,        os: macos-latest,     features: "acme auth sso mimalloc wasm-plugins" }
           - { target: aarch64-apple-darwin,       os: macos-latest,     features: "acme auth sso mimalloc wasm-plugins" }
           - { target: x86_64-pc-windows-msvc,     os: windows-latest,   features: "acme auth sso mimalloc wasm-plugins" }
+          # FIPS 140-3 build (18.23.0): aws-lc's validated module, glibc (it
+          # doesn't build for musl), TLS limited to FIPS-approved algorithms.
+          - { target: x86_64-unknown-linux-gnu,   os: ubuntu-latest,    features: "fips acme auth sso mimalloc", suffix: "-fips" }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -204,7 +207,7 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          name="rws-$TAG-${{ matrix.target }}"
+          name="rws-$TAG-${{ matrix.target }}${{ matrix.suffix }}"
           mkdir "$name"
           cp -R README.md LICENSE "$name/"
           if [ "${{ runner.os }}" = "Windows" ]; then
@@ -228,7 +231,7 @@ jobs:
         shell: bash
         run: |
           # Run from an empty directory, like a fresh install would.
-          bin="$PWD/rws-$TAG-${{ matrix.target }}/rws"
+          bin="$PWD/rws-$TAG-${{ matrix.target }}${{ matrix.suffix }}/rws"
           mkdir -p "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
           "$bin" --port=7979 &
           pid=$!
@@ -252,7 +255,7 @@ jobs:
 
       # Dockerfile.release copies these in per platform.
       - name: Keep Linux binary for the image build
-        if: contains(matrix.target, 'linux')
+        if: contains(matrix.target, 'musl')
         uses: actions/upload-artifact@v4
         with:
           name: docker-${{ matrix.target }}

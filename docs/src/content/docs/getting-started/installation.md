@@ -112,6 +112,10 @@ cargo build --release --no-default-features --features http1
 
 ## Feature flags
 
+`fips` (since 18.23.0) builds TLS on aws-lc's FIPS 140-3 validated module
+and needs CMake and Go; see [FIPS 140-3](/features/https-tls/#fips-140-3).
+
+
 | Feature | What it adds | Required deps |
 |---|---|---|
 | `http1` | Synchronous thread-pool server, no async runtime, no TLS | `ctrlc`, `libc` |

@@ -166,7 +166,7 @@ pub fn build(ca_pem: Option<&[u8]>, validation: &BackendTlsValidation) -> Result
         }
         None => roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()),
     }
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let _ = crate::crypto_provider().install_default();
     let webpki = rustls::client::WebPkiServerVerifier::builder(Arc::new(roots)).build().map_err(|e| e.to_string())?;
     let verifier: Arc<dyn ServerCertVerifier> = if validation.subject_alt_names.is_empty() {
         webpki

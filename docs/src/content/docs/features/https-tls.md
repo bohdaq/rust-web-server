@@ -95,6 +95,34 @@ tls_key_file  = "key.pem"
 `rust-web-server` uses [rustls](https://github.com/rustls/rustls) with the
 `aws-lc-rs` cryptography backend. There is no dependency on OpenSSL.
 
+## FIPS 140-3
+
+For environments that require FIPS-validated cryptography, build with the
+`fips` feature (since 18.23.0) or use the release's
+`rws-<version>-x86_64-unknown-linux-gnu-fips.tar.gz`:
+
+```sh
+cargo install rust-web-server --features "fips acme auth sso"   # needs CMake, Go and a C compiler
+rws --version   # rws 18.23.0 (FIPS)
+```
+
+TLS — the HTTPS and QUIC listeners, mTLS client verification, ACME, the
+reverse proxy's upstream connections and the outbound HTTP client — then
+runs on aws-lc's FIPS 140-3 validated module with only FIPS-approved
+algorithms: AES-GCM suites (no ChaCha20-Poly1305), NIST curves and the
+approved hybrid key exchange, RSA and ECDSA signatures. At startup rws
+checks that every TLS configuration rustls builds reports itself
+FIPS-compliant and refuses to start otherwise; `GET /admin/api/v1/status`
+lists `fips` among the features.
+
+Not covered by the module: HS256 JWTs and the `{SHA256}` htpasswd scheme
+(RustCrypto `hmac`/`sha2`), ES256 JWT verification (`p256`), rws's own
+SHA-256 for cache keys and signed cookies, and the in-crate RSA verifier
+used for RS256 tokens and SAML. Where your policy needs those under the
+module too, keep authentication in a FIPS-validated identity provider and
+use the TLS side of rws. The FIPS build is glibc-only (aws-lc's FIPS module
+doesn't build for musl), so there's no FIPS container image yet.
+
 ## ALPN negotiation
 
 When a TLS certificate is configured, the server advertises both `h2` and

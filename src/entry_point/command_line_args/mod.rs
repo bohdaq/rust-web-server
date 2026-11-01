@@ -24,7 +24,8 @@ pub fn informational_flag_output(args: &[String]) -> Option<String> {
     for arg in flags {
         match arg.as_str() {
             "--version" | "-V" => {
-                return Some(format!("rws {}\n", env!("CARGO_PKG_VERSION")));
+                // A FIPS build says so (18.23.0); others print just the version.
+                return Some(format!("rws {}{}\n", env!("CARGO_PKG_VERSION"), if crate::FIPS { " (FIPS)" } else { "" }));
             }
             "--help" => return Some(help_text()),
             _ => {}

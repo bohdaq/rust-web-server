@@ -230,6 +230,20 @@ pub mod h3_handler;
 #[cfg(test)]
 mod stack_depth_tests;
 
+/// The rustls crypto provider every TLS config uses: aws-lc-rs, or with the
+/// `fips` feature its FIPS 140-3 validated module and only the algorithms
+/// FIPS approves (18.23.0).
+#[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
+pub fn crypto_provider() -> rustls::crypto::CryptoProvider {
+    #[cfg(feature = "fips")]
+    return rustls::crypto::default_fips_provider();
+    #[cfg(not(feature = "fips"))]
+    rustls::crypto::aws_lc_rs::default_provider()
+}
+
+/// Whether this build uses the FIPS module (`fips` feature).
+pub const FIPS: bool = cfg!(feature = "fips");
+
 /// A rustls client-config builder with this crate's crypto provider
 /// (aws-lc-rs) named explicitly. `rustls::ClientConfig::builder()` uses the
 /// process-wide default provider and panics when none is installed and more
@@ -238,7 +252,7 @@ mod stack_depth_tests;
 /// crate starts here.
 #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
 pub(crate) fn tls_client_builder() -> rustls::ConfigBuilder<rustls::ClientConfig, rustls::WantsVerifier> {
-    rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+    rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(crate::crypto_provider()))
         .with_safe_default_protocol_versions()
         .expect("aws-lc-rs supports rustls's default protocol versions")
 }

@@ -72,6 +72,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   security and critical fixes for twelve months; 18.20 is the first, until
   2027-11-01), security response targets and coordinated disclosure in
   `SECURITY.md` and a Support policy docs page.
+- FIPS build (#78): the `fips` feature runs all TLS on aws-lc's FIPS 140-3
+  module with FIPS-approved algorithms only, checks every TLS config at
+  startup, and says `(FIPS)` in `--version`; a
+  `rws-<version>-x86_64-unknown-linux-gnu-fips.tar.gz` release artifact.
+  Every rustls config now names `crypto_provider()` explicitly.
 
 ### Fixed
 

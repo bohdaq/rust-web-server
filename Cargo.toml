@@ -125,6 +125,7 @@ http-client = ["dep:rustls", "dep:webpki-roots"]
 brotli = ["dep:brotli"]
 zstd   = ["dep:zstd"]
 acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]
+fips   = ["http2", "rustls/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
 serde  = ["dep:serde", "dep:serde_json"]
 auth   = ["dep:hmac", "dep:sha2"]
 auth-asymmetric = ["auth", "dep:p256", "dep:rand_core"]  # RS256 (in-crate rsa_key) / ES256 (p256) in JwtLayer

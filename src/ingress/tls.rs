@@ -69,7 +69,7 @@ pub(crate) fn build_client_config(ca_pem: &str) -> Result<Arc<ClientConfig>, Str
     // Idempotent: errors only if a *different* provider was already
     // installed, which we don't care about — some other TLS-using module
     // (e.g. `crate::tls`) may have already installed the same one.
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let _ = crate::crypto_provider().install_default();
 
     let certs = parse_pem_certificates(ca_pem)?;
     if certs.is_empty() {

@@ -243,7 +243,7 @@ fn tls_acceptor(listeners: &[ListenerConfig], http: bool) -> Option<tokio_rustls
     if certs.is_empty() {
         return None;
     }
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let _ = crate::crypto_provider().install_default();
     let builder = rustls::ServerConfig::builder();
     let builder = match listeners.iter().find_map(|l| l.client_ca.as_ref()).map(client_verifier) {
         Some(Ok(verifier)) => builder.with_client_cert_verifier(verifier),

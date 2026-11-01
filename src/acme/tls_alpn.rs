@@ -130,7 +130,7 @@ pub(crate) async fn serve(addr: String, shutdown: tokio::sync::oneshot::Receiver
         }
         None => tokio::net::TcpListener::bind(&addr).await.map_err(|e| format!("TLS-ALPN-01 listener on {addr}: {e}"))?,
     };
-    let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+    let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(crate::crypto_provider()))
         .with_safe_default_protocol_versions()
         .map_err(|e| e.to_string())?
         .with_no_client_auth()

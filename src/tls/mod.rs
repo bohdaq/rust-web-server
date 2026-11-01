@@ -82,7 +82,7 @@ pub fn create_tls_acceptor_from_vhosts(
     default_cert: &str,
     default_key: &str,
 ) -> Result<TlsAcceptor, String> {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let _ = crate::crypto_provider().install_default();
 
     let resolver = SniCertResolver::build(vhosts, default_cert, default_key)?;
 
@@ -90,12 +90,12 @@ pub fn create_tls_acceptor_from_vhosts(
     let ca_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CLIENT_CA_FILE)
         .unwrap_or_default();
     let mut config = if ca_path.is_empty() {
-        ServerConfig::builder()
+        server_builder()?
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(resolver))
     } else {
         let verifier = load_client_verifier(&ca_path)?;
-        ServerConfig::builder()
+        server_builder()?
             .with_client_cert_verifier(verifier)
             .with_cert_resolver(Arc::new(resolver))
     };
@@ -106,7 +106,23 @@ pub fn create_tls_acceptor_from_vhosts(
         config.alpn_protocols.push(crate::acme::tls_alpn::ALPN.to_vec());
     }
 
+    require_fips(config.fips())?;
     Ok(TlsAcceptor::from(Arc::new(config)))
+}
+
+/// A server config builder on [`crate::crypto_provider`] (FIPS-only
+/// algorithms in a `fips` build), whatever provider is the process default.
+fn server_builder() -> Result<rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier>, String> {
+    ServerConfig::builder_with_provider(Arc::new(crate::crypto_provider())).with_safe_default_protocol_versions().map_err(|e| e.to_string())
+}
+
+/// In a `fips` build, refuse a TLS configuration rustls doesn't report as
+/// FIPS-compliant (18.23.0).
+pub(crate) fn require_fips(compliant: bool) -> Result<(), String> {
+    if crate::FIPS && !compliant {
+        return Err("this is a FIPS build, but the TLS configuration isn't FIPS-compliant".to_string());
+    }
+    Ok(())
 }
 
 /// Convenience wrapper for single-certificate deployments (backward compat).
@@ -120,25 +136,26 @@ pub fn create_quinn_server_config_from_vhosts(
     default_cert: &str,
     default_key: &str,
 ) -> Result<quinn::ServerConfig, String> {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let _ = crate::crypto_provider().install_default();
 
     let resolver = SniCertResolver::build(vhosts, default_cert, default_key)?;
 
     let ca_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CLIENT_CA_FILE)
         .unwrap_or_default();
     let mut tls_config = if ca_path.is_empty() {
-        ServerConfig::builder()
+        server_builder()?
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(resolver))
     } else {
         let verifier = load_client_verifier(&ca_path)?;
-        ServerConfig::builder()
+        server_builder()?
             .with_client_cert_verifier(verifier)
             .with_cert_resolver(Arc::new(resolver))
     };
 
     tls_config.max_early_data_size = u32::MAX;
     tls_config.alpn_protocols = vec![b"h3".to_vec()];
+    require_fips(tls_config.fips())?;
 
     let quic_config = quinn::crypto::rustls::QuicServerConfig::try_from(tls_config)
         .map_err(|e| format!("QUIC TLS config error: {}", e))?;
@@ -197,7 +214,7 @@ fn load_client_verifier(ca_path: &str) -> Result<Arc<dyn rustls::server::danger:
             .add(cert)
             .map_err(|e| format!("invalid CA cert in '{}': {}", ca_path, e))?;
     }
-    let mut builder = WebPkiClientVerifier::builder(Arc::new(root_store));
+    let mut builder = WebPkiClientVerifier::builder_with_provider(Arc::new(root_store), Arc::new(crate::crypto_provider()));
     let crl_files = std::env::var("RWS_CONFIG_TLS_CLIENT_CRL_FILE").unwrap_or_default();
     let crls = load_crls(&crl_files)?;
     if !crls.is_empty() {

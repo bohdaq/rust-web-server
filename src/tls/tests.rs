@@ -144,3 +144,17 @@ fn strict_refuses_stale_crls() {
     std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_FILE");
     std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_STRICT");
 }
+
+#[test]
+fn the_crypto_provider_matches_the_build() {
+    assert_eq!(crate::crypto_provider().fips(), crate::FIPS);
+}
+
+#[cfg(feature = "fips")]
+#[test]
+fn fips_builds_offer_only_fips_algorithms() {
+    let provider = crate::crypto_provider();
+    assert!(provider.fips());
+    assert!(!provider.cipher_suites.iter().any(|s| s.suite() == rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256), "ChaCha20 isn't FIPS-approved");
+    assert!(crate::tls::require_fips(true).is_ok() && crate::tls::require_fips(false).is_err());
+}
