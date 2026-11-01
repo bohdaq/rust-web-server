@@ -29,6 +29,31 @@ impl URL {
         decode_uri_component(component)
     }
 
+    /// A query or form value: `+` is a space, `%HH` a byte, the bytes read
+    /// as UTF-8 (invalid sequences become U+FFFD); a `%` without two hex
+    /// digits stays as it is (18.24.0).
+    pub fn form_decode(component: &str) -> String {
+        let b = component.as_bytes();
+        let mut out = Vec::with_capacity(b.len());
+        let mut i = 0;
+        while i < b.len() {
+            let hex = |c: u8| (c as char).to_digit(16);
+            match b[i] {
+                b'+' => out.push(b' '),
+                b'%' => match (b.get(i + 1).and_then(|c| hex(*c)), b.get(i + 2).and_then(|c| hex(*c))) {
+                    (Some(h), Some(l)) => {
+                        out.push((h * 16 + l) as u8);
+                        i += 2;
+                    }
+                    _ => out.push(b'%'),
+                },
+                c => out.push(c),
+            }
+            i += 1;
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
     pub fn build_query(params: HashMap<String, String>) -> String {
         build_url_search_params(params)
     }

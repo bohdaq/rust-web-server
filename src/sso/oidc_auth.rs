@@ -420,7 +420,7 @@ impl OidcAuth {
         let nonce    = Self::random_token();
         let redirect_uri = self.redirect_uri(request, connection);
         let return_to = query_param(request, "return_to")
-            .filter(|r| r.starts_with('/') && !r.starts_with("//") && !r.contains('\\'))
+            .filter(|r| local_path(r))
             .unwrap_or_else(|| self.config.post_login_redirect.clone());
 
         if self.signed.is_some() {
@@ -656,35 +656,19 @@ fn query_param(request: &Request, name: &str) -> Option<String> {
         let k = parts.next()?.trim();
         if k == name {
             let v = parts.next().unwrap_or("").trim();
-            return Some(percent_decode(v));
+            return Some(crate::url::URL::form_decode(v));
         }
     }
     None
 }
 
-fn percent_decode(s: &str) -> String {
-    let mut out   = String::with_capacity(s.len());
-    let bytes      = s.as_bytes();
-    let mut i      = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(b) = u8::from_str_radix(
-                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""),
-                16,
-            ) {
-                out.push(b as char);
-                i += 3;
-                continue;
-            }
-        }
-        if bytes[i] == b'+' {
-            out.push(' ');
-        } else {
-            out.push(bytes[i] as char);
-        }
-        i += 1;
-    }
-    out
+
+/// A `return_to` that stays on this site: a path starting with one `/`, no
+/// backslash and no control or whitespace characters (browsers drop tabs
+/// and newlines from URLs, so `/\t/evil.example` would become
+/// `//evil.example`, 18.24.0).
+fn local_path(r: &str) -> bool {
+    r.starts_with('/') && !r.starts_with("//") && !r.contains('\\') && !r.chars().any(|c| c.is_control() || c.is_whitespace())
 }
 
 fn error_response(msg: &str) -> Response {

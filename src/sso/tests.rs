@@ -1458,6 +1458,26 @@ mod oidc_auth_tests {
         let seen = app.captured.lock().unwrap().clone().unwrap();
         assert!(!seen.headers.iter().any(|h| h.name.to_ascii_lowercase().starts_with("x-auth-request") || h.name.eq_ignore_ascii_case("x-rws-oidc-claims")));
     }
+
+    #[test]
+    fn return_to_with_a_tab_or_space_is_replaced() {
+        for bad in ["/%09/evil.example", "/%0a/evil.example", "/%20/evil.example", "%2F%2Fevil.example", "/%5Cevil.example", "https://evil.example/"] {
+            let (mut config, _) = idp("");
+            config.redirect_uri = String::new();
+            let oidc = OidcAuth::new(config, Arc::new(SessionStore::new(60))).signed_cookies("k".as_bytes().to_vec());
+            let login = oidc.handle(&get(&format!("/auth/login?return_to={bad}")), &conn(), &OkApp).unwrap();
+            let pre = set_cookie(&login, "_rws_oidc_pre").unwrap();
+            let payload = String::from_utf8(super::super::pkce::base64url_decode(pre.split('.').next().unwrap()).unwrap()).unwrap();
+            assert!(payload.contains(r#""return_to":"/""#), "{bad}: {payload}");
+        }
+    }
+
+    #[test]
+    fn form_decoding_is_utf8() {
+        assert_eq!(crate::url::URL::form_decode("caf%C3%A9+au+lait%"), "café au lait%");
+        assert_eq!(crate::url::URL::form_decode("%zz%4"), "%zz%4");
+    }
+
 }
 
 // ── Provider presets and OidcConfig::from_env (Phase 5) ─────────────────────────
@@ -2196,4 +2216,5 @@ mod server_tests {
         let end = json[start..].find('"').unwrap();
         json[start..start + end].to_string()
     }
+
 }
