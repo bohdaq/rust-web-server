@@ -547,6 +547,7 @@ fn main() {
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
     rust_web_server::admin::start_from_env();
+    rust_web_server::cluster::start_from_env();
     telemetry();
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -582,6 +583,7 @@ async fn serve() {
     // handler, so the signal's default action ended the process.
     rust_web_server::config_watch::start();
     rust_web_server::admin::start_from_env();
+    rust_web_server::cluster::start_from_env();
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -623,6 +625,7 @@ async fn serve() {
     // handler, so the signal's default action ended the process.
     rust_web_server::config_watch::start();
     rust_web_server::admin::start_from_env();
+    rust_web_server::cluster::start_from_env();
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();

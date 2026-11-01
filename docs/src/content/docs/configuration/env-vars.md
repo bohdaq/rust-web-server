@@ -163,7 +163,10 @@ don't use them.
 | `RWS_CONFIG_ADMIN_TOKEN_ENV` | `RWS_ADMIN_TOKEN` | variable name | The environment variable holding the admin bearer token. Unset or empty: the admin listener doesn't start. |
 | `RWS_CONFIG_ADMIN_ALLOWED_ORIGINS` | (none) | comma list of origins | Browser origins allowed to call the admin API besides its own. |
 | `RWS_CONFIG_ADMIN_USERS` | (none) | comma list | More admin users, `name:ENV_VAR:role` each (role `viewer`, `operator` or `admin`; since 18.22.0). See [users and roles](/deployment/admin/#users-roles-and-the-audit-log). |
-| `RWS_CONFIG_CLUSTER_NODE` | host name | string | This replica's name in audit entries (`[cluster] node`; since 18.22.0). |
+| `RWS_CONFIG_CLUSTER_REDIS` | `RWS_CONFIG_ACME_REDIS` | `host:port` | Redis shared by replicas for runtime state: blocklist, maintenance, drains, flags, purges (since 18.22.0). See [Several replicas](/deployment/cluster/). |
+| `RWS_CONFIG_CLUSTER_REDIS_PASSWORD` | `RWS_CONFIG_ACME_REDIS_PASSWORD` | string | Its password (never printed). |
+| `RWS_CONFIG_CLUSTER_PREFIX` | `rws:cluster:` | string | Key prefix in that Redis. |
+| `RWS_CONFIG_CLUSTER_NODE` | host name | string | This replica's name in `status`, heartbeats and audit entries (`[cluster] node`; since 18.22.0). |
 | `RWS_CONFIG_ADMIN_AUDIT_LOG` | (memory only) | path | Append every admin change to this file as JSON lines. |
 | `RWS_CONFIG_ADMIN_OIDC_ISSUER` | (off) | URL | OIDC provider for signing in to the admin UI (discovery at `<issuer>/.well-known/openid-configuration`). |
 | `RWS_CONFIG_ADMIN_OIDC_PROVIDER` | (off) | `google`, `microsoft`, `github` | A provider preset instead of an issuer. |

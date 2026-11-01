@@ -142,14 +142,14 @@ blocking path, which hands the connection over). Plain-HTTP backends only.
 
 ## #76 Runtime state across replicas
 
-- `[cluster] redis = "redis://…"`, `prefix = "rws:"` (defaults to `[acme]
-  redis` when set). Blocklist, maintenance mode, drained backends and
-  feature flags are stored in Redis hashes and published on a channel;
-  every replica subscribes (`SUBSCRIBE` on a dedicated `RespConn`,
-  reconnect with backoff) and applies changes within a second, and
-  reloads the full state on (re)connect. Local changes write Redis first,
-  then apply. Redis down → local changes still apply, logged, synced on
-  reconnect (last writer wins, per key with a version counter).
+- `[cluster] redis = "host:port"`, `prefix = "rws:cluster:"` (defaults to
+  `[acme] redis` when set). One JSON document (`<prefix>state`, with a
+  version) holds blocklist, maintenance, drains, flags and the last 50
+  purges; changes go through a Lua script (`cjson`) so they apply
+  atomically; replicas poll it every second (rws's RESP client doesn't
+  read arrays, so no SUBSCRIBE/HGETALL) and match their state when the
+  version moves. Local changes apply first; Redis down → they queue;
+  an empty Redis is seeded from a replica's state.
 - Cache purges are broadcast (each replica purges its own caches).
 - The audit log names the replica (`hostname`/`[cluster] node`).
 - `rws ctl status` lists the replicas seen in the last minute (heartbeat
@@ -258,7 +258,7 @@ blocking path, which hands the connection over). Plain-HTTP backends only.
 | 4a | **done 2026-11-01** #82: relay moved to `proxy::upgrade` (gateway re-exports it), `WebSocket::upgrade_raw` ungated, `ConfigDrivenApp::execute_async` returns `None` for upgrades, `DynamicProxy::forward_upgrade` (prepare → backend, host override, read timeout; TLS backends 502). Tests: 2 unit (101 + relay with path rewrite and X-Forwarded-For, dead backend 502); `ci/e2e/ws_upgrade.sh` (CI `ws-upgrade`): Python RFC 6455 echo backend + client through rws, plain and TLS (`tls = "internal"`), 8 concurrent sockets, ordinary requests on the same route, dead backend 502 | done |
 | 4 | **done 2026-11-01** #74: `docs/…/cookbook/` — overview + 8 recipes (static site, SPA + API, Node, Python/Ruby, PHP, internal tools with OIDC + forward-auth, API gateway, local dev), sidebar group; `config_check::tests::cookbook_configs_pass_check` runs every TOML block through `check_str_offline` (needs acme + auth + sso: CI's feature-set run). Docker Compose / Kubernetes recipes not added (deployment/docker.md and kubernetes*.md cover them). Release 18.21.0 waits for the user | done |
 | 5 | **done 2026-11-01**: `admin::access` (Role, TokenUser/`parse_users`, `parse_role_map`/`role_for`, `required_role`, global audit ring 1000 + JSON-lines file, `redact`, `McpAuditLayer` for the binary's changing MCP tools); AdminApi: users, `authenticate` (tokens compared in constant time against all; OIDC via `LazyOidc` with `path_prefix=/admin` + new `OidcAuth::signed_in`), `/admin/auth/*`, public `GET /auth`, `GET /whoami`, `GET /audit`, CSRF `X-Rws-Admin` for cookie writes, role check, audit of changes/refusals; settings `[admin] users, audit_log, oidc_*` + `--check`. UI: SSO button, user · role in the header, X-Rws-Admin + same-origin credentials, Audit page (`admin-ui/build.sh`). `rws ctl whoami`/`audit`. Tests: 10 admin (users, role map, role matrix, audit+redaction, file, auth methods, check, MCP audit), ctl whoami/audit; `oidc.sh` admin sign-in via Keycloak (ops → operator, CSRF, tuples refused, unmapped refused, audited); `admin_ui.sh` header + Audit page | done |
-| 6 | #76 cluster state via Redis | — |
+| 6 | **done 2026-11-01**: `src/cluster` — `Op`, `State` (JSON as cjson writes it), `Store` (RedisStore: EVAL apply + heartbeat scripts; MemoryStore for tests), `Local` (ProcessState applies/snapshots blocklist, maintenance, drains, flags, purges), `ClusterSync` (publish/queue, tick: seed empty store from local snapshot, flush pending, adopt newer version, first read skips old purges; heartbeat every 5 s), `start_from_env` thread; admin ops publish; `status.cluster` + `rws ctl status` line; settings `[cluster] redis, redis_password, prefix, node`. Tests: 8 unit (JSON round trip incl. captured cjson output, purge cap, two replicas, store down + queue, late replica, empty store seeded, process state); `ci/e2e/cluster.sh` (CI `cluster`, real Redis): block/unblock, maintenance, drain, flag across replicas, Redis restarted empty (seeded back, queued change arrives, drain kept), late replica adopts, audit names node | done |
 | 7 | #77 WAF → release 18.22.0 | — |
 | 8 | #81 LTS + security policy | — |
 | 9 | #78 FIPS build | — |

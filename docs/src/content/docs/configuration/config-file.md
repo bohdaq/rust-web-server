@@ -274,6 +274,11 @@ serve_dotfiles          = false        # RWS_CONFIG_SERVE_DOTFILES: serve .git/,
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
 
+[cluster]                            # RWS_CONFIG_CLUSTER_*: runtime state shared by replicas (18.22.0)
+redis  = "10.0.0.20:6379"            # default: [acme] redis
+prefix = "rws:cluster:"
+node   = "web-1"                     # default: the host name
+
 [gateway_api]                        # RWS_CONFIG_GATEWAY_API_*: the Kubernetes Gateway API controller (gateway-api feature)
 enabled         = true
 controller_name = "rws8.tech/gateway-controller"

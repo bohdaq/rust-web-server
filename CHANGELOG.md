@@ -55,6 +55,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `GET /whoami`. Single sign-on for the admin UI with `oidc_issuer` /
   `oidc_provider` and `oidc_roles` (groups → roles), cookie changes guarded
   by an `X-Rws-Admin` header.
+- Runtime state across replicas (#76): with `[cluster] redis` (or
+  `[acme] redis`) the IP blocklist, maintenance mode, drained backends,
+  feature flags and cache purges changed on one replica apply on all of
+  them within a second; Redis outages are ridden out (changes queue, an
+  empty Redis is re-seeded from the replicas); `status` lists the nodes.
 
 ### Fixed
 

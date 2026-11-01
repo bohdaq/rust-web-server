@@ -632,6 +632,13 @@ fn print_status(out: &mut dyn Write, body: &str) -> std::io::Result<()> {
     writeln!(out, "admin     {}", field(&listeners, "admin"))?;
     let features: Vec<String> = elements(&member(body, "features")).iter().map(|f| text(f)).collect();
     writeln!(out, "features  {}", features.join(" "))?;
+    let cluster = member(body, "cluster");
+    if !cluster.is_empty() && cluster.trim() != "null" {
+        let nodes: Vec<String> = elements(&member(&cluster, "nodes")).iter().map(|n| text(n)).collect();
+        let pending = field(&cluster, "pending");
+        let pending = if pending == "0" || pending.is_empty() { String::new() } else { format!(", {pending} change(s) waiting") };
+        writeln!(out, "cluster   node {} · Redis {} · {} node(s): {}{pending}", field(&cluster, "node"), field(&cluster, "redis"), nodes.len(), nodes.join(", "))?;
+    }
     for d in elements(&member(body, "disk")) {
         let free = field(&d, "free_bytes").parse().map(bytes).unwrap_or_default();
         let total = field(&d, "total_bytes").parse().map(bytes).unwrap_or_default();

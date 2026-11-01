@@ -511,6 +511,10 @@
         "link": "/deployment/admin/"
       },
       {
+        "label": "Several replicas",
+        "link": "/deployment/cluster/"
+      },
+      {
         "label": "Traffic insights",
         "link": "/deployment/traffic/"
       },

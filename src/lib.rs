@@ -149,6 +149,9 @@ pub mod proxy_config;
 pub mod llm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod admin;
+/// Runtime state shared across replicas through Redis (18.22.0).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod cluster;
 /// FastCGI client: PHP through php-fpm (18.21.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod fastcgi;

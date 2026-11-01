@@ -89,6 +89,7 @@ pub fn maintenance_json() -> String {
 
 pub fn set_maintenance(active: bool) -> String {
     crate::maintenance::MAINTENANCE_MODE.store(active, Ordering::SeqCst);
+    crate::cluster::publish(crate::cluster::Op::Maintenance(active));
     maintenance_json()
 }
 
@@ -99,11 +100,13 @@ pub fn blocklist_json() -> String {
 
 pub fn block(ip: &str) -> String {
     crate::blocklist::global().block(ip);
+    crate::cluster::publish(crate::cluster::Op::Block(ip.to_string()));
     format!(r#"{{"blocked":{}}}"#, quoted(ip))
 }
 
 pub fn unblock(ip: &str) -> String {
     crate::blocklist::global().unblock(ip);
+    crate::cluster::publish(crate::cluster::Op::Unblock(ip.to_string()));
     format!(r#"{{"unblocked":{}}}"#, quoted(ip))
 }
 
@@ -116,6 +119,7 @@ pub fn flags_json() -> String {
 
 pub fn set_flag(name: &str, enabled: bool) -> String {
     crate::feature::global().set(name, enabled);
+    crate::cluster::publish(crate::cluster::Op::Flag { name: name.to_string(), enabled });
     format!(r#"{{"name":{},"enabled":{enabled}}}"#, quoted(name))
 }
 
@@ -229,6 +233,7 @@ pub fn set_drained(upstream: &str, backend: &str, drained: bool) -> Result<Strin
         return Err(format!("upstream {upstream:?} has no backend {backend:?}"));
     }
     crate::proxy_config::upstream::set_drained(upstream, backend, drained);
+    crate::cluster::publish(crate::cluster::Op::Drain { upstream: upstream.to_string(), backend: backend.to_string(), drained });
     Ok(format!(r#"{{"upstream":{},"backend":{},"drained":{drained}}}"#, quoted(upstream), quoted(backend)))
 }
 
@@ -310,6 +315,7 @@ pub fn purge_cache(name: &str, path: Option<&str>, prefix: Option<&str>) -> Opti
         _ => crate::cache::Purge::All,
     };
     let n = cache.purge(&target);
+    crate::cluster::publish(crate::cluster::Op::Purge { cache: name.to_string(), path: path.filter(|p| !p.is_empty()).map(str::to_string), prefix: prefix.filter(|p| !p.is_empty()).map(str::to_string) });
     Some(format!(r#"{{"name":{},"purged":{n}}}"#, quoted(name)))
 }
 
