@@ -7,6 +7,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- Local HTTPS (#71): `tls = "internal"` (`--tls=internal`) makes rws its
+  own certificate authority and serves a certificate for `localhost`,
+  `127.0.0.1`, `::1`, the listen address, the virtual hosts and
+  `tls_internal_names`, re-issued weekly without a restart. `rws trust`
+  puts the CA in the system trust store (Linux, macOS, Windows, and the
+  NSS database browsers use on Linux); `rws untrust` removes it.
+
 ### Fixed
 
 - The admin API's IP blocklist (and `rws ctl block`) now applies in proxy

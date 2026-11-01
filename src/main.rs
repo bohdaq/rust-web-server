@@ -511,6 +511,11 @@ async fn start_acme(listener: Option<&std::net::TcpListener>) {
 /// errors, 1 otherwise.
 fn exit_if_informational_flag() {
     let args: Vec<String> = std::env::args().collect();
+    // `rws trust` / `rws untrust`: the local CA in the system trust store.
+    #[cfg(feature = "http2")]
+    if let Some(code) = rust_web_server::tls::internal::trust_command(&args) {
+        std::process::exit(code);
+    }
     // `rws ctl …` / `rwsctl …`: a client of the admin API, not a server.
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(ctl_args) = rust_web_server::ctl::requested(&args) {
@@ -566,6 +571,7 @@ async fn serve() {
     #[cfg(feature = "gateway-api")]
     rust_web_server::gateway_api::start_from_env();
 
+    rust_web_server::tls::internal::start_from_env();
     start_acme(Some(&listener)).await;
     // After ACME, not before: provisioning writes the certificate and key the
     // watcher watches, and its SIGHUP arrived before run_tls installs the
@@ -606,6 +612,7 @@ async fn serve() {
     #[cfg(feature = "gateway-api")]
     rust_web_server::gateway_api::start_from_env();
 
+    rust_web_server::tls::internal::start_from_env();
     start_acme(Some(&listener)).await;
     // After ACME, not before: provisioning writes the certificate and key the
     // watcher watches, and its SIGHUP arrived before run_tls installs the

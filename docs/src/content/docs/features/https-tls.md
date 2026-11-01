@@ -16,9 +16,52 @@ cargo build
 cargo build --no-default-features --features http2
 ```
 
+## Local HTTPS: `tls = "internal"`
+
+For development, rws can be its own certificate authority (since 18.21.0):
+
+```sh
+rws --tls=internal          # or tls = "internal" in rws.config.toml
+rws trust                   # once: browsers and curl trust https://localhost
+```
+
+On first use rws creates a CA (EC P-256, valid ten years) in your data
+directory — `~/.local/share/rws/pki` on Linux (`$XDG_DATA_HOME` if set),
+`~/Library/Application Support/rws/pki` on macOS, `%APPDATA%\rws\pki` on
+Windows; `tls_internal_dir` (`RWS_CONFIG_TLS_INTERNAL_DIR`) moves it. It then
+serves a certificate it issued for `localhost`, `127.0.0.1`, `::1`, the
+listen address, every `[[virtual_host]]` domain and the names in
+`tls_internal_names`:
+
+```toml
+tls = "internal"
+tls_internal_names = "app.localhost, api.localhost, myapp.test"
+```
+
+The certificate lives 7 days and is re-issued at half-life without a
+restart. Browsers refuse wildcards directly under a top-level name, so list
+`app.localhost` rather than `*.localhost` (`*.myapp.test` is fine).
+
+`rws trust` adds the CA to the system trust store — `update-ca-certificates`
+on Debian/Ubuntu, `update-ca-trust` on Fedora/RHEL, `trust` on Arch (with
+`sudo`, which asks for your password), the System keychain on macOS, the
+current user's Root store on Windows — and to the NSS database Chrome and
+Firefox use on Linux (`~/.pki/nssdb`, needs `certutil` from
+`libnss3-tools`). `rws untrust` takes it out; `rws trust --print` writes the
+CA certificate to stdout, e.g. for a phone or another machine:
+
+```sh
+rws trust --print > rws-ca.pem
+curl --cacert rws-ca.pem https://localhost:7878/
+```
+
+Only for development and private networks: the CA key sits on your disk.
+If `tls_cert_file`/`tls_key_file` or `acme_domains` are set, they win and
+`tls = "internal"` is ignored (with a note at startup).
+
 ## Generating a self-signed certificate
 
-Use `openssl` to create a certificate and key for local development:
+Or use `openssl` to create a certificate and key yourself:
 
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem \

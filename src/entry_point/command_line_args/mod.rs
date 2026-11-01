@@ -54,6 +54,8 @@ fn help_text() -> String {
     }
     text.push_str("      --check[=<file>]                         Validate rws.config.toml (or <file>) and exit:\n");
     text.push_str("                                               0 if it has no errors, 1 otherwise\n");
+    text.push_str("      trust [--print] | untrust                Put rws's local CA (tls = \"internal\") in the\n");
+    text.push_str("                                               system trust store, or take it out\n");
     text.push_str("      ctl <command>                            Drive a running server's admin API\n");
     text.push_str("                                               (rws ctl help; also installed as rwsctl)\n");
     text.push_str("  -V, --version                                Print version and exit\n");
@@ -241,6 +243,14 @@ impl CommandLineArgument {
                 _hint: Some(hint.to_string()),
             });
         }
+
+        let argument = CommandLineArgument {
+            short_form: "".to_string(),
+            long_form: "tls".to_string(),
+            environment_variable: "RWS_CONFIG_TLS".to_string(),
+            _hint: Some("internal: HTTPS from rws's own CA (local development; see rws trust)".to_string())
+        };
+        argument_list.push(argument);
 
         argument_list
     }

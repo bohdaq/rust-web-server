@@ -18,6 +18,8 @@ mod tests;
 /// `tests.rs` checks this list against every `RWS_CONFIG_*` name in `src/`.
 pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
     "RWS_CONFIG_CACHE_STATUS",
+    "RWS_CONFIG_TLS_INTERNAL_DIR",
+    "RWS_CONFIG_TLS_INTERNAL_NAMES",
     "RWS_CONFIG_ERROR_FORMAT",
     "RWS_CONFIG_TLS_CLIENT_CRL_FILE",
     "RWS_CONFIG_TLS_CLIENT_CRL_STRICT",

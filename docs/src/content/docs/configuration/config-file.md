@@ -118,6 +118,9 @@ port               = 443         # RWS_CONFIG_PORT (default: 7878)
 thread_count       = 200         # RWS_CONFIG_THREAD_COUNT (default: 200, http1 build only)
 tls_cert_file      = "cert.pem"  # RWS_CONFIG_TLS_CERT_FILE — enables HTTPS, HTTP/2, HTTP/3
 tls_key_file       = "key.pem"   # RWS_CONFIG_TLS_KEY_FILE
+# tls              = "internal"  # RWS_CONFIG_TLS: HTTPS from rws's own CA instead (local development, rws trust)
+# tls_internal_names = "app.localhost"  # RWS_CONFIG_TLS_INTERNAL_NAMES: more names for that certificate
+# tls_internal_dir = "/path/pki" # RWS_CONFIG_TLS_INTERNAL_DIR: where the CA lives (default: per-user data dir)
 http_redirect_port = 80          # RWS_CONFIG_HTTP_REDIRECT_PORT — HTTP → HTTPS redirect listener
 request_allocation_size_in_bytes = 10000  # RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES — per-read chunk size
 ```

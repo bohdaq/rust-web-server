@@ -9,6 +9,8 @@ use tokio_rustls::TlsAcceptor;
 
 use crate::virtual_host::VirtualHostConfig;
 
+pub mod internal;
+
 #[cfg(test)]
 mod tests;
 

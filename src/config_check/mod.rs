@@ -289,6 +289,11 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     }
                 }
             }
+            "RWS_CONFIG_TLS" => {
+                if !value.is_empty() && !value.eq_ignore_ascii_case("internal") {
+                    report.error(format!("{key} = {value:?}: expected \"internal\" (or leave it out)"));
+                }
+            }
             "RWS_CONFIG_TEMPLATE_DIR" => {
                 if !offline() && !value.is_empty() && !Path::new(value).is_dir() {
                     report.warn(format!("{key} = {value:?}: directory not found"));

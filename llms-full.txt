@@ -1104,6 +1104,9 @@ concurrency differently — this variable is read but ignored at runtime.
 | Variable | Default | Type | Description |
 |----------|---------|------|-------------|
 | `RWS_CONFIG_TLS_CERT_FILE` | `` (empty) | path | Path to the PEM-encoded certificate chain file. When non-empty, enables HTTPS, HTTP/2, and HTTP/3. |
+| `RWS_CONFIG_TLS` | (empty) | string | `internal`: serve HTTPS with a certificate from rws's own CA (since 18.21.0; local development — see [HTTPS / TLS](/features/https-tls/#local-https-tls--internal)). Ignored when certificate files or ACME domains are set. |
+| `RWS_CONFIG_TLS_INTERNAL_NAMES` | (empty) | list | More names (comma-separated) for the `tls = "internal"` certificate, beside `localhost`, `127.0.0.1`, `::1`, the listen address and the virtual hosts. |
+| `RWS_CONFIG_TLS_INTERNAL_DIR` | per-user data dir | path | Where rws keeps its local CA and the certificate it issues (`~/.local/share/rws/pki` on Linux). |
 | `RWS_CONFIG_TLS_KEY_FILE` | `` (empty) | path | Path to the PEM-encoded private key file. Must match `RWS_CONFIG_TLS_CERT_FILE`. |
 | `RWS_CONFIG_TLS_CLIENT_CA_FILE` | `` (empty) | path | Path to a PEM-encoded CA certificate used to verify client certificates (mTLS). When set, the TLS handshake requires a valid client certificate signed by this CA. Connections without a valid cert are rejected before any HTTP processing. |
 | `RWS_CONFIG_HTTP_REDIRECT_PORT` | `` (empty) | integer | When non-empty, a plain-HTTP listener is started on this port that issues `301 Moved Permanently` redirects to HTTPS. Set to `80` when running on standard ports. Requires TLS to be configured. |
@@ -1419,6 +1422,9 @@ port               = 443         # RWS_CONFIG_PORT (default: 7878)
 thread_count       = 200         # RWS_CONFIG_THREAD_COUNT (default: 200, http1 build only)
 tls_cert_file      = "cert.pem"  # RWS_CONFIG_TLS_CERT_FILE — enables HTTPS, HTTP/2, HTTP/3
 tls_key_file       = "key.pem"   # RWS_CONFIG_TLS_KEY_FILE
+# tls              = "internal"  # RWS_CONFIG_TLS: HTTPS from rws's own CA instead (local development, rws trust)
+# tls_internal_names = "app.localhost"  # RWS_CONFIG_TLS_INTERNAL_NAMES: more names for that certificate
+# tls_internal_dir = "/path/pki" # RWS_CONFIG_TLS_INTERNAL_DIR: where the CA lives (default: per-user data dir)
 http_redirect_port = 80          # RWS_CONFIG_HTTP_REDIRECT_PORT — HTTP → HTTPS redirect listener
 request_allocation_size_in_bytes = 10000  # RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES — per-read chunk size
 ```
@@ -6514,9 +6520,52 @@ cargo build
 cargo build --no-default-features --features http2
 ```
 
+## Local HTTPS: `tls = "internal"`
+
+For development, rws can be its own certificate authority (since 18.21.0):
+
+```sh
+rws --tls=internal          # or tls = "internal" in rws.config.toml
+rws trust                   # once: browsers and curl trust https://localhost
+```
+
+On first use rws creates a CA (EC P-256, valid ten years) in your data
+directory — `~/.local/share/rws/pki` on Linux (`$XDG_DATA_HOME` if set),
+`~/Library/Application Support/rws/pki` on macOS, `%APPDATA%\rws\pki` on
+Windows; `tls_internal_dir` (`RWS_CONFIG_TLS_INTERNAL_DIR`) moves it. It then
+serves a certificate it issued for `localhost`, `127.0.0.1`, `::1`, the
+listen address, every `[[virtual_host]]` domain and the names in
+`tls_internal_names`:
+
+```toml
+tls = "internal"
+tls_internal_names = "app.localhost, api.localhost, myapp.test"
+```
+
+The certificate lives 7 days and is re-issued at half-life without a
+restart. Browsers refuse wildcards directly under a top-level name, so list
+`app.localhost` rather than `*.localhost` (`*.myapp.test` is fine).
+
+`rws trust` adds the CA to the system trust store — `update-ca-certificates`
+on Debian/Ubuntu, `update-ca-trust` on Fedora/RHEL, `trust` on Arch (with
+`sudo`, which asks for your password), the System keychain on macOS, the
+current user's Root store on Windows — and to the NSS database Chrome and
+Firefox use on Linux (`~/.pki/nssdb`, needs `certutil` from
+`libnss3-tools`). `rws untrust` takes it out; `rws trust --print` writes the
+CA certificate to stdout, e.g. for a phone or another machine:
+
+```sh
+rws trust --print > rws-ca.pem
+curl --cacert rws-ca.pem https://localhost:7878/
+```
+
+Only for development and private networks: the CA key sits on your disk.
+If `tls_cert_file`/`tls_key_file` or `acme_domains` are set, they win and
+`tls = "internal"` is ignored (with a note at startup).
+
 ## Generating a self-signed certificate
 
-Use `openssl` to create a certificate and key for local development:
+Or use `openssl` to create a certificate and key yourself:
 
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem \

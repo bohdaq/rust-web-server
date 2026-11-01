@@ -56,6 +56,9 @@ concurrency differently — this variable is read but ignored at runtime.
 | Variable | Default | Type | Description |
 |----------|---------|------|-------------|
 | `RWS_CONFIG_TLS_CERT_FILE` | `` (empty) | path | Path to the PEM-encoded certificate chain file. When non-empty, enables HTTPS, HTTP/2, and HTTP/3. |
+| `RWS_CONFIG_TLS` | (empty) | string | `internal`: serve HTTPS with a certificate from rws's own CA (since 18.21.0; local development — see [HTTPS / TLS](/features/https-tls/#local-https-tls--internal)). Ignored when certificate files or ACME domains are set. |
+| `RWS_CONFIG_TLS_INTERNAL_NAMES` | (empty) | list | More names (comma-separated) for the `tls = "internal"` certificate, beside `localhost`, `127.0.0.1`, `::1`, the listen address and the virtual hosts. |
+| `RWS_CONFIG_TLS_INTERNAL_DIR` | per-user data dir | path | Where rws keeps its local CA and the certificate it issues (`~/.local/share/rws/pki` on Linux). |
 | `RWS_CONFIG_TLS_KEY_FILE` | `` (empty) | path | Path to the PEM-encoded private key file. Must match `RWS_CONFIG_TLS_CERT_FILE`. |
 | `RWS_CONFIG_TLS_CLIENT_CA_FILE` | `` (empty) | path | Path to a PEM-encoded CA certificate used to verify client certificates (mTLS). When set, the TLS handshake requires a valid client certificate signed by this CA. Connections without a valid cert are rejected before any HTTP processing. |
 | `RWS_CONFIG_HTTP_REDIRECT_PORT` | `` (empty) | integer | When non-empty, a plain-HTTP listener is started on this port that issues `301 Moved Permanently` redirects to HTTPS. Set to `80` when running on standard ports. Requires TLS to be configured. |

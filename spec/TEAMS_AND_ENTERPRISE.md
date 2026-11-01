@@ -42,8 +42,8 @@ record at scale (the user's).
   rws keeps its own CA (EC P-256, 10 years) in the state directory
   (`RWS_CONFIG_STATE_DIR`, default the ACME state dir) and issues leaf
   certificates (7 days, renewed at half-life, hot-swapped) for
-  `localhost`, `*.localhost`, `127.0.0.1`, `::1` and any configured
-  names. With no certificate configured and the listener on loopback,
+  `localhost`, `127.0.0.1`, `::1` and any configured names (no
+  `*.localhost`: browsers and webpki refuse wildcards under a single label). With no certificate configured and the listener on loopback,
   `rws --tls-internal` is the one-flag local HTTPS.
 - `rws trust` / `rws untrust`: install the CA into the system trust store
   (Debian/Ubuntu `update-ca-certificates`, Fedora/RHEL `update-ca-trust`,
@@ -240,7 +240,7 @@ limits + CORS), Docker Compose, Kubernetes. Each config is checked by
 
 | # | Scope | Status |
 |---|---|---|
-| 1 | #71 local HTTPS | — |
+| 1 | **done 2026-11-01**: `tls::internal` — `LocalCa` (rcgen; CA P-256 10 y in the per-user data dir or `tls_internal_dir`, `ca.key` 0600, issuer rebuilt from `ca.name` since rcgen can't parse without x509-parser), leaf 7 d for loopback + listen address + vhosts + `tls_internal_names` (names validated; no single-label wildcards), written key-first, `start_from_env` before ACME fills empty TLS paths, renewal thread at half-life → `request_reload` (unless `watch`). `rws trust [--print]`/`untrust` (update-ca-certificates / update-ca-trust / trust, sudo when not root; macOS System keychain; Windows user Root; NSS db optional). `--tls` flag, `--check` validates. rcgen moved into `http2`. Tests: 7 unit (CA reuse, 0600, handshake per name via rustls, foreign CA refused, bad names, names(), start_from_env); `ci/e2e/tls_internal.sh` (CI `tls-internal`, runs `rws trust` only on CI). Per-vhost `tls = "internal"` dropped: vhosts without files fall back to this certificate | done |
 | 2 | #72 FastCGI | — |
 | 3 | #73 OIDC + forward-auth in config | — |
 | 4 | #74 cookbook → release 18.21.0 (with the user's go) | — |
