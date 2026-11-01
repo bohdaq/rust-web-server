@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- systemd integration (#67), without libsystemd: with `Type=notify` rws says
+  `READY=1` once it serves (listeners bound, certificates loaded),
+  `RELOADING=1` / `READY=1` around a reload, `STOPPING=1` at shutdown, and
+  pings `WATCHDOG=1` from its event loop at half `WatchdogSec`. Socket
+  activation: listeners systemd passes (`rws.socket`, matched by
+  `FileDescriptorName` or port) are used instead of binding — restarts
+  refuse nothing — including by every per-core runtime. The packages' unit
+  is `Type=notify` with `WatchdogSec=30` and they install `rws.socket`.
+
 ## 18.19.0 — 2026-11-01
 
 ### Changed

@@ -22,6 +22,8 @@ contents:
       mode: 0755
   - src: packaging/linux/rws.service
     dst: /usr/lib/systemd/system/rws.service
+  - src: packaging/linux/rws.socket
+    dst: /usr/lib/systemd/system/rws.socket
   - src: packaging/linux/rws.config.toml
     dst: /etc/rws/rws.config.toml
     type: config|noreplace

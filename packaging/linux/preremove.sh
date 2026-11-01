@@ -3,4 +3,5 @@
 set -e
 if { [ "$1" = remove ] || [ "$1" = 0 ]; } && [ -d /run/systemd/system ]; then
   systemctl disable --now rws.service || true
+  systemctl disable --now rws.socket 2>/dev/null || true
 fi

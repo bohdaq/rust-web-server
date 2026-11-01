@@ -5,7 +5,11 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+# rws says when it serves (after listeners and certificates), around
+# reloads and at shutdown, and pings the watchdog while it runs.
+Type=notify
+NotifyAccess=main
+WatchdogSec=30
 User=rws
 Group=rws
 WorkingDirectory=/var/www/rws

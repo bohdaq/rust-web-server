@@ -538,9 +538,13 @@ fn main() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
         let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
+        rust_web_server::systemd::ready("serving");
         Server::run(listener, pool, proxy_app);
     } else {
         SERVER_READY.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
+        rust_web_server::systemd::ready("serving");
         Server::run(listener, pool, build_app());
     }
     rust_web_server::otel::shutdown();
@@ -568,12 +572,16 @@ async fn serve() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
         let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
+        rust_web_server::systemd::ready("serving");
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),
             Server::run_redirect(),
         );
     } else {
         SERVER_READY.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
+        rust_web_server::systemd::ready("serving");
         tokio::join!(
             Server::run_tls(listener, pool, build_app()),
             Server::run_redirect(),
@@ -604,6 +612,8 @@ async fn serve() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
         let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
+        rust_web_server::systemd::ready("serving");
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),
             Server::run_quic(proxy_app),
@@ -611,6 +621,8 @@ async fn serve() {
         );
     } else {
         SERVER_READY.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
+        rust_web_server::systemd::ready("serving");
         // One app for both listeners (building it twice printed its
         // startup notes twice).
         let app = build_app();

@@ -80,6 +80,12 @@ pub(crate) fn pool_key(key: &str) -> Cow<'_, str> {
 /// runtimes' (`SO_REUSEPORT`: the kernel spreads connections across them).
 #[cfg(unix)]
 pub(crate) fn bind(addr: SocketAddr) -> std::io::Result<tokio::net::TcpListener> {
+    // Socket activation: every runtime accepts on a copy of systemd's socket
+    // (a new SO_REUSEPORT socket couldn't share the port with it).
+    if let Some(listener) = crate::systemd::tcp(addr, None) {
+        listener.set_nonblocking(true)?;
+        return tokio::net::TcpListener::from_std(listener);
+    }
     let socket = if addr.is_ipv4() { tokio::net::TcpSocket::new_v4()? } else { tokio::net::TcpSocket::new_v6()? };
     socket.set_reuseaddr(true)?;
     socket.set_reuseport(true)?;

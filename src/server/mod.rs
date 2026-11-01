@@ -691,7 +691,15 @@ impl Server {
 
         println!("Setting up {}://{}...", protocol, &bind_addr);
 
-        let boxed_listener = TcpListener::bind(&bind_addr);
+        // A socket systemd passed (socket activation), else our own.
+        #[cfg(unix)]
+        let inherited = bind_addr.parse::<std::net::SocketAddr>().ok().and_then(|addr| crate::systemd::tcp(addr, Some(protocol)));
+        #[cfg(not(unix))]
+        let inherited: Option<TcpListener> = None;
+        let boxed_listener = match inherited {
+            Some(listener) => Ok(listener),
+            None => TcpListener::bind(&bind_addr),
+        };
         if boxed_listener.is_err() {
             let message = format!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
             return Err(message);
@@ -759,6 +767,8 @@ impl Server {
             }
 
             crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+            #[cfg(unix)]
+            crate::systemd::stopping();
             println!("Shutting down — waiting for in-flight connections to finish");
             pool.join();
             println!("Server stopped");
@@ -1089,7 +1099,9 @@ async fn sigterm() {
         }
     }
     #[cfg(not(unix))]
-    requested.await
+    requested.await;
+    #[cfg(unix)]
+    crate::systemd::stopping();
 }
 
 /// Returns a stream that fires on each SIGHUP on Unix; never fires elsewhere.
@@ -1118,6 +1130,14 @@ async fn sighup() {
 #[cfg(feature = "http2")]
 pub(crate) async fn bind_all_families(ip: &str, port: u16) -> Result<Vec<tokio::net::TcpListener>, String> {
     use tokio::net::TcpListener;
+    #[cfg(unix)]
+    {
+        let wanted = if ip.contains(':') { format!("[{ip}]:{port}") } else { format!("{ip}:{port}") };
+        if let Some(listener) = wanted.parse().ok().and_then(|addr| crate::systemd::tcp(addr, Some("redirect"))) {
+            listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+            return TcpListener::from_std(listener).map(|l| vec![l]).map_err(|e| e.to_string());
+        }
+    }
     if ip != "0.0.0.0" {
         let addr = if ip.contains(':') { format!("[{ip}]:{port}") } else { format!("{ip}:{port}") };
         return TcpListener::bind(&addr).await.map(|l| vec![l]).map_err(|e| format!("{addr}: {e}"));
@@ -1516,7 +1536,16 @@ impl Server {
             }
         };
 
-        let endpoint = match quinn::Endpoint::server(server_config, addr) {
+        // A UDP socket systemd passed, else bind one.
+        #[cfg(unix)]
+        let inherited = crate::systemd::udp(addr, Some("quic"));
+        #[cfg(not(unix))]
+        let inherited: Option<std::net::UdpSocket> = None;
+        let endpoint = match inherited {
+            Some(socket) => quinn::Endpoint::new(quinn::EndpointConfig::default(), Some(server_config), socket, std::sync::Arc::new(quinn::TokioRuntime)),
+            None => quinn::Endpoint::server(server_config, addr),
+        };
+        let endpoint = match endpoint {
             Ok(e) => e,
             Err(e) => {
                 eprintln!("QUIC endpoint error: {}", e);

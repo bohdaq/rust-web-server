@@ -124,7 +124,7 @@ rwsctl traffic [--week|--month] [--host h]
 
 | # | Scope | Status |
 |---|---|---|
-| 1 | #67 notify (READY/RELOADING/STOPPING/STATUS/WATCHDOG) + socket activation + unit/socket files + docs + e2e | — |
+| 1 | **done 2026-11-01**: `src/systemd` (unix, server builds): `notify` (path or `@abstract`), `ready`/`reloading`/`reloaded`/`stopping`/`status`, watchdog from the tokio runtime (thread in http1) when `WATCHDOG_USEC` (and `WATCHDOG_PID`) say; `LISTEN_FDS`/`LISTEN_PID`/`LISTEN_FDNAMES` read once (vars removed, fds CLOEXEC, kind via `SO_TYPE`), `tcp(addr, name)`/`udp(addr, name)` return a dup matched by name, exact address, then port. Wired: `Server::setup` (name http/https), per-core `bind` (each runtime a dup — a new SO_REUSEPORT socket can't share systemd's port), redirect (`redirect`), QUIC via `Endpoint::new` (`quic`), admin (`admin`); READY next to `SERVER_READY=true` in every main, RELOADING/READY around `config_reload::reload`, STOPPING in `sigterm()` and the http1 shutdown. Packaging: unit `Type=notify` + `NotifyAccess=main` + `WatchdogSec=30` (docs block kept identical), `rws.socket` installed, preremove disables it. Tests: notifications (path + abstract), inherited matching/copies; `ci/e2e/systemd.sh` (CI `systemd`): Python NOTIFY_SOCKET (READY after serving, WATCHDOG, RELOADING/READY on SIGHUP, STOPPING on SIGTERM) + `systemd-socket-activate` | done |
 | 2 | #68 Forwarded + CRLs + docs + e2e; release 18.20.0 | — |
 | 3 | #69 HS256 secret lists + htpasswd reload + docs | — |
 | 4 | #70 `rws ctl` + docs + e2e; release 18.21.0 | — |

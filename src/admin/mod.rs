@@ -516,7 +516,14 @@ pub fn start(config: &AdminConfig) -> Result<Option<std::net::SocketAddr>, Strin
         return Ok(None);
     }
     let token = config.token()?;
-    let listener = std::net::TcpListener::bind(&config.listen).map_err(|e| format!("can't listen on {}: {e}", config.listen))?;
+    #[cfg(unix)]
+    let inherited = config.listen.parse().ok().and_then(|addr| crate::systemd::tcp(addr, Some("admin")));
+    #[cfg(not(unix))]
+    let inherited: Option<std::net::TcpListener> = None;
+    let listener = match inherited {
+        Some(listener) => listener,
+        None => std::net::TcpListener::bind(&config.listen).map_err(|e| format!("can't listen on {}: {e}", config.listen))?,
+    };
     let local = listener.local_addr().map_err(|e| e.to_string())?;
     let api = AdminApi::new(token).allowed_origins(config.allowed_origins.clone());
     std::thread::Builder::new()

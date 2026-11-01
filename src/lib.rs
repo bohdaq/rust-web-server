@@ -61,6 +61,8 @@ pub mod error;
 pub mod extract;
 pub mod i18n;
 pub mod a2a;
+#[cfg(all(unix, any(feature = "http1", feature = "http2")))]
+pub mod systemd;
 pub mod ip_filter;
 pub mod macros;
 pub mod blocklist;

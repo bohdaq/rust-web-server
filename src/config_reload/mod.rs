@@ -190,6 +190,14 @@ pub fn request_reload() {
 /// TLS cert/key) are silently ignored — they are re-parsed from the file but
 /// have no effect until the next process start.
 pub fn reload() {
+    #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
+    crate::systemd::reloading();
+    reload_settings();
+    #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
+    crate::systemd::reloaded();
+}
+
+fn reload_settings() {
     // Re-parse rws.config.toml → updates process env vars for CORS, log format, etc.
     // Only one thread ever calls this (the signal handler or admin endpoint),
     // while workers only read env vars, so the single-writer / many-readers

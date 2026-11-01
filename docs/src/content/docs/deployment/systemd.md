@@ -68,7 +68,11 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+# rws says when it serves (after listeners and certificates), around
+# reloads and at shutdown, and pings the watchdog while it runs.
+Type=notify
+NotifyAccess=main
+WatchdogSec=30
 User=rws
 Group=rws
 WorkingDirectory=/var/www/rws
@@ -137,6 +141,46 @@ Rotate it with logrotate, which tells rws to reopen the file with
 logrotate snippet, or set `access_log_max_size` and let rws rotate it.
 Without `access_log`, lines go to stdout and land in the journal
 (`journalctl -u rws`).
+
+## Readiness and the watchdog
+
+With `Type=notify` (since 18.20.0) systemd counts rws as started only once
+it serves: listeners bound, certificates loaded (ACME included). `systemctl
+start` and `restart` wait for that and fail if rws doesn't get there.
+`systemctl reload` waits for the reload to finish (`RELOADING=1`, then
+`READY=1`), and `systemctl status` shows rws's status line. With
+`WatchdogSec=` rws pings systemd from its event loop at half the interval;
+a hung process stops pinging and is restarted. An older unit with
+`Type=simple` keeps working: rws only notifies when systemd asks for it
+(`NOTIFY_SOCKET`).
+
+## Socket activation
+
+The packages also install `rws.socket`. Enabled, systemd opens the ports
+and hands them to rws, so a restart refuses nothing (connections wait in
+the socket's queue) and rws doesn't need `CAP_NET_BIND_SERVICE`:
+
+```sh
+sudo systemctl enable --now rws.socket
+sudo systemctl restart rws        # no refused connections
+```
+
+```ini
+[Socket]
+ListenStream=443
+FileDescriptorName=https
+ListenStream=80
+FileDescriptorName=redirect
+ListenDatagram=443
+FileDescriptorName=quic
+Service=rws.service
+```
+
+rws takes each listener from systemd when one matches by name (`https` or
+`http` for the main port, `redirect`, `quic`, `admin`) or by port, and
+binds the rest itself. With per-core runtimes every runtime accepts on its
+own copy of the inherited socket. Startup prints which sockets systemd
+passed.
 
 ## Day to day
 

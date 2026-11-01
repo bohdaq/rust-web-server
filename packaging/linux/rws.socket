@@ -1,0 +1,18 @@
+# Optional socket activation: systemd holds the ports, so nothing is refused
+# while rws restarts, and rws needs no CAP_NET_BIND_SERVICE.
+#   sudo systemctl enable --now rws.socket
+[Unit]
+Description=rws web server sockets
+Documentation=https://rws8.tech/docs/deployment/systemd/
+
+[Socket]
+ListenStream=443
+FileDescriptorName=https
+ListenStream=80
+FileDescriptorName=redirect
+ListenDatagram=443
+FileDescriptorName=quic
+Service=rws.service
+
+[Install]
+WantedBy=sockets.target
