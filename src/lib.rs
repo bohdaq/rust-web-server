@@ -149,6 +149,8 @@ pub mod proxy_config;
 pub mod llm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod admin;
+/// Web application firewall: rws's own rules (18.22.0).
+pub mod waf;
 /// Runtime state shared across replicas through Redis (18.22.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cluster;

@@ -352,6 +352,10 @@ Bodies are buffered (uploads up to `max_body_size`); responses too.
 
 ### `[route.middleware]` — per-route middleware
 
+A route can also run the [web application firewall](/features/waf/)
+(`[route.middleware.waf]`, or `[middleware.waf]` for every route), which
+sits outside auth and inside the rate limit and IP filter.
+
 Middleware is applied only to requests that match this route.
 
 #### Rate limiting

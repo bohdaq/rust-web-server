@@ -82,6 +82,8 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.middleware.ip_filter" => vec!["allow", "deny"],
         "route.middleware.mirror" => vec!["upstream", "backends", "percent"],
         "route.middleware.authz" => vec!["relation", "object"],
+        "route.middleware.waf" => vec!["mode", "paranoia", "threshold", "inspect_body_bytes", "max_args", "exclude"],
+        "route.middleware.waf.rule" => vec!["id", "field", "contains", "prefix", "equals", "cidr", "action", "score"],
         "authz" => vec!["store", "tuples"],
         "route.middleware.wasm" => vec!["module", "fuel", "memory_mb", "config"],
         "route.middleware.rewrite.request" | "route.middleware.rewrite.response" => REWRITE_RULE_KEYS.to_vec(),
@@ -496,6 +498,14 @@ fn validate_middleware(
         report.error(format!("{label}: jwt and basic auth need the `auth` feature, which this build doesn't include; the route answers 503"));
     }
 
+    if let Some(waf) = &mw.waf {
+        for e in &waf.errors {
+            report.error(format!("{label}: {e}"));
+        }
+        if waf.config.mode == crate::waf::Mode::Detect {
+            report.warn(format!("{label}: [waf] mode = \"detect\": matches are logged, nothing is refused"));
+        }
+    }
     for entry in mw.ip_allow.iter().chain(&mw.ip_deny) {
         if !crate::ip_filter::is_valid_entry(entry) {
             report.error(format!("{label}: ip_filter entry '{entry}' is not an IP address or CIDR range — ignored"));

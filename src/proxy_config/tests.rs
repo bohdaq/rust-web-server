@@ -2653,3 +2653,46 @@ fn an_upgrade_to_a_dead_backend_is_a_502() {
     req.headers.push(Header { name: "Upgrade".into(), value: "websocket".into() });
     assert_eq!(app.execute(&req, &make_conn("127.0.0.1")).unwrap().status_code, 502);
 }
+
+#[test]
+fn waf_settings_parse_and_block_on_a_route() {
+    let toml = r#"
+[[route]]
+[route.match]
+path = "/*"
+[route.action]
+type = "respond"
+status = 200
+body = "ok"
+[route.middleware.waf]
+paranoia = 2
+exclude = ["942200@/reports/"]
+[[route.middleware.waf.rule]]
+id = 1001
+field = "path"
+prefix = ["/wp-login"]
+[[route.middleware.waf.rule]]
+id = 1002
+field = "ip"
+cidr = ["10.0.0.0/8"]
+action = "allow"
+"#;
+    let cfg = ProxyConfig::from_str(toml);
+    let waf = cfg.routes[0].middleware.waf.clone().expect("waf");
+    assert!(waf.errors.is_empty(), "{:?}", waf.errors);
+    assert_eq!(waf.config.paranoia, 2);
+    assert_eq!(waf.config.rules.len(), 2);
+    assert_eq!(waf.config.exclude, [crate::waf::Exclusion { rule: "942200".into(), path_prefix: "/reports/".into() }]);
+    let app = crate::proxy_config::builder::build(cfg).0;
+    let client = crate::test_client::TestClient::new(app);
+    assert_eq!(client.get("/?q=%3Cscript%3Ealert(1)%3C/script%3E").send().status(), 403);
+    assert_eq!(client.get("/wp-login.php").send().status(), 403);
+    assert_eq!(client.get("/?q=shoes").send().status(), 200);
+}
+
+#[test]
+fn waf_setting_errors_are_reported() {
+    let report = crate::config_check::check_str_offline("[[route]]\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"respond\"\nstatus = 200\n[route.middleware.waf]\nmode = \"strict\"\nparanoia = 9\n[[route.middleware.waf.rule]]\nid = 7\nfield = \"cookie\"\ncontains = [\"x\"]\n");
+    let text = format!("{report:?}");
+    assert!(text.contains("expected block, detect or off") && text.contains("expected 1, 2 or 3") && text.contains("field = \\\"cookie\\\""), "{text}");
+}

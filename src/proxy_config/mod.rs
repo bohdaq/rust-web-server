@@ -214,6 +214,15 @@ pub struct FastCgiAction {
     pub max_idle: u64,
 }
 
+/// `[route.middleware.waf]` / `[middleware.waf]`, parsed; `errors` names
+/// values that didn't parse (`rws --check` reports them; the WAF then runs
+/// with the rest).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WafSettings {
+    pub config: crate::waf::WafConfig,
+    pub errors: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct MiddlewareConfig {
     pub rate_limit: Option<RateLimitConfig>,
@@ -256,6 +265,8 @@ pub struct MiddlewareConfig {
     /// `[route.middleware.mirror]`: copy a share of requests to other
     /// backends (18.11.0).
     pub mirror: Option<MirrorConfig>,
+    /// `[route.middleware.waf]` (18.22.0): the web application firewall.
+    pub waf: Option<WafSettings>,
 }
 
 /// `[route.middleware.mirror]`.
@@ -868,9 +879,11 @@ fn parse_middleware_config(
         },
     });
 
+    let waf = parse_waf(map, &format!("{mw_sec}.waf"));
+
     MiddlewareConfig {
         rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny,
-        timeout_ms, max_body_size, wasm, mirror,
+        timeout_ms, max_body_size, wasm, mirror, waf,
         early_hints: get_array(map, mw_sec, "early_hints"),
         authz: section_exists(map, &format!("{mw_sec}.authz")).then(|| RouteAuthzConfig {
             relation: get_str(map, &format!("{mw_sec}.authz"), "relation"),
@@ -880,6 +893,81 @@ fn parse_middleware_config(
 }
 
 /// Collect `[[{mw_sec}.rewrite.{direction}]]` entries.
+/// `[…waf]` and its `[[…waf.rule]]` tables.
+fn parse_waf(map: &parser::SectionMap, sec: &str) -> Option<WafSettings> {
+    use crate::waf::{Action, CustomRule, Exclusion, Field, Mode, WafConfig};
+    use parser::{get_array, get_str, get_u64, section_exists};
+    if !section_exists(map, sec) {
+        return None;
+    }
+    let mut errors = Vec::new();
+    let defaults = WafConfig::default();
+    let mode_text = get_str(map, sec, "mode");
+    let mode = Mode::parse(&mode_text).unwrap_or_else(|| {
+        errors.push(format!("[waf] mode = {mode_text:?}: expected block, detect or off"));
+        Mode::Block
+    });
+    let paranoia = get_u64(map, sec, "paranoia", 1);
+    if !(1..=3).contains(&paranoia) {
+        errors.push(format!("[waf] paranoia = {paranoia}: expected 1, 2 or 3"));
+    }
+    let mut rules = Vec::new();
+    let mut j = 0;
+    loop {
+        let rsec = format!("{sec}.rule[{j}]");
+        if !section_exists(map, &rsec) {
+            break;
+        }
+        j += 1;
+        let id = get_u64(map, &rsec, "id", 0) as u32;
+        let field_text = get_str(map, &rsec, "field");
+        let Some(field) = Field::parse(&field_text) else {
+            errors.push(format!("[waf] rule {id}: field = {field_text:?}: expected path, query, args, arg:<name>, header:<name>, method, ip or body"));
+            continue;
+        };
+        let action_text = get_str(map, &rsec, "action");
+        let action = match action_text.to_ascii_lowercase().as_str() {
+            "deny" | "" => Action::Deny,
+            "allow" => Action::Allow,
+            "log" => Action::Log,
+            "score" => Action::Score(get_u64(map, &rsec, "score", 5) as u32),
+            other => {
+                errors.push(format!("[waf] rule {id}: action = {other:?}: expected deny, allow, log or score"));
+                continue;
+            }
+        };
+        let rule = CustomRule {
+            id,
+            field,
+            contains: get_array(map, &rsec, "contains"),
+            prefix: get_array(map, &rsec, "prefix"),
+            equals: get_array(map, &rsec, "equals"),
+            cidr: get_array(map, &rsec, "cidr"),
+            action,
+        };
+        if rule.contains.is_empty() && rule.prefix.is_empty() && rule.equals.is_empty() && rule.cidr.is_empty() {
+            errors.push(format!("[waf] rule {id}: needs contains, prefix, equals or cidr"));
+            continue;
+        }
+        if let Some(bad) = rule.cidr.iter().find(|c| !crate::ip_filter::is_valid_entry(c)) {
+            errors.push(format!("[waf] rule {id}: cidr {bad:?} is not an address or range"));
+        }
+        rules.push(rule);
+    }
+    Some(WafSettings {
+        config: WafConfig {
+            mode,
+            paranoia: paranoia.clamp(1, 3) as u8,
+            threshold: get_u64(map, sec, "threshold", defaults.threshold as u64).max(1) as u32,
+            inspect_body_bytes: get_u64(map, sec, "inspect_body_bytes", defaults.inspect_body_bytes as u64) as usize,
+            max_args: get_u64(map, sec, "max_args", defaults.max_args as u64) as usize,
+            exclude: get_array(map, sec, "exclude").iter().map(|e| Exclusion::parse(e)).collect(),
+            rules,
+        },
+        errors,
+    })
+}
+
 fn collect_rewrite_rules(
     map: &parser::SectionMap,
     mw_sec: &str,
@@ -1117,7 +1205,7 @@ impl MiddlewareConfig {
             && self.rewrite_request.is_empty() && self.rewrite_response.is_empty()
             && self.ip_allow.is_empty() && self.ip_deny.is_empty()
             && self.timeout_ms.is_none() && self.max_body_size.is_none() && self.wasm.is_none()
-            && self.authz.is_none()
+            && self.authz.is_none() && self.waf.is_none()
     }
 }
 

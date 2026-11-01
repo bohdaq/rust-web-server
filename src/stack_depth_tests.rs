@@ -228,3 +228,27 @@ fn openapi_schemas_nested_and_referenced_deeply() {
         assert_eq!(1, crate::mcp::openapi_tools::tools(&refs, &Default::default()).unwrap().len());
     });
 }
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn fastcgi_stream_of_thousands_of_records() {
+    on_small_stack(|| {
+        let mut buf = Vec::new();
+        for _ in 0..20_000 {
+            crate::fastcgi::encode_record(&mut buf, crate::fastcgi::STDOUT, 1, b"x");
+        }
+        assert_eq!(crate::fastcgi::parse_records(&buf).unwrap().len(), 20_000);
+        crate::fastcgi::fuzz::records(&"Status: 200\nX: y\n".repeat(5000).into_bytes());
+    });
+}
+
+#[test]
+fn waf_on_deeply_nested_and_long_values() {
+    on_small_stack(|| {
+        let nested = format!("{}{}", "${".repeat(5000), "}".repeat(5000));
+        let json = format!("{}\"<script>\"{}", "[".repeat(20_000), "]".repeat(20_000));
+        crate::waf::fuzz::inspect(nested.as_bytes());
+        crate::waf::fuzz::inspect(json.as_bytes());
+        crate::waf::fuzz::inspect("&#60;".repeat(20_000).as_bytes());
+    });
+}

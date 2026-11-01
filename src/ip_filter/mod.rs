@@ -100,6 +100,12 @@ impl IpFilter {
 }
 
 /// `true` if `entry` is an address or CIDR range [`IpFilter`] understands.
+/// Whether `ip` is in `entry` (an address or CIDR range); for the WAF's
+/// `cidr` rules.
+pub(crate) fn matches(entry: &str, ip: &str) -> bool {
+    IpFilter::deny([entry]).matches(ip)
+}
+
 pub fn is_valid_entry(entry: &str) -> bool {
     IpRange::parse(entry).is_some()
 }

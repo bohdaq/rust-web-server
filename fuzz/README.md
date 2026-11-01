@@ -33,6 +33,7 @@ cargo install cargo-fuzz
 | `otel_baggage` | the W3C `baggage` header parser (`otel::Baggage::parse`) | any client, with tracing on |
 | `accept_encoding` | `Accept-Encoding` negotiation for gzip / br / zstd (via `fuzz_api`) | any client |
 | `openapi_to_mcp` | OpenAPI documents to MCP tools: `$ref` inlining, schemas, request building (via `fuzz_api`) | an upstream API's OpenAPI document |
+| `waf_inspect` | the WAF's decoding and detections, JSON and multipart field extraction (`waf`) | any client, with the WAF on |
 | `fastcgi_record` | FastCGI records, name-value pairs and CGI response headers (`fastcgi`) | FastCGI servers (php-fpm) |
 | `a2a_request` | A2A JSON-RPC requests: parsing, messages, parts, tasks (via `fuzz_api`) | any A2A client |
 | `accept_language` | `Accept-Language` parsing and language negotiation (via `fuzz_api`) | any client |

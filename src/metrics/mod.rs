@@ -253,6 +253,11 @@ fn prometheus_text_without_http() -> String {
         out.push('\n');
         out.push_str(&upstream_text);
     }
+    let waf_text = crate::waf::prometheus_text();
+    if !waf_text.is_empty() {
+        out.push('\n');
+        out.push_str(&waf_text);
+    }
 
     #[cfg(not(target_arch = "wasm32"))]
     {

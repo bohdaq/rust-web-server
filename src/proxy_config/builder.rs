@@ -527,6 +527,14 @@ pub(crate) fn apply_middleware_named(
         };
     }
 
+    // ── Web application firewall (outside auth: login pages are covered;
+    //    inside the rate limit and IP filter, which are cheaper) ─────────
+    if let Some(ref waf) = mw.waf {
+        if waf.config.mode != crate::waf::Mode::Off {
+            app = arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(crate::waf::WafLayer::new(waf.config.clone())));
+        }
+    }
+
     // ── Rate limit ─────────────────────────────────────────────────────────
     if let Some(ref rl_cfg) = mw.rate_limit {
         let limiter = Arc::new(crate::rate_limit::RateLimiter::new(

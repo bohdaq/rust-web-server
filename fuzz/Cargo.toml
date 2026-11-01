@@ -288,3 +288,10 @@ path = "fuzz_targets/fastcgi_record.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "waf_inspect"
+path = "fuzz_targets/waf_inspect.rs"
+test = false
+doc = false
+bench = false

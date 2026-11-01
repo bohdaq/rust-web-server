@@ -1,0 +1,1 @@
+&lt;img src=x onerror=alert(1)&gt; %3Cscript%3E javascript:alert(1)

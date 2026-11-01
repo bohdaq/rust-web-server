@@ -286,6 +286,10 @@
         "link": "/features/ip-filter/"
       },
       {
+        "label": "Web Application Firewall",
+        "link": "/features/waf/"
+      },
+      {
         "label": "Request ID",
         "link": "/features/request-id/"
       },
