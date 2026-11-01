@@ -163,6 +163,12 @@ don't use them.
 | `RWS_CONFIG_ADMIN_TOKEN_ENV` | `RWS_ADMIN_TOKEN` | variable name | The environment variable holding the admin bearer token. Unset or empty: the admin listener doesn't start. |
 | `RWS_CONFIG_ADMIN_ALLOWED_ORIGINS` | (none) | comma list of origins | Browser origins allowed to call the admin API besides its own. |
 | `RWS_CONFIG_ADMIN_USERS` | (none) | comma list | More admin users, `name:ENV_VAR:role` each (role `viewer`, `operator` or `admin`; since 18.22.0). See [users and roles](/deployment/admin/#users-roles-and-the-audit-log). |
+| `RWS_CONFIG_FLEET_SOURCE` | (off) | URL | Where to pull the config from: `https://…`, `s3://bucket/key`, `git+<url>#<branch>:<path>`; `{node}` is the node name (since 18.23.0). See [Fleet config](/deployment/fleet/). |
+| `RWS_CONFIG_FLEET_PUBLIC_KEY` | (none) | base64 or path | The Ed25519 public key configs are signed with (`rws fleet keygen`). |
+| `RWS_CONFIG_FLEET_INTERVAL_SECS` | `30` | seconds | How often to check the source (at least 5). |
+| `RWS_CONFIG_FLEET_REPORT_URL` | (none) | URL | Each outcome is POSTed here as JSON. |
+| `RWS_CONFIG_FLEET_INSECURE` | `false` | bool | Accept unsigned configs (testing only). |
+| `RWS_CONFIG_FLEET_S3_ENDPOINT` | AWS | URL | S3-compatible storage for `s3://` sources. |
 | `RWS_CONFIG_CLUSTER_REDIS` | `RWS_CONFIG_ACME_REDIS` | `host:port` | Redis shared by replicas for runtime state: blocklist, maintenance, drains, flags, purges (since 18.22.0). See [Several replicas](/deployment/cluster/). |
 | `RWS_CONFIG_CLUSTER_REDIS_PASSWORD` | `RWS_CONFIG_ACME_REDIS_PASSWORD` | string | Its password (never printed). |
 | `RWS_CONFIG_CLUSTER_PREFIX` | `rws:cluster:` | string | Key prefix in that Redis. |

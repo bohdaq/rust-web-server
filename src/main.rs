@@ -520,6 +520,11 @@ fn exit_if_informational_flag() {
     if let Some(code) = rust_web_server::tls::internal::trust_command(&args) {
         std::process::exit(code);
     }
+    // `rws fleet keygen` / `rws fleet sign`: the fleet config's keys.
+    #[cfg(feature = "http2")]
+    if let Some(code) = rust_web_server::fleet::command(&args) {
+        std::process::exit(code);
+    }
     // `rws ctl …` / `rwsctl …`: a client of the admin API, not a server.
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(ctl_args) = rust_web_server::ctl::requested(&args) {
@@ -548,6 +553,8 @@ fn main() {
     rust_web_server::config_watch::start();
     rust_web_server::admin::start_from_env();
     rust_web_server::cluster::start_from_env();
+    #[cfg(feature = "http2")]
+    rust_web_server::fleet::start_from_env();
     telemetry();
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -584,6 +591,8 @@ async fn serve() {
     rust_web_server::config_watch::start();
     rust_web_server::admin::start_from_env();
     rust_web_server::cluster::start_from_env();
+    #[cfg(feature = "http2")]
+    rust_web_server::fleet::start_from_env();
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -626,6 +635,8 @@ async fn serve() {
     rust_web_server::config_watch::start();
     rust_web_server::admin::start_from_env();
     rust_web_server::cluster::start_from_env();
+    #[cfg(feature = "http2")]
+    rust_web_server::fleet::start_from_env();
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();

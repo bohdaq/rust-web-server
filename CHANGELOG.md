@@ -82,6 +82,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   handshakes are signed on the token — ECDSA P-256/P-384, RSA-PSS and
   PKCS#1; `rws --check` opens the key. In the macOS, Windows and glibc FIPS
   release binaries.
+- Fleet config pull (#80): `[fleet] source` (HTTPS with ETags, `s3://`,
+  `git+…#branch:path`, `{node}`) fetched every `interval_secs`; an Ed25519
+  signature (`rws fleet keygen`, `rws fleet sign`), `rws --check` and the
+  reload must all pass before the config replaces the running one; outcomes
+  POSTed to `report_url` and shown in `status`. Release binaries now include
+  `storage-s3`.
 
 ### Fixed
 

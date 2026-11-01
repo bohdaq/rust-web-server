@@ -529,6 +529,7 @@ dependencies = [
 name = "rust-web-server"
 version = "18.20.0"
 dependencies = [
+ "aws-lc-rs",
  "bytes",
  "file-ext",
  "flate2",

@@ -519,6 +519,10 @@
         "link": "/deployment/cluster/"
       },
       {
+        "label": "Fleet config",
+        "link": "/deployment/fleet/"
+      },
+      {
         "label": "Traffic insights",
         "link": "/deployment/traffic/"
       },

@@ -83,14 +83,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, wasm-shim, systemd, mtls-crl, tls-internal, fastcgi, oidc, ws-upgrade, cluster, waf, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, mirror, early-hints, dictionary, h3-upstream, authz, mcp-gateway, llm-proxy, admin, admin-ui, wasm-plugins, wasm-shim, systemd, mtls-crl, tls-internal, fastcgi, oidc, ws-upgrade, cluster, waf, fleet, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           key: e2e
-      - run: cargo build --bin rws --features "acme auth sso mimalloc"
+      - run: cargo build --bin rws --features "acme auth sso mimalloc storage-s3"
       - name: ACME against Pebble (Let's Encrypt's test CA)
         if: matrix.check == 'acme-pebble'
         env:
@@ -225,6 +225,9 @@ jobs:
       - name: Web application firewall through the binary
         if: matrix.check == 'waf'
         run: ci/e2e/waf.sh target/debug/rws
+      - name: Fleet config pull (HTTP source, S3 via SeaweedFS)
+        if: matrix.check == 'fleet'
+        run: ci/e2e/fleet.sh target/debug/rws
       - name: WebAssembly plugins (unit tests with the feature; the example plugin through the binary)
         if: matrix.check == 'wasm-plugins'
         run: |

@@ -165,6 +165,7 @@ Use it as:
 - [Observability](https://rws8.tech/deployment/observability/): Metrics, structured logs, distributed tracing, and health endpoints for rust-web-server.
 - [Admin API](https://rws8.tech/deployment/admin/): Inspect and change a running rws on a listener of its own, behind a bearer token, never on the public routes.
 - [Several replicas](https://rws8.tech/deployment/cluster/): Run rws on several machines behind a load balancer and keep runtime changes — the IP blocklist, maintenance mode, drained backends, feature flags and cache purges — the same on all of them through Redis.
+- [Fleet config](https://rws8.tech/deployment/fleet/): Many rws instances, one source of truth — instances pull a signed config from HTTPS, S3 or git, check it, apply it and report back.
 - [Traffic insights](https://rws8.tech/deployment/traffic/): See who visits your sites (people, AI agents and bots) on the admin UI's Traffic page, counted by rws itself with no tracking script.
 - [systemd](https://rws8.tech/deployment/systemd/): Run rws as a hardened systemd service — from the deb/rpm packages or by hand; unprivileged user, read-only system, ports below 1024, reload and log rotation by signal.
 - [Windows](https://rws8.tech/deployment/windows/): Run rws on Windows, in a terminal or as a Windows service started at boot and stopped gracefully by the Service Control Manager.

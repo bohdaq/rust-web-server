@@ -149,6 +149,9 @@ pub mod proxy_config;
 pub mod llm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod admin;
+/// Fleet config pull: signed configs from HTTPS, S3 or git (18.23.0).
+#[cfg(all(feature = "http2", not(target_arch = "wasm32")))]
+pub mod fleet;
 /// Web application firewall: rws's own rules (18.22.0).
 pub mod waf;
 /// Runtime state shared across replicas through Redis (18.22.0).

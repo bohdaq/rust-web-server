@@ -117,7 +117,7 @@ pkg-fmt = "zip"
 [features]
 default = ["http3", "brotli", "zstd"]
 http1 = ["dep:ctrlc", "dep:libc"]
-http2 = ["dep:rcgen", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc"]
+http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc"]
 http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
 http-client = ["dep:rustls", "dep:webpki-roots"]
 # Content codings besides gzip (18.1.0): `br` (pure Rust) and `zstd` (C

@@ -644,6 +644,13 @@ pub fn features() -> Vec<&'static str> {
     on
 }
 
+fn fleet_status() -> String {
+    #[cfg(feature = "http2")]
+    return crate::fleet::status_json().unwrap_or_else(|| "null".to_string());
+    #[cfg(not(feature = "http2"))]
+    "null".to_string()
+}
+
 fn status_json(connection: &ConnectionInfo) -> String {
     let env = |name: &str| std::env::var(name).unwrap_or_default();
     let tls = !env(Config::RWS_CONFIG_TLS_CERT_FILE).is_empty() || !env(Config::RWS_CONFIG_ACME_DOMAINS).is_empty();
@@ -656,7 +663,7 @@ fn status_json(connection: &ConnectionInfo) -> String {
         .map(|(dir, free, total, low)| format!(r#"{{"dir":"{}","free_bytes":{free},"total_bytes":{total},"low":{low}}}"#, json_escape(&dir)))
         .collect();
     format!(
-        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}},"disk":[{}],"cluster":{}}}"#,
+        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}},"disk":[{}],"cluster":{},"fleet":{}}}"#,
         env!("CARGO_PKG_VERSION"),
         std::process::id(),
         started().elapsed().as_secs(),
@@ -669,6 +676,7 @@ fn status_json(connection: &ConnectionInfo) -> String {
         connection.server.port,
         disk.join(","),
         crate::cluster::status_json().unwrap_or_else(|| "null".to_string()),
+        fleet_status(),
     )
 }
 

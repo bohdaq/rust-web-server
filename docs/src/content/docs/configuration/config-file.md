@@ -274,6 +274,12 @@ serve_dotfiles          = false        # RWS_CONFIG_SERVE_DOTFILES: serve .git/,
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
 
+[fleet]                              # RWS_CONFIG_FLEET_*: pull a signed config (18.23.0)
+source        = "https://config.example.com/rws/{node}.toml"
+public_key    = "kJ0pQ…="              # rws fleet keygen
+interval_secs = 30
+report_url    = "https://config.example.com/rws/report"
+
 [cluster]                            # RWS_CONFIG_CLUSTER_*: runtime state shared by replicas (18.22.0)
 redis  = "10.0.0.20:6379"            # default: [acme] redis
 prefix = "rws:cluster:"

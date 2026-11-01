@@ -639,6 +639,13 @@ fn print_status(out: &mut dyn Write, body: &str) -> std::io::Result<()> {
         let pending = if pending == "0" || pending.is_empty() { String::new() } else { format!(", {pending} change(s) waiting") };
         writeln!(out, "cluster   node {} · Redis {} · {} node(s): {}{pending}", field(&cluster, "node"), field(&cluster, "redis"), nodes.len(), nodes.join(", "))?;
     }
+    let fleet = member(body, "fleet");
+    if !fleet.is_empty() && fleet.trim() != "null" {
+        let config = field(&fleet, "config");
+        let error = field(&fleet, "error");
+        let state = if error != "null" && !error.is_empty() { format!("refused: {error}") } else { format!("config {}", config.get(..12).unwrap_or(&config)) };
+        writeln!(out, "fleet     {} · {state}", field(&fleet, "source"))?;
+    }
     for d in elements(&member(body, "disk")) {
         let free = field(&d, "free_bytes").parse().map(bytes).unwrap_or_default();
         let total = field(&d, "total_bytes").parse().map(bytes).unwrap_or_default();
