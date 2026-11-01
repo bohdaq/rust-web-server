@@ -42,12 +42,6 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
-- ACME: a chunked reply from the CA is decoded properly. The decoder skipped
-  the first chunk-size line and read data as a size, so the body came back
-  empty; Let's Encrypt chunks large orders (12 names here), and rws then waited
-  for a status it never saw ("order timed out with status ''"). The framing now
-  comes from the Transfer-Encoding header.
-
 - Cluster sync (#76): an admin change no longer waits on Redis — it's
   queued for the sync thread, which sends it at once; a Redis connect gives
   up after 2 s per address instead of the OS's long retry.
@@ -60,6 +54,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `X-Forwarded-For` and rws's own as two headers; they're one chain now.
 - PKCS#11: handshakes no longer wait on one shared session per key — up to
   8 sessions sign in parallel.
+
+## 18.23.2 — 2026-11-01
+
+### Fixed
+
+- ACME: a chunked reply from the CA is decoded properly. The decoder skipped
+  the first chunk-size line and read data as a size, so the body came back
+  empty; Let's Encrypt chunks large orders (12 names here), and rws then waited
+  for a status it never saw ("order timed out with status ''"). The framing now
+  comes from the Transfer-Encoding header.
 
 ## 18.23.1 — 2026-11-01
 
