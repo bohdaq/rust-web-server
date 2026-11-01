@@ -214,6 +214,28 @@ Change a running server without editing files, and extend it without recompiling
 - **#69** **Key rotation for HS256 and Basic** — several JWT secrets with `kid`, htpasswd re-read on change.
 - **#70** **`rws ctl` / `rwsctl`** — the admin API from the command line. 18.21.0's planned scope, shipped in 18.20.0 (the user's call).
 
+## 18.21.0 — Solo developers and startups
+
+Plan: [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) (2026-11-01).
+
+- **#71** **Local HTTPS** — `tls = "internal"`: rws's own CA issues certificates for `localhost` and other local names; `rws trust` installs the CA.
+- **#72** **FastCGI** — `type = "fastcgi"` routes to php-fpm with the front-controller pattern (Laravel, Symfony, WordPress).
+- **#73** **OIDC login and forward-auth in the config file** — protect a route with Google/Okta/Keycloak sign-in (email, domain, group allow-lists) or an Authelia/Authentik-style auth service, no code.
+- **#74** **Cookbook** — complete, CI-checked configs for common stacks.
+
+## 18.22.0 — Teams
+
+- **#75** **Admin users, roles and audit log** — named tokens with viewer/operator/admin roles, OIDC sign-in to the admin UI, every change in an audit log.
+- **#76** **Runtime state across replicas** — blocklist, maintenance, drains, flags and purges shared through Redis.
+- **#77** **Web application firewall** — rws's own engine: SQL injection, XSS, traversal, command injection, scanners, custom TOML rules, anomaly scoring, detect or block.
+
+## 18.23.0 — Enterprise
+
+- **#78** **FIPS build** — aws-lc FIPS module, a separate release artifact.
+- **#79** **TLS keys in an HSM** — PKCS#11 URIs for `tls_key_file`.
+- **#80** **Fleet config pull** — instances pull signed config from HTTPS, S3 or git and report back.
+- **#81** **LTS and security policy** — supported versions, response targets, LTS branches.
+
 ## 19.0.0 — Breaking changes
 
 - **#63** **Proxy response pass-through.** On the 18.0.0 benchmarks rws leads nginx in most scenarios, but on proxy-1k it is level or slightly behind (EPYC 7763: 48.7 vs 45.3 µs CPU per request; the one Intel run: −2% requests per second, +9% CPU per request). The remaining cost is rws parsing every upstream response into a `Response` and writing it out again, about 7% of a proxied request's CPU in the per-core profile. Carry a simple upstream head through unparsed instead, keeping what the parse does for safety: dropping hop-by-hop and duplicate `Content-Length` headers and rejecting CR/LF. That needs a new field on `Response`, whose fields are all public and built by struct literal, so it breaks apps; mark `Response` `#[non_exhaustive]` (with constructors) in the same release so later fields don't. Judge it by same-run A/B against 18.x on proxy-1k. *Planned 2026-10-26.* **Shelved 2026-10-30**: re-measured (proxy-1k level with nginx on throughput, +4.6% CPU/request); a same-run A/B of the cheap non-breaking half was noise, so a major version for the rest isn't worth it ([RELEASE_19_0.md](RELEASE_19_0.md)).
