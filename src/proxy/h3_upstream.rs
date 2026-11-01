@@ -68,6 +68,9 @@ impl std::fmt::Display for H3Error {
 pub(crate) struct Target<'a> {
     pub(crate) host: &'a str,
     pub(crate) port: u16,
+    /// The `:authority` to send instead of `host:port` (a config route's
+    /// `preserve_host` / `upstream_host`).
+    pub(crate) authority: Option<&'a str>,
     /// The TLS client configuration (trust roots, client certificate); its
     /// ALPN is replaced with `h3`.
     pub(crate) tls: &'a Arc<rustls::ClientConfig>,
@@ -170,7 +173,7 @@ fn start(
     target: &Target<'_>,
 ) -> Result<tokio::sync::oneshot::Receiver<Result<Response, H3Error>>, H3Error> {
     let addr = format!("{}:{}", target.host, target.port);
-    let head = request_head(request, client, &addr).map_err(H3Error::Failed)?;
+    let head = request_head(request, client, target.authority.unwrap_or(&addr)).map_err(H3Error::Failed)?;
     let quic = quic_config(target.tls).map_err(H3Error::Connect)?;
     let (tx, head_rx) = tokio::sync::oneshot::channel();
     let head_tx = HeadSender(Mutex::new(Some(tx)));
@@ -192,8 +195,8 @@ fn start(
     Ok(head_rx)
 }
 
-fn request_head(request: &Request, client: crate::proxy::Peer<'_>, addr: &str) -> Result<http::Request<()>, String> {
-    let uri: http::Uri = format!("https://{addr}{}", request.request_uri).parse().map_err(|e: http::uri::InvalidUri| e.to_string())?;
+fn request_head(request: &Request, client: crate::proxy::Peer<'_>, authority: &str) -> Result<http::Request<()>, String> {
+    let uri: http::Uri = format!("https://{authority}{}", request.request_uri).parse().map_err(|e: http::uri::InvalidUri| e.to_string())?;
     let method = http::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
     let mut builder = http::Request::builder().method(method).uri(uri);
     for h in &request.headers {

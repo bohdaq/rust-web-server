@@ -2309,3 +2309,134 @@ fn route_matcher_prefers_the_host_header_over_sni() {
     req.headers[0].value = "".to_string().into();
     assert!(git.matches(&req, &conn));
 }
+
+// ── TOML strings: escapes, literal strings, quotes in scanners ──────────────
+
+#[test]
+fn basic_strings_decode_escapes_literal_strings_do_not() {
+    let cfg = ProxyConfig::from_str(concat!(
+        "[[route]]\nname = \"policy\"\n[route.match]\npath = \"/p\"\n[route.action]\ntype = \"respond\"\n",
+        "body = \"version: STSv1\\r\\nmode: testing\\r\\n\\\"q\\\" \\u00e9\\U0001F600 \\\\ \\d\"\n",
+        "[[route]]\nname = \"literal\"\n[route.match]\npath = \"/l\"\n[route.action]\ntype = \"respond\"\n",
+        "body = 'C:\\new\\path' # a comment\n",
+    ));
+    let bodies: Vec<String> = cfg.routes.iter().map(|r| match &r.action {
+        ActionConfig::Respond { body, .. } => body.clone(),
+        other => panic!("{other:?}"),
+    }).collect();
+    // `\d` isn't a TOML escape: kept as written.
+    assert_eq!(bodies[0], "version: STSv1\r\nmode: testing\r\n\"q\" é😀 \\ \\d");
+    assert_eq!(bodies[1], "C:\\new\\path");
+}
+
+#[test]
+fn an_escaped_quote_does_not_end_a_string_for_comments_arrays_or_inline_tables() {
+    let cfg = ProxyConfig::from_str(concat!(
+        "[[upstream]]\nname = \"u\"\nbackends = [\"127.0.0.1:1\", \"127.0.0.1:2\"] # two\n",
+        "[[route]]\nname = \"r\"\n[route.match]\npath = \"/\"\n[route.action]\ntype = \"respond\"\n",
+        "body = \"a \\\"#not a comment\\\", b\" # a comment\n",
+        "[route.middleware]\nrate_limit = { max_requests = 5, window_secs = 60 }\n",
+    ));
+    assert_eq!(cfg.upstreams[0].backends, ["127.0.0.1:1", "127.0.0.1:2"]);
+    match &cfg.routes[0].action {
+        ActionConfig::Respond { body, .. } => assert_eq!(body, "a \"#not a comment\", b"),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn inline_tables_keep_non_ascii_text() {
+    let map = crate::proxy_config::parser::parse("[t]\nx = { a = \"żółw ✓\", b = 'ünï' }\n");
+    let vals: Vec<&str> = map["t.x"].iter().map(|(_, v)| v.as_str()).collect();
+    assert_eq!(vals, ["żółw ✓", "ünï"]);
+}
+
+// ── preserve_host / upstream_host ────────────────────────────────────────────
+
+/// A backend answering each of `n` requests with the request head it got.
+fn spawn_head_echo_backend(n: usize) -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind backend");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        for _ in 0..n {
+            let Ok((mut stream, _)) = listener.accept() else { return };
+            let mut buf = vec![0u8; 8192];
+            let len = stream.read(&mut buf).unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..len]).to_string();
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", head.len(), head);
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+    port
+}
+
+fn host_route(port: u16, action_extra: &str) -> crate::proxy_config::ConfigDrivenApp {
+    let cfg = ProxyConfig::from_str(&format!(
+        "[[upstream]]\nname = \"b\"\nbackends = [\"127.0.0.1:{port}\"]\n[[route]]\nname = \"r\"\n[route.match]\npath = \"/*\"\n[route.action]\ntype = \"proxy\"\nupstream = \"b\"\n{action_extra}"
+    ));
+    crate::proxy_config::builder::build(cfg).0
+}
+
+fn request_for(host: &str) -> Request {
+    let mut req = make_request("GET", "/x");
+    req.headers.push(Header { name: "Host".into(), value: host.to_string().into() });
+    req
+}
+
+fn upstream_host_line(response: &crate::response::Response) -> String {
+    let body: Vec<u8> = response.content_range_list.iter().flat_map(|c| c.body.iter().copied()).collect();
+    String::from_utf8_lossy(&body).lines().find(|l| l.to_ascii_lowercase().starts_with("host:")).unwrap_or("").to_string()
+}
+
+#[test]
+fn proxy_action_parses_preserve_host_and_upstream_host() {
+    use crate::proxy_config::UpstreamHost;
+    let host_of = |extra: &str| {
+        let cfg = ProxyConfig::from_str(&format!("[[route]]\n[route.match]\npath = \"/\"\n[route.action]\ntype = \"proxy\"\nupstream = \"127.0.0.1:1\"\n{extra}"));
+        match &cfg.routes[0].action {
+            ActionConfig::Proxy { upstream_host, .. } => upstream_host.clone(),
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(host_of(""), UpstreamHost::Backend);
+    assert_eq!(host_of("preserve_host = true"), UpstreamHost::Client);
+    assert_eq!(host_of("upstream_host = \"git.example.com\""), UpstreamHost::Fixed("git.example.com".into()));
+    // upstream_host wins over preserve_host.
+    assert_eq!(host_of("preserve_host = true\nupstream_host = \"a.example\""), UpstreamHost::Fixed("a.example".into()));
+}
+
+#[test]
+fn proxy_sends_the_configured_host_upstream() {
+    let conn = make_conn("10.0.0.1");
+    let port = spawn_head_echo_backend(4);
+    let backend = format!("Host: 127.0.0.1");
+    assert_eq!(upstream_host_line(&host_route(port, "").execute(&request_for("git.example.com"), &conn).unwrap()), backend);
+    assert_eq!(upstream_host_line(&host_route(port, "preserve_host = true").execute(&request_for("git.example.com"), &conn).unwrap()), "Host: git.example.com");
+    assert_eq!(upstream_host_line(&host_route(port, "upstream_host = \"fixed.example\"").execute(&request_for("git.example.com"), &conn).unwrap()), "Host: fixed.example");
+    // preserve_host without a client Host falls back to the backend's.
+    assert_eq!(upstream_host_line(&host_route(port, "preserve_host = true").execute(&make_request("GET", "/x"), &conn).unwrap()), backend);
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn async_forwarder_sends_the_configured_host_upstream() {
+    let conn = make_conn("10.0.0.1");
+    let port = spawn_head_echo_backend(2);
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    for (extra, want) in [("preserve_host = true", "Host: git.example.com"), ("upstream_host = \"fixed.example\"", "Host: fixed.example")] {
+        let app = host_route(port, extra);
+        let request = request_for("git.example.com");
+        let response = runtime.block_on(async { app.execute_async(&request, &conn).expect("async route").await }).unwrap();
+        assert_eq!(upstream_host_line(&response), want);
+    }
+}
+
+#[test]
+fn rws_check_warns_that_a_host_rewrite_does_not_reach_the_upstream() {
+    let base = "[[route]]\n[route.match]\npath = \"/\"\n[route.action]\ntype = \"proxy\"\nupstream = \"127.0.0.1:1\"\n";
+    let rewrite = "[[route.middleware.rewrite.request]]\ntype = \"header_set\"\nname = \"Host\"\nvalue = \"a.example\"\n";
+    let warns = |toml: &str| crate::config_check::check_str_offline(toml).warnings.join("\n");
+    assert!(warns(&format!("{base}{rewrite}")).contains("preserve_host"));
+    assert!(!warns(base).contains("preserve_host"));
+}

@@ -4,6 +4,9 @@ use std::io::{BufRead, Cursor};
 use crate::entry_point::command_line_args::CommandLineArgument;
 use file_ext::FileExt;
 
+pub(crate) mod toml_str;
+use toml_str::{unquote, Quotes};
+
 #[cfg(test)]
 mod tests;
 
@@ -250,20 +253,18 @@ fn qualified_key(table: &str, key: &str) -> String {
 
 /// Drop a trailing `# comment`, ignoring `#` inside quoted strings.
 fn strip_comment(line: &str) -> &str {
-    let mut quote: Option<char> = None;
+    let mut quotes = Quotes::default();
     for (i, c) in line.char_indices() {
-        match (quote, c) {
-            (None, '"') | (None, '\'') => quote = Some(c),
-            (Some(q), c) if c == q => quote = None,
-            (None, '#') => return &line[..i],
-            _ => {}
+        if !quotes.step(c) && c == '#' {
+            return &line[..i];
         }
     }
     line
 }
 
-/// A TOML value as a plain string: quoted strings lose only their quotes,
-/// arrays become `a,b,c`, anything else (numbers, booleans) is trimmed.
+/// A TOML value as a plain string: quoted strings lose their quotes (basic
+/// strings also their escapes, see [`toml_str::unquote`]), arrays become
+/// `a,b,c`, anything else (numbers, booleans) is trimmed.
 fn parse_value(raw: &str) -> String {
     let raw = raw.trim();
     if let Some(inner) = raw.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
@@ -277,29 +278,15 @@ fn parse_value(raw: &str) -> String {
     unquote(raw)
 }
 
-fn unquote(s: &str) -> String {
-    for q in ['"', '\''] {
-        if s.len() >= 2 && s.starts_with(q) && s.ends_with(q) {
-            return s[1..s.len() - 1].to_string();
-        }
-    }
-    s.to_string()
-}
-
 /// Split array items on commas outside quotes.
 fn split_array(inner: &str) -> Vec<&str> {
     let mut items = vec![];
-    let mut quote: Option<char> = None;
+    let mut quotes = Quotes::default();
     let mut start = 0;
     for (i, c) in inner.char_indices() {
-        match (quote, c) {
-            (None, '"') | (None, '\'') => quote = Some(c),
-            (Some(q), c) if c == q => quote = None,
-            (None, ',') => {
-                items.push(&inner[start..i]);
-                start = i + 1;
-            }
-            _ => {}
+        if !quotes.step(c) && c == ',' {
+            items.push(&inner[start..i]);
+            start = i + 1;
         }
     }
     items.push(&inner[start..]);

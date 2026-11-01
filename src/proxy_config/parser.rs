@@ -7,6 +7,7 @@
 //! of key-value pairs found in that section.
 
 use std::collections::HashMap;
+use crate::entry_point::config_file::toml_str::{unquote, Quotes};
 
 /// Section path → list of (key, value) pairs.
 pub type SectionMap = HashMap<String, Vec<(String, String)>>;
@@ -161,55 +162,34 @@ pub(crate) fn logical_lines(toml: &str) -> Vec<String> {
 /// `[` minus `]` outside quoted strings.
 fn bracket_depth(line: &str) -> i64 {
     let mut depth = 0;
-    let mut quote: Option<char> = None;
-    let mut escaped = false;
+    let mut quotes = Quotes::default();
     for c in line.chars() {
-        match quote {
-            Some(q) => {
-                if escaped {
-                    escaped = false;
-                } else if c == '\\' {
-                    escaped = true;
-                } else if c == q {
-                    quote = None;
-                }
-            }
-            None => match c {
-                '"' | '\'' => quote = Some(c),
-                '[' => depth += 1,
-                ']' => depth -= 1,
-                _ => {}
-            },
+        if quotes.step(c) {
+            continue;
+        }
+        match c {
+            '[' => depth += 1,
+            ']' => depth -= 1,
+            _ => {}
         }
     }
     depth
 }
 
 pub(crate) fn strip_comment(line: &str) -> &str {
-    let bytes = line.as_bytes();
-    let mut in_quote = false;
-    let mut quote_char = b'"';
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if in_quote {
-            if b == quote_char && (i == 0 || bytes[i - 1] != b'\\') {
-                in_quote = false;
-            }
-        } else if b == b'"' || b == b'\'' {
-            in_quote = true;
-            quote_char = b;
-        } else if b == b'#' {
+    let mut quotes = Quotes::default();
+    for (i, c) in line.char_indices() {
+        if !quotes.step(c) && c == '#' {
             return &line[..i];
         }
-        i += 1;
     }
     line
 }
 
 /// Parse a single TOML value into its string representation.
 ///
-/// - Quoted strings → bare string (quotes stripped)
+/// - Quoted strings → bare string (quotes stripped, a basic string's escapes
+///   decoded: [`unquote`])
 /// - Arrays `["a","b"]` → `"a,b"` (joined with comma)
 /// - Booleans / numbers → as-is
 pub(crate) fn parse_value(raw: &str) -> String {
@@ -219,23 +199,11 @@ pub(crate) fn parse_value(raw: &str) -> String {
         let inner = &raw[1..raw.len() - 1];
         let items: Vec<String> = split_array_items(inner)
             .into_iter()
-            .map(|s| strip_quotes(s.trim()))
+            .map(|s| unquote(s.trim()))
             .collect();
         return items.join(",");
     }
-    strip_quotes(raw)
-}
-
-/// Strip leading/trailing `"` or `'` from a value.
-fn strip_quotes(s: &str) -> String {
-    let s = s.trim();
-    // len >= 2: a lone `"` or `'` both starts and ends with a quote.
-    if s.len() >= 2 && ((s.starts_with('"') && s.ends_with('"')) ||
-       (s.starts_with('\'') && s.ends_with('\''))) {
-        s[1..s.len() - 1].to_string()
-    } else {
-        s.to_string()
-    }
+    unquote(raw)
 }
 
 /// Split a TOML array body (without brackets) into individual items.
@@ -243,26 +211,20 @@ fn strip_quotes(s: &str) -> String {
 fn split_array_items(inner: &str) -> Vec<&str> {
     let mut items = Vec::new();
     let mut depth = 0i32;
-    let mut in_quote = false;
-    let mut quote_char = b'"';
+    let mut quotes = Quotes::default();
     let mut start = 0;
-    let bytes = inner.as_bytes();
-
-    for (i, &b) in bytes.iter().enumerate() {
-        if in_quote {
-            if b == quote_char {
-                in_quote = false;
+    for (i, c) in inner.char_indices() {
+        if quotes.step(c) {
+            continue;
+        }
+        match c {
+            '[' | '{' => depth += 1,
+            ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                items.push(inner[start..i].trim());
+                start = i + 1;
             }
-        } else if b == b'"' || b == b'\'' {
-            in_quote = true;
-            quote_char = b;
-        } else if b == b'[' || b == b'{' {
-            depth += 1;
-        } else if b == b']' || b == b'}' {
-            depth -= 1;
-        } else if b == b',' && depth == 0 {
-            items.push(inner[start..i].trim());
-            start = i + 1;
+            _ => {}
         }
     }
     let last = inner[start..].trim();
@@ -276,39 +238,28 @@ fn split_array_items(inner: &str) -> Vec<&str> {
 fn split_inline_table(inner: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut depth = 0i32;
-    let mut in_quote = false;
-    let mut quote_char = b'"';
-    let mut current = String::new();
-
-    for b in inner.bytes() {
-        if in_quote {
-            current.push(b as char);
-            if b == quote_char {
-                in_quote = false;
+    let mut quotes = Quotes::default();
+    let mut start = 0;
+    for (i, c) in inner.char_indices() {
+        if quotes.step(c) {
+            continue;
+        }
+        match c {
+            '[' | '{' => depth += 1,
+            ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                let part = inner[start..i].trim();
+                if !part.is_empty() {
+                    parts.push(part.to_string());
+                }
+                start = i + 1;
             }
-        } else if b == b'"' || b == b'\'' {
-            in_quote = true;
-            quote_char = b;
-            current.push(b as char);
-        } else if b == b'[' || b == b'{' {
-            depth += 1;
-            current.push(b as char);
-        } else if b == b']' || b == b'}' {
-            depth -= 1;
-            current.push(b as char);
-        } else if b == b',' && depth == 0 {
-            let part = current.trim().to_string();
-            if !part.is_empty() {
-                parts.push(part);
-            }
-            current = String::new();
-        } else {
-            current.push(b as char);
+            _ => {}
         }
     }
-    let part = current.trim().to_string();
+    let part = inner[start..].trim();
     if !part.is_empty() {
-        parts.push(part);
+        parts.push(part.to_string());
     }
     parts
 }

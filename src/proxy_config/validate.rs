@@ -12,7 +12,7 @@ use crate::proxy_config::{parser, ActionConfig, AuthConfig, MiddlewareConfig, Pr
 const STRATEGIES: &[&str] = &["round_robin", "random", "ip_hash", "least_connections"];
 
 const HEALTH_CHECK_KEYS: &[&str] = &["path", "interval_secs", "timeout_ms", "healthy_threshold", "unhealthy_threshold"];
-const PROXY_ACTION_KEYS: &[&str] = &["upstream", "connect_timeout_ms", "read_timeout_ms", "strip_path_prefix", "add_path_prefix"];
+const PROXY_ACTION_KEYS: &[&str] = &["upstream", "connect_timeout_ms", "read_timeout_ms", "strip_path_prefix", "add_path_prefix", "preserve_host", "upstream_host"];
 const GRPC_ACTION_KEYS: &[&str] = &["upstream", "connect_timeout_ms", "read_timeout_ms"];
 const STATIC_ACTION_KEYS: &[&str] = &["root", "index"];
 const REDIRECT_ACTION_KEYS: &[&str] = &["location", "status"];
@@ -261,6 +261,12 @@ impl ProxyConfig {
 
         for (i, route) in self.routes.iter().enumerate() {
             let label = if route.name.is_empty() { format!("route #{}", i + 1) } else { format!("route '{}'", route.name) };
+            // The proxy writes the upstream `Host` itself, after the rewrites.
+            if matches!(route.action, ActionConfig::Proxy { .. })
+                && route.middleware.rewrite_request.iter().any(|r| r.type_.starts_with("header_") && r.name.as_deref().is_some_and(|n| n.trim().eq_ignore_ascii_case("host")))
+            {
+                report.warn(format!("{label}: a request rewrite of `Host` doesn't reach the upstream — set `preserve_host = true` or `upstream_host = \"…\"` on the proxy action"));
+            }
             match &route.action {
                 ActionConfig::Proxy { upstream, .. } | ActionConfig::Grpc { upstream, .. } => {
                     if upstream.is_empty() {

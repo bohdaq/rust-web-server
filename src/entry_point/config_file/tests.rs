@@ -195,3 +195,25 @@ fn inline_table_inside_a_table_nests() {
     let s = settings_of("[cors]\nallow = { all = true }\n");
     assert_eq!(s.settings, vec![("RWS_CONFIG_CORS_ALLOW_ALL".to_string(), "true".to_string())]);
 }
+
+#[test]
+fn basic_strings_decode_escapes_literal_strings_do_not() {
+    assert_eq!(parse_value(r#""a\tb\nc\"d\\e""#), "a\tb\nc\"d\\e");
+    assert_eq!(parse_value(r#""\u00e9\U0001F600""#), "é😀");
+    // Not TOML escapes, or broken ones: kept as written.
+    assert_eq!(parse_value(r#""^/v\d+/""#), r"^/v\d+/");
+    assert_eq!(parse_value(r#""\u12""#), r"\u12");
+    assert_eq!(parse_value(r#""\uD800""#), r"\uD800");
+    // A backslash at the very end has nothing to escape.
+    assert_eq!(parse_value(r#""trailing\""#), "trailing\\");
+    assert_eq!(parse_value(r"'C:\new\path'"), r"C:\new\path");
+    assert_eq!(parse_value(r#"["a\"b", 'c,d', "e"]"#), "a\"b,c,d,e");
+}
+
+#[test]
+fn an_escaped_quote_does_not_end_a_string_before_a_comment() {
+    assert_eq!(strip_comment(r##"x = "a \"#b\" c" # note"##).trim(), r##"x = "a \"#b\" c""##);
+    assert_eq!(strip_comment(r##"x = "C:\\" # note"##).trim(), r##"x = "C:\\""##);
+    // Literal strings have no escapes: the backslash doesn't hide the quote.
+    assert_eq!(strip_comment(r"x = 'C:\' # note").trim(), r"x = 'C:\'");
+}

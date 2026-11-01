@@ -145,6 +145,19 @@ pub struct MatchConfig {
     pub content_type: Option<String>,
 }
 
+/// The `Host` a proxy route sends its upstream.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum UpstreamHost {
+    /// The backend's address (the default).
+    #[default]
+    Backend,
+    /// The client's `Host` (`preserve_host = true`), like nginx's
+    /// `proxy_set_header Host $host`.
+    Client,
+    /// This name (`upstream_host = "…"`).
+    Fixed(String),
+}
+
 #[derive(Debug, Clone)]
 pub enum ActionConfig {
     Proxy {
@@ -153,6 +166,8 @@ pub enum ActionConfig {
         read_timeout_ms: u64,
         strip_path_prefix: Option<String>,
         add_path_prefix: Option<String>,
+        /// The `Host` sent upstream (`preserve_host`, `upstream_host`).
+        upstream_host: UpstreamHost,
     },
     Grpc {
         upstream: String,
@@ -482,6 +497,16 @@ impl ProxyConfig {
                         add_path_prefix: {
                             let v = get_str(&map, &p_sec, "add_path_prefix");
                             if v.is_empty() { None } else { Some(v) }
+                        },
+                        upstream_host: {
+                            let fixed = get_str(&map, &p_sec, "upstream_host");
+                            if !fixed.is_empty() {
+                                UpstreamHost::Fixed(fixed)
+                            } else if get_str(&map, &p_sec, "preserve_host") == "true" {
+                                UpstreamHost::Client
+                            } else {
+                                UpstreamHost::Backend
+                            }
                         },
                     }
                 }
@@ -1430,9 +1455,26 @@ pub(crate) struct DynamicProxy {
     /// reach are on TCP until the time kept here.
     #[cfg(feature = "http3")]
     h3: Option<Arc<std::sync::Mutex<HashMap<String, std::time::Instant>>>>,
+    /// The `Host` sent upstream.
+    upstream_host: UpstreamHost,
 }
 
 impl DynamicProxy {
+    /// Send this `Host` upstream instead of the backend's address.
+    pub(crate) fn with_upstream_host(mut self, host: UpstreamHost) -> Self {
+        self.upstream_host = host;
+        self
+    }
+
+    /// The `Host` to send instead of the backend's address, if any.
+    fn host_override<'a>(&'a self, request: &'a Request) -> Option<&'a str> {
+        match &self.upstream_host {
+            UpstreamHost::Backend => None,
+            UpstreamHost::Client => request.header(Header::_HOST).map(|h| h.value.as_ref()).filter(|v| !v.is_empty()),
+            UpstreamHost::Fixed(host) => Some(host),
+        }
+    }
+
     /// Trust the given CA for TLS backends instead of the WebPKI roots.
     pub(crate) fn with_trust(mut self, trust: Option<Arc<crate::proxy::UpstreamTls>>) -> Self {
         self.trust = trust;
@@ -1528,6 +1570,7 @@ impl DynamicProxy {
             early_hints: None,
             #[cfg(feature = "http3")]
             h3: None,
+            upstream_host: UpstreamHost::Backend,
         }
     }
 
@@ -1785,6 +1828,7 @@ impl DynamicProxy {
                 let target = crate::proxy::h3_upstream::Target {
                     host: &prepared.host,
                     port: prepared.port,
+                    authority: self.host_override(request),
                     tls: &config,
                     connect_timeout: self.connect_timeout,
                     read_timeout: self.read_timeout,
@@ -1804,11 +1848,12 @@ impl DynamicProxy {
                     }
                 }
             }
-            let result = crate::proxy::async_upstream::forward(
+            let result = crate::proxy::async_upstream::forward_as(
                 &prepared.request,
                 crate::proxy::Peer::of(conn),
                 &prepared.host,
                 prepared.port,
+                self.host_override(request).unwrap_or(&prepared.host),
                 tls,
                 self.connect_timeout,
                 self.read_timeout,
@@ -1866,6 +1911,7 @@ impl Application for DynamicProxy {
                 let target = crate::proxy::h3_upstream::Target {
                     host: &prepared.host,
                     port: prepared.port,
+                    authority: self.host_override(request),
                     tls: &config,
                     connect_timeout: self.connect_timeout,
                     read_timeout: self.read_timeout,
@@ -1885,12 +1931,13 @@ impl Application for DynamicProxy {
                     }
                 }
             }
-            let result = crate::proxy::forward_upstream_trusting(
+            let result = crate::proxy::forward_upstream_as(
                 crate::proxy::shared_pool(),
                 &prepared.request,
                 crate::proxy::Peer::of(conn),
                 &prepared.host,
                 prepared.port,
+                self.host_override(request).unwrap_or(&prepared.host),
                 self.tls,
                 self.trust.as_deref(),
                 self.connect_timeout,

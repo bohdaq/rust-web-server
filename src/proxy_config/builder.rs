@@ -129,6 +129,7 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     read_timeout_ms,
                     strip_path_prefix,
                     add_path_prefix,
+                    upstream_host,
                 } => {
                     let live = upstream_lives
                         .get(upstream.as_str())
@@ -155,7 +156,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     .with_policy(upstream, upstream_policies.get(upstream.as_str()).cloned())
                     .with_mirror(mirror.clone())
                     .with_early_hints(&route.middleware.early_hints)
-                    .with_h3(upstream_cfg.is_some_and(|u| u.protocol.eq_ignore_ascii_case("h3"))));
+                    .with_h3(upstream_cfg.is_some_and(|u| u.protocol.eq_ignore_ascii_case("h3")))
+                    .with_upstream_host(upstream_host.clone()));
                     if proxy.supports_async() && route.middleware.is_empty() {
                         async_proxy = Some(Arc::clone(&proxy));
                     }

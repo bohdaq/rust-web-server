@@ -256,6 +256,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `ProxyConfig` | `proxy_config` | Parsed `[[route]]`/`[[upstream]]` config; `ProxyConfig::is_proxy_mode()`, `.validate(&mut ConfigReport)`. See [Config-driven proxy](/proxy/config-driven/) |
 | `ConfigDrivenApp` | `proxy_config` | The app `proxy_config::build_from_file()` returns: first-match router with per-route middleware and per-upstream `strategy` (`round_robin`, `random`, `ip_hash`, `least_connections`); `.with_config(ServerConfig)` |
 | `StickyConfig`, `BreakerConfig`, `RetryConfig` | `proxy_config` | An `[[upstream]]`'s `[upstream.sticky]`, `[upstream.circuit_breaker]` and `[upstream.retry]` (fields of `UpstreamConfig`, beside `weights`). See [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker) |
+| `UpstreamHost` | `proxy_config` | The `Host` a proxy route sends upstream (`ActionConfig::Proxy::upstream_host`): `Backend` (default), `Client` (`preserve_host = true`), `Fixed(name)` (`upstream_host`). See [proxy action](/configuration/config-file/#routeaction--proxy) |
 | `ReloadOutcome` | `proxy_config` | Result of `ConfigDrivenApp::reload_from_str` / `reload_from_file` (validated first; the running routes stay on errors) |
 
 ## HTTP client

@@ -77,8 +77,14 @@ variable is its table name plus the key, upper-cased:
 | `[rate_limit]` `max_requests = 500` | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` |
 | 2nd `[[virtual_host]]` block, `domain = ...` | `RWS_CONFIG_VIRTUAL_HOST_1_DOMAIN` |
 
-Strings keep their exact contents (`csp = "default-src 'self'; img-src *"`
-works); arrays become comma-separated lists. A key that doesn't correspond to
+Strings are TOML strings, here and in the proxy sections: in a basic string
+(`"…"`) the escapes `\n \r \t \b \f \e \" \\ \uXXXX \UXXXXXXXX` stand for
+the characters they name (`body = "line 1\r\nline 2"` is two lines); a
+literal string (`'…'`) is taken exactly as written (`'C:\new'`). A backslash
+before anything else in a basic string is kept as written, so `"^/v\d+/"`
+stays as it is. Quotes of the other kind need no escape
+(`csp = "default-src 'self'; img-src *"` works); arrays become
+comma-separated lists. A key that doesn't correspond to
 any setting is reported at startup — `Warning: unknown setting '[server] port'
 in rws.config.toml — ignored` — rather than silently dropped. `[[route]]`,
 `[[upstream]]`, `[[tcp_proxy]]`, `[[udp_proxy]]`, `[[ws_proxy]]`, and
@@ -391,7 +397,18 @@ connect_timeout_ms  = 5000           # (default: 5000)
 read_timeout_ms     = 30000          # (default: 30000)
 strip_path_prefix   = "/api"         # Strip this prefix before forwarding (optional)
 add_path_prefix     = "/v2"          # Add this prefix after stripping (optional)
+preserve_host       = true           # Send the client's Host upstream (default: false)
+upstream_host       = "app.internal" # Send this Host upstream (optional; wins over preserve_host)
 ```
+
+The upstream gets the backend's address as its `Host` unless the route says
+otherwise: `preserve_host = true` passes on the client's (nginx's
+`proxy_set_header Host $host`, for an application that builds its links from
+the host it's asked for), `upstream_host` sends a fixed name. Over HTTP/3
+upstreams they set `:authority`. The proxy writes `Host` itself, so a
+`header_set` rewrite of `Host` doesn't reach the upstream — `rws --check`
+warns about one. The client's host also goes upstream as `X-Forwarded-Host`
+either way.
 
 ### `[route.action]` — grpc
 

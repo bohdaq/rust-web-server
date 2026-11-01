@@ -124,12 +124,31 @@ enum Exchange {
 }
 
 /// Forward `request` to `host:port` — over TLS when `tls` is given — and
-/// return the backend's response.
+/// return the backend's response (the tests' shorthand for [`forward_as`]
+/// with the backend's address as the `Host`).
+#[cfg(test)]
 pub(crate) async fn forward(
     request: &Request,
     client: Peer<'_>,
     host: &str,
     port: u16,
+    tls: Option<AsyncTls>,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    forward_as(request, client, host, port, host, tls, connect_timeout, read_timeout).await
+}
+
+/// Forward `request` to `host:port` — over TLS when `tls` is given — sending
+/// `host_header` as the `Host` (the backend's address, or a config route's
+/// `preserve_host` / `upstream_host`), and return the backend's response.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn forward_as(
+    request: &Request,
+    client: Peer<'_>,
+    host: &str,
+    port: u16,
+    host_header: &str,
     tls: Option<AsyncTls>,
     connect_timeout: Duration,
     read_timeout: Duration,
@@ -143,7 +162,7 @@ pub(crate) async fn forward(
     let pooled = crate::server::per_core::pool_key(&key);
     match tls {
         None => {
-            forward_on(pool(), &pooled, request, host, client, read_timeout, || connect(&key, connect_timeout)).await
+            forward_on(pool(), &pooled, request, host_header, client, read_timeout, || connect(&key, connect_timeout)).await
         }
         Some(tls) => {
             let connect_tls = || async {
@@ -157,7 +176,7 @@ pub(crate) async fn forward(
                     Err(_) => Err(format!("TLS handshake with {} timed out", key)),
                 }
             };
-            forward_on(tls.pool, &pooled, request, host, client, read_timeout, connect_tls).await
+            forward_on(tls.pool, &pooled, request, host_header, client, read_timeout, connect_tls).await
         }
     }
 }

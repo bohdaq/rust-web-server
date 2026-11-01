@@ -5,6 +5,29 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- Config proxy routes choose the upstream `Host`: `preserve_host = true`
+  sends the client's, `upstream_host = "…"` a fixed name (`:authority` over
+  HTTP/3 upstreams). It was always the backend's address, and a `header_set`
+  rewrite of `Host` was silently dropped — `rws --check` now warns about one.
+
+### Fixed
+
+- Config-file strings (`rws.config.toml` settings and proxy sections) are
+  TOML strings: a basic string's escapes (`\n`, `\r`, `\"`, `\\`, `\uXXXX`, …)
+  are decoded, a literal string (`'…'`) is taken as written. They used to lose
+  only their quotes, so `body = "a\r\nb"` answered with a literal `\r\n` and
+  the documented `body = "{\"ok\":true}"` with its backslashes. A backslash
+  before anything else is still kept as written (`"^/v\d+/"`). Note: a value
+  that relied on the old reading of a real escape — say a Windows path
+  `"C:\new"` — now changes; write it as `'C:\new'` or `"C:\\new"`.
+- An escaped quote no longer ends a string for comment, array and inline-table
+  splitting (`"a\"#b"` lost everything after `#`), and inline tables keep
+  non-ASCII text (it was rebuilt byte by byte and garbled).
+
 ## 18.18.0 — 2026-11-01
 
 ### Added

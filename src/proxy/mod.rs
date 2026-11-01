@@ -680,6 +680,25 @@ pub(crate) fn forward_upstream_trusting(
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
+    forward_upstream_as(plain_pool, request, client, host, port, host, tls, trust, connect_timeout, read_timeout)
+}
+
+/// [`forward_upstream_trusting`], sending `host_header` as the `Host` instead
+/// of the backend's address (a config route's `preserve_host` /
+/// `upstream_host`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn forward_upstream_as(
+    plain_pool: &ConnPool,
+    request: &Request,
+    client: Peer<'_>,
+    host: &str,
+    port: u16,
+    host_header: &str,
+    tls: bool,
+    trust: Option<&UpstreamTls>,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
     // Inside a traced request: a client span per forward, current while the
     // request is built, so the upstream's `traceparent` names it.
     #[cfg(not(target_arch = "wasm32"))]
@@ -692,7 +711,7 @@ pub(crate) fn forward_upstream_trusting(
             span.set_attribute(key, value);
         }
     }
-    let result = forward_upstream_untraced(plain_pool, request, client, host, port, tls, trust, connect_timeout, read_timeout);
+    let result = forward_upstream_untraced(plain_pool, request, client, host, port, host_header, tls, trust, connect_timeout, read_timeout);
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(span) = &span {
         span.finish_http_client(result.as_ref().map(|r| r.status_code as u16).map_err(String::as_str));
@@ -707,6 +726,7 @@ fn forward_upstream_untraced(
     client: Peer<'_>,
     host: &str,
     port: u16,
+    host_header: &str,
     tls: bool,
     trust: Option<&UpstreamTls>,
     connect_timeout: Duration,
@@ -719,7 +739,7 @@ fn forward_upstream_untraced(
                 Some(t) => (t.pool, Arc::clone(&t.config)),
                 None => (shared_tls_pool(), tls_client_config()),
             };
-            return forward_via(pool, request, client, host, port, host, read_timeout, || {
+            return forward_via(pool, request, client, host, port, host_header, read_timeout, || {
                 connect_tls_with(Arc::clone(&config), host, port, connect_timeout)
             });
         }
@@ -729,7 +749,7 @@ fn forward_upstream_untraced(
             return Err("HTTPS backends need the http2 or http-client feature, which this build doesn't include".to_string());
         }
     }
-    forward_pooled(plain_pool, request, client, host, port, connect_timeout, read_timeout)
+    forward_via(plain_pool, request, client, host, port, host_header, read_timeout, || connect_tcp(host, port, connect_timeout))
 }
 
 /// Trust settings for one upstream's TLS backends: the certificates in a CA
@@ -1623,6 +1643,7 @@ impl H3ReverseProxy {
             let target = h3_upstream::Target {
                 host: &backend.host,
                 port: backend.port,
+                authority: None,
                 tls: &config,
                 connect_timeout: self.inner.connect_timeout,
                 read_timeout: self.inner.read_timeout,

@@ -88,7 +88,7 @@ fn start_backend_on(bind: SocketAddr, cert: Option<(String, String, Vec<u8>)>) -
 }
 
 fn target(port: u16, tls: &Arc<rustls::ClientConfig>) -> Target<'_> {
-    Target { host: "localhost", port, tls, connect_timeout: Duration::from_millis(1500), read_timeout: Duration::from_secs(5) }
+    Target { host: "localhost", port, authority: None, tls, connect_timeout: Duration::from_millis(1500), read_timeout: Duration::from_secs(5) }
 }
 
 fn peer() -> crate::proxy::Peer<'static> {
