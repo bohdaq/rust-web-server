@@ -566,6 +566,10 @@
       {
         "label": "Roadmap",
         "link": "/reference/roadmap/"
+      },
+      {
+        "label": "Support policy",
+        "link": "/reference/support-policy/"
       }
     ]
   }

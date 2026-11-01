@@ -179,6 +179,7 @@ Use it as:
 - [Architecture](https://rws8.tech/reference/architecture/): How rws handles a request — listeners, the HTTP/1.1, HTTP/2 and HTTP/3 front ends, the Application trait, middleware, the static-file and proxy fast paths, and configuration.
 - [Benchmarks](https://rws8.tech/reference/benchmarks/): rws compared with Caddy and nginx on static files and reverse proxying, and how to reproduce the numbers.
 - [Roadmap](https://rws8.tech/reference/roadmap/): Planned features for rust-web-server — each appears as a callout on the relevant docs page.
+- [Support policy](https://rws8.tech/reference/support-policy/): Which rws releases get fixes and for how long, the long-term-support (LTS) lines, security response targets and how fixes are released.
 
 ## Optional
 

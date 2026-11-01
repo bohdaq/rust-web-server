@@ -52,6 +52,19 @@ git push origin 17.110.0
 
 The docs site, [rws8.tech](https://rws8.tech), is rebuilt from the tag's `docs/` and pushed to the `docs` branch of `bohdaq/rws8.tech` (GitHub Pages) by the same workflow; it needs the `DOCS_SITE_DEPLOY_KEY` repository secret, the private half of a write-enabled deploy key on that repo.
 
+### LTS lines
+
+Every six months one minor release is named long-term support (the policy:
+`docs/src/content/docs/reference/support-policy.md`, and the table in
+`SECURITY.md`). When it's released, create its branch from the tag —
+`git branch 18.20.x 18.20.0 && git push origin 18.20.x` — and add it to both
+tables. A fix that qualifies (security, or critical: data loss, a crash or
+hang clients can trigger, a regression, broken renewal) lands on `main`
+first, then is cherry-picked onto each supported `<minor>.x` branch with its
+test; bump the patch version there, tag (`18.20.1`) and push the tag. CI
+runs on the branch like on `main`. When a line's twelve months are up, mark
+it ended in both tables.
+
 A patch for an older line (e.g. `17.113.1` after `18.0.0`) is released the same way, from a tag on that line's branch: the workflow sees that it isn't the highest version tag, so the GitHub Release isn't marked Latest, the image is pushed as `<version>` and `<major>` but not `latest`, and the Homebrew formula is left on the newest version.
 
 After the workflow, submit the release to the two package indexes that take pull requests (both checked in CI by `packaging.yml`):

@@ -68,6 +68,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `detect`, exclusions by rule and path, custom `deny`/`allow`/`log`/`score`
   rules; `403` problem+json, `[waf]` log lines, `rws_waf_*` metrics;
   `waf::WafLayer` for code.
+- Support policy (#81): long-term-support lines (one minor every six months,
+  security and critical fixes for twelve months; 18.20 is the first, until
+  2027-11-01), security response targets and coordinated disclosure in
+  `SECURITY.md` and a Support policy docs page.
 
 ### Fixed
 
