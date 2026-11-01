@@ -3326,7 +3326,7 @@ dependencies = [
 
 [[package]]
 name = "rust-web-server"
-version = "18.20.0"
+version = "18.23.0"
 dependencies = [
  "aes-gcm",
  "argon2",
