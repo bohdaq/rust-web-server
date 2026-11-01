@@ -17,6 +17,19 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `FileDescriptorName` or port) are used instead of binding — restarts
   refuse nothing — including by every per-core runtime. The packages' unit
   is `Type=notify` with `WatchdogSec=30` and they install `rws.socket`.
+- CRLs for inbound mTLS (#68): `tls_client_crl_file` (PEM or DER,
+  comma-separated) makes revoked client certificates fail the handshake;
+  re-read on reload and by `watch`, parsed by `rws --check`;
+  `tls_client_crl_strict = true` also refuses stale CRLs and certificates no
+  CRL covers.
+
+### Changed
+
+- Proxied requests carry RFC 7239 `Forwarded` (`for=…;proto=…;host=…`)
+  beside the `X-Forwarded-*` headers (#68), extending an incoming one.
+  Backends that read `Forwarded` (Spring's `ForwardedHeaderFilter`, Rails)
+  now see it, with the values `X-Forwarded-*` already carry.
+  `forwarded_header = "off"` (`RWS_CONFIG_FORWARDED_HEADER`) leaves it out.
 
 ## 18.19.0 — 2026-11-01
 

@@ -30,6 +30,9 @@ order.
 | `RWS_CONFIG_PROXY_NAME` | `rws` | string | This hop's name in `Proxy-Status` and `Cache-Status`. |
 | `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` | `false` | boolean | Add the backend address (`next-hop`) and the failure's text (`details`) to `Proxy-Status`; they reveal internal addresses. |
 | `RWS_CONFIG_CACHE_STATUS` | `true` | boolean | `Cache-Status` (RFC 9211) on responses that pass through a response cache: `hit; ttl=…`, `fwd=uri-miss; stored`, … (since 18.17.0). See [Caching](/features/caching/#cache-status-header). |
+| `RWS_CONFIG_FORWARDED_HEADER` | `add` | string | Proxied requests carry RFC 7239 `Forwarded` beside `X-Forwarded-*` (since 18.20.0); `off` leaves it out and passes the client's through. |
+| `RWS_CONFIG_TLS_CLIENT_CRL_FILE` | (empty) | paths | Certificate revocation lists for client certificates (mTLS), PEM or DER, comma-separated; revoked certificates fail the handshake (since 18.20.0). See [mTLS](/features/mtls/#revoked-certificates-crls). |
+| `RWS_CONFIG_TLS_CLIENT_CRL_STRICT` | `false` | boolean | Refuse a CRL past its `nextUpdate` and certificates no CRL covers. |
 | `RWS_CONFIG_COMPRESSION_DICTIONARIES` | (empty) | string | Comma-separated URL patterns (`/js/app.*.js`) of static files offered as compression dictionaries; later versions go out as `dcz` / `dcb` deltas (since 18.12.0). See [Dictionary compression](/features/compression/#dictionary-compression). |
 | `RWS_CONFIG_EARLY_HINTS_HTTP1` | `false` | boolean | Also send `103 Early Hints` to HTTP/1.1 clients (since 18.12.0). HTTP/2 and HTTP/3 always get them; see [Early Hints](/features/early-hints/). |
 | `RWS_CONFIG_DIRECTORY_LISTING` | `true` | boolean | List a directory that has no `index.html` (since 18.8.4). `false` answers `404 Not Found` instead; directories with an `index.html` and files are unaffected. |

@@ -1078,6 +1078,9 @@ order.
 | `RWS_CONFIG_PROXY_NAME` | `rws` | string | This hop's name in `Proxy-Status` and `Cache-Status`. |
 | `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` | `false` | boolean | Add the backend address (`next-hop`) and the failure's text (`details`) to `Proxy-Status`; they reveal internal addresses. |
 | `RWS_CONFIG_CACHE_STATUS` | `true` | boolean | `Cache-Status` (RFC 9211) on responses that pass through a response cache: `hit; ttl=…`, `fwd=uri-miss; stored`, … (since 18.17.0). See [Caching](/features/caching/#cache-status-header). |
+| `RWS_CONFIG_FORWARDED_HEADER` | `add` | string | Proxied requests carry RFC 7239 `Forwarded` beside `X-Forwarded-*` (since 18.20.0); `off` leaves it out and passes the client's through. |
+| `RWS_CONFIG_TLS_CLIENT_CRL_FILE` | (empty) | paths | Certificate revocation lists for client certificates (mTLS), PEM or DER, comma-separated; revoked certificates fail the handshake (since 18.20.0). See [mTLS](/features/mtls/#revoked-certificates-crls). |
+| `RWS_CONFIG_TLS_CLIENT_CRL_STRICT` | `false` | boolean | Refuse a CRL past its `nextUpdate` and certificates no CRL covers. |
 | `RWS_CONFIG_COMPRESSION_DICTIONARIES` | (empty) | string | Comma-separated URL patterns (`/js/app.*.js`) of static files offered as compression dictionaries; later versions go out as `dcz` / `dcb` deltas (since 18.12.0). See [Dictionary compression](/features/compression/#dictionary-compression). |
 | `RWS_CONFIG_EARLY_HINTS_HTTP1` | `false` | boolean | Also send `103 Early Hints` to HTTP/1.1 clients (since 18.12.0). HTTP/2 and HTTP/3 always get them; see [Early Hints](/features/early-hints/). |
 | `RWS_CONFIG_DIRECTORY_LISTING` | `true` | boolean | List a directory that has no `index.html` (since 18.8.4). `false` answers `404 Not Found` instead; directories with an `index.html` and files are unaffected. |
@@ -1548,6 +1551,9 @@ proxy_status            = "always"   # RWS_CONFIG_PROXY_STATUS: Proxy-Status on 
 proxy_name              = "rws"      # RWS_CONFIG_PROXY_NAME: this hop's name in Proxy-Status / Cache-Status
 proxy_status_next_hop   = false      # RWS_CONFIG_PROXY_STATUS_NEXT_HOP: add the backend address and error text
 cache_status            = true       # RWS_CONFIG_CACHE_STATUS: Cache-Status on responses through a response cache
+forwarded_header        = "add"      # RWS_CONFIG_FORWARDED_HEADER: RFC 7239 Forwarded on proxied requests; "off" leaves it out
+tls_client_crl_file     = "/etc/rws/clients.crl.pem"  # RWS_CONFIG_TLS_CLIENT_CRL_FILE: revoked client certificates (PEM or DER, comma-separated)
+tls_client_crl_strict   = false      # RWS_CONFIG_TLS_CLIENT_CRL_STRICT: refuse stale CRLs and certificates no CRL covers
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas
 early_hints_http1       = true       # RWS_CONFIG_EARLY_HINTS_HTTP1: also send 103 Early Hints over HTTP/1.1 (default false)
 directory_listing       = false      # RWS_CONFIG_DIRECTORY_LISTING: 404 instead of listing a directory without index.html (default true)
@@ -7071,6 +7077,23 @@ ServerConfig::builder()
 
 The CA certificate is loaded into a `RootCertStore`. Every TLS `ClientHello`
 that follows must include a certificate chain rooted in that store.
+
+## Revoked certificates (CRLs)
+
+To refuse client certificates you've revoked, give rws your CA's
+certificate revocation lists (since 18.20.0):
+
+```toml
+tls_client_crl_file   = "/etc/rws/clients.crl.pem"   # PEM (any number of X509 CRL blocks) or DER; several files comma-separated
+tls_client_crl_strict = false                        # true: a CRL past its nextUpdate, or a certificate no CRL covers, is refused
+```
+
+A revoked certificate fails the TLS handshake. By default only
+certificates whose CA has a CRL are checked, and a CRL past its
+`nextUpdate` still counts; `tls_client_crl_strict = true` refuses both
+(use it when every CA you trust publishes CRLs you keep fresh). The files
+are re-read on `SIGHUP` and, with `watch = true`, as soon as they change, so
+a new list applies without a restart. `rws --check` parses them.
 
 ## Generating test client certificates
 
@@ -13314,6 +13337,7 @@ The following headers are never forwarded to the upstream or back to the client,
 | `Host` | Backend host (replaces the original `Host` header) |
 | `X-Forwarded-Host` | The `Host` the client sent, unless it already carries an `X-Forwarded-Host` (since 18.8.4) |
 | `X-Forwarded-Proto` | `https` when the client connected over TLS (HTTPS, HTTP/2 over TLS, HTTP/3), else `http`; an incoming `X-Forwarded-Proto` is kept, so rws behind another TLS terminator passes its answer on (since 18.9.0) |
+| `Forwarded` | RFC 7239: `for=<client>;proto=<http|https>;host=` (IPv6 as `for="[2001:db8::1]"`), appended to an incoming `Forwarded` like `X-Forwarded-For` (since 18.20.0). `forwarded_header = "off"` (`RWS_CONFIG_FORWARDED_HEADER`) leaves it out and passes the client's through unchanged |
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
 | `Content-Length` | Length of the forwarded body (exactly one) |
 

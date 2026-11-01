@@ -68,3 +68,79 @@ fn load_certified_key_pairs_cert_with_key() {
     let key = write_fixture("pair_key.pem", RSA_PKCS1_KEY_PEM);
     assert_eq!(1, load_certified_key(cert.as_str(), key.as_str()).unwrap().cert.len());
 }
+
+/// A CA, two client certificates (serials 1 and 2) and a CRL from the CA
+/// revoking serial 2, next update `next`.
+fn crl_pki(tag: &str, next: (i32, u8, u8)) -> (crate::test_env::TempPath, crate::test_env::TempPath, Vec<u8>, Vec<rustls::pki_types::CertificateDer<'static>>) {
+    use rcgen::{BasicConstraints, CertificateParams, CertificateRevocationListParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyIdMethod, KeyPair, KeyUsagePurpose, RevokedCertParams, SerialNumber, PKCS_ECDSA_P256_SHA256};
+    let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+    let ca_key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
+    let ca_cert = ca_params.clone().self_signed(&ca_key).unwrap();
+    let issuer = Issuer::new(ca_params, ca_key);
+    let client = |serial: u8| {
+        let mut params = CertificateParams::new(vec![format!("client-{serial}")]).unwrap();
+        params.serial_number = Some(SerialNumber::from(vec![serial]));
+        params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+        let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
+        params.signed_by(&key, &issuer).unwrap().der().clone()
+    };
+    let clients = vec![client(1), client(2)];
+    let crl = CertificateRevocationListParams {
+        this_update: rcgen::date_time_ymd(2026, 1, 1),
+        next_update: rcgen::date_time_ymd(next.0, next.1, next.2),
+        crl_number: SerialNumber::from(vec![1]),
+        issuing_distribution_point: None,
+        revoked_certs: vec![RevokedCertParams { serial_number: SerialNumber::from(vec![2]), revocation_time: rcgen::date_time_ymd(2026, 1, 1), reason_code: None, invalidity_date: None }],
+        key_identifier_method: KeyIdMethod::Sha256,
+    }
+    .signed_by(&issuer)
+    .unwrap();
+    let ca = write_fixture(&format!("crl_{tag}_ca.pem"), &ca_cert.pem());
+    let crl_pem = write_fixture(&format!("crl_{tag}.pem"), &crl.pem().unwrap());
+    (ca, crl_pem, crl.der().to_vec(), clients)
+}
+
+#[test]
+fn revoked_client_certificates_fail_the_handshake() {
+    let _g = crate::test_env::lock();
+    let now = rustls::pki_types::UnixTime::now();
+    let (ca, crl, crl_der, clients) = crl_pki("basic", (2099, 1, 1));
+    std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_STRICT");
+    std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_FILE");
+    let plain = super::load_client_verifier(ca.as_str()).unwrap();
+    assert!(plain.verify_client_cert(&clients[1], &[], now).is_ok(), "no CRL configured: accepted");
+
+    std::env::set_var("RWS_CONFIG_TLS_CLIENT_CRL_FILE", crl.as_str());
+    let checked = super::load_client_verifier(ca.as_str()).unwrap();
+    assert!(checked.verify_client_cert(&clients[0], &[], now).is_ok());
+    let refused = checked.verify_client_cert(&clients[1], &[], now).unwrap_err();
+    assert!(format!("{refused:?}").contains("Revoked"), "{refused:?}");
+
+    // DER works too, and several files are read.
+    let der = crate::test_env::TempPath::new("crl_basic.der");
+    std::fs::write(der.as_str(), &crl_der).unwrap();
+    std::env::set_var("RWS_CONFIG_TLS_CLIENT_CRL_FILE", format!("{}, {}", der.as_str(), crl.as_str()));
+    assert!(super::load_client_verifier(ca.as_str()).unwrap().verify_client_cert(&clients[1], &[], now).is_err());
+
+    let junk = write_fixture("crl_junk.pem", "not a crl");
+    assert!(super::load_crls(junk.as_str()).unwrap_err().contains("neither PEM nor DER"));
+    assert!(super::load_crls("/nonexistent/crl.pem").unwrap_err().contains("can't read"));
+    std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_FILE");
+}
+
+#[test]
+fn strict_refuses_stale_crls() {
+    let _g = crate::test_env::lock();
+    let now = rustls::pki_types::UnixTime::now();
+    let (ca, crl, _, clients) = crl_pki("stale", (2026, 1, 2));
+    std::env::set_var("RWS_CONFIG_TLS_CLIENT_CRL_FILE", crl.as_str());
+    std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_STRICT");
+    assert!(super::load_client_verifier(ca.as_str()).unwrap().verify_client_cert(&clients[0], &[], now).is_ok(), "a stale CRL still counts by default");
+    std::env::set_var("RWS_CONFIG_TLS_CLIENT_CRL_STRICT", "true");
+    let refused = super::load_client_verifier(ca.as_str()).unwrap().verify_client_cert(&clients[0], &[], now).unwrap_err();
+    assert!(format!("{refused:?}").to_lowercase().contains("expired"), "{refused:?}");
+    std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_FILE");
+    std::env::remove_var("RWS_CONFIG_TLS_CLIENT_CRL_STRICT");
+}

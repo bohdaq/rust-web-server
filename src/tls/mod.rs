@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use rustls::{RootCertStore, ServerConfig};
 use rustls::pki_types::pem::{self, PemObject};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 use rustls::sign::CertifiedKey;
 use tokio_rustls::TlsAcceptor;
@@ -195,7 +195,38 @@ fn load_client_verifier(ca_path: &str) -> Result<Arc<dyn rustls::server::danger:
             .add(cert)
             .map_err(|e| format!("invalid CA cert in '{}': {}", ca_path, e))?;
     }
-    WebPkiClientVerifier::builder(Arc::new(root_store))
-        .build()
-        .map_err(|e| format!("client cert verifier build error: {}", e))
+    let mut builder = WebPkiClientVerifier::builder(Arc::new(root_store));
+    let crl_files = std::env::var("RWS_CONFIG_TLS_CLIENT_CRL_FILE").unwrap_or_default();
+    let crls = load_crls(&crl_files)?;
+    if !crls.is_empty() {
+        builder = builder.with_crls(crls);
+        if std::env::var("RWS_CONFIG_TLS_CLIENT_CRL_STRICT").is_ok_and(|v| v.trim().eq_ignore_ascii_case("true")) {
+            // A CRL past its nextUpdate, or a certificate no CRL covers, fails.
+            builder = builder.enforce_revocation_expiration();
+        } else {
+            // Only certificates whose CA has a CRL are checked.
+            builder = builder.allow_unknown_revocation_status();
+        }
+    }
+    builder.build().map_err(|e| format!("client cert verifier build error: {}", e))
+}
+
+/// Certificate revocation lists from `files` (comma-separated; each PEM
+/// with any number of `X509 CRL` blocks, or one DER CRL), 18.20.0.
+pub(crate) fn load_crls(files: &str) -> Result<Vec<CertificateRevocationListDer<'static>>, String> {
+    let mut crls = Vec::new();
+    for path in files.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let bytes = std::fs::read(path).map_err(|e| format!("can't read CRL file '{path}': {e}"))?;
+        let pem: Vec<_> = CertificateRevocationListDer::pem_slice_iter(&bytes).collect::<Result<_, _>>().map_err(|e| format!("CRL file '{path}': {e}"))?;
+        if pem.is_empty() {
+            // DER: an X.509 CRL is a SEQUENCE.
+            if bytes.first() != Some(&0x30) {
+                return Err(format!("CRL file '{path}' is neither PEM nor DER"));
+            }
+            crls.push(CertificateRevocationListDer::from(bytes));
+        } else {
+            crls.extend(pem);
+        }
+    }
+    Ok(crls)
 }

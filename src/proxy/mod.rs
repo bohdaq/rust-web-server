@@ -326,6 +326,35 @@ impl<'a> Peer<'a> {
     }
 }
 
+/// The `Forwarded` value for this hop (RFC 7239, 18.20.0): the request's
+/// own `Forwarded` (from proxies before this one) extended with
+/// `for=<client>;proto=<http|https>;host=<Host>`; `None` when
+/// `forwarded_header = "off"`.
+pub(crate) fn forwarded_value(request: &Request, client: Peer<'_>) -> Option<String> {
+    if !crate::server_config::ServerConfig::current().forwarded_header {
+        return None;
+    }
+    let node = match client.ip.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(v4)) => v4.to_string(),
+        Ok(std::net::IpAddr::V6(v6)) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4.to_string(),
+            None => format!("\"[{v6}]\""),
+        },
+        Err(_) => "unknown".to_string(),
+    };
+    let mut element = format!("for={node};proto={}", client.proto());
+    if let Some(host) = request.header(crate::header::Header::_HOST).map(|h| h.value.as_ref()).filter(|h: &&str| !h.is_empty() && h.bytes().all(|b| b.is_ascii_graphic() && b != b'"' && b != b'\\')) {
+        let token = host.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b));
+        if token {
+            element.push_str(&format!(";host={host}"));
+        } else {
+            element.push_str(&format!(";host=\"{host}\""));
+        }
+    }
+    let prior = request.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("forwarded")).map(|h| h.value.trim()).filter(|v| !v.is_empty() && !v.bytes().any(|b| b < 0x20)).collect::<Vec<_>>();
+    Some(if prior.is_empty() { element } else { format!("{}, {element}", prior.join(", ")) })
+}
+
 pub(crate) fn build_request(
     request: &Request,
     backend_host: &str,
@@ -344,12 +373,14 @@ pub(crate) fn build_request(
     let trace = crate::otel::propagation_headers();
     #[cfg(target_arch = "wasm32")]
     let trace: Option<(String, Option<String>)> = None;
+    let forwarded_header = forwarded_value(request, client);
     let forwarded = |h: &&crate::header::Header| {
         // An empty name would be sent as a malformed ": value" line.
         !h.name.is_empty()
             && !is_hop_by_hop_or_host(&h.name)
             && !h.name.eq_ignore_ascii_case(crate::header::Header::_CONTENT_LENGTH)
             && !h.name.eq_ignore_ascii_case("X-Forwarded-For")
+            && !(forwarded_header.is_some() && h.name.eq_ignore_ascii_case("Forwarded"))
             && !connection.is_some_and(|c| connection_listed(c, &h.name))
             && !(trace.is_some() && (h.name.eq_ignore_ascii_case("traceparent") || h.name.eq_ignore_ascii_case("baggage")))
     };
@@ -368,6 +399,7 @@ pub(crate) fn build_request(
         + client.ip.len() + 19 + prior_xff.map_or(0, |v| v.len() + 2)
         + forwarded_host.map_or(0, |v| v.len() + 20)
         + forwarded_proto.map_or(0, |v| v.len() + 21)
+        + forwarded_header.as_ref().map_or(0, |v| v.len() + 13)
         + trace.as_ref().map_or(0, |(t, b)| t.len() + 15 + b.as_ref().map_or(0, |b| b.len() + 11))
         + 13
         + 24
@@ -398,6 +430,11 @@ pub(crate) fn build_request(
     }
     if let Some(proto) = forwarded_proto {
         for part in ["X-Forwarded-Proto: ", proto, "\r\n"] {
+            out.extend_from_slice(part.as_bytes());
+        }
+    }
+    if let Some(value) = &forwarded_header {
+        for part in ["Forwarded: ", value.as_str(), "\r\n"] {
             out.extend_from_slice(part.as_bytes());
         }
     }

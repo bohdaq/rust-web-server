@@ -31,6 +31,10 @@ pub fn watched_paths() -> Vec<PathBuf> {
     for key in [crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE, crate::entry_point::Config::RWS_CONFIG_TLS_KEY_FILE] {
         paths.extend(var(key).map(PathBuf::from));
     }
+    // CRLs for client certificates: a new list applies without a restart.
+    if let Some(files) = var("RWS_CONFIG_TLS_CLIENT_CRL_FILE") {
+        paths.extend(files.split(',').map(str::trim).filter(|p| !p.is_empty()).map(PathBuf::from));
+    }
     for i in 0.. {
         if var(&format!("RWS_CONFIG_VIRTUAL_HOST_{i}_DOMAIN")).is_none() {
             break;

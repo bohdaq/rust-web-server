@@ -1098,7 +1098,7 @@ fn proxied_request_drops_hop_by_hop_and_host_in_any_case() {
     let out = crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), false);
     // The client's Content-Length is regenerated, not forwarded twice.
     let expected = "POST /a?b=1 HTTP/1.1\r\nHost: b:9\r\nX-Kept: v\r\n\
-        X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nX-Forwarded-Host: client\r\nX-Forwarded-Proto: http\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
+        X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nX-Forwarded-Host: client\r\nX-Forwarded-Proto: http\r\nForwarded: for=10.0.0.1;proto=http;host=client\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
     assert_eq!(expected, String::from_utf8(out.clone()).unwrap());
     assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
 }
@@ -1412,3 +1412,28 @@ fn proxied_request_says_whether_the_client_used_tls() {
     assert!(text.contains("X-Forwarded-Proto: https\r\n"), "{text:?}");
 }
 
+
+#[test]
+fn forwarded_extends_the_chain_and_can_be_turned_off() {
+    let _g = crate::test_env::lock();
+    let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: example.com:8443\r\nForwarded: for=198.51.100.17;proto=https\r\n\r\n").unwrap();
+    let peer = crate::proxy::Peer { ip: "2001:db8::1", tls: true };
+    assert_eq!(
+        Some(r#"for=198.51.100.17;proto=https, for="[2001:db8::1]";proto=https;host="example.com:8443""#.to_string()),
+        crate::proxy::forwarded_value(&req, peer)
+    );
+    let mapped = crate::proxy::Peer { ip: "::ffff:192.0.2.60", tls: false };
+    let bare = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: a.example\r\n\r\n").unwrap();
+    assert_eq!(Some("for=192.0.2.60;proto=http;host=a.example".to_string()), crate::proxy::forwarded_value(&bare, mapped));
+    let out = String::from_utf8(crate::proxy::build_request(&req, "b:9", peer, true)).unwrap();
+    assert_eq!(1, out.matches("\r\nForwarded: ").count(), "one Forwarded line: {out}");
+    assert!(out.contains("\r\nForwarded: for=198.51.100.17;proto=https, for=") && !out.contains("\r\nForwarded: for=198.51.100.17;proto=https\r\n"), "{out}");
+
+    std::env::set_var("RWS_CONFIG_FORWARDED_HEADER", "off");
+    crate::server_config::invalidate();
+    assert_eq!(None, crate::proxy::forwarded_value(&req, peer));
+    let out = String::from_utf8(crate::proxy::build_request(&req, "b:9", peer, true)).unwrap();
+    assert!(out.contains("\r\nForwarded: for=198.51.100.17;proto=https\r\n"), "off: the client's passes through untouched: {out}");
+    std::env::remove_var("RWS_CONFIG_FORWARDED_HEADER");
+    crate::server_config::invalidate();
+}

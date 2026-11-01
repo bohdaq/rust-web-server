@@ -199,9 +199,10 @@ fn request_head(request: &Request, client: crate::proxy::Peer<'_>, authority: &s
     let uri: http::Uri = format!("https://{authority}{}", request.request_uri).parse().map_err(|e: http::uri::InvalidUri| e.to_string())?;
     let method = http::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
     let mut builder = http::Request::builder().method(method).uri(uri);
+    let forwarded = crate::proxy::forwarded_value(request, client);
     for h in &request.headers {
         let lower = h.name.to_ascii_lowercase();
-        if lower.is_empty() || NOT_FORWARDED.contains(&lower.as_str()) {
+        if lower.is_empty() || NOT_FORWARDED.contains(&lower.as_str()) || (forwarded.is_some() && lower == "forwarded") {
             if lower == "te" && h.value.split(',').any(|v| v.trim().eq_ignore_ascii_case("trailers")) {
                 builder = builder.header("te", "trailers");
             }
@@ -210,6 +211,9 @@ fn request_head(request: &Request, client: crate::proxy::Peer<'_>, authority: &s
         builder = builder.header(h.name.as_ref(), h.value.as_ref());
     }
     builder = builder.header("x-forwarded-for", client.ip).header("via", "3 rws");
+    if let Some(value) = &forwarded {
+        builder = builder.header("forwarded", value.as_str());
+    }
     if request.header("X-Forwarded-Proto").is_none() {
         builder = builder.header("x-forwarded-proto", client.proto());
     }

@@ -281,6 +281,14 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: file not found"));
                 }
             }
+            #[cfg(feature = "http2")]
+            "RWS_CONFIG_TLS_CLIENT_CRL_FILE" => {
+                if !offline() && !value.is_empty() {
+                    if let Err(e) = crate::tls::load_crls(value) {
+                        report.error(format!("{key}: {e}"));
+                    }
+                }
+            }
             "RWS_CONFIG_TEMPLATE_DIR" => {
                 if !offline() && !value.is_empty() && !Path::new(value).is_dir() {
                     report.warn(format!("{key} = {value:?}: directory not found"));

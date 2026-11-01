@@ -28,13 +28,17 @@ pub fn is_upgrade(request: &Request) -> bool {
 /// `X-Forwarded-Host` (the client's own `Host`).
 pub fn request_head(request: &Request, client: crate::proxy::Peer<'_>, host: &str) -> Vec<u8> {
     let mut head = format!("{} {} HTTP/1.1\r\nHost: {host}\r\n", request.method, request.request_uri);
+    let forwarded = crate::proxy::forwarded_value(request, client);
     for header in &request.headers {
-        if header.name.eq_ignore_ascii_case("host") || header.name.eq_ignore_ascii_case("content-length") {
+        if header.name.eq_ignore_ascii_case("host") || header.name.eq_ignore_ascii_case("content-length") || (forwarded.is_some() && header.name.eq_ignore_ascii_case("forwarded")) {
             continue;
         }
         head.push_str(&format!("{}: {}\r\n", header.name, header.value));
     }
     head.push_str(&format!("X-Forwarded-For: {}\r\n", client.ip));
+    if let Some(value) = &forwarded {
+        head.push_str(&format!("Forwarded: {value}\r\n"));
+    }
     if request.header("X-Forwarded-Proto").is_none() {
         head.push_str(&format!("X-Forwarded-Proto: {}\r\n", client.proto()));
     }

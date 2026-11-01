@@ -46,6 +46,23 @@ ServerConfig::builder()
 The CA certificate is loaded into a `RootCertStore`. Every TLS `ClientHello`
 that follows must include a certificate chain rooted in that store.
 
+## Revoked certificates (CRLs)
+
+To refuse client certificates you've revoked, give rws your CA's
+certificate revocation lists (since 18.20.0):
+
+```toml
+tls_client_crl_file   = "/etc/rws/clients.crl.pem"   # PEM (any number of X509 CRL blocks) or DER; several files comma-separated
+tls_client_crl_strict = false                        # true: a CRL past its nextUpdate, or a certificate no CRL covers, is refused
+```
+
+A revoked certificate fails the TLS handshake. By default only
+certificates whose CA has a CRL are checked, and a CRL past its
+`nextUpdate` still counts; `tls_client_crl_strict = true` refuses both
+(use it when every CA you trust publishes CRLs you keep fresh). The files
+are re-read on `SIGHUP` and, with `watch = true`, as soon as they change, so
+a new list applies without a restart. `rws --check` parses them.
+
 ## Generating test client certificates
 
 Create a self-signed CA and a client certificate signed by it:
