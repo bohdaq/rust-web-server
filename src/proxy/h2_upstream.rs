@@ -146,6 +146,7 @@ fn request_head(request: &Request, client: crate::proxy::Peer<'_>, addr: &str, t
     let uri: http::Uri = format!("{scheme}://{addr}{}", request.request_uri).parse().map_err(|e: http::uri::InvalidUri| e.to_string())?;
     let method = http::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
     let mut builder = http::Request::builder().method(method).uri(uri);
+    let request = &*crate::proxy::from_peer(request, client);
     let forwarded = crate::proxy::forwarded_value(request, client);
     for h in &request.headers {
         let lower = h.name.to_ascii_lowercase();

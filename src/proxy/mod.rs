@@ -330,6 +330,23 @@ impl<'a> Peer<'a> {
     }
 }
 
+/// The headers a client sets to describe earlier hops.
+const FORWARDING_HEADERS: [&str; 4] = ["x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "forwarded"];
+
+/// `request` as the proxy may pass it on: from a peer outside
+/// `trusted_proxies` its `X-Forwarded-For/Proto/Host` and `Forwarded` are
+/// dropped (rws sets its own), so a client can't claim `https` or another
+/// host (18.24.0). Borrowed when nothing needs dropping.
+pub(crate) fn from_peer<'a>(request: &'a Request, client: Peer<'_>) -> std::borrow::Cow<'a, Request> {
+    let has = request.headers.iter().any(|h| FORWARDING_HEADERS.iter().any(|n| h.name.eq_ignore_ascii_case(n)));
+    if !has || crate::server_config::ServerConfig::current().trusted_proxies.trusts(client.ip) {
+        return std::borrow::Cow::Borrowed(request);
+    }
+    let mut owned = request.clone();
+    owned.headers.retain(|h| !FORWARDING_HEADERS.iter().any(|n| h.name.eq_ignore_ascii_case(n)));
+    std::borrow::Cow::Owned(owned)
+}
+
 /// The `Forwarded` value for this hop (RFC 7239, 18.20.0): the request's
 /// own `Forwarded` (from proxies before this one) extended with
 /// `for=<client>;proto=<http|https>;host=<Host>`; `None` when
@@ -365,6 +382,7 @@ pub(crate) fn build_request(
     client: Peer<'_>,
     keep_alive: bool,
 ) -> Vec<u8> {
+    let request = &*from_peer(request, client);
     // One buffer, sized up front and filled with extend_from_slice — no
     // write!/format machinery, no lower-cased copy of each header name.
     // `Content-Length` is regenerated from the (possibly de-chunked) body and

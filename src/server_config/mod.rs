@@ -138,6 +138,10 @@ pub struct ServerConfig {
     /// `RWS_CONFIG_FORWARDED_HEADER` — proxied requests carry RFC 7239
     /// `Forwarded` beside `X-Forwarded-*`. Default on; `"off"` leaves it out.
     pub forwarded_header: bool,
+    /// `trusted_proxies` (18.24.0): peers whose `X-Forwarded-*` and
+    /// `Forwarded` headers are passed on; from anyone else they are
+    /// replaced.
+    pub trusted_proxies: crate::ip_filter::TrustedProxies,
     /// `RWS_CONFIG_EARLY_HINTS_HTTP1` — also send `103 Early Hints` to
     /// HTTP/1.1 clients. Default `false`: browsers use them only over HTTP/2
     /// and HTTP/3, and some old HTTP/1.1 clients mishandle extra `1xx`
@@ -183,6 +187,7 @@ impl Default for ServerConfig {
             proxy_status_next_hop: false,
             cache_status: true,
             forwarded_header: true,
+            trusted_proxies: crate::ip_filter::TrustedProxies::parse("").expect("the default parses"),
             early_hints_http1: false,
             compression_dictionaries: Vec::new(),
             directory_listing: true,
@@ -231,6 +236,10 @@ impl ServerConfig {
             proxy_status_next_hop: read("RWS_CONFIG_PROXY_STATUS_NEXT_HOP").eq_ignore_ascii_case("true"),
             cache_status: !read("RWS_CONFIG_CACHE_STATUS").trim().eq_ignore_ascii_case("false"),
             forwarded_header: !matches!(read("RWS_CONFIG_FORWARDED_HEADER").trim().to_ascii_lowercase().as_str(), "off" | "false" | "none"),
+            // A bad list is reported by `rws --check`; here it falls back to
+            // the default rather than trusting everyone.
+            trusted_proxies: crate::ip_filter::TrustedProxies::parse(&read("RWS_CONFIG_TRUSTED_PROXIES"))
+                .unwrap_or_else(|_| crate::ip_filter::TrustedProxies::parse("").expect("the default parses")),
             early_hints_http1: read("RWS_CONFIG_EARLY_HINTS_HTTP1").eq_ignore_ascii_case("true"),
             compression_dictionaries: read("RWS_CONFIG_COMPRESSION_DICTIONARIES")
                 .split(',')

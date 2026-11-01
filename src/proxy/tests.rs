@@ -1417,9 +1417,10 @@ fn proxied_request_says_whether_the_client_used_tls() {
 fn forwarded_extends_the_chain_and_can_be_turned_off() {
     let _g = crate::test_env::lock();
     let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: example.com:8443\r\nForwarded: for=198.51.100.17;proto=https\r\n\r\n").unwrap();
-    let peer = crate::proxy::Peer { ip: "2001:db8::1", tls: true };
+    // A load balancer in a private range: its chain is kept and extended.
+    let peer = crate::proxy::Peer { ip: "fd00::1", tls: true };
     assert_eq!(
-        Some(r#"for=198.51.100.17;proto=https, for="[2001:db8::1]";proto=https;host="example.com:8443""#.to_string()),
+        Some(r#"for=198.51.100.17;proto=https, for="[fd00::1]";proto=https;host="example.com:8443""#.to_string()),
         crate::proxy::forwarded_value(&req, peer)
     );
     let mapped = crate::proxy::Peer { ip: "::ffff:192.0.2.60", tls: false };
@@ -1436,4 +1437,45 @@ fn forwarded_extends_the_chain_and_can_be_turned_off() {
     assert!(out.contains("\r\nForwarded: for=198.51.100.17;proto=https\r\n"), "off: the client's passes through untouched: {out}");
     std::env::remove_var("RWS_CONFIG_FORWARDED_HEADER");
     crate::server_config::invalidate();
+}
+
+
+#[test]
+fn an_untrusted_client_cannot_set_forwarding_headers() {
+    let _g = crate::test_env::lock();
+    let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: shop.example\r\nX-Forwarded-Proto: https\r\nX-Forwarded-Host: admin.example\r\nX-Forwarded-For: 10.9.9.9\r\nForwarded: for=10.9.9.9;proto=https\r\n\r\n").unwrap();
+    let internet = crate::proxy::Peer { ip: "203.0.113.50", tls: false };
+    let out = String::from_utf8(crate::proxy::build_request(&req, "b:9", internet, true)).unwrap();
+    assert!(out.contains("\r\nX-Forwarded-Proto: http\r\n") && !out.contains("X-Forwarded-Proto: https"), "{out}");
+    assert!(out.contains("\r\nX-Forwarded-Host: shop.example\r\n") && !out.contains("admin.example"), "{out}");
+    assert!(out.contains("\r\nX-Forwarded-For: 203.0.113.50\r\n") && !out.contains("10.9.9.9"), "{out}");
+    // From a trusted load balancer the same headers are kept.
+    let lb = crate::proxy::Peer { ip: "10.0.0.2", tls: false };
+    let out = String::from_utf8(crate::proxy::build_request(&req, "b:9", lb, true)).unwrap();
+    assert!(out.contains("X-Forwarded-Proto: https") && out.contains("X-Forwarded-Host: admin.example") && out.contains("X-Forwarded-For: 10.9.9.9, 10.0.0.2"), "{out}");
+    // "*" restores the old behaviour, "none" trusts nobody.
+    std::env::set_var("RWS_CONFIG_TRUSTED_PROXIES", "*");
+    crate::server_config::invalidate();
+    assert!(String::from_utf8(crate::proxy::build_request(&req, "b:9", internet, true)).unwrap().contains("X-Forwarded-Proto: https"));
+    std::env::set_var("RWS_CONFIG_TRUSTED_PROXIES", "none");
+    crate::server_config::invalidate();
+    assert!(!String::from_utf8(crate::proxy::build_request(&req, "b:9", lb, true)).unwrap().contains("admin.example"));
+    std::env::remove_var("RWS_CONFIG_TRUSTED_PROXIES");
+    crate::server_config::invalidate();
+}
+
+#[test]
+fn trusted_proxy_lists_parse() {
+    use crate::ip_filter::TrustedProxies;
+    let d = TrustedProxies::parse("").unwrap();
+    for ip in ["127.0.0.1", "::1", "10.1.2.3", "172.20.0.1", "192.168.1.1", "100.64.0.9", "fd12::1", "::ffff:10.0.0.1"] {
+        assert!(d.trusts(ip), "{ip}");
+    }
+    for ip in ["203.0.113.1", "8.8.8.8", "2001:db8::1", "172.32.0.1", "not-an-ip"] {
+        assert!(!d.trusts(ip), "{ip}");
+    }
+    assert!(TrustedProxies::parse("*").unwrap().trusts("8.8.8.8"));
+    assert!(!TrustedProxies::parse("none").unwrap().trusts("127.0.0.1"));
+    assert!(TrustedProxies::parse("173.245.48.0/20, 2400:cb00::/32").unwrap().trusts("173.245.48.7"));
+    assert!(TrustedProxies::parse("10.0.0.0/8, cloudflare").is_err());
 }

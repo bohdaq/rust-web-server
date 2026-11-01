@@ -289,6 +289,13 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     }
                 }
             }
+            "RWS_CONFIG_TRUSTED_PROXIES" => {
+                if let Err(e) = crate::ip_filter::TrustedProxies::parse(value) {
+                    report.error(format!("{key}: {e}"));
+                } else if value.trim() == "*" {
+                    report.warn(format!("{key} = \"*\": every client can set X-Forwarded-Proto/Host and Forwarded (claim https, another host); list your load balancers instead"));
+                }
+            }
             "RWS_CONFIG_TLS" => {
                 if !value.is_empty() && !value.eq_ignore_ascii_case("internal") {
                     report.error(format!("{key} = {value:?}: expected \"internal\" (or leave it out)"));

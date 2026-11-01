@@ -262,6 +262,7 @@ proxy_name              = "rws"      # RWS_CONFIG_PROXY_NAME: this hop's name in
 proxy_status_next_hop   = false      # RWS_CONFIG_PROXY_STATUS_NEXT_HOP: add the backend address and error text
 cache_status            = true       # RWS_CONFIG_CACHE_STATUS: Cache-Status on responses through a response cache
 forwarded_header        = "add"      # RWS_CONFIG_FORWARDED_HEADER: RFC 7239 Forwarded on proxied requests; "off" leaves it out
+trusted_proxies         = ["10.0.0.0/8"]  # RWS_CONFIG_TRUSTED_PROXIES: whose X-Forwarded-*/Forwarded to believe (default: loopback + private ranges)
 tls_client_crl_file     = "/etc/rws/clients.crl.pem"  # RWS_CONFIG_TLS_CLIENT_CRL_FILE: revoked client certificates (PEM or DER, comma-separated)
 tls_client_crl_strict   = false      # RWS_CONFIG_TLS_CLIENT_CRL_STRICT: refuse stale CRLs and certificates no CRL covers
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas

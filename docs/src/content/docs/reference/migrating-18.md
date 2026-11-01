@@ -167,3 +167,11 @@ If you skipped those releases, these refuse or change what you may rely on:
 - Inline tables in settings: `rate_limit = { max_requests = 100 }`.
 
 The full list is in [`CHANGELOG.md`](https://github.com/bohdaq/rust-web-server/blob/main/CHANGELOG.md).
+
+## 18.24: trusted proxies
+
+Not a breaking release, but one default changed: an incoming
+`X-Forwarded-For/Proto/Host` or `Forwarded` is believed only from
+`trusted_proxies` (loopback and private ranges by default). If rws sits
+behind a load balancer or CDN with a public address, list it:
+`trusted_proxies = ["203.0.113.0/24"]` — or `"*"` to keep 18.23's behaviour.

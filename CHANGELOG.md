@@ -13,6 +13,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   isn't on `main` or a `<major>.<minor>.x` line or whose CI run isn't green;
   CI builds with `--locked`, lints the workflow files (actionlint) and checks
   the release's Windows features on Windows. The `18.20.x` LTS branch exists.
+- **Proxied requests: client-sent forwarding headers are believed only from
+  `trusted_proxies`** (#84). An incoming `X-Forwarded-For/Proto/Host` or
+  `Forwarded` is kept when the peer is loopback or in a private range
+  (10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7) by default; from anyone
+  else rws replaces them, so a client can't claim `https` or another host to
+  your app. **Behind a public CDN (Cloudflare, Fastly…) list its ranges in
+  `trusted_proxies`, or set `trusted_proxies = "*"` for the old behaviour.**
 
 ### Security
 
@@ -31,6 +38,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- WebSocket upgrades through proxy routes sent the client's
+  `X-Forwarded-For` and rws's own as two headers; they're one chain now.
 - PKCS#11: handshakes no longer wait on one shared session per key — up to
   8 sessions sign in parallel.
 

@@ -257,6 +257,8 @@ fn a_request_without_matches_is_fast() {
         assert_eq!(waf.inspect(&r, &conn()).score, 0);
     }
     let per = start.elapsed() / 1000;
-    // Generous for debug builds on slow runners; release is ~10× faster.
-    assert!(per < std::time::Duration::from_micros(500), "{per:?} per request");
+    // Generous: debug build, shared with the whole parallel suite. Catches a
+    // pathological slowdown, not a regression of a few percent (release is
+    // ~10× faster).
+    assert!(per < std::time::Duration::from_millis(5), "{per:?} per request");
 }

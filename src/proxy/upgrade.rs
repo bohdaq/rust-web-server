@@ -28,15 +28,22 @@ pub fn is_upgrade(request: &Request) -> bool {
 /// `Host` = `host`) plus `X-Forwarded-For` and, unless the client sent one,
 /// `X-Forwarded-Host` (the client's own `Host`).
 pub fn request_head(request: &Request, client: crate::proxy::Peer<'_>, host: &str) -> Vec<u8> {
+    let request = &*crate::proxy::from_peer(request, client);
     let mut head = format!("{} {} HTTP/1.1\r\nHost: {host}\r\n", request.method, request.request_uri);
     let forwarded = crate::proxy::forwarded_value(request, client);
     for header in &request.headers {
-        if header.name.eq_ignore_ascii_case("host") || header.name.eq_ignore_ascii_case("content-length") || (forwarded.is_some() && header.name.eq_ignore_ascii_case("forwarded")) {
+        // X-Forwarded-For is extended below, as build_request does: one
+        // header to the backend, not the client's plus ours (18.24.0).
+        if header.name.eq_ignore_ascii_case("host") || header.name.eq_ignore_ascii_case("content-length") || header.name.eq_ignore_ascii_case("x-forwarded-for") || (forwarded.is_some() && header.name.eq_ignore_ascii_case("forwarded")) {
             continue;
         }
         head.push_str(&format!("{}: {}\r\n", header.name, header.value));
     }
-    head.push_str(&format!("X-Forwarded-For: {}\r\n", client.ip));
+    let prior = request.header("x-forwarded-for").map(|h| h.value.trim().to_string()).filter(|v| !v.is_empty());
+    head.push_str(&match prior {
+        Some(p) => format!("X-Forwarded-For: {p}, {}\r\n", client.ip),
+        None => format!("X-Forwarded-For: {}\r\n", client.ip),
+    });
     if let Some(value) = &forwarded {
         head.push_str(&format!("Forwarded: {value}\r\n"));
     }

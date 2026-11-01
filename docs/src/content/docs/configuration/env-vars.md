@@ -30,6 +30,7 @@ order.
 | `RWS_CONFIG_PROXY_NAME` | `rws` | string | This hop's name in `Proxy-Status` and `Cache-Status`. |
 | `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` | `false` | boolean | Add the backend address (`next-hop`) and the failure's text (`details`) to `Proxy-Status`; they reveal internal addresses. |
 | `RWS_CONFIG_CACHE_STATUS` | `true` | boolean | `Cache-Status` (RFC 9211) on responses that pass through a response cache: `hit; ttl=…`, `fwd=uri-miss; stored`, … (since 18.17.0). See [Caching](/features/caching/#cache-status-header). |
+| `RWS_CONFIG_TRUSTED_PROXIES` | loopback + private ranges | list of addresses / CIDR | Peers whose `X-Forwarded-*` and `Forwarded` headers are passed on; from others they're replaced (since 18.24.0). `*` trusts everyone, `none` no one. See [Reverse proxy](/proxy/reverse-proxy/). |
 | `RWS_CONFIG_FORWARDED_HEADER` | `add` | string | Proxied requests carry RFC 7239 `Forwarded` beside `X-Forwarded-*` (since 18.20.0); `off` leaves it out and passes the client's through. |
 | `RWS_CONFIG_TLS_CLIENT_CRL_FILE` | (empty) | paths | Certificate revocation lists for client certificates (mTLS), PEM or DER, comma-separated; revoked certificates fail the handshake (since 18.20.0). See [mTLS](/features/mtls/#revoked-certificates-crls). |
 | `RWS_CONFIG_TLS_CLIENT_CRL_STRICT` | `false` | boolean | Refuse a CRL past its `nextUpdate` and certificates no CRL covers. |
