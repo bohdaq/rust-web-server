@@ -10,13 +10,62 @@
 # (checked on the live URL, default /healthz), and for a preview
 # PREVIEW_HOURS (kube-dc removes it that long after the last deploy),
 # PREVIEW_REPOSITORY + PREVIEW_PULL_REQUEST (and when that pull request
-# closes; public repositories).
+# closes; public repositories), and PREVIEW_DATABASE: a plan such as
+# postgresql-development for a fresh, empty database of the preview's own
+# (<app>-db, removed with the preview; the app gets <app>-db-owner).
 set -euo pipefail
 
 NAMESPACE="$1" APP="$2" IMAGE="$3"
 export APP IMAGE DB_SECRET="${DB_SECRET:-$APP-db-owner}"
 TIMEOUT="${TIMEOUT:-300}"
 cd "$(dirname "$0")"
+
+if [ -n "${PREVIEW_DATABASE:-}" ]; then
+  # A fresh, empty database of the preview's own, labelled like the rest of
+  # it so it goes when the preview goes; Delete frees its data and capacity.
+  db="$APP-db"
+  label="${PREVIEW_HOURS:+preview.kube-dc.com/name: $APP}"
+  kubectl -n "$NAMESPACE" apply -f - <<MANIFEST
+apiVersion: services.kube-dc.com/v1alpha1
+kind: ManagedService
+metadata:
+  name: $db
+  labels: { $label }
+spec:
+  classRef: { name: ${PREVIEW_DATABASE%%-*} }
+  planRef: { name: $PREVIEW_DATABASE }
+  placement: { mode: ProviderShared }
+  connectivity: { classRef: { name: tenant-native } }
+  topology: { instances: 1 }
+  deletionPolicy: Delete
+MANIFEST
+  uid=$(kubectl -n "$NAMESPACE" get managedservice "$db" -o jsonpath='{.metadata.uid}')
+  kubectl -n "$NAMESPACE" apply -f - <<MANIFEST
+apiVersion: services.kube-dc.com/v1alpha1
+kind: ServiceBinding
+metadata:
+  name: $db-owner
+  labels: { $label }
+spec:
+  serviceRef: { name: $db }
+  serviceUID: $uid
+  role: owner
+  consumer: { kind: Namespace, name: $NAMESPACE, namespace: $NAMESPACE }
+  delivery: { mode: DataPlaneLocalSecret, secretName: $db-owner }
+MANIFEST
+  DB_SECRET="$db-owner"
+  # A new database takes a few minutes; the app starts once its credentials exist.
+  echo "Waiting for the preview database $db..."
+  for _ in $(seq 1 $((${DB_TIMEOUT:-600} / 10))); do
+    kubectl -n "$NAMESPACE" get secret "$DB_SECRET" >/dev/null 2>&1 && break
+    sleep 10
+  done
+  if ! kubectl -n "$NAMESPACE" get secret "$DB_SECRET" >/dev/null 2>&1; then
+    echo "The preview database $db is not ready:"
+    kubectl -n "$NAMESPACE" get managedservice "$db" -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+    exit 1
+  fi
+fi
 
 if [ -n "${PULL_TOKEN:-}" ]; then
   kubectl -n "$NAMESPACE" create secret docker-registry "$APP-pull" \

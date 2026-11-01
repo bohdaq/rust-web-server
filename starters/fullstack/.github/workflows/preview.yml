@@ -1,6 +1,7 @@
 # Every pull request gets its own copy of the app in vars.KUBE_DC_PREVIEW_NAMESPACE,
 # named <app>-pr-<number>, with its URL in the PR's deployments. Closing the PR
-# removes it. Previews have no database Secret, so they keep notes in memory.
+# removes it. With vars.KUBE_DC_PREVIEW_DATABASE each preview gets a fresh
+# database of its own; otherwise it keeps notes in memory.
 name: preview
 
 on:
@@ -52,6 +53,12 @@ jobs:
         run: |
           app="${{ steps.names.outputs.app }}"
           kubectl -n "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" delete deployment,service "$app" --ignore-not-found
+          # A preview database and its credentials, when it has one; its data
+          # is destroyed only once the deletion is confirmed by name.
+          for db in $(kubectl -n "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" get managedservice -l "preview.kube-dc.com/name=$app" -o name); do
+            kubectl -n "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" annotate --overwrite "$db" "services.kube-dc.com/confirm-delete=${db#*/}"
+          done
+          kubectl -n "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" delete servicebinding,managedservice -l "preview.kube-dc.com/name=$app" --ignore-not-found --wait=false
           # A pull Secret exists only for private images.
           if [ -n "$PULL_TOKEN" ]; then
             kubectl -n "${{ vars.KUBE_DC_PREVIEW_NAMESPACE }}" delete secret "$app-pull" --ignore-not-found
@@ -80,6 +87,9 @@ jobs:
           PULL_USER: ${{ github.repository_owner }}
           PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           DB_SECRET: none
+          # A plan such as postgresql-development gives every preview a fresh, empty
+          # database of its own, removed with the preview.
+          PREVIEW_DATABASE: ${{ vars.KUBE_DC_PREVIEW_DATABASE }}
           # kube-dc removes the preview after 72 hours without a deploy, or once
           # GitHub reports the pull request closed, even if this workflow's
           # cleanup on close does not run.

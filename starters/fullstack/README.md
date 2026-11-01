@@ -37,6 +37,7 @@ in another (http://127.0.0.1:5173, `/api` proxied to the app).
    | Variable | `KUBE_DC_TOKEN_URL` | Token URL from the credentials |
    | Variable | `KUBE_DC_NAMESPACE` | e.g. `my-org-notes` |
    | Variable | `KUBE_DC_PREVIEW_NAMESPACE` | e.g. `my-org-previews` |
+   | Variable | `KUBE_DC_PREVIEW_DATABASE` | Optional, e.g. `postgresql-development`: each preview gets a fresh, empty database |
    | Secret | `KUBE_DC_CLIENT_ID`, `KUBE_DC_CLIENT_SECRET` | From the credentials |
    | Secret | `KUBE_DC_CA_CERT` | Only if the API server's certificate is not publicly trusted |
    | Secret | `GHCR_PULL_TOKEN` | Only for a private package: a token with `read:packages` |
@@ -53,5 +54,8 @@ in another (http://127.0.0.1:5173, `/api` proxied to the app).
    and prints the HTTPS URL. Each pull request gets a preview at its own
    URL (`preview`), removed when the PR closes; kube-dc also removes it after
    72 hours without a deploy, or once the PR is closed, if that cleanup fails.
+   With `KUBE_DC_PREVIEW_DATABASE` the preview has its own empty database
+   (`<app>-pr-<n>-db`, a few minutes to start), removed with it; otherwise
+   preview notes live in memory.
 
 By hand: `KUBECONFIG=$(deploy/kubeconfig.sh) deploy/deploy.sh <namespace> <app> <image>`.
