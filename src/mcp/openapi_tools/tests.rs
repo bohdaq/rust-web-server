@@ -127,3 +127,63 @@ fn documents_rws_refuses_and_hostile_refs() {
     let remote = r##"{"openapi":"3.1.0","paths":{"/r":{"get":{"operationId":"r","parameters":[{"$ref":"https://evil.example/p.json"}]}}}}"##;
     assert_eq!(r#"{"type":"object","properties":{}}"#, tools(remote, &ToolOptions::default()).unwrap()[0].input_schema, "remote refs are not fetched");
 }
+
+fn invoices_app() -> crate::state::AppWithState<()> {
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    crate::app::App::with_state(())
+        .get("/invoices/:id", |req, params, _conn, _state| {
+            let id = params.get("id").unwrap_or("");
+            if id == "0" {
+                return Response::text(STATUS_CODE_REASON_PHRASE.n404_not_found, "no invoice 0");
+            }
+            let caller = req.header("X-Rws-Mcp-Caller").map(|h| h.value.to_string()).unwrap_or_default();
+            Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, format!(r#"{{"id":"{id}","total":42,"caller":"{caller}"}}"#).into_bytes())
+        })
+        .post("/invoices", |req, _params, _conn, _state| {
+            Response::json(STATUS_CODE_REASON_PHRASE.n201_created, format!(r#"{{"created":{}}}"#, String::from_utf8_lossy(&req.body)).into_bytes())
+        })
+}
+
+const INVOICES: &str = r#"{"openapi":"3.1.0","info":{"title":"Invoices","version":"1"},"paths":{
+  "/invoices/{id}":{"get":{"operationId":"getInvoice","summary":"One invoice","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+    "responses":{"200":{"content":{"application/json":{"schema":{"type":"object","properties":{"total":{"type":"integer"}}}}}}}}},
+  "/invoices":{"post":{"operationId":"createInvoice","requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object"}}}}}}}}"#;
+
+fn rpc(client: &crate::test_client::TestClient<crate::mcp::McpServer>, body: &str) -> String {
+    client.post("/mcp").header("Authorization", "Bearer t-alice").header("Content-Type", "application/json").body_text(body).send().body_text().to_string()
+}
+
+#[test]
+fn an_apps_own_operations_run_in_process() {
+    let server = crate::mcp::McpServer::new("invoices", "1")
+        .openapi_tools(invoices_app(), INVOICES, &ToolOptions { include: vec!["getInvoice".into(), "createInvoice".into()], ..Default::default() })
+        .unwrap()
+        .require_bearer_tokens([("t-alice", "alice")]);
+    let client = crate::test_client::TestClient::new(server);
+    let listed = rpc(&client, r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#);
+    assert!(listed.contains(r#""name":"getInvoice""#) && listed.contains(r#""name":"createInvoice""#), "{listed}");
+    assert!(listed.contains(r#""openWorldHint":false"#), "in-process tools aren't open-world: {listed}");
+
+    let got = rpc(&client, r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"getInvoice","arguments":{"id":"7"}}}"#);
+    assert!(got.contains("structuredContent") && got.contains(r#"\"total\":42"#), "{got}");
+    assert!(got.contains(r#"\"caller\":\"alice\""#), "the MCP caller reaches the handler: {got}");
+    let created = rpc(&client, r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"createInvoice","arguments":{"body":{"amount":5}}}}"#);
+    assert!(created.contains(r#"created\":{\"amount\":5}"#), "{created}");
+    let missing = rpc(&client, r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"getInvoice","arguments":{"id":"0"}}}"#);
+    assert!(missing.contains(r#""isError":true"#) && missing.contains("HTTP 404") && missing.contains("no invoice 0"), "{missing}");
+}
+
+#[cfg(feature = "openapi")]
+#[test]
+fn the_document_can_come_from_the_app() {
+    use crate::openapi::{OpenApiConfig, Operation};
+    let app = invoices_app();
+    let config = OpenApiConfig::new("Invoices", "1").operation("GET", "/invoices/:id", Operation::new("One invoice").operation_id("getInvoice").path_param_schema("id", r#"{"type":"string"}"#, "The invoice"));
+    let spec = app.openapi_spec(&config);
+    let found = tools(&spec, &ToolOptions::default()).unwrap();
+    assert!(found.iter().any(|t| t.name == "getInvoice" && t.path == "/invoices/{id}"), "{:?}", found.iter().map(|t| (&t.name, &t.path)).collect::<Vec<_>>());
+    let server = crate::mcp::McpServer::new("invoices", "1").openapi_tools(app, &spec, &ToolOptions::default()).unwrap();
+    let client = crate::test_client::TestClient::new(server.require_bearer_tokens([("t-alice", "alice")]));
+    let got = rpc(&client, r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"getInvoice","arguments":{"id":"9"}}}"#);
+    assert!(got.contains(r#"\"id\":\"9\""#), "{got}");
+}

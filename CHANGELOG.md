@@ -26,6 +26,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   (`McpGateway::openapi`) turns an OpenAPI document's operations into
   `<prefix>__<operation>` tools, each call an HTTP request to `base_url`
   (no redirects) with the API's credentials from the environment.
+- `McpServer::openapi_tools(app, spec, options)`: an app's own operations
+  as MCP tools, each call run in-process through the app (the caller's
+  identity in `X-Rws-Mcp-Caller`); `AppWithState::openapi_spec(&config)`
+  (`openapi` feature) returns the document `openapi()` serves.
 - Config proxy routes choose the upstream `Host`: `preserve_host = true`
   sends the client's, `upstream_host = "…"` a fixed name (`:authority` over
   HTTP/3 upstreams). It was always the backend's address, and a `header_set`

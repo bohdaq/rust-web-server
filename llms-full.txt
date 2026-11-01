@@ -19053,6 +19053,32 @@ let call = found[0].request(r#"{"id": 42}"#).unwrap();
 assert_eq!("/invoices/42", call.path_and_query);
 ```
 
+## Your app's own routes
+
+An app that describes its routes with [OpenAPI](/building-apps/openapi/) gets
+MCP tools for them in one call; each call runs the route in-process (no HTTP
+round trip), through the app's middleware:
+
+```rust,ignore
+use rust_web_server::mcp::{openapi_tools::ToolOptions, McpServer};
+use rust_web_server::openapi::{OpenApiConfig, Operation};
+
+let config = OpenApiConfig::new("Invoices", "1.0")
+    .operation("GET", "/invoices/:id", Operation::new("Get an invoice").operation_id("getInvoice")
+        .path_param_schema("id", r#"{"type":"string"}"#, "The invoice"));
+let app = App::with_state(state).get("/invoices/:id", get_invoice).post("/invoices", create_invoice);
+let spec = app.openapi_spec(&config);           // `openapi` feature
+let mcp = McpServer::new("invoices", "1.0")
+    .openapi_tools(app.clone(), &spec, &ToolOptions::default())?
+    .require_bearer_tokens([("token", "alice")])
+    .wrap(app.openapi(config));                 // the HTTP API stays as it was
+```
+
+The handler sees the MCP caller's identity (the token's `sub`) in the
+`X-Rws-Mcp-Caller` header. A non-2xx answer is a tool error with its status
+and body. `openapi_tools` takes any `Application` and any OpenAPI document,
+so it also works for apps whose document is written by hand.
+
 ## Through the MCP gateway
 
 The `rws` binary's [MCP gateway](/mcp/gateway/) takes an API as a source next
@@ -20985,7 +21011,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Query` | `extract` | Parsed query string as `HashMap` |
 | `RequestHeaders` | `extract` | All request headers with case-insensitive `.get(name)` |
 | `RequestId` | `extract` / `request_id` | The ID `RequestIdLayer` put on the request; empty string without it (never fails) |
-| `openapi_tools::tools` | `mcp` | OpenAPI 3.0/3.1 operations as MCP tools (`OpenApiTool`: schemas, annotations, `request(arguments)` → `ToolRequest`); `ToolOptions` (prefix, include, exclude). See [Tools from OpenAPI](/mcp/openapi-tools/) |
+| `openapi_tools::tools` | `mcp` | OpenAPI 3.0/3.1 operations as MCP tools (`OpenApiTool`: schemas, annotations, `request(arguments)` → `ToolRequest`); `ToolOptions` (prefix, include, exclude); `McpServer::openapi_tools(app, spec, options)` runs them in-process against an `Application`; `AppWithState::openapi_spec` (`openapi`) gives the document. See [Tools from OpenAPI](/mcp/openapi-tools/) |
 | `A2aServer` | `a2a` | A2A 1.0 agent (JSON-RPC): Agent Card, `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`; `on_message`, `at`, `wrap`. See [A2A agents](/mcp/a2a/) |
 | `AgentCard` / `Skill` | `a2a` | The agent's card at `/.well-known/agent-card.json` and the skills on it |
 | `A2aContext` / `A2aReply` | `a2a` | What a message handler gets (task, context, the continued task) and returns (a message or a task) |

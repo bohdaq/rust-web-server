@@ -366,5 +366,63 @@ impl OpenApiTool {
     }
 }
 
+impl super::McpServer {
+    /// Make `app`'s operations, as `spec` (its OpenAPI document) describes
+    /// them, tools of this server, run in-process: a call builds the
+    /// request and hands it to `app` — no HTTP round trip, the app's own
+    /// middleware applying as to any request. With [`AppWithState`] the
+    /// document comes from [`AppWithState::openapi_spec`].
+    ///
+    /// [`AppWithState`]: crate::state::AppWithState
+    /// [`AppWithState::openapi_spec`]: crate::state::AppWithState::openapi_spec
+    pub fn openapi_tools<A>(mut self, app: A, spec: &str, options: &ToolOptions) -> Result<Self, String>
+    where
+        A: crate::application::Application + Send + Sync + 'static,
+    {
+        let app = std::sync::Arc::new(app);
+        for tool in tools(spec, options)? {
+            let (name, description, input) = (tool.name.clone(), tool.description.clone(), tool.input_schema.clone());
+            let (output, annotations) = (tool.output_schema.clone(), tool.annotations);
+            let (app, tool) = (std::sync::Arc::clone(&app), std::sync::Arc::new(tool));
+            self = self.tool_with_context(&name, &description, &input, move |ctx, args| call_in_process(app.as_ref(), &tool, args, &ctx));
+            if let Some(schema) = output {
+                self = self.tool_output_schema(&name, &schema);
+            }
+            self = self.tool_annotations(&name, ToolAnnotations { open_world_hint: Some(false), ..annotations });
+        }
+        Ok(self)
+    }
+}
+
+/// One call, handed to `app` as a request.
+fn call_in_process(app: &dyn crate::application::Application, tool: &OpenApiTool, arguments: &str, ctx: &super::McpContext) -> Result<super::McpContent, String> {
+    use crate::header::Header;
+    let call = tool.request(arguments)?;
+    let mut headers = vec![Header::new("Host", "localhost".to_string()), Header::new("Accept", "application/json".to_string())];
+    // The MCP caller's identity, for the app's own checks.
+    if let Some(sub) = ctx.auth_claims.as_deref().and_then(|c| json_lite::parse(c).ok()).and_then(|c| c.get("sub").and_then(JsonValue::as_str).map(str::to_string)) {
+        headers.push(Header::new("X-Rws-Mcp-Caller", sub));
+    }
+    headers.extend(call.headers.iter().filter(|(n, _)| !n.eq_ignore_ascii_case("x-rws-mcp-caller")).map(|(n, v)| Header::new(n.clone(), v.clone())));
+    let body = call.body.unwrap_or_default().into_bytes();
+    if !body.is_empty() {
+        headers.push(Header::new("Content-Type", "application/json".to_string()));
+        headers.push(Header::new("Content-Length", body.len().to_string()));
+    }
+    let request = crate::request::Request { method: call.method.clone(), request_uri: call.path_and_query.clone(), http_version: "HTTP/1.1".to_string(), headers, body: body.into() };
+    let connection = crate::server::ConnectionInfo::default();
+    let response = app.execute(&request, &connection)?;
+    let content_type = response.content_range_list.first().map(|c| c.content_type.clone()).unwrap_or_default();
+    let text = response.content_range_list.iter().map(|c| String::from_utf8_lossy(&c.body).into_owned()).collect::<String>();
+    if !(200..300).contains(&response.status_code) {
+        return Err(format!("HTTP {}: {text}", response.status_code));
+    }
+    Ok(match (content_type.contains("json"), tool.output_schema.is_some()) {
+        (true, true) if text.trim_start().starts_with('{') => super::McpContent::structured(text),
+        (true, _) => super::McpContent::json(text),
+        _ => super::McpContent::text(text),
+    })
+}
+
 #[cfg(test)]
 mod tests;

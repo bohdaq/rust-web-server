@@ -21,6 +21,32 @@ let call = found[0].request(r#"{"id": 42}"#).unwrap();
 assert_eq!("/invoices/42", call.path_and_query);
 ```
 
+## Your app's own routes
+
+An app that describes its routes with [OpenAPI](/building-apps/openapi/) gets
+MCP tools for them in one call; each call runs the route in-process (no HTTP
+round trip), through the app's middleware:
+
+```rust,ignore
+use rust_web_server::mcp::{openapi_tools::ToolOptions, McpServer};
+use rust_web_server::openapi::{OpenApiConfig, Operation};
+
+let config = OpenApiConfig::new("Invoices", "1.0")
+    .operation("GET", "/invoices/:id", Operation::new("Get an invoice").operation_id("getInvoice")
+        .path_param_schema("id", r#"{"type":"string"}"#, "The invoice"));
+let app = App::with_state(state).get("/invoices/:id", get_invoice).post("/invoices", create_invoice);
+let spec = app.openapi_spec(&config);           // `openapi` feature
+let mcp = McpServer::new("invoices", "1.0")
+    .openapi_tools(app.clone(), &spec, &ToolOptions::default())?
+    .require_bearer_tokens([("token", "alice")])
+    .wrap(app.openapi(config));                 // the HTTP API stays as it was
+```
+
+The handler sees the MCP caller's identity (the token's `sub`) in the
+`X-Rws-Mcp-Caller` header. A non-2xx answer is a tool error with its status
+and body. `openapi_tools` takes any `Application` and any OpenAPI document,
+so it also works for apps whose document is written by hand.
+
 ## Through the MCP gateway
 
 The `rws` binary's [MCP gateway](/mcp/gateway/) takes an API as a source next

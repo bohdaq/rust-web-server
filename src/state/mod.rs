@@ -314,6 +314,13 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
     ///     .get("/users/:id", |_req, _params, _conn, _state| Response::new())
     ///     .openapi(OpenApiConfig::new("My API", "1.0.0"));
     /// ```
+    /// This app's OpenAPI document as JSON (what [`openapi`](Self::openapi)
+    /// serves), e.g. for [`McpServer::openapi_tools`](crate::mcp::McpServer::openapi_tools).
+    #[cfg(feature = "openapi")]
+    pub fn openapi_spec(&self, config: &crate::openapi::OpenApiConfig) -> String {
+        crate::openapi::build_spec(config, &self.route_entries())
+    }
+
     #[cfg(feature = "openapi")]
     pub fn openapi(self, config: crate::openapi::OpenApiConfig) -> Self {
         let spec_json = Arc::new(crate::openapi::build_spec(&config, &self.route_entries()));
