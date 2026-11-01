@@ -5,7 +5,37 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
+## 18.22.0 — 2026-11-01
+
+### Added
+
+- Admin users, roles and audit log (#75): `[admin] users =
+  ["name:ENV_VAR:role"]` adds named tokens with `viewer`, `operator` or
+  `admin` roles; every change through the API, UI, `rws ctl` or MCP tools
+  (and every refused attempt) goes to an audit log — `GET /audit`,
+  `rws ctl audit`, an Audit page, and `audit_log` for a JSON-lines file;
+  `GET /whoami`. Single sign-on for the admin UI with `oidc_issuer` /
+  `oidc_provider` and `oidc_roles` (groups → roles), cookie changes guarded
+  by an `X-Rws-Admin` header.
+- Runtime state across replicas (#76): with `[cluster] redis` (or
+  `[acme] redis`) the IP blocklist, maintenance mode, drained backends,
+  feature flags and cache purges changed on one replica apply on all of
+  them within a second; Redis outages are ridden out (changes queue, an
+  empty Redis is re-seeded from the replicas); `status` lists the nodes.
+- Web application firewall (#77): `[middleware.waf]` / `[route.middleware.waf]`
+  with rws's own rules — SQL injection, XSS, path traversal and sensitive
+  files, inclusion wrappers, command injection, cloud-metadata SSRF,
+  Log4Shell, scanners — over decoded paths, arguments, form/JSON/multipart
+  fields, cookies and headers; anomaly scoring, paranoia 1–3, `block` or
+  `detect`, exclusions by rule and path, custom `deny`/`allow`/`log`/`score`
+  rules; `403` problem+json, `[waf]` log lines, `rws_waf_*` metrics;
+  `waf::WafLayer` for code.
+- Support policy (#81): long-term-support lines (one minor every six months,
+  security and critical fixes for twelve months; 18.20 is the first, until
+  2027-11-01), security response targets and coordinated disclosure in
+  `SECURITY.md` and a Support policy docs page.
+
+## 18.21.0 — 2026-11-01
 
 ### Security
 
@@ -47,31 +77,6 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   app with an API, Node, Python/Ruby and PHP apps, internal tools behind
   sign-in, an API gateway and local development — each checked by
   `rws --check` in CI (`cookbook_configs_pass_check`).
-- Admin users, roles and audit log (#75): `[admin] users =
-  ["name:ENV_VAR:role"]` adds named tokens with `viewer`, `operator` or
-  `admin` roles; every change through the API, UI, `rws ctl` or MCP tools
-  (and every refused attempt) goes to an audit log — `GET /audit`,
-  `rws ctl audit`, an Audit page, and `audit_log` for a JSON-lines file;
-  `GET /whoami`. Single sign-on for the admin UI with `oidc_issuer` /
-  `oidc_provider` and `oidc_roles` (groups → roles), cookie changes guarded
-  by an `X-Rws-Admin` header.
-- Runtime state across replicas (#76): with `[cluster] redis` (or
-  `[acme] redis`) the IP blocklist, maintenance mode, drained backends,
-  feature flags and cache purges changed on one replica apply on all of
-  them within a second; Redis outages are ridden out (changes queue, an
-  empty Redis is re-seeded from the replicas); `status` lists the nodes.
-- Web application firewall (#77): `[middleware.waf]` / `[route.middleware.waf]`
-  with rws's own rules — SQL injection, XSS, path traversal and sensitive
-  files, inclusion wrappers, command injection, cloud-metadata SSRF,
-  Log4Shell, scanners — over decoded paths, arguments, form/JSON/multipart
-  fields, cookies and headers; anomaly scoring, paranoia 1–3, `block` or
-  `detect`, exclusions by rule and path, custom `deny`/`allow`/`log`/`score`
-  rules; `403` problem+json, `[waf]` log lines, `rws_waf_*` metrics;
-  `waf::WafLayer` for code.
-- Support policy (#81): long-term-support lines (one minor every six months,
-  security and critical fixes for twelve months; 18.20 is the first, until
-  2027-11-01), security response targets and coordinated disclosure in
-  `SECURITY.md` and a Support policy docs page.
 
 ### Fixed
 
