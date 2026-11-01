@@ -32,7 +32,7 @@ body { min-height: 100dvh; }
 /* ── shell ─────────────────────────────────────────────────────────────── */
 /* lit-material-adaptive-navigation shows a drawer from 840px, a rail from
    600px and a bottom bar below that; the grid gives it the matching column. */
-.shell { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; min-height: 100dvh; }
+.shell { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100dvh; }
 .top {
   grid-column: 1 / -1;
   display: flex; align-items: center; gap: var(--space-200);
@@ -49,7 +49,7 @@ main:focus { outline: none; }
 @media (min-width: 840px) { .nav { width: 240px; box-sizing: border-box; } }
 
 @media (max-width: 599.98px) {
-  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+  .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr auto; }
   .nav { grid-row: 3; position: sticky; bottom: 0; z-index: 5; padding: 0; border: 0; }
   main { grid-row: 2; padding: var(--space-300) var(--space-200) var(--space-400); }
   .top { padding: var(--space-100) var(--space-200); }

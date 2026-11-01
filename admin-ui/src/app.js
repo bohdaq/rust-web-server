@@ -1,9 +1,8 @@
 import { LitElement, html, nothing } from "lit";
 import { api, ApiError, followLogs, setToken, token } from "./api.js";
+import { formatBytes as bytes, formatDuration } from "@lit-material/format";
+import "@lit-material/truncate";
 import { icon } from "./icons.js";
-
-const bytes = (n) =>
-  n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KiB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MiB` : `${(n / 1073741824).toFixed(1)} GiB`;
 
 const VIEWS = [
   { id: "overview", label: "Overview", icon: "gauge" },
@@ -22,12 +21,8 @@ function viewFromHash() {
   return VIEWS.some((v) => v.id === id) ? id : "overview";
 }
 
-function duration(secs) {
-  const d = Math.floor(secs / 86400), h = Math.floor((secs % 86400) / 3600), m = Math.floor((secs % 3600) / 60);
-  if (d) return `${d}d ${h}h`;
-  if (h) return `${h}h ${m}m`;
-  return `${m}m ${secs % 60}s`;
-}
+// "3d 4h", "2h 5m", "4m 12s".
+const duration = (secs) => formatDuration(secs * 1000, { unitDisplay: "narrow" });
 
 // The rws app icon (site/dist/brand/icon-orange.svg), inline: the admin
 // page's CSP allows no images from elsewhere.
@@ -669,7 +664,7 @@ export class RwsAdmin extends LitElement {
       .map(([setting, value]) => ({ setting, value }));
     const columns = [
       { key: "setting", label: "Setting", mono: true },
-      { key: "value", label: "Value", mono: true, render: (r) => (r.value === "" ? status("neutral", "empty") : r.value) },
+      { key: "value", label: "Value", mono: true, render: (r) => (r.value === "" ? status("neutral", "empty") : html`<lit-material-truncate position="middle" style="max-width: min(60ch, 50vw)" .value=${r.value}></lit-material-truncate>`) },
     ];
     return html`
       <h1>Config</h1>
