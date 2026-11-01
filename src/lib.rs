@@ -320,6 +320,25 @@ pub mod test_env {
 #[cfg(fuzzing)]
 #[doc(hidden)]
 pub mod fuzz_api {
+    /// A fleet signature file (`rws-fleet-sig v2 <serial> <sig>` or the
+    /// 18.23 form) checked against a body (18.24.0). Must never panic or
+    /// accept: no input is a valid signature for the fixed key.
+    #[cfg(all(feature = "http2", not(target_arch = "wasm32")))]
+    pub fn fleet_signature(data: &[u8]) {
+        let _ = crate::fleet::parse_signature(data);
+        let (body, sig) = data.split_at(data.len() / 2);
+        assert!(crate::fleet::verify(body, sig, &[7u8; 32]).is_err(), "a fuzzed signature verified");
+    }
+
+    /// An RFC 7512 `pkcs11:` URI (18.24.0). Must never panic.
+    #[cfg(feature = "pkcs11")]
+    pub fn pkcs11_uri(data: &[u8]) {
+        if let Ok(text) = std::str::from_utf8(data) {
+            let _ = crate::tls::pkcs11::Pkcs11Uri::parse(text);
+            let _ = crate::entry_point::shown("RWS_CONFIG_TLS_KEY_FILE", text);
+        }
+    }
+
     /// Proxy route-matching normalization of a request target (#50): any
     /// input, and normalizing twice changes nothing.
     pub fn proxy_normalize_target(data: &[u8]) {

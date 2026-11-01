@@ -252,3 +252,12 @@ fn waf_on_deeply_nested_and_long_values() {
         crate::waf::fuzz::inspect("&#60;".repeat(20_000).as_bytes());
     });
 }
+
+#[test]
+#[cfg(feature = "http2")]
+fn fleet_signature_on_long_input() {
+    on_small_stack(|| {
+        let sig = format!("rws-fleet-sig v2 1 {}", "A".repeat(4_000));
+        assert!(crate::fleet::verify(b"x", sig.as_bytes(), &[7u8; 32]).is_err());
+    });
+}

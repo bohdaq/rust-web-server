@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2", "acme", "wasm-plugins"] }
+rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2", "acme", "wasm-plugins", "pkcs11"] }
 
 # Separate workspace: the root workspace excludes fuzz/.
 [workspace]
@@ -292,6 +292,20 @@ bench = false
 [[bin]]
 name = "waf_inspect"
 path = "fuzz_targets/waf_inspect.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fleet_signature"
+path = "fuzz_targets/fleet_signature.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pkcs11_uri"
+path = "fuzz_targets/pkcs11_uri.rs"
 test = false
 doc = false
 bench = false

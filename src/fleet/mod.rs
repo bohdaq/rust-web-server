@@ -20,7 +20,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::core::base64::Base64;
-use crate::mcp::json_escape;
+use crate::core::json::escape as json_escape;
 
 pub const RWS_CONFIG_FLEET_SOURCE: &str = "RWS_CONFIG_FLEET_SOURCE";
 pub const RWS_CONFIG_FLEET_INTERVAL_SECS: &str = "RWS_CONFIG_FLEET_INTERVAL_SECS";
@@ -160,6 +160,11 @@ pub fn parse_signature(raw: &[u8]) -> Result<(u64, Vec<u8>), String> {
 fn signature_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     if raw.len() == 64 {
         return Ok(raw.to_vec());
+    }
+    // 64 bytes are 88 base64 characters: anything much longer isn't one
+    // (and isn't worth decoding).
+    if raw.len() > 256 {
+        return Err(format!("an Ed25519 signature is 64 bytes; this is {} characters", raw.len()));
     }
     let sig = Base64::decode(String::from_utf8_lossy(raw).trim().to_string()).map_err(|e| format!("the signature isn't base64: {e}"))?;
     if sig.len() != 64 {
