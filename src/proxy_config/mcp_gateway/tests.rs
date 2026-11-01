@@ -203,3 +203,40 @@ fn a_config_file_gateway_federates_and_enforces_its_rules() {
     std::env::remove_var("RWS_TEST_GW_E2E_ALICE");
     std::env::remove_var("RWS_TEST_GW_E2E_BOB");
 }
+
+#[test]
+fn openapi_sections_parse_and_are_checked() {
+    let toml = r#"
+[[route]]
+  [route.match]
+  path = "/mcp"
+  [route.action]
+  type = "mcp"
+  [[route.action.mcp.openapi]]
+  prefix = "billing"
+  spec = "https://billing.internal/openapi.json"
+  base_url = "https://billing.internal"
+  include = ["getInvoice", "createInvoice"]
+  exclude = ["deleteAll"]
+  timeout_ms = 5000
+  headers_env = { Authorization = "RWS_TEST_BILLING_AUTH" }
+  [[route.action.mcp.caller]]
+  identity = "alice"
+  token_env = "RWS_TEST_ALICE"
+  [[route.action.mcp.allow]]
+  identity = "alice"
+  tools = ["billing__*"]
+"#;
+    let config = gateway_of(toml);
+    assert!(config.upstreams.is_empty());
+    let api = &config.apis[0];
+    assert_eq!(("billing", "https://billing.internal", 5000), (api.prefix.as_str(), api.base_url.as_str(), api.timeout_ms));
+    assert_eq!((vec!["getInvoice".to_string(), "createInvoice".to_string()], vec!["deleteAll".to_string()]), (api.include.clone(), api.exclude.clone()));
+    assert_eq!(vec![("Authorization".to_string(), "RWS_TEST_BILLING_AUTH".to_string())], api.headers_env);
+    let report = format!("{:?}", check_str_offline(toml));
+    assert!(!report.contains("has no [[route.action.mcp.upstream]]"), "an openapi source is enough: {report}");
+    assert!(!report.contains("unknown key"), "{report}");
+    let bad = toml.replace("base_url = \"https://billing.internal\"", "base_url = \"billing.internal\"\n  bogus = 1");
+    let report = format!("{:?}", check_str_offline(&bad));
+    assert!(report.contains("base_url") && report.contains("bogus"), "{report}");
+}

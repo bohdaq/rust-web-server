@@ -672,3 +672,73 @@ fn each_caller_gets_their_own_upstream_credential() {
     let debug = format!("{:?}", Upstream::new("up", "http://x/mcp").header("Authorization", "Bearer secret"));
     assert!(!debug.contains("secret"), "{debug}");
 }
+
+/// A stand-in HTTP API: its OpenAPI document at /openapi.json; GET /pets/{id}
+/// answers JSON echoing what it got; anything else 404.
+fn pets_api() -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = std::sync::Arc::clone(&seen);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let mut buf = [0u8; 8192];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).to_string();
+            log.lock().unwrap().push(head.clone());
+            let target = head.split_whitespace().nth(1).unwrap_or("").to_string();
+            let (status, body) = if target == "/openapi.json" {
+                ("200 OK", r#"{"openapi":"3.1.0","info":{"title":"Pets","version":"1"},"paths":{
+                  "/pets/{id}":{"get":{"operationId":"getPet","summary":"One pet","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+                    "responses":{"200":{"content":{"application/json":{"schema":{"type":"object","properties":{"name":{"type":"string"}}}}}}}},
+                    "delete":{"operationId":"deletePet","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}]}}}}"#.to_string())
+            } else if let Some(id) = target.strip_prefix("/pets/") {
+                if id == "missing" { ("404 Not Found", r#"{"error":"no such pet"}"#.to_string()) } else { ("200 OK", format!(r#"{{"name":"pet {id}"}}"#)) }
+            } else {
+                ("404 Not Found", "{}".to_string())
+            };
+            let _ = stream.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+        }
+    });
+    (base, seen)
+}
+
+#[test]
+fn an_openapi_upstream_becomes_tools_calling_the_api() {
+    let (base, seen) = pets_api();
+    let server = McpGateway::new("gw", "1")
+        .refresh_every(None)
+        .openapi(super::OpenApiUpstream::new("pets", format!("{base}/openapi.json"), base.clone()).header("Authorization", "Bearer api-key"))
+        .allow("alice", ["pets__*"])
+        .build()
+        .unwrap()
+        .require_bearer_tokens([("alice-token", "alice")]);
+    let client = TestClient::new(server);
+    let tools = list(&client, "alice-token");
+    assert!(tools.contains(r#""name":"pets__getPet""#) && !tools.contains("deletePet"), "GET only by default: {tools}");
+    assert!(tools.contains(r#""readOnlyHint":true"#) && tools.contains("outputSchema"), "{tools}");
+
+    let result = call(&client, "alice-token", "pets__getPet", r#"{"id":"7 b"}"#);
+    assert!(result.contains(r#"pet 7%20b"#) || result.contains("pet 7 b") || result.contains(r#"\"name\":\"pet 7%20b\""#), "{result}");
+    assert!(result.contains("structuredContent"), "an object response is structured content: {result}");
+    let request = seen.lock().unwrap().iter().find(|h| h.starts_with("GET /pets/")).cloned().unwrap();
+    assert!(request.starts_with("GET /pets/7%20b ") && request.contains("Authorization: Bearer api-key") && !request.contains("alice-token"), "{request}");
+
+    let failed = call(&client, "alice-token", "pets__getPet", r#"{"id":"missing"}"#);
+    assert!(failed.contains(r#""isError":true"#) && failed.contains("HTTP 404"), "{failed}");
+    let bad = call(&client, "alice-token", "pets__getPet", "{}");
+    assert!(bad.contains(r#""isError":true"#) && bad.contains("id"), "the input schema requires id: {bad}");
+}
+
+#[test]
+fn openapi_upstreams_that_cant_be_used() {
+    let err = |api: super::OpenApiUpstream| McpGateway::new("gw", "1").refresh_every(None).openapi(api).build().err().unwrap();
+    assert!(err(super::OpenApiUpstream::new("p", "/nonexistent/spec.json", "http://x")).contains("reading /nonexistent/spec.json"));
+    assert!(err(super::OpenApiUpstream::new("p", "/x", "ftp://x")).contains("isn't an http(s) URL"));
+    assert!(err(super::OpenApiUpstream::new("bad__prefix", "/x", "http://x")).contains("prefix"));
+    let file = crate::test_env::TempPath::new("gw_swagger.json");
+    std::fs::write(&*file, r#"{"swagger":"2.0"}"#).unwrap();
+    assert!(err(super::OpenApiUpstream::new("p", file.to_str().unwrap(), "http://x")).contains("Swagger 2.0"));
+}

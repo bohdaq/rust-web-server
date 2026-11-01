@@ -59,6 +59,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.mcp" => super::mcp_gateway::GATEWAY_KEYS.to_vec(),
         "route.action.mcp.upstream" => super::mcp_gateway::UPSTREAM_KEYS.to_vec(),
         "route.action.mcp.caller" => super::mcp_gateway::CALLER_KEYS.to_vec(),
+        "route.action.mcp.openapi" => super::mcp_gateway::OPENAPI_KEYS.to_vec(),
         "route.action.mcp.allow" => super::mcp_gateway::ALLOW_KEYS.to_vec(),
         "route.action.mcp.limit" => super::mcp_gateway::LIMIT_KEYS.to_vec(),
         "route.action.llm" => super::llm::LLM_KEYS.to_vec(),
@@ -110,7 +111,7 @@ pub fn check_unknown_keys(toml: &str, report: &mut ConfigReport) {
         }
         let shape = strip_indices(section);
         // Header names, relation names: any key.
-        if shape == "route.action.mcp.upstream.headers_env" || shape == "route.action.a2a.headers_env" || shape.starts_with("authz.type.") {
+        if shape == "route.action.mcp.upstream.headers_env" || shape == "route.action.mcp.openapi.headers_env" || shape == "route.action.a2a.headers_env" || shape.starts_with("authz.type.") {
             continue;
         }
         match known_keys(&shape) {

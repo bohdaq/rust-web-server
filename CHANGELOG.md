@@ -15,6 +15,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `request(arguments)` building each call's HTTP request. Only `GET`
   operations unless included by operationId; local `$ref`s inlined with
   depth, cycle and size limits. Fuzz target `openapi_to_mcp`.
+- The MCP gateway takes HTTP APIs as sources: `[[route.action.mcp.openapi]]`
+  (`McpGateway::openapi`) turns an OpenAPI document's operations into
+  `<prefix>__<operation>` tools, each call an HTTP request to `base_url`
+  (no redirects) with the API's credentials from the environment.
 - Config proxy routes choose the upstream `Host`: `preserve_host = true`
   sends the client's, `upstream_host = "…"` a fixed name (`:authority` over
   HTTP/3 upstreams). It was always the backend's address, and a `header_set`

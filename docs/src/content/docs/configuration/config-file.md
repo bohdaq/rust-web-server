@@ -488,6 +488,13 @@ An [MCP gateway](/mcp/gateway/): one MCP endpoint in front of several upstream M
   timeout_ms  = 30000
   headers_env = { Authorization = "GITHUB_MCP_AUTHORIZATION" }   # header = env var with its value
 
+  [[route.action.mcp.openapi]]             # an HTTP API's operations as tools (since 18.19.0)
+  prefix      = "billing"
+  spec        = "https://billing.internal/openapi.json"
+  base_url    = "https://billing.internal"
+  include     = ["getInvoice"]            # operationIds; default: every GET
+  headers_env = { Authorization = "BILLING_API_AUTHORIZATION" }
+
   [[route.action.mcp.caller]]             # who may connect: their bearer token
   identity  = "alice"
   token_env = "ALICE_MCP_TOKEN"

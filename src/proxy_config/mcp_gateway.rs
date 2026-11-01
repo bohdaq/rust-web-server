@@ -21,6 +21,13 @@
 //!   timeout_ms  = 30000
 //!   headers_env = { Authorization = "GITHUB_MCP_AUTHORIZATION" }  # header = env var holding its value
 //!
+//!   [[route.action.mcp.openapi]]               # an HTTP API's operations as tools (18.19.0)
+//!   prefix      = "billing"
+//!   spec        = "https://billing.internal/openapi.json"   # or a file path
+//!   base_url    = "https://billing.internal"                # calls go only here
+//!   include     = ["getInvoice", "listInvoices"]            # operationIds; default: every GET
+//!   headers_env = { Authorization = "BILLING_API_AUTHORIZATION" }
+//!
 //!   [[route.action.mcp.caller]]
 //!   identity  = "alice"
 //!   token_env = "ALICE_MCP_TOKEN"       # the bearer token alice sends
@@ -64,6 +71,7 @@ pub struct McpGatewayConfig {
     pub audit_log: bool,
     pub allowed_origins: Vec<String>,
     pub upstreams: Vec<UpstreamConfig>,
+    pub apis: Vec<OpenApiConfig>,
     pub callers: Vec<CallerConfig>,
     pub allow: Vec<(String, Vec<String>)>,
     pub limits: Vec<LimitConfig>,
@@ -75,6 +83,18 @@ pub struct UpstreamConfig {
     pub url: String,
     pub timeout_ms: u64,
     /// `(header, environment variable holding its value)`.
+    pub headers_env: Vec<(String, String)>,
+}
+
+/// `[[route.action.mcp.openapi]]`: an HTTP API's operations as tools.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OpenApiConfig {
+    pub prefix: String,
+    pub spec: String,
+    pub base_url: String,
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    pub timeout_ms: u64,
     pub headers_env: Vec<(String, String)>,
 }
 
@@ -95,6 +115,7 @@ pub struct LimitConfig {
 pub(crate) const GATEWAY_KEYS: &[&str] = &["name", "refresh_secs", "audit_log", "allowed_origins"];
 pub(crate) const UPSTREAM_KEYS: &[&str] = &["prefix", "url", "timeout_ms"];
 pub(crate) const CALLER_KEYS: &[&str] = &["identity", "token_env"];
+pub(crate) const OPENAPI_KEYS: &[&str] = &["prefix", "spec", "base_url", "include", "exclude", "timeout_ms"];
 pub(crate) const ALLOW_KEYS: &[&str] = &["identity", "tools"];
 pub(crate) const LIMIT_KEYS: &[&str] = &["tools", "max_calls", "window_secs"];
 
@@ -119,6 +140,18 @@ pub(crate) fn parse(map: &SectionMap, section: &str) -> McpGatewayConfig {
                 headers_env: map.get(&format!("{s}.headers_env")).cloned().unwrap_or_default(),
             })
             .collect(),
+        apis: indexed("openapi")
+            .into_iter()
+            .map(|s| OpenApiConfig {
+                prefix: get_str(map, &s, "prefix"),
+                spec: get_str(map, &s, "spec"),
+                base_url: get_str(map, &s, "base_url"),
+                include: get_array(map, &s, "include"),
+                exclude: get_array(map, &s, "exclude"),
+                timeout_ms: get_u64(map, &s, "timeout_ms", 30_000),
+                headers_env: map.get(&format!("{s}.headers_env")).cloned().unwrap_or_default(),
+            })
+            .collect(),
         callers: indexed("caller")
             .into_iter()
             .map(|s| CallerConfig { identity: get_str(map, &s, "identity"), token_env: get_str(map, &s, "token_env") })
@@ -139,8 +172,8 @@ pub(crate) fn validate(config: &McpGatewayConfig, route_path: Option<&str>, labe
         None => report.error(format!("{label}: an mcp route needs [route.match] path, e.g. \"/mcp\"")),
         _ => {}
     }
-    if config.upstreams.is_empty() {
-        report.error(format!("{label}: [route.action.mcp] has no [[route.action.mcp.upstream]]"));
+    if config.upstreams.is_empty() && config.apis.is_empty() {
+        report.error(format!("{label}: [route.action.mcp] has no [[route.action.mcp.upstream]] or [[route.action.mcp.openapi]]"));
     }
     let mut prefixes = Vec::new();
     for (i, u) in config.upstreams.iter().enumerate() {
@@ -156,6 +189,29 @@ pub(crate) fn validate(config: &McpGatewayConfig, route_path: Option<&str>, labe
             report.error(format!("{what}: url {:?} must start with http:// or https://", u.url));
         }
         for (header, env) in &u.headers_env {
+            if !offline && std::env::var(env).unwrap_or_default().is_empty() {
+                report.error(format!("{what}: header {header} reads {env}, which is unset or empty"));
+            }
+        }
+    }
+    for (i, a) in config.apis.iter().enumerate() {
+        let what = format!("{label}: openapi #{}", i + 1);
+        if a.prefix.is_empty() || a.prefix.contains("__") || a.prefix.ends_with('_') || !a.prefix.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+            report.error(format!("{what}: prefix {:?} must be letters, digits, '-' and single '_'", a.prefix));
+        } else if prefixes.contains(&a.prefix) {
+            report.error(format!("{what}: prefix {:?} is used twice", a.prefix));
+        } else {
+            prefixes.push(a.prefix.clone());
+        }
+        if a.spec.is_empty() {
+            report.error(format!("{what}: spec (an OpenAPI document's URL or file) is required"));
+        } else if !offline && !a.spec.starts_with("http") && !std::path::Path::new(&a.spec).is_file() {
+            report.error(format!("{what}: spec file {:?} doesn't exist", a.spec));
+        }
+        if !(a.base_url.starts_with("http://") || a.base_url.starts_with("https://")) {
+            report.error(format!("{what}: base_url {:?} must start with http:// or https://", a.base_url));
+        }
+        for (header, env) in &a.headers_env {
             if !offline && std::env::var(env).unwrap_or_default().is_empty() {
                 report.error(format!("{what}: header {header} reads {env}, which is unset or empty"));
             }
@@ -199,6 +255,15 @@ fn build(config: &McpGatewayConfig, path: &str) -> Result<McpServer, String> {
             }
         }
         gateway = gateway.upstream(upstream);
+    }
+    for a in &config.apis {
+        let mut api = crate::mcp::gateway::OpenApiUpstream::new(a.prefix.clone(), a.spec.clone(), a.base_url.clone()).include(a.include.clone()).exclude(a.exclude.clone()).timeout_ms(a.timeout_ms);
+        for (header, env) in &a.headers_env {
+            if let Ok(value) = std::env::var(env) {
+                api = api.header(header.clone(), value);
+            }
+        }
+        gateway = gateway.openapi(api);
     }
     for (identity, tools) in &config.allow {
         gateway = gateway.allow(identity.clone(), tools.clone());

@@ -21,6 +21,31 @@ let call = found[0].request(r#"{"id": 42}"#).unwrap();
 assert_eq!("/invoices/42", call.path_and_query);
 ```
 
+## Through the MCP gateway
+
+The `rws` binary's [MCP gateway](/mcp/gateway/) takes an API as a source next
+to MCP upstreams: its operations become `<prefix>__<operation>` tools, each
+call an HTTP request to `base_url` with the API's own credentials (never the
+caller's token), the gateway's allow rules, limits and audit log applying as
+to any tool.
+
+```toml
+[[route.action.mcp.openapi]]
+prefix      = "billing"
+spec        = "https://billing.internal/openapi.json"   # or a file path
+base_url    = "https://billing.internal"                # calls go only here, without redirects
+include     = ["getInvoice", "listInvoices"]            # operationIds; default: every GET
+exclude     = []
+timeout_ms  = 30000
+headers_env = { Authorization = "BILLING_API_AUTHORIZATION" }
+```
+
+The document is read when the gateway starts (and on reload). A JSON object
+answer is the result's `structuredContent` when the operation declares an
+object response; other answers are text; a non-2xx answer is a tool error
+carrying its status and body (results are cut at 1 MiB). In code:
+`McpGateway::openapi(OpenApiUpstream::new(prefix, spec, base_url))`.
+
 ## What becomes a tool
 
 - **Only `GET` operations**, unless `ToolOptions::include` lists

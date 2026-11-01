@@ -111,11 +111,116 @@ impl Upstream {
     }
 }
 
+/// An HTTP API whose OpenAPI operations become gateway tools
+/// ([`McpGateway::openapi`], 18.19.0): each call is an HTTP request to
+/// `base_url`.
+#[derive(Clone)]
+pub struct OpenApiUpstream {
+    prefix: String,
+    spec: String,
+    base_url: String,
+    headers: Vec<(String, String)>,
+    include: Vec<String>,
+    exclude: Vec<String>,
+    timeout_ms: u64,
+}
+
+impl OpenApiUpstream {
+    /// Tools `<prefix>__<operation>` from the OpenAPI document at `spec`
+    /// (an `http(s)://` URL or a file path), calling `base_url` (scheme,
+    /// host and optional path prefix: requests never go anywhere else).
+    pub fn new(prefix: impl Into<String>, spec: impl Into<String>, base_url: impl Into<String>) -> Self {
+        OpenApiUpstream { prefix: prefix.into(), spec: spec.into(), base_url: base_url.into().trim_end_matches('/').to_string(), headers: Vec::new(), include: Vec::new(), exclude: Vec::new(), timeout_ms: 30_000 }
+    }
+
+    /// Send this header with every request (and the spec fetch): the API's
+    /// own credentials, never the caller's.
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((name.into(), value.into()));
+        self
+    }
+
+    /// operationIds to expose (default: every `GET`).
+    pub fn include<I: IntoIterator<Item = S>, S: Into<String>>(mut self, ids: I) -> Self {
+        self.include = ids.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// operationIds never to expose.
+    pub fn exclude<I: IntoIterator<Item = S>, S: Into<String>>(mut self, ids: I) -> Self {
+        self.exclude = ids.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Give up on a request after this long (default 30 s).
+    pub fn timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = timeout_ms;
+        self
+    }
+
+    fn client(&self) -> crate::http_client::Client {
+        // No redirects: a call must not be bounced to another host.
+        crate::http_client::Client::new().max_redirects(0)
+    }
+
+    fn load_spec(&self) -> Result<String, String> {
+        if self.spec.starts_with("http://") || self.spec.starts_with("https://") {
+            let client = self.client();
+            let mut request = client.get(&self.spec).timeout_ms(self.timeout_ms);
+            for (name, value) in &self.headers {
+                request = request.header(name, value);
+            }
+            let response = request.send().map_err(|e| format!("fetching {}: {e}", self.spec))?;
+            if !response.is_success() {
+                return Err(format!("fetching {}: HTTP {}", self.spec, response.status()));
+            }
+            response.text().map_err(|e| e.to_string())
+        } else {
+            std::fs::read_to_string(&self.spec).map_err(|e| format!("reading {}: {e}", self.spec))
+        }
+    }
+
+    /// Call the API for one tool call.
+    fn call(&self, tool: &crate::mcp::openapi_tools::OpenApiTool, arguments: &str) -> Result<McpContent, String> {
+        const MAX_RESULT: usize = 1 << 20;
+        let call = tool.request(arguments)?;
+        let url = format!("{}{}", self.base_url, call.path_and_query);
+        let client = self.client();
+        let mut request = client.request(&call.method, &url).timeout_ms(self.timeout_ms);
+        for (name, value) in call.headers.iter().chain(self.headers.iter()) {
+            request = request.header(name, value);
+        }
+        if let Some(body) = call.body {
+            request = request.body_json(&body);
+        }
+        let response = request.send().map_err(|e| format!("{} {}: {e}", call.method, call.path_and_query))?;
+        let mut text = response.text().unwrap_or_default();
+        if text.len() > MAX_RESULT {
+            let mut cut = MAX_RESULT;
+            while !text.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            text.truncate(cut);
+            text.push_str("…(truncated)");
+        }
+        if !response.is_success() {
+            return Err(format!("HTTP {}: {text}", response.status()));
+        }
+        let is_json = response.header("content-type").is_some_and(|t| t.contains("json"));
+        Ok(match (is_json, tool.output_schema.is_some()) {
+            (true, true) if text.trim_start().starts_with('{') => McpContent::structured(text),
+            (true, _) => McpContent::json(text),
+            _ => McpContent::text(text),
+        })
+    }
+}
+
 /// Builds a gateway [`McpServer`]; see the [module docs](self).
 pub struct McpGateway {
     name: String,
     version: String,
     upstreams: Vec<Upstream>,
+    apis: Vec<OpenApiUpstream>,
     rules: Vec<(String, Vec<String>)>,
     refresh: Option<std::time::Duration>,
     limits: Vec<ToolLimit>,
@@ -136,7 +241,7 @@ pub const DEFAULT_REFRESH: std::time::Duration = std::time::Duration::from_secs(
 impl McpGateway {
     /// A gateway announcing itself as `name`/`version`.
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
-        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), rules: Vec::new(), refresh: Some(DEFAULT_REFRESH), limits: Vec::new(), audit: false }
+        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), apis: Vec::new(), rules: Vec::new(), refresh: Some(DEFAULT_REFRESH), limits: Vec::new(), audit: false }
     }
 
     /// Allow each caller (each `sub`) at most `max_calls` calls per
@@ -166,6 +271,13 @@ impl McpGateway {
         self
     }
 
+    /// Expose an HTTP API's OpenAPI operations as tools (`<prefix>__<id>`);
+    /// the document is read at [`build`](Self::build).
+    pub fn openapi(mut self, api: OpenApiUpstream) -> Self {
+        self.apis.push(api);
+        self
+    }
+
     /// Federate `upstream`'s tools.
     pub fn upstream(mut self, upstream: Upstream) -> Self {
         self.upstreams.push(upstream);
@@ -190,14 +302,19 @@ impl McpGateway {
     /// something that isn't MCP. Add authentication to the result.
     pub fn build(self) -> Result<McpServer, String> {
         let mut prefixes: Vec<&str> = Vec::new();
-        for upstream in &self.upstreams {
-            if !valid_prefix(&upstream.prefix) {
-                return Err(format!("upstream prefix \"{}\": use letters, digits, '-' and single '_'", upstream.prefix));
+        for prefix in self.upstreams.iter().map(|u| u.prefix.as_str()).chain(self.apis.iter().map(|a| a.prefix.as_str())) {
+            if !valid_prefix(prefix) {
+                return Err(format!("upstream prefix \"{prefix}\": use letters, digits, '-' and single '_'"));
             }
-            if prefixes.contains(&upstream.prefix.as_str()) {
-                return Err(format!("upstream prefix \"{}\" is used twice", upstream.prefix));
+            if prefixes.contains(&prefix) {
+                return Err(format!("upstream prefix \"{prefix}\" is used twice"));
             }
-            prefixes.push(&upstream.prefix);
+            prefixes.push(prefix);
+        }
+        for api in &self.apis {
+            if !(api.base_url.starts_with("http://") || api.base_url.starts_with("https://")) {
+                return Err(format!("{}: base_url {:?} isn't an http(s) URL", api.prefix, api.base_url));
+            }
         }
 
         let rules = Arc::new(self.rules);
@@ -256,6 +373,22 @@ impl McpGateway {
                 let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub"));
                 identity.is_some_and(|identity| allowed(&rules, &identity, name))
             });
+        }
+        for api in self.apis {
+            let spec = api.load_spec().map_err(|e| format!("{}: {e}", api.prefix))?;
+            let options = crate::mcp::openapi_tools::ToolOptions { prefix: Some(api.prefix.clone()), include: api.include.clone(), exclude: api.exclude.clone() };
+            let found = crate::mcp::openapi_tools::tools(&spec, &options).map_err(|e| format!("{}: {e}", api.prefix))?;
+            let api = Arc::new(api);
+            for tool in found {
+                let (name, description, input) = (tool.name.clone(), tool.description.clone(), tool.input_schema.clone());
+                let (output, annotations) = (tool.output_schema.clone(), tool.annotations);
+                let (api, tool) = (Arc::clone(&api), Arc::new(tool));
+                server = server.tool_with_context(&name, &description, &input, move |_ctx, args| api.call(&tool, args));
+                if let Some(schema) = output {
+                    server = server.tool_output_schema(&name, &schema);
+                }
+                server = server.tool_annotations(&name, annotations);
+            }
         }
         let mut federated = Vec::new();
         for upstream in self.upstreams {
