@@ -203,7 +203,7 @@ Change a running server without editing files, and extend it without recompiling
 
 - **#65** **A2A server module** (tranches 1–2 — card, messages, tasks, streaming, auth — shipped in 18.17.0) — A2A 1.0 JSON-RPC binding: Agent Card, messages, tasks, streaming, push notifications, graded by a2aproject/a2a-tck; then an A2A gateway route. Plan: [A2A_SERVER.md](A2A_SERVER.md) (2026-10-31).
 
-## 18.19.0 — OpenAPI to MCP
+## 18.19.0 — OpenAPI to MCP (released 2026-11-01)
 
 - **#66** **MCP tools from OpenAPI** — an upstream API's OpenAPI operations as MCP gateway tools, and an app's own described routes as in-process tools. Plan: [OPENAPI_TO_MCP.md](OPENAPI_TO_MCP.md) (2026-10-31).
 
