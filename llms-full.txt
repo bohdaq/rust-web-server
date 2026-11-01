@@ -19055,7 +19055,7 @@ assert_eq!("/invoices/42", call.path_and_query);
 
 ## Your app's own routes
 
-An app that describes its routes with [OpenAPI](/building-apps/openapi/) gets
+An app that describes its routes with [OpenAPI](/features/openapi/) gets
 MCP tools for them in one call; each call runs the route in-process (no HTTP
 round trip), through the app's middleware:
 
