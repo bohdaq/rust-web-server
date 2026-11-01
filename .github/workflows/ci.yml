@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Release lines (18.20.x, …) get the same checks as main.
+    branches: [main, "[0-9]+.[0-9]+.x"]
   pull_request:
   schedule:
     # Weekly, so a newly published RustSec/npm advisory turns the badge red
@@ -57,7 +58,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: fips
-      - run: cargo test --lib --features fips tls::
+      - run: "cargo test --lib --features fips tls::"
       - run: cargo build --bin rws --features "fips acme auth sso"
       - run: ci/e2e/fips.sh target/debug/rws
 
