@@ -21,7 +21,7 @@ compile error found by the release build).
 | # | Item | Status |
 |---|---|---|
 | 1 | Release gating: `--locked` on every cargo call in CI, actionlint job, Windows `cargo check` with the release's Windows features, release.yml refuses a tag whose commit has no green CI run or isn't on main / a `*.x` branch; `18.20.x` LTS branch; RELEASE.md MSRV | **done**: 14 cargo calls `--locked`, jobs `actionlint` (1.7.7, clean locally) and `windows` (`cargo check` with the release's Windows features), release.yml step checks branch + the commit's CI jobs (install.sh excepted; dry-run passes 18.23.0/18.23.1), `18.20.x` pushed at the 18.20.0 tag, RELEASE.md (MSRV 1.99, the gate) |
-| 2 | Fleet: signed serial (rollback refused, persisted), restore the previous file when a reload fails, refuse fetched configs that change `[fleet]` | — |
+| 2 | Fleet: signed serial (rollback refused, persisted), restore the previous file when a reload fails, refuse fetched configs that change `[fleet]` | **done**: `.sig` v2 = `rws-fleet-sig v2 <serial> <b64>` over `rws-fleet-v2\n<serial>\n<body>`; sign defaults serial to max(now, previous+1), `--serial N`; serial persisted in `<state_dir>/serial`, `serial <= applied` refused; `[fleet]` keys of fetched vs local file must match; previous file restored + reload when the reload fails; 18.23 sigs accepted as serial 0. Tests: rollback refused across restart, forged serial, settings change refused, parse |
 | 3 | WAF: keep MySQL `/*! … */` content, command-injection needs a shell-like argument at paranoia 1, `--check` warns when a WAF route has no `max_body_size` | — |
 | 4 | PKCS#11: a session pool, PINs masked in output, RFC 3986 percent-decoding | — |
 | 5 | `trusted_proxies`; WebSocket upgrades send one `X-Forwarded-For` | — |

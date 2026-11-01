@@ -170,10 +170,75 @@ fn keygen_and_sign_make_files_verify_accepts() {
     let key = format!("{prefix}.key");
     assert_eq!(command(&argv(&["rws", "fleet", "sign", config.to_str().unwrap(), "--key", &key])), Some(0));
     let public = read_public_key(&format!("{prefix}.pub")).unwrap();
-    assert!(verify(GOOD.as_bytes(), &std::fs::read(format!("{}.sig", config.display())).unwrap(), &public).is_ok());
+    let signed = std::fs::read(format!("{}.sig", config.display())).unwrap();
+    assert!(String::from_utf8_lossy(&signed).starts_with(SIG_PREFIX));
+    let first = verify(GOOD.as_bytes(), &signed, &public).unwrap();
+    assert!(first > 1_700_000_000, "serial defaults to now");
+    assert_eq!(command(&argv(&["rws", "fleet", "sign", config.to_str().unwrap(), "--key", &key])), Some(0));
+    assert!(verify(GOOD.as_bytes(), &std::fs::read(format!("{}.sig", config.display())).unwrap(), &public).unwrap() > first, "re-signing grows the serial");
     std::fs::write(&config, BAD).unwrap();
     assert_eq!(command(&argv(&["rws", "fleet", "sign", config.to_str().unwrap(), "--key", &key])), Some(1), "a config that fails --check isn't signed");
     assert_eq!(command(&argv(&["rws", "fleet"])), Some(2));
     assert_eq!(command(&argv(&["rws", "serve"])), None);
     std::fs::remove_dir_all(&*dir).ok();
+}
+
+fn sig_v2(pair: &aws_lc_rs::signature::Ed25519KeyPair, serial: u64, body: &str) -> String {
+    format!("{SIG_PREFIX}{serial} {}", Base64::encode(pair.sign(&signed_message(serial, body.as_bytes())).as_ref()).unwrap())
+}
+
+#[test]
+fn serials_refuse_rollback_and_survive_a_restart() {
+    let (pair, public) = keypair();
+    let v1 = GOOD.replace("fleet", "one");
+    let v2 = GOOD.replace("fleet", "two");
+    let files = Arc::new(Mutex::new(HashMap::new()));
+    let put = |body: &str, sig: String, tag: &str| {
+        files.lock().unwrap().insert("/c.toml".to_string(), (body.to_string(), format!("\"{tag}\"")));
+        files.lock().unwrap().insert("/c.toml.sig".to_string(), (sig, format!("\"s{tag}\"")));
+    };
+    put(&v1, sig_v2(&pair, 10, &v1), "1");
+    let base = server(Arc::clone(&files), Arc::new(Mutex::new(Vec::new())));
+    let path = TempPath::new("fleet-serial.toml");
+    let state = path.with_extension("state");
+    let make = || fleet(Source::Http(format!("{base}/c.toml")), Some(public.clone()), String::new(), &path);
+    let f = make();
+    assert!(matches!(f.tick(), Outcome::Applied(_)));
+    put(&v2, sig_v2(&pair, 11, &v2), "2");
+    assert!(matches!(f.tick(), Outcome::Applied(_)));
+    // The older, validly signed file again: refused, also after a restart.
+    put(&v1, sig_v2(&pair, 10, &v1), "3");
+    assert!(matches!(f.tick(), Outcome::Refused(e) if e.contains("serial 10")));
+    let restarted = make();
+    assert!(matches!(restarted.tick(), Outcome::Refused(e) if e.contains("isn't above the applied 11")));
+    assert_eq!(std::fs::read_to_string(&*path).unwrap(), v2);
+    // A serial changed after signing doesn't verify.
+    let forged = sig_v2(&pair, 10, &v1).replacen(" 10 ", " 99 ", 1);
+    assert!(verify(v1.as_bytes(), forged.as_bytes(), &public).is_err());
+    std::fs::remove_dir_all(&state).ok();
+}
+
+#[test]
+fn a_fetched_config_cant_change_the_fleet_settings() {
+    let (pair, public) = keypair();
+    let local = "port = 7979\n[fleet]\nsource = \"https://cfg.example/c.toml\"\npublic_key = \"x\"\n";
+    let fetched = "port = 7979\n[fleet]\nsource = \"https://cfg.example/c.toml\"\npublic_key = \"x\"\ninsecure = true\n";
+    let files = Arc::new(Mutex::new(HashMap::new()));
+    files.lock().unwrap().insert("/c.toml".to_string(), (fetched.to_string(), "\"a\"".to_string()));
+    files.lock().unwrap().insert("/c.toml.sig".to_string(), (sig_v2(&pair, 5, fetched), "\"b\"".to_string()));
+    let base = server(files, Arc::new(Mutex::new(Vec::new())));
+    let path = TempPath::new("fleet-settings.toml");
+    std::fs::write(&*path, local).unwrap();
+    let f = fleet(Source::Http(format!("{base}/c.toml")), Some(public), String::new(), &path);
+    assert!(matches!(f.tick(), Outcome::Refused(e) if e.contains("[fleet] settings")));
+    assert_eq!(std::fs::read_to_string(&*path).unwrap(), local);
+}
+
+#[test]
+fn signature_files_parse() {
+    assert_eq!(parse_signature(b"rws-fleet-sig v2 x AAAA").unwrap_err(), "the signature's serial \"x\" isn't a number");
+    assert!(parse_signature(b"rws-fleet-sig v2 7").is_err());
+    let (pair, _) = keypair();
+    assert_eq!(parse_signature(sig_v2(&pair, 7, "a").as_bytes()).unwrap().0, 7);
+    assert_eq!(parse_signature(sig(&pair, "a").as_bytes()).unwrap().0, 0, "18.23 format: serial 0");
 }

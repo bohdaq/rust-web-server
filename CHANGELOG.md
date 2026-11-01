@@ -14,6 +14,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   CI builds with `--locked`, lints the workflow files (actionlint) and checks
   the release's Windows features on Windows. The `18.20.x` LTS branch exists.
 
+### Security
+
+- Fleet config pull (#80): signatures now carry a serial (`rws-fleet-sig v2
+  <serial> <sig>`, from `rws fleet sign`), and a config whose serial isn't
+  above the applied one is refused, so an older signed file can't roll an
+  instance back; a fetched config can't change the `[fleet]` settings; when
+  the reload refuses a fetched config the previous file is restored. 18.23
+  signature files still verify; re-sign to get rollback protection.
+
 ## 18.23.1 — 2026-11-01
 
 ### Fixed

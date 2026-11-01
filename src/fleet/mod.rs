@@ -130,7 +130,33 @@ pub enum Fetched {
     Config { body: Vec<u8>, signature: Option<Vec<u8>> },
 }
 
-/// A signature file: base64, or the 64 raw bytes.
+/// The signature file `rws fleet sign` writes (18.24.0): one line,
+/// `rws-fleet-sig v2 <serial> <base64 signature>`, the signature over
+/// [`signed_message`]. The serial only grows: an instance refuses a config
+/// whose serial isn't above the one it applied, so an older signed file
+/// can't roll it back.
+pub const SIG_PREFIX: &str = "rws-fleet-sig v2 ";
+
+/// What a v2 signature covers: a domain tag, the serial, then the file.
+pub fn signed_message(serial: u64, body: &[u8]) -> Vec<u8> {
+    let mut m = format!("rws-fleet-v2\n{serial}\n").into_bytes();
+    m.extend_from_slice(body);
+    m
+}
+
+/// A parsed signature file: the serial (0 for the 18.23 format, which
+/// signed the body alone) and the signature bytes.
+pub fn parse_signature(raw: &[u8]) -> Result<(u64, Vec<u8>), String> {
+    let text = String::from_utf8_lossy(raw);
+    if let Some(rest) = text.trim().strip_prefix(SIG_PREFIX) {
+        let (serial, sig) = rest.split_once(' ').ok_or("the signature file is `rws-fleet-sig v2 <serial> <signature>`")?;
+        let serial: u64 = serial.parse().map_err(|_| format!("the signature's serial {serial:?} isn't a number"))?;
+        return Ok((serial, signature_bytes(sig.trim().as_bytes())?));
+    }
+    Ok((0, signature_bytes(raw)?))
+}
+
+/// A signature: base64, or the 64 raw bytes.
 fn signature_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     if raw.len() == 64 {
         return Ok(raw.to_vec());
@@ -142,12 +168,28 @@ fn signature_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     Ok(sig)
 }
 
-/// Check `body` against `signature` with `public_key`.
-pub fn verify(body: &[u8], signature: &[u8], public_key: &[u8]) -> Result<(), String> {
-    let sig = signature_bytes(signature)?;
+/// Check `body` against a signature file with `public_key`; the serial it
+/// carries (0 for an 18.23-format file).
+pub fn verify(body: &[u8], signature: &[u8], public_key: &[u8]) -> Result<u64, String> {
+    let (serial, sig) = parse_signature(signature)?;
+    let message = if serial == 0 && !String::from_utf8_lossy(signature).trim_start().starts_with(SIG_PREFIX) { body.to_vec() } else { signed_message(serial, body) };
     aws_lc_rs::signature::UnparsedPublicKey::new(&aws_lc_rs::signature::ED25519, public_key)
-        .verify(body, &sig)
-        .map_err(|_| "the signature doesn't match (wrong key, or the file was changed after signing)".to_string())
+        .verify(&message, &sig)
+        .map_err(|_| "the signature doesn't match (wrong key, or the file was changed after signing)".to_string())?;
+    Ok(serial)
+}
+
+/// The `[fleet]` settings a config file sets (`RWS_CONFIG_FLEET_*` → value).
+fn fleet_settings(text: &str) -> Vec<(String, String)> {
+    let mut v: Vec<(String, String)> = crate::entry_point::config_file::collect_settings(std::io::Cursor::new(text.as_bytes()), String::new())
+        .map(|c| c.settings)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(k, _)| k.starts_with("RWS_CONFIG_FLEET_"))
+        .map(|(k, v)| (k, v.trim().to_string()))
+        .collect();
+    v.sort();
+    v
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -164,6 +206,8 @@ pub struct Fleet {
 struct FleetState {
     etag: Option<String>,
     applied: Option<String>,
+    /// The serial of the applied config (persisted in the state directory).
+    serial: u64,
     last_check: u64,
     last_error: Option<String>,
 }
@@ -183,7 +227,8 @@ fn unix_now() -> u64 {
 impl Fleet {
     pub fn new(config: FleetConfig) -> Fleet {
         let applied = std::fs::read(&config.config_path).ok().map(|b| sha256_hex(&b));
-        Fleet { config, state: Mutex::new(FleetState { applied, ..FleetState::default() }) }
+        let serial = std::fs::read_to_string(config.state_dir.join("serial")).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0);
+        Fleet { config, state: Mutex::new(FleetState { applied, serial, ..FleetState::default() }) }
     }
 
     fn fetch(&self) -> Result<Fetched, String> {
@@ -295,43 +340,86 @@ impl Fleet {
     }
 
     fn apply(&self, body: Vec<u8>, signature: Option<Vec<u8>>) -> Outcome {
+        let hash = sha256_hex(&body);
+        let (applied, applied_serial) = {
+            let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            (state.applied.clone(), state.serial)
+        };
+        let mut serial = 0;
         if let Some(key) = &self.config.public_key {
             let Some(sig) = signature else { return Outcome::Refused("no signature".into()) };
-            if let Err(e) = verify(&body, &sig, key) {
-                return Outcome::Refused(e);
+            match verify(&body, &sig, key) {
+                Ok(s) => serial = s,
+                Err(e) => return Outcome::Refused(e),
             }
-        }
-        let hash = sha256_hex(&body);
-        if self.state.lock().unwrap_or_else(|e| e.into_inner()).applied.as_deref() == Some(hash.as_str()) {
+            if applied.as_deref() == Some(hash.as_str()) {
+                return Outcome::Unchanged;
+            }
+            // Rollback: a validly signed but older file.
+            if applied_serial > 0 && serial <= applied_serial {
+                return Outcome::Refused(format!("the config's serial {serial} isn't above the applied {applied_serial} (an older signed file?)"));
+            }
+        } else if applied.as_deref() == Some(hash.as_str()) {
             return Outcome::Unchanged;
         }
         let Ok(text) = String::from_utf8(body.clone()) else { return Outcome::Refused("the config isn't UTF-8".into()) };
+        let path = &self.config.config_path;
+        let previous = std::fs::read(path).ok();
+        // The fleet settings themselves (source, key, insecure) can't be
+        // changed through the fleet: that would let one signed file turn off
+        // signatures or move the source at the next restart.
+        let current = previous.as_deref().map(|p| fleet_settings(&String::from_utf8_lossy(p))).unwrap_or_default();
+        if fleet_settings(&text) != current {
+            return Outcome::Refused("the fetched config changes [fleet] settings; change them on the instance (or its environment), not through the fleet".to_string());
+        }
         let report = crate::config_check::check_str(&text);
         if !report.is_ok() {
             return Outcome::Refused(format!("the fetched config doesn't pass rws --check: {}", report.errors.join("; ")));
         }
-        let path = &self.config.config_path;
-        let tmp = path.with_extension("fleet.tmp");
-        if let Err(e) = std::fs::write(&tmp, &body).and_then(|_| std::fs::rename(&tmp, path)) {
+        let write = |bytes: &[u8]| {
+            let tmp = path.with_extension("fleet.tmp");
+            std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path))
+        };
+        if let Err(e) = write(&body) {
             return Outcome::Refused(format!("writing {}: {e}", path.display()));
         }
-        self.state.lock().unwrap_or_else(|e| e.into_inner()).applied = Some(hash.clone());
-        if crate::metrics::SERVER_READY.load(std::sync::atomic::Ordering::SeqCst) {
-            let (before, _) = crate::config_reload::last_reload();
-            crate::config_reload::request_reload();
-            let deadline = std::time::Instant::now() + Duration::from_secs(10);
-            while std::time::Instant::now() < deadline {
-                let (count, errors) = crate::config_reload::last_reload();
-                if count > before {
-                    if !errors.is_empty() {
-                        return Outcome::Refused(format!("the reload reported: {}", errors.join("; ")));
-                    }
-                    break;
+        if let Err(e) = self.reload() {
+            // Put the previous file back, so a restart doesn't load the
+            // config the running server refused.
+            if let Some(prev) = &previous {
+                if let Err(w) = write(prev) {
+                    return Outcome::Refused(format!("{e}; restoring {} failed: {w}", path.display()));
                 }
-                std::thread::sleep(Duration::from_millis(50));
+                let _ = self.reload();
             }
+            return Outcome::Refused(e);
+        }
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.applied = Some(hash.clone());
+        if serial > 0 {
+            state.serial = serial;
+            let _ = std::fs::create_dir_all(&self.config.state_dir).and_then(|_| std::fs::write(self.config.state_dir.join("serial"), serial.to_string()));
         }
         Outcome::Applied(hash)
+    }
+
+    /// Reload as SIGHUP does and wait for it; `Err` with the errors it
+    /// reported. A no-op before the server is up.
+    fn reload(&self) -> Result<(), String> {
+        if !crate::metrics::SERVER_READY.load(std::sync::atomic::Ordering::SeqCst) {
+            return Ok(());
+        }
+        let (before, _) = crate::config_reload::last_reload();
+        crate::config_reload::request_reload();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            let (count, errors) = crate::config_reload::last_reload();
+            if count > before {
+                return if errors.is_empty() { Ok(()) } else { Err(format!("the reload reported: {}", errors.join("; "))) };
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        Ok(())
     }
 
     fn report(&self, outcome: &Outcome) {
@@ -408,11 +496,15 @@ pub fn command(args: &[String]) -> Option<i32> {
         return None;
     }
     let rest: Vec<&str> = args[2..].iter().map(String::as_str).collect();
-    let usage = "Usage: rws fleet keygen [<prefix>]   (writes <prefix>.key and <prefix>.pub; default fleet)\n       rws fleet sign <file> --key <prefix>.key   (writes <file>.sig)";
+    let usage = "Usage: rws fleet keygen [<prefix>]   (writes <prefix>.key and <prefix>.pub; default fleet)\n       rws fleet sign <file> --key <prefix>.key [--serial N]   (writes <file>.sig; serial default: now)";
     let result = match rest.as_slice() {
         ["keygen"] => keygen("fleet"),
         ["keygen", prefix] => keygen(prefix),
-        ["sign", file, "--key", key] | ["sign", "--key", key, file] => sign(file, key),
+        ["sign", file, "--key", key] | ["sign", "--key", key, file] => sign(file, key, None),
+        ["sign", file, "--key", key, "--serial", serial] => match serial.parse() {
+            Ok(n) if n > 0 => sign(file, key, Some(n)),
+            _ => Err(format!("--serial {serial:?}: expected a number above 0")),
+        },
         _ => {
             eprintln!("{usage}");
             return Some(2);
@@ -448,7 +540,9 @@ fn keygen(prefix: &str) -> Result<String, String> {
     Ok(format!("wrote {key_path} (keep it secret) and {prefix}.pub\npublic_key = \"{public}\""))
 }
 
-fn sign(file: &str, key: &str) -> Result<String, String> {
+/// Sign `file` with serial `serial`, else the current Unix time (and above
+/// the serial of an existing `<file>.sig`).
+fn sign(file: &str, key: &str, serial: Option<u64>) -> Result<String, String> {
     let body = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
     let pkcs8 = Base64::decode(std::fs::read_to_string(key).map_err(|e| format!("{key}: {e}"))?.trim().to_string()).map_err(|e| format!("{key}: not a key from rws fleet keygen: {e}"))?;
     let pair = aws_lc_rs::signature::Ed25519KeyPair::from_pkcs8(&pkcs8).map_err(|_| format!("{key}: not a key from rws fleet keygen"))?;
@@ -456,9 +550,13 @@ fn sign(file: &str, key: &str) -> Result<String, String> {
     if !report.is_ok() {
         return Err(format!("{file} doesn't pass rws --check: {}", report.errors.join("; ")));
     }
-    let signature = Base64::encode(pair.sign(&body).as_ref())?;
-    std::fs::write(format!("{file}.sig"), format!("{signature}\n")).map_err(|e| format!("{file}.sig: {e}"))?;
-    Ok(format!("wrote {file}.sig"))
+    // Above the file's previous signature too, so two signings within a
+    // second still grow.
+    let previous = std::fs::read(format!("{file}.sig")).ok().and_then(|raw| parse_signature(&raw).ok()).map_or(0, |(n, _)| n);
+    let serial = serial.unwrap_or_else(|| unix_now().max(previous + 1));
+    let signature = Base64::encode(pair.sign(&signed_message(serial, &body)).as_ref())?;
+    std::fs::write(format!("{file}.sig"), format!("{SIG_PREFIX}{serial} {signature}\n")).map_err(|e| format!("{file}.sig: {e}"))?;
+    Ok(format!("wrote {file}.sig (serial {serial})"))
 }
 
 #[cfg(test)]
