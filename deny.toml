@@ -35,6 +35,12 @@ allow = [
     "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
+# The FIPS build's aws-lc module (`fips` feature, 18.23.0) carries the
+# OpenSSL license for code inherited from OpenSSL; it's permissive (BSD-style
+# with attribution), allowed for that one crate only.
+exceptions = [
+    { name = "aws-lc-fips-sys", allow = ["OpenSSL"] },
+]
 
 [bans]
 # Duplicate versions are reported, not fatal: they come from upstream
