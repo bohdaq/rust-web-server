@@ -539,6 +539,7 @@ dependencies = [
  "memchr",
  "rcgen",
  "rustls",
+ "rws-base",
  "rws-macros",
  "serde",
  "serde_json",
@@ -594,6 +595,15 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "untrusted 0.9.0",
+]
+
+[[package]]
+name = "rws-base"
+version = "18.25.0"
+dependencies = [
+ "file-ext",
+ "url-build-parse",
+ "url-search-params",
 ]
 
 [[package]]
