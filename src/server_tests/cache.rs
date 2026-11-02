@@ -203,25 +203,47 @@ fn config_routes_register_their_caches_and_admin_purges_them() {
     std::env::set_var("RWS_TEST_PURGE_TOKEN", "tok");
     let toml = "[[route]]\nname = \"catalog\"\n[route.match]\npath = \"/c/*\"\n[route.action]\ntype = \"respond\"\nbody = \"hi\"\n[route.middleware.cache]\npurge_token_env = \"RWS_TEST_PURGE_TOKEN\"\n";
     assert!(crate::config_check::check_str(toml).errors.is_empty(), "{:?}", crate::config_check::check_str(toml).errors);
-    let (app, _h) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(toml));
-    app.execute(&get("/c/1"), &conn()).unwrap();
-    app.execute(&get("/c/2"), &conn()).unwrap();
-    let cache = crate::cache::registry::get("route:catalog").expect("registered");
-    assert_eq!(cache.size(), 2);
     let api = crate::admin::AdminApi::new("t");
     let call = |method: &str, path: &str| {
         let raw = format!("{method} {path} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer t\r\n\r\n");
         let r = api.execute(&Request::parse(raw.as_bytes()).unwrap(), &conn()).unwrap();
         (r.status_code, String::from_utf8_lossy(&r.content_range_list[0].body).to_string())
     };
-    let (status, list) = call("GET", "/admin/api/v1/caches");
-    assert_eq!(status, 200);
-    assert!(list.contains(r#"{"name":"route:catalog","kind":"memory","entries":2,"bytes":null,"hits":0,"misses":2}"#), "{list}");
-    assert_eq!(call("DELETE", "/admin/api/v1/caches/route%3Acatalog?path=/c/1"), (200, r#"{"name":"route:catalog","purged":1}"#.to_string()));
-    assert_eq!(call("DELETE", "/admin/api/v1/caches/route:catalog").1, r#"{"name":"route:catalog","purged":1}"#);
-    assert_eq!(call("DELETE", "/admin/api/v1/caches/nope").0, 404);
-    let purge = Request::parse(b"PURGE /c/1 HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer tok\r\n\r\n").unwrap();
-    assert_eq!(app.execute(&purge, &conn()).unwrap().status_code, 200, "PURGE through the config route");
+    // Tests building proxy configs run in parallel, and every build replaces
+    // the `route:*` caches in the process-wide registry: start over when ours
+    // was replaced part-way through.
+    let gone = |body: &str| body.contains("no cache named");
+    for attempt in 1..=5 {
+        let last = attempt == 5;
+        let (app, _h) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(toml));
+        app.execute(&get("/c/1"), &conn()).unwrap();
+        app.execute(&get("/c/2"), &conn()).unwrap();
+        let Some(cache) = crate::cache::registry::get("route:catalog") else { continue };
+        if cache.size() != 2 && !last {
+            continue;
+        }
+        assert_eq!(cache.size(), 2);
+        let (status, list) = call("GET", "/admin/api/v1/caches");
+        assert_eq!(status, 200);
+        if !list.contains(r#""name":"route:catalog""#) && !last {
+            continue;
+        }
+        assert!(list.contains(r#"{"name":"route:catalog","kind":"memory","entries":2,"bytes":null,"hits":0,"misses":2}"#), "{list}");
+        let one = call("DELETE", "/admin/api/v1/caches/route%3Acatalog?path=/c/1");
+        if gone(&one.1) && !last {
+            continue;
+        }
+        assert_eq!(one, (200, r#"{"name":"route:catalog","purged":1}"#.to_string()));
+        let all = call("DELETE", "/admin/api/v1/caches/route:catalog");
+        if gone(&all.1) && !last {
+            continue;
+        }
+        assert_eq!(all.1, r#"{"name":"route:catalog","purged":1}"#);
+        assert_eq!(call("DELETE", "/admin/api/v1/caches/nope").0, 404);
+        let purge = Request::parse(b"PURGE /c/1 HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer tok\r\n\r\n").unwrap();
+        assert_eq!(app.execute(&purge, &conn()).unwrap().status_code, 200, "PURGE through the config route");
+        break;
+    }
     std::env::remove_var("RWS_TEST_PURGE_TOKEN");
     let unset = crate::config_check::check_str(toml).errors.join("\n");
     assert!(unset.contains("RWS_TEST_PURGE_TOKEN is unset"), "{unset}");

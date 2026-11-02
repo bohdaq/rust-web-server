@@ -191,6 +191,8 @@ fn recorder() -> &'static Recorder {
 
 /// Start counting (the binary does this when the admin API is on).
 pub fn enable() {
+    // The access log (no `log` module on wasm32) reports each request here.
+    #[cfg(not(target_arch = "wasm32"))]
     crate::log::set_access_observer(super::observe);
     let _ = recorder();
     ENABLED.store(true, Ordering::Relaxed);
