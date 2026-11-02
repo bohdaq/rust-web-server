@@ -6195,92 +6195,15 @@ pub enum rust_web_server::waf::Field
 pub enum rust_web_server::waf::Mode
 pub enum rust_web_server::websocket::Frame
 pub enum rust_web_server::websocket::Message
-pub fn &T::is_available(&self, &str) -> bool
-pub fn &T::is_optional() -> bool
-pub fn &T::json_schema() -> alloc::string::String
-pub fn &T::record_failure(&self, &str)
-pub fn &T::record_success(&self, &str)
 pub fn &[u8]::eq(&self, &rust_web_server::request::Body) -> bool
 pub fn &rust_web_server::request::Body::read(&mut self, &mut [u8]) -> core::io::error::Result<usize>
-pub fn &str::to_column(&self) -> rust_web_server::model::Value
-pub fn ()::is_optional() -> bool
-pub fn ()::json_schema() -> alloc::string::String
 pub fn [T; N]::is_optional() -> bool
 pub fn [T; N]::json_schema() -> alloc::string::String
-pub fn [T]::is_optional() -> bool
-pub fn [T]::json_schema() -> alloc::string::String
 pub fn [u8]::eq(&self, &rust_web_server::request::Body) -> bool
-pub fn alloc::boxed::Box<T>::is_optional() -> bool
-pub fn alloc::boxed::Box<T>::json_schema() -> alloc::string::String
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::is_optional() -> bool
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::json_schema() -> alloc::string::String
-pub fn alloc::collections::btree::set::BTreeSet<T>::is_optional() -> bool
-pub fn alloc::collections::btree::set::BTreeSet<T>::json_schema() -> alloc::string::String
-pub fn alloc::collections::vec_deque::VecDeque<T>::is_optional() -> bool
-pub fn alloc::collections::vec_deque::VecDeque<T>::json_schema() -> alloc::string::String
-pub fn alloc::rcs::arc::Arc<T>::apply(&self, &rust_web_server::cluster::Op) -> core::io::error::Result<()>
-pub fn alloc::rcs::arc::Arc<T>::heartbeat(&self, &str, u64) -> core::io::error::Result<alloc::vec::Vec<alloc::string::String>>
-pub fn alloc::rcs::arc::Arc<T>::is_optional() -> bool
-pub fn alloc::rcs::arc::Arc<T>::json_schema() -> alloc::string::String
-pub fn alloc::rcs::arc::Arc<T>::state(&self) -> core::io::error::Result<core::option::Option<rust_web_server::cluster::State>>
-pub fn alloc::rcs::arc::Arc<rust_web_server::otel::CapturingExporter>::export(&self, &[rust_web_server::otel::SpanData])
-pub fn alloc::rcs::arc::Arc<rust_web_server::otel::CapturingExporter>::shutdown(&self)
-pub fn alloc::rcs::rc::Rc<T>::is_optional() -> bool
-pub fn alloc::rcs::rc::Rc<T>::json_schema() -> alloc::string::String
 pub fn alloc::string::String::from(rust_web_server::core::base64::DecodeError) -> alloc::string::String
-pub fn alloc::string::String::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn alloc::string::String::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn alloc::string::String::is_optional() -> bool
-pub fn alloc::string::String::json_schema() -> alloc::string::String
-pub fn alloc::string::String::to_column(&self) -> rust_web_server::model::Value
-pub fn alloc::vec::Vec<T>::is_optional() -> bool
-pub fn alloc::vec::Vec<T>::json_schema() -> alloc::string::String
 pub fn alloc::vec::Vec<u8>::eq(&self, &rust_web_server::request::Body) -> bool
-pub fn bool::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn bool::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn bool::is_optional() -> bool
-pub fn bool::json_schema() -> alloc::string::String
-pub fn bool::to_column(&self) -> rust_web_server::model::Value
-pub fn char::is_optional() -> bool
-pub fn char::json_schema() -> alloc::string::String
-pub fn core::option::Option<T>::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn core::option::Option<T>::is_optional() -> bool
-pub fn core::option::Option<T>::json_schema() -> alloc::string::String
-pub fn core::option::Option<T>::to_column(&self) -> rust_web_server::model::Value
-pub fn f32::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn f32::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn f32::is_optional() -> bool
-pub fn f32::json_schema() -> alloc::string::String
-pub fn f32::to_column(&self) -> rust_web_server::model::Value
-pub fn f64::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn f64::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn f64::is_optional() -> bool
-pub fn f64::json_schema() -> alloc::string::String
-pub fn f64::to_column(&self) -> rust_web_server::model::Value
-pub fn i128::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn i128::is_optional() -> bool
-pub fn i128::json_schema() -> alloc::string::String
-pub fn i16::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn i16::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn i16::is_optional() -> bool
-pub fn i16::json_schema() -> alloc::string::String
-pub fn i16::to_column(&self) -> rust_web_server::model::Value
-pub fn i32::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn i32::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn i32::is_optional() -> bool
-pub fn i32::json_schema() -> alloc::string::String
-pub fn i32::to_column(&self) -> rust_web_server::model::Value
-pub fn i64::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn i64::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn i64::is_optional() -> bool
-pub fn i64::json_schema() -> alloc::string::String
-pub fn i64::to_column(&self) -> rust_web_server::model::Value
-pub fn i8::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn i8::is_optional() -> bool
-pub fn i8::json_schema() -> alloc::string::String
-pub fn isize::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn isize::is_optional() -> bool
-pub fn isize::json_schema() -> alloc::string::String
 pub fn rust_web_server::a2a::A2aContext::complete(&self, alloc::vec::Vec<rust_web_server::a2a::Artifact>) -> rust_web_server::a2a::Task
 pub fn rust_web_server::a2a::A2aContext::context_id(&self) -> &str
 pub fn rust_web_server::a2a::A2aContext::fail(&self, &str) -> rust_web_server::a2a::Task
@@ -6294,16 +6217,12 @@ pub fn rust_web_server::a2a::A2aReply::fmt(&self, &mut core::fmt::Formatter<'_>)
 pub fn rust_web_server::a2a::A2aServer::at(self, &str) -> rust_web_server::a2a::A2aServer
 pub fn rust_web_server::a2a::A2aServer::blocking_timeout(self, core::time::Duration) -> rust_web_server::a2a::A2aServer
 pub fn rust_web_server::a2a::A2aServer::clone(&self) -> Self
-pub fn rust_web_server::a2a::A2aServer::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::a2a::A2aServer::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::a2a::A2aServer::extended_card(self, rust_web_server::a2a::AgentCard) -> rust_web_server::a2a::A2aServer
 pub fn rust_web_server::a2a::A2aServer::new(rust_web_server::a2a::AgentCard) -> rust_web_server::a2a::A2aServer
 pub fn rust_web_server::a2a::A2aServer::on_message<F>(self, F) -> rust_web_server::a2a::A2aServer where F: core::ops::function::Fn(&rust_web_server::a2a::A2aContext, rust_web_server::a2a::Message) -> rust_web_server::a2a::A2aReply + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::a2a::A2aServer::push_notifications<'a>(self, impl core::iter::traits::collect::IntoIterator<Item = &'a str>) -> rust_web_server::a2a::A2aServer
 pub fn rust_web_server::a2a::A2aServer::require_bearer(self, &str) -> rust_web_server::a2a::A2aServer
 pub fn rust_web_server::a2a::A2aServer::require_bearer_tokens<'a>(self, impl core::iter::traits::collect::IntoIterator<Item = (&'a str, &'a str)>) -> rust_web_server::a2a::A2aServer
-pub fn rust_web_server::a2a::A2aServer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::a2a::A2aServer::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::a2a::A2aServer::wrap(self, impl rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static) -> rust_web_server::a2a::A2aServer
 pub fn rust_web_server::a2a::AgentCard::clone(&self) -> Self
 pub fn rust_web_server::a2a::AgentCard::documentation_url(self, &str) -> rust_web_server::a2a::AgentCard
@@ -6407,13 +6326,9 @@ pub fn rust_web_server::acme::tls_alpn::is_challenge(&rustls::server::server_con
 pub fn rust_web_server::acme::tls_alpn::set_startup_listener(std::net::tcp::TcpListener)
 pub fn rust_web_server::admin::AdminApi::allowed_origins(self, alloc::vec::Vec<alloc::string::String>) -> rust_web_server::admin::AdminApi
 pub fn rust_web_server::admin::AdminApi::clone(&self) -> Self
-pub fn rust_web_server::admin::AdminApi::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::admin::AdminApi::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::admin::AdminApi::new(impl core::convert::Into<alloc::string::String>) -> rust_web_server::admin::AdminApi
 pub fn rust_web_server::admin::AdminApi::oidc(self, &rust_web_server::admin::AdminOidcConfig) -> core::result::Result<rust_web_server::admin::AdminApi, alloc::string::String>
 pub fn rust_web_server::admin::AdminApi::reloader(self, impl core::ops::function::Fn() + core::marker::Send + core::marker::Sync + 'static, core::time::Duration) -> rust_web_server::admin::AdminApi
-pub fn rust_web_server::admin::AdminApi::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::admin::AdminApi::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::admin::AdminApi::users(self, alloc::vec::Vec<rust_web_server::admin::access::TokenUser>) -> rust_web_server::admin::AdminApi
 pub fn rust_web_server::admin::AdminConfig::clone(&self) -> Self
 pub fn rust_web_server::admin::AdminConfig::default() -> Self
@@ -6431,12 +6346,7 @@ pub fn rust_web_server::admin::access::AuditEntry::clone(&self) -> Self
 pub fn rust_web_server::admin::access::AuditEntry::eq(&self, &Self) -> bool
 pub fn rust_web_server::admin::access::AuditEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::admin::access::AuditEntry::to_json(&self) -> alloc::string::String
-pub fn rust_web_server::admin::access::McpAuditLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::admin::access::McpAuditLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::admin::access::McpAuditLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::admin::access::McpAuditLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::admin::access::McpAuditLayer::new(impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> rust_web_server::admin::access::McpAuditLayer
-pub fn rust_web_server::admin::access::McpAuditLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::admin::access::Principal::clone(&self) -> Self
 pub fn rust_web_server::admin::access::Principal::eq(&self, &Self) -> bool
 pub fn rust_web_server::admin::access::Principal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -6500,72 +6410,39 @@ pub fn rust_web_server::admin::ops::upstreams_json() -> alloc::string::String
 pub fn rust_web_server::admin::start(&rust_web_server::admin::AdminConfig) -> core::result::Result<core::option::Option<core::net::socket_addr::SocketAddr>, alloc::string::String>
 pub fn rust_web_server::admin::start_from_env()
 pub fn rust_web_server::app::App::clone(&self) -> Self
-pub fn rust_web_server::app::App::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::app::App::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::app::App::handle_request(rust_web_server::request::Request) -> (rust_web_server::response::Response, rust_web_server::request::Request)
 pub fn rust_web_server::app::App::mcp(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rust_web_server::mcp::McpServer
-pub fn rust_web_server::app::App::new() -> Self
-pub fn rust_web_server::app::App::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::app::App::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::App::with_async_state<S: core::marker::Send + core::marker::Sync + 'static>(S) -> rust_web_server::async_state::AsyncAppWithState<S>
 pub fn rust_web_server::app::App::with_config(rust_web_server::server_config::ServerConfig) -> Self
 pub fn rust_web_server::app::App::with_state<S: core::marker::Send + core::marker::Sync + 'static>(S) -> rust_web_server::state::AppWithState<S>
 pub fn rust_web_server::app::App::wrap<M: rust_web_server::middleware::Middleware + 'static>(self, M) -> rust_web_server::middleware::WithMiddleware<rust_web_server::app::App>
-pub fn rust_web_server::app::controller::directory_listing::DirectoryListingAssetsController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::app::controller::directory_listing::DirectoryListingAssetsController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::favicon::FaviconController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::favicon::FaviconController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::favicon::FaviconController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::favicon::FaviconController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::file::initiate::FileUploadInitiateController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::file::initiate::FileUploadInitiateController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::file::initiate::FileUploadInitiateController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::file::initiate::FileUploadInitiateController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::form::get_method::FormGetMethodController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::form::get_method::FormGetMethodController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::form::get_method::FormGetMethodController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::form::get_method::FormGetMethodController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::health::HealthController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::health::HealthController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::health::HealthController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::health::HealthController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::index::IndexController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::index::IndexController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::index::IndexController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::index::IndexController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::metrics::MetricsController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::metrics::MetricsController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::metrics::MetricsController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::metrics::MetricsController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::not_found::NotFoundController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::not_found::NotFoundController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::not_found::NotFoundController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::not_found::NotFoundController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::ready::ReadyController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::ready::ReadyController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::ready::ReadyController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::ready::ReadyController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::script::ScriptController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::script::ScriptController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::script::ScriptController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::script::ScriptController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
-pub fn rust_web_server::app::controller::static_resource::StaticResourceController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::static_resource::StaticResourceController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::static_resource::StaticResourceController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::static_resource::StaticResourceController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::static_resource::StaticResourceController::process_static_resources(&rust_web_server::request::Request) -> core::result::Result<alloc::vec::Vec<rust_web_server::range::ContentRange>, rust_web_server::response::Error>
 pub fn rust_web_server::app::controller::static_resource::StaticResourceController::render_directory_listing(&str, &str) -> alloc::string::String
-pub fn rust_web_server::app::controller::style::StyleController::is_matching(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::app::controller::style::StyleController::is_matching_request(&rust_web_server::request::Request) -> bool
-pub fn rust_web_server::app::controller::style::StyleController::process(&rust_web_server::request::Request, rust_web_server::response::Response, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response
 pub fn rust_web_server::app::controller::style::StyleController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
 pub fn rust_web_server::application::Application::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::application::Application::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
@@ -6573,8 +6450,6 @@ pub fn rust_web_server::application::Application::runs_inline(&self, &rust_web_s
 pub fn rust_web_server::application::Application::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::clone(&self) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::delete<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
-pub fn rust_web_server::async_state::AsyncAppWithState<S>::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::async_state::AsyncAppWithState<S>::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::get<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::new(S) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::openapi(self, rust_web_server::openapi::OpenApiConfig) -> Self
@@ -6582,51 +6457,29 @@ pub fn rust_web_server::async_state::AsyncAppWithState<S>::patch<F, Fut>(self, &
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::post<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::put<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
-pub fn rust_web_server::async_state::AsyncAppWithState<S>::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::state(&self) -> &S
-pub fn rust_web_server::async_state::AsyncAppWithState<S>::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::with_config(self, rust_web_server::server_config::ServerConfig) -> Self
-pub fn rust_web_server::auth::BasicAuthLayer<F>::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::auth::BasicAuthLayer<F>::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::auth::BasicAuthLayer<F>::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::auth::BasicAuthLayer<F>::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::BasicAuthLayer<F>::new(F) -> Self
-pub fn rust_web_server::auth::BasicAuthLayer<F>::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::BasicAuthLayer<alloc::boxed::Box<(dyn core::ops::function::Fn(&str, &str) -> bool + core::marker::Send + core::marker::Sync)>>::from_htpasswd_file(&str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::auth::Claims::is_valid_at(&self, u64) -> bool
-pub fn rust_web_server::auth::JwtLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::auth::JwtLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::JwtLayer::es256(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn rust_web_server::auth::JwtLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::auth::JwtLayer::identity_claim(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn rust_web_server::auth::JwtLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::JwtLayer::new(impl core::convert::Into<alloc::vec::Vec<u8>>) -> Self
 pub fn rust_web_server::auth::JwtLayer::rs256(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn rust_web_server::auth::JwtLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::JwtLayer::secret_with_kid(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::vec::Vec<u8>>) -> Self
 pub fn rust_web_server::auth::JwtLayer::secrets<I, S>(I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::vec::Vec<u8>>
 pub fn rust_web_server::auth::build_jwt(&str, &[u8]) -> alloc::string::String
 pub fn rust_web_server::auth::extract_bearer_token(&rust_web_server::request::Request) -> core::option::Option<alloc::string::String>
-pub fn rust_web_server::auth::forward::ForwardAuthLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::auth::forward::ForwardAuthLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::forward::ForwardAuthLayer::copy_header(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn rust_web_server::auth::forward::ForwardAuthLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::auth::forward::ForwardAuthLayer::identity_header(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn rust_web_server::auth::forward::ForwardAuthLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::forward::ForwardAuthLayer::new(impl core::convert::Into<alloc::string::String>) -> Self
-pub fn rust_web_server::auth::forward::ForwardAuthLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::auth::forward::ForwardAuthLayer::timeout_ms(self, u64) -> Self
 pub fn rust_web_server::auth::verify_jwt(&str, &[u8]) -> core::option::Option<rust_web_server::auth::Claims>
 pub fn rust_web_server::auth::verify_jwt_es256(&str, &p256::ecdsa::VerifyingKey) -> core::option::Option<rust_web_server::auth::Claims>
 pub fn rust_web_server::auth::verify_jwt_rs256(&str, &rust_web_server::rsa_key::RsaPublicKey) -> core::option::Option<rust_web_server::auth::Claims>
-pub fn rust_web_server::authz::AuthzLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::authz::AuthzLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::authz::AuthzLayer::clone(&self) -> Self
 pub fn rust_web_server::authz::AuthzLayer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::authz::AuthzLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::authz::AuthzLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::authz::AuthzLayer::new(rust_web_server::authz::rebac::Authorizer, &str, &str) -> core::result::Result<rust_web_server::authz::AuthzLayer, alloc::string::String>
-pub fn rust_web_server::authz::AuthzLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::authz::AuthzLayer::with(rust_web_server::authz::rebac::Authorizer, impl core::ops::function::Fn(&rust_web_server::request::Request) -> core::option::Option<(alloc::string::String, rust_web_server::authz::rebac::ObjectRef)> + core::marker::Send + core::marker::Sync + 'static) -> rust_web_server::authz::AuthzLayer
 pub fn rust_web_server::authz::Identity::as_subject(&self) -> rust_web_server::authz::rebac::Subject
 pub fn rust_web_server::authz::Identity::claim(&self, &str) -> core::option::Option<alloc::string::String>
@@ -6670,11 +6523,7 @@ pub fn rust_web_server::authz::rebac::AuthzError::clone(&self) -> Self
 pub fn rust_web_server::authz::rebac::AuthzError::eq(&self, &Self) -> bool
 pub fn rust_web_server::authz::rebac::AuthzError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::authz::rebac::MemoryStore::default() -> Self
-pub fn rust_web_server::authz::rebac::MemoryStore::delete(&self, &rust_web_server::authz::rebac::Tuple) -> core::result::Result<bool, rust_web_server::authz::rebac::AuthzError>
-pub fn rust_web_server::authz::rebac::MemoryStore::list(&self, &rust_web_server::authz::rebac::TupleFilter, usize) -> core::result::Result<alloc::vec::Vec<rust_web_server::authz::rebac::Tuple>, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::rebac::MemoryStore::new() -> rust_web_server::authz::rebac::MemoryStore
-pub fn rust_web_server::authz::rebac::MemoryStore::read(&self, &rust_web_server::authz::rebac::ObjectRef, &str) -> core::result::Result<alloc::vec::Vec<rust_web_server::authz::rebac::Subject>, rust_web_server::authz::rebac::AuthzError>
-pub fn rust_web_server::authz::rebac::MemoryStore::write(&self, &rust_web_server::authz::rebac::Tuple) -> core::result::Result<bool, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::rebac::ObjectRef::clone(&self) -> Self
 pub fn rust_web_server::authz::rebac::ObjectRef::cmp(&self, &Self) -> core::cmp::Ordering
 pub fn rust_web_server::authz::rebac::ObjectRef::eq(&self, &Self) -> bool
@@ -6719,24 +6568,15 @@ pub fn rust_web_server::authz::rebac::TupleStore::list(&self, &rust_web_server::
 pub fn rust_web_server::authz::rebac::TupleStore::read(&self, &rust_web_server::authz::rebac::ObjectRef, &str) -> core::result::Result<alloc::vec::Vec<rust_web_server::authz::rebac::Subject>, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::rebac::TupleStore::write(&self, &rust_web_server::authz::rebac::Tuple) -> core::result::Result<bool, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::rebac::parse_expression(&str) -> core::result::Result<alloc::vec::Vec<rust_web_server::authz::rebac::Term>, rust_web_server::authz::rebac::AuthzError>
-pub fn rust_web_server::authz::sql::SqlStore::delete(&self, &rust_web_server::authz::rebac::Tuple) -> core::result::Result<bool, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::sql::SqlStore::from_env() -> core::result::Result<rust_web_server::authz::sql::SqlStore, rust_web_server::authz::rebac::AuthzError>
-pub fn rust_web_server::authz::sql::SqlStore::list(&self, &rust_web_server::authz::rebac::TupleFilter, usize) -> core::result::Result<alloc::vec::Vec<rust_web_server::authz::rebac::Tuple>, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::sql::SqlStore::new(rust_web_server::model::pool::DbPool) -> core::result::Result<rust_web_server::authz::sql::SqlStore, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::sql::SqlStore::open(rust_web_server::model::connection::DbConfig) -> core::result::Result<rust_web_server::authz::sql::SqlStore, rust_web_server::authz::rebac::AuthzError>
-pub fn rust_web_server::authz::sql::SqlStore::read(&self, &rust_web_server::authz::rebac::ObjectRef, &str) -> core::result::Result<alloc::vec::Vec<rust_web_server::authz::rebac::Subject>, rust_web_server::authz::rebac::AuthzError>
-pub fn rust_web_server::authz::sql::SqlStore::write(&self, &rust_web_server::authz::rebac::Tuple) -> core::result::Result<bool, rust_web_server::authz::rebac::AuthzError>
 pub fn rust_web_server::authz::with_identity<R>(rust_web_server::authz::Identity, impl core::ops::function::FnOnce() -> R) -> R
 pub fn rust_web_server::blocklist::Blocklist::block(&self, &str)
 pub fn rust_web_server::blocklist::Blocklist::clear(&self)
 pub fn rust_web_server::blocklist::Blocklist::is_blocked(&self, &str) -> bool
 pub fn rust_web_server::blocklist::Blocklist::list(&self) -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::blocklist::Blocklist::unblock(&self, &str)
-pub fn rust_web_server::blocklist::BlocklistLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::blocklist::BlocklistLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::blocklist::BlocklistLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::blocklist::BlocklistLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::blocklist::BlocklistLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::blocklist::global() -> &'static rust_web_server::blocklist::Blocklist
 pub fn rust_web_server::body::form_urlencoded::FormUrlEncoded::generate(std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> alloc::string::String
 pub fn rust_web_server::body::form_urlencoded::FormUrlEncoded::parse(alloc::vec::Vec<u8>) -> core::result::Result<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>, alloc::string::String>
@@ -6746,20 +6586,15 @@ pub fn rust_web_server::body::multipart_form_data::FormMultipartData::generate_p
 pub fn rust_web_server::body::multipart_form_data::FormMultipartData::parse(&[u8], alloc::string::String) -> core::result::Result<alloc::vec::Vec<rust_web_server::body::multipart_form_data::Part>, alloc::string::String>
 pub fn rust_web_server::body::multipart_form_data::Part::get_header(&self, alloc::string::String) -> core::option::Option<&rust_web_server::header::Header>
 pub fn rust_web_server::body::multipart_form_data::Part::header(&self, &str) -> core::option::Option<&rust_web_server::header::Header>
-pub fn rust_web_server::cache::CacheLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::cache::CacheLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::cache::CacheLayer::clear(&self)
 pub fn rust_web_server::cache::CacheLayer::clone(&self) -> Self
 pub fn rust_web_server::cache::CacheLayer::disk(impl core::convert::Into<std::path::PathBuf>, u64) -> core::io::error::Result<Self>
-pub fn rust_web_server::cache::CacheLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::cache::CacheLayer::hits(&self) -> u64
-pub fn rust_web_server::cache::CacheLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::cache::CacheLayer::kind(&self) -> &'static str
 pub fn rust_web_server::cache::CacheLayer::memory(usize) -> Self
 pub fn rust_web_server::cache::CacheLayer::misses(&self) -> u64
 pub fn rust_web_server::cache::CacheLayer::purge(&self, &rust_web_server::cache::Purge) -> usize
 pub fn rust_web_server::cache::CacheLayer::purge_token(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn rust_web_server::cache::CacheLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::cache::CacheLayer::size(&self) -> usize
 pub fn rust_web_server::cache::CacheLayer::stored_bytes(&self) -> core::option::Option<u64>
 pub fn rust_web_server::cache::CacheLayer::ttl(self, u64) -> Self
@@ -6771,18 +6606,13 @@ pub fn rust_web_server::cache::Purge::from_target(&str) -> rust_web_server::cach
 pub fn rust_web_server::cache::registry::get(&str) -> core::option::Option<rust_web_server::cache::CacheLayer>
 pub fn rust_web_server::cache::registry::list() -> alloc::vec::Vec<(alloc::string::String, rust_web_server::cache::CacheLayer)>
 pub fn rust_web_server::cache::registry::register(impl core::convert::Into<alloc::string::String>, rust_web_server::cache::CacheLayer)
-pub fn rust_web_server::canary::CanaryLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::canary::CanaryLayer::add_pool(self, rust_web_server::service_discovery::BackendPool, u32) -> Self
-pub fn rust_web_server::canary::CanaryLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::canary::CanaryLayer::clone(&self) -> Self
 pub fn rust_web_server::canary::CanaryLayer::connect_timeout_ms(self, u64) -> Self
 pub fn rust_web_server::canary::CanaryLayer::from_parts(alloc::vec::Vec<rust_web_server::canary::WeightedBackend>, alloc::vec::Vec<rust_web_server::canary::WeightedPool>) -> Self
-pub fn rust_web_server::canary::CanaryLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::canary::CanaryLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::canary::CanaryLayer::new(alloc::vec::Vec<rust_web_server::canary::WeightedBackend>) -> Self
 pub fn rust_web_server::canary::CanaryLayer::path_prefix(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::canary::CanaryLayer::read_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::canary::CanaryLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::canary::CanaryLayer::update(&self, alloc::vec::Vec<rust_web_server::canary::WeightedBackend>, alloc::vec::Vec<rust_web_server::canary::WeightedPool>)
 pub fn rust_web_server::canary::CanaryLayer::with_pools(alloc::vec::Vec<rust_web_server::canary::WeightedPool>) -> Self
 pub fn rust_web_server::canary::WeightedBackend::clone(&self) -> Self
@@ -6805,26 +6635,15 @@ pub fn rust_web_server::circuit_breaker::CircuitBreaker::reset(&mut self, &str)
 pub fn rust_web_server::circuit_breaker::CircuitBreaker::state(&self, &str) -> rust_web_server::circuit_breaker::BreakerState
 pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::clone(&self) -> Self
 pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::from_env() -> Self
-pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::is_available(&self, &str) -> bool
-pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::is_available(&self, &str) -> core::io::error::Result<bool>
 pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::new(impl core::convert::Into<alloc::string::String>, core::option::Option<alloc::string::String>, u32, u64) -> Self
-pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::record_failure(&self, &str)
-pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::record_failure(&self, &str) -> core::io::error::Result<()>
-pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::record_success(&self, &str)
-pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::record_success(&self, &str) -> core::io::error::Result<()>
 pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::reset(&self, &str) -> core::io::error::Result<()>
 pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::set_limits(&self, u32, u64)
 pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::set_max_half_open_probes(&self, u32)
 pub fn rust_web_server::circuit_breaker::RedisCircuitBreaker::state(&self, &str) -> core::io::error::Result<rust_web_server::circuit_breaker::BreakerState>
-pub fn rust_web_server::circuit_breaker::RetryLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::circuit_breaker::RetryLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::circuit_breaker::RetryLayer::default() -> Self
-pub fn rust_web_server::circuit_breaker::RetryLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::circuit_breaker::RetryLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::circuit_breaker::RetryLayer::max_retries(self, u32) -> Self
 pub fn rust_web_server::circuit_breaker::RetryLayer::new() -> Self
 pub fn rust_web_server::circuit_breaker::RetryLayer::retry_on(self, alloc::vec::Vec<i16>) -> Self
-pub fn rust_web_server::circuit_breaker::RetryLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::circuit_breaker::global() -> &'static std::sync::poison::mutex::Mutex<rust_web_server::circuit_breaker::CircuitBreaker>
 pub fn rust_web_server::client_hint::ClientHint::clone(&self) -> Self
 pub fn rust_web_server::client_hint::ClientHint::eq(&self, &Self) -> bool
@@ -6839,19 +6658,11 @@ pub fn rust_web_server::cluster::ClusterSync::status_json(&self) -> alloc::strin
 pub fn rust_web_server::cluster::ClusterSync::tick(&self, bool)
 pub fn rust_web_server::cluster::Local::apply(&self, &rust_web_server::cluster::State, u64)
 pub fn rust_web_server::cluster::Local::snapshot(&self) -> rust_web_server::cluster::State
-pub fn rust_web_server::cluster::MemoryStore::apply(&self, &rust_web_server::cluster::Op) -> core::io::error::Result<()>
 pub fn rust_web_server::cluster::MemoryStore::default() -> Self
-pub fn rust_web_server::cluster::MemoryStore::heartbeat(&self, &str, u64) -> core::io::error::Result<alloc::vec::Vec<alloc::string::String>>
-pub fn rust_web_server::cluster::MemoryStore::state(&self) -> core::io::error::Result<core::option::Option<rust_web_server::cluster::State>>
 pub fn rust_web_server::cluster::Op::clone(&self) -> Self
 pub fn rust_web_server::cluster::Op::eq(&self, &Self) -> bool
 pub fn rust_web_server::cluster::Op::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::cluster::ProcessState::apply(&self, &rust_web_server::cluster::State, u64)
-pub fn rust_web_server::cluster::ProcessState::snapshot(&self) -> rust_web_server::cluster::State
-pub fn rust_web_server::cluster::RedisStore::apply(&self, &rust_web_server::cluster::Op) -> core::io::error::Result<()>
-pub fn rust_web_server::cluster::RedisStore::heartbeat(&self, &str, u64) -> core::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn rust_web_server::cluster::RedisStore::new(&str, core::option::Option<alloc::string::String>, &str) -> rust_web_server::cluster::RedisStore
-pub fn rust_web_server::cluster::RedisStore::state(&self) -> core::io::error::Result<core::option::Option<rust_web_server::cluster::State>>
 pub fn rust_web_server::cluster::State::apply(&mut self, &rust_web_server::cluster::Op)
 pub fn rust_web_server::cluster::State::clone(&self) -> Self
 pub fn rust_web_server::cluster::State::default() -> Self
@@ -7007,15 +6818,10 @@ pub fn rust_web_server::di::Container::register<T: core::marker::Send + core::ma
 pub fn rust_web_server::di::Container::register_named<T: core::marker::Send + core::marker::Sync + 'static>(&mut self, impl core::convert::Into<alloc::string::String>, T) -> &mut Self
 pub fn rust_web_server::disk_guard::has_room(&std::path::Path) -> bool
 pub fn rust_web_server::disk_guard::status() -> alloc::vec::Vec<(alloc::string::String, u64, u64, bool)>
-pub fn rust_web_server::early_hints::EarlyHintsLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::early_hints::EarlyHintsLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::early_hints::EarlyHintsLayer::clone(&self) -> Self
 pub fn rust_web_server::early_hints::EarlyHintsLayer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::early_hints::EarlyHintsLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::early_hints::EarlyHintsLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::early_hints::EarlyHintsLayer::links(&self) -> &[alloc::string::String]
 pub fn rust_web_server::early_hints::EarlyHintsLayer::new<I, S>(I) -> rust_web_server::early_hints::EarlyHintsLayer where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
-pub fn rust_web_server::early_hints::EarlyHintsLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::early_hints::available() -> bool
 pub fn rust_web_server::early_hints::send<S: core::convert::AsRef<str>>(&[S]) -> bool
 pub fn rust_web_server::early_hints::valid(&str) -> bool
@@ -7045,7 +6851,6 @@ pub fn rust_web_server::entry_point::set_default_values()
 pub fn rust_web_server::entry_point::shown<'a>(&str, &'a str) -> alloc::borrow::Cow<'a, str>
 pub fn rust_web_server::error::AppError::eq(&self, &Self) -> bool
 pub fn rust_web_server::error::AppError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::error::AppError::into_response(self) -> rust_web_server::response::Response
 pub fn rust_web_server::error::IntoResponse::into_response(self) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem(&rust_web_server::response::StatusCodeReasonPhrase, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem::problem(&rust_web_server::response::StatusCodeReasonPhrase, &str) -> rust_web_server::response::Response
@@ -7057,32 +6862,23 @@ pub fn rust_web_server::ext::string_ext::StringExt::filter_ascii_control_charact
 pub fn rust_web_server::ext::string_ext::StringExt::float_number_with_precision(f64, u8) -> alloc::string::String
 pub fn rust_web_server::ext::string_ext::StringExt::truncate_new_line_carriage_return(&str) -> alloc::string::String
 pub fn rust_web_server::extract::Body::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::extract::Body::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
 pub fn rust_web_server::extract::Body::into_bytes(self) -> alloc::vec::Vec<u8>
 pub fn rust_web_server::extract::BodyText::as_str(&self) -> &str
 pub fn rust_web_server::extract::BodyText::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::extract::BodyText::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
 pub fn rust_web_server::extract::FromRequest::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
 pub fn rust_web_server::extract::Query::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::extract::Query::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
 pub fn rust_web_server::extract::Query::get(&self, &str) -> core::option::Option<&alloc::string::String>
 pub fn rust_web_server::extract::RequestHeaders::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::extract::RequestHeaders::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
 pub fn rust_web_server::extract::RequestHeaders::get(&self, &str) -> core::option::Option<&str>
 pub fn rust_web_server::extract::RequestId::as_str(&self) -> &str
 pub fn rust_web_server::extract::RequestId::clone(&self) -> Self
 pub fn rust_web_server::extract::RequestId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::extract::RequestId::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
 pub fn rust_web_server::fastcgi::Address::clone(&self) -> Self
 pub fn rust_web_server::fastcgi::Address::eq(&self, &Self) -> bool
 pub fn rust_web_server::fastcgi::Address::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::fastcgi::Address::parse(&str) -> core::result::Result<rust_web_server::fastcgi::Address, alloc::string::String>
 pub fn rust_web_server::fastcgi::FastCgi::clone(&self) -> Self
-pub fn rust_web_server::fastcgi::FastCgi::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::fastcgi::FastCgi::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::fastcgi::FastCgi::new(rust_web_server::fastcgi::FastCgiConfig) -> core::result::Result<rust_web_server::fastcgi::FastCgi, alloc::string::String>
-pub fn rust_web_server::fastcgi::FastCgi::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::fastcgi::FastCgi::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::fastcgi::FastCgi::with_static(self, alloc::rcs::arc::Arc<(dyn rust_web_server::application::Application + core::marker::Send + core::marker::Sync)>) -> rust_web_server::fastcgi::FastCgi
 pub fn rust_web_server::fastcgi::FastCgiConfig::clone(&self) -> Self
 pub fn rust_web_server::fastcgi::FastCgiConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -7181,11 +6977,7 @@ pub fn rust_web_server::gateway_api::resources::tcp_routes() -> kube_core::disco
 pub fn rust_web_server::gateway_api::resources::tls_routes() -> kube_core::discovery::ApiResource
 pub fn rust_web_server::gateway_api::resources::udp_routes() -> kube_core::discovery::ApiResource
 pub fn rust_web_server::gateway_api::router::PortRouter::clone(&self) -> Self
-pub fn rust_web_server::gateway_api::router::PortRouter::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::gateway_api::router::PortRouter::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::gateway_api::router::PortRouter::new(rust_web_server::gateway_api::router::PortListeners) -> rust_web_server::gateway_api::router::PortRouter
-pub fn rust_web_server::gateway_api::router::PortRouter::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::gateway_api::router::PortRouter::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::gateway_api::routes::Backend::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::routes::Backend::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::routes::Backend::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -7721,8 +7513,6 @@ pub fn rust_web_server::i18n::AcceptLanguage::clone(&self) -> Self
 pub fn rust_web_server::i18n::AcceptLanguage::default() -> Self
 pub fn rust_web_server::i18n::AcceptLanguage::eq(&self, &Self) -> bool
 pub fn rust_web_server::i18n::AcceptLanguage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::i18n::AcceptLanguage::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
-pub fn rust_web_server::i18n::AcceptLanguage::from_request(&rust_web_server::request::Request) -> rust_web_server::i18n::AcceptLanguage
 pub fn rust_web_server::i18n::AcceptLanguage::negotiate<'a>(&self, &[&'a str]) -> core::option::Option<&'a str>
 pub fn rust_web_server::i18n::AcceptLanguage::parse(&str) -> rust_web_server::i18n::AcceptLanguage
 pub fn rust_web_server::i18n::Catalog::clone(&self) -> Self
@@ -7753,12 +7543,8 @@ pub fn rust_web_server::i18n::Translator<'a>::clone(&self) -> Self
 pub fn rust_web_server::i18n::Translator<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::i18n::plural_category(&str, u64) -> &'static str
 pub fn rust_web_server::ingress::IngressRouter::connect_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::ingress::IngressRouter::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::ingress::IngressRouter::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::ingress::IngressRouter::new(rust_web_server::ingress::KubernetesIngressWatcher) -> Self
 pub fn rust_web_server::ingress::IngressRouter::read_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::ingress::IngressRouter::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::ingress::IngressRouter::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::ingress::IngressRule::clone(&self) -> Self
 pub fn rust_web_server::ingress::IngressRule::eq(&self, &Self) -> bool
 pub fn rust_web_server::ingress::IngressRule::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -7777,13 +7563,8 @@ pub fn rust_web_server::ingress::PathType::clone(&self) -> Self
 pub fn rust_web_server::ingress::PathType::eq(&self, &Self) -> bool
 pub fn rust_web_server::ingress::PathType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::ingress::parse_ingress_list(&str, core::option::Option<&str>) -> alloc::vec::Vec<rust_web_server::ingress::IngressRule>
-pub fn rust_web_server::ip_filter::IpFilter::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::ip_filter::IpFilter::allow(impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::AsRef<str>>) -> Self
-pub fn rust_web_server::ip_filter::IpFilter::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::ip_filter::IpFilter::deny(impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::AsRef<str>>) -> Self
-pub fn rust_web_server::ip_filter::IpFilter::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::ip_filter::IpFilter::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::ip_filter::IpFilter::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::ip_filter::IpRangeEntry::clone(&self) -> Self
 pub fn rust_web_server::ip_filter::IpRangeEntry::eq(&self, &Self) -> bool
 pub fn rust_web_server::ip_filter::IpRangeEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -7796,8 +7577,6 @@ pub fn rust_web_server::ip_filter::is_valid_entry(&str) -> bool
 pub fn rust_web_server::json::Json<T>::deref(&self) -> &T
 pub fn rust_web_server::json::Json<T>::deref_mut(&mut self) -> &mut T
 pub fn rust_web_server::json::Json<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::json::Json<T>::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
-pub fn rust_web_server::json::Json<T>::from_request(&rust_web_server::request::Request) -> core::result::Result<rust_web_server::json::Json<T>, rust_web_server::response::Response>
 pub fn rust_web_server::json::Json<T>::into_response(self) -> rust_web_server::response::Response
 pub fn rust_web_server::json::array::RawUnprocessedJSONArray::split_into_vector_of_strings(alloc::string::String) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, alloc::string::String>
 pub fn rust_web_server::json::array::boolean::JSONArrayOfBooleans::parse_as_list_bool(alloc::string::String) -> core::result::Result<alloc::vec::Vec<bool>, alloc::string::String>
@@ -7844,7 +7623,6 @@ pub fn rust_web_server::json::object::ToJSON::to_json_string(&self) -> alloc::st
 pub fn rust_web_server::json::property::JSONProperty::parse(&str) -> core::result::Result<(rust_web_server::json::property::JSONProperty, rust_web_server::json::property::JSONValue), alloc::string::String>
 pub fn rust_web_server::json::property::JSONValue::float_number_with_precision(&self, u8) -> alloc::string::String
 pub fn rust_web_server::json::property::JSONValue::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::json::property::JSONValue::new() -> rust_web_server::json::property::JSONValue
 pub fn rust_web_server::language::Language::as_list() -> alloc::vec::Vec<rust_web_server::language::Lang>
 pub fn rust_web_server::llm::Api::clone(&self) -> Self
 pub fn rust_web_server::llm::Api::eq(&self, &Self) -> bool
@@ -7856,13 +7634,9 @@ pub fn rust_web_server::llm::LlmProxy::audit_log(self, bool) -> rust_web_server:
 pub fn rust_web_server::llm::LlmProxy::budget(self, impl core::convert::Into<alloc::string::String>, u64, u64) -> rust_web_server::llm::LlmProxy
 pub fn rust_web_server::llm::LlmProxy::clone(&self) -> Self
 pub fn rust_web_server::llm::LlmProxy::default() -> Self
-pub fn rust_web_server::llm::LlmProxy::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::llm::LlmProxy::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::llm::LlmProxy::new() -> rust_web_server::llm::LlmProxy
 pub fn rust_web_server::llm::LlmProxy::provider(self, rust_web_server::llm::Provider) -> rust_web_server::llm::LlmProxy
 pub fn rust_web_server::llm::LlmProxy::redis(self, impl core::convert::Into<alloc::string::String>, core::option::Option<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rust_web_server::llm::LlmProxy
-pub fn rust_web_server::llm::LlmProxy::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::llm::LlmProxy::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::llm::LlmProxy::timeouts(self, core::time::Duration, core::time::Duration) -> rust_web_server::llm::LlmProxy
 pub fn rust_web_server::llm::LlmProxy::virtual_key(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rust_web_server::llm::LlmProxy
 pub fn rust_web_server::llm::Provider::api_key(self, impl core::convert::Into<alloc::string::String>) -> rust_web_server::llm::Provider
@@ -7894,11 +7668,6 @@ pub fn rust_web_server::log::Log::usage_information() -> alloc::string::String
 pub fn rust_web_server::log::tail::enable()
 pub fn rust_web_server::log::tail::follow(rust_web_server::sse::SseSender) -> bool
 pub fn rust_web_server::log::tail::recent(usize) -> alloc::vec::Vec<alloc::string::String>
-pub fn rust_web_server::maintenance::MaintenanceLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::maintenance::MaintenanceLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::maintenance::MaintenanceLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::maintenance::MaintenanceLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::maintenance::MaintenanceLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::mcp::InputRequired::clone(&self) -> Self
 pub fn rust_web_server::mcp::InputRequired::default() -> Self
 pub fn rust_web_server::mcp::InputRequired::elicit(self, &str, &str, &str) -> Self
@@ -7956,8 +7725,6 @@ pub fn rust_web_server::mcp::McpServer::before_tool_call<F>(self, F) -> Self whe
 pub fn rust_web_server::mcp::McpServer::cache_hints(self, u64, bool) -> Self
 pub fn rust_web_server::mcp::McpServer::clone(&self) -> Self
 pub fn rust_web_server::mcp::McpServer::completion<F>(self, &str, &str, F) -> Self where F: core::ops::function::Fn(&str, &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, alloc::string::String> + core::marker::Send + core::marker::Sync + 'static
-pub fn rust_web_server::mcp::McpServer::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::mcp::McpServer::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::mcp::McpServer::handle_request(&self, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::mcp::McpServer::handle_request_with_context(&self, &str, rust_web_server::mcp::McpContext) -> rust_web_server::response::Response
 pub fn rust_web_server::mcp::McpServer::icon(self, rust_web_server::mcp::McpIcon) -> Self
@@ -7988,10 +7755,8 @@ pub fn rust_web_server::mcp::McpServer::require_bearer_tokens<I, T, N>(self, I) 
 pub fn rust_web_server::mcp::McpServer::require_oauth(self, rust_web_server::sso::discovery::OidcProvider, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::mcp::McpServer::resource<F>(self, &str, &str, &str, F) -> Self where F: core::ops::function::Fn(&str) -> core::result::Result<rust_web_server::mcp::McpContent, alloc::string::String> + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::mcp::McpServer::resource_filter<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::mcp::McpContext, &str) -> bool + core::marker::Send + core::marker::Sync + 'static
-pub fn rust_web_server::mcp::McpServer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::mcp::McpServer::session_count(&self) -> usize
 pub fn rust_web_server::mcp::McpServer::session_ttl(self, core::time::Duration) -> Self
-pub fn rust_web_server::mcp::McpServer::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::mcp::McpServer::task_required(self, &str) -> Self
 pub fn rust_web_server::mcp::McpServer::task_ttl(self, core::time::Duration) -> Self
 pub fn rust_web_server::mcp::McpServer::title(self, impl core::convert::Into<alloc::string::String>) -> Self
@@ -8066,11 +7831,6 @@ pub fn rust_web_server::mcp::openapi_tools::ToolRequest::clone(&self) -> Self
 pub fn rust_web_server::mcp::openapi_tools::ToolRequest::eq(&self, &Self) -> bool
 pub fn rust_web_server::mcp::openapi_tools::ToolRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::mcp::openapi_tools::tools(&str, &rust_web_server::mcp::openapi_tools::ToolOptions) -> core::result::Result<alloc::vec::Vec<rust_web_server::mcp::openapi_tools::OpenApiTool>, alloc::string::String>
-pub fn rust_web_server::metrics::MetricsLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::metrics::MetricsLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::metrics::MetricsLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::metrics::MetricsLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::metrics::MetricsLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::metrics::connection_close()
 pub fn rust_web_server::metrics::connection_open()
 pub fn rust_web_server::metrics::exposition::accepts_protobuf(&str) -> bool
@@ -8089,18 +7849,9 @@ pub fn rust_web_server::middleware::Middleware::answers_streamed_body(&self, &ru
 pub fn rust_web_server::middleware::Middleware::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::middleware::Middleware::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::middleware::Middleware::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::middleware::RateLimitLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::middleware::RateLimitLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::middleware::RateLimitLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::middleware::RateLimitLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::middleware::RateLimitLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::middleware::WithMiddleware<A>::clone(&self) -> Self
-pub fn rust_web_server::middleware::WithMiddleware<A>::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::middleware::WithMiddleware<A>::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::middleware::WithMiddleware<A>::mcp(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rust_web_server::mcp::McpServer
 pub fn rust_web_server::middleware::WithMiddleware<A>::new(A) -> Self
-pub fn rust_web_server::middleware::WithMiddleware<A>::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::middleware::WithMiddleware<A>::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::middleware::WithMiddleware<A>::wrap(self, impl rust_web_server::middleware::Middleware + 'static) -> Self
 pub fn rust_web_server::mime_type::MimeType::detect_mime_type(&str) -> alloc::string::String
 pub fn rust_web_server::mime_type::MimeType::get_extension_from_filename(&str) -> core::option::Option<&str>
@@ -8159,7 +7910,6 @@ pub fn rust_web_server::null::Null::clone(&self) -> Self
 pub fn rust_web_server::null::Null::eq(&self, &Self) -> bool
 pub fn rust_web_server::null::Null::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::null::Null::from_str(&str) -> core::result::Result<Self, Self::Err>
-pub fn rust_web_server::null::Null::new() -> Self
 pub fn rust_web_server::null::ParseNullError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::openapi::OpenApiConfig::clone(&self) -> Self
 pub fn rust_web_server::openapi::OpenApiConfig::description(self, impl core::convert::Into<alloc::string::String>) -> Self
@@ -8196,9 +7946,7 @@ pub fn rust_web_server::otel::AttributeValue::from(i32) -> Self
 pub fn rust_web_server::otel::AttributeValue::from(i64) -> Self
 pub fn rust_web_server::otel::AttributeValue::from(u32) -> Self
 pub fn rust_web_server::otel::CapturingExporter::default() -> Self
-pub fn rust_web_server::otel::CapturingExporter::export(&self, &[rust_web_server::otel::SpanData])
 pub fn rust_web_server::otel::CapturingExporter::new() -> Self
-pub fn rust_web_server::otel::CapturingExporter::shutdown(&self)
 pub fn rust_web_server::otel::CapturingExporter::take(&self) -> alloc::vec::Vec<rust_web_server::otel::SpanData>
 pub fn rust_web_server::otel::Context::attach(&self) -> rust_web_server::otel::ContextGuard
 pub fn rust_web_server::otel::Context::clone(&self) -> Self
@@ -8215,15 +7963,8 @@ pub fn rust_web_server::otel::Exporter::export(&self, &[rust_web_server::otel::S
 pub fn rust_web_server::otel::Exporter::shutdown(&self)
 pub fn rust_web_server::otel::ExporterConfig::clone(&self) -> Self
 pub fn rust_web_server::otel::ExporterConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::otel::OtelLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::otel::OtelLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::otel::OtelLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::otel::OtelLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::otel::OtelLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::otel::OtlpHttpExporter::build_body(&self, &[rust_web_server::otel::SpanData]) -> alloc::string::String
-pub fn rust_web_server::otel::OtlpHttpExporter::export(&self, &[rust_web_server::otel::SpanData])
 pub fn rust_web_server::otel::OtlpHttpExporter::new(&str, &str, &str) -> Self
-pub fn rust_web_server::otel::OtlpHttpExporter::shutdown(&self)
 pub fn rust_web_server::otel::OtlpHttpExporter::url(&self) -> &str
 pub fn rust_web_server::otel::OtlpHttpExporter::with_headers(self, alloc::vec::Vec<(alloc::string::String, alloc::string::String)>) -> Self
 pub fn rust_web_server::otel::Span::drop(&mut self)
@@ -8242,8 +7983,6 @@ pub fn rust_web_server::otel::SpanKind::clone(&self) -> Self
 pub fn rust_web_server::otel::SpanKind::default() -> Self
 pub fn rust_web_server::otel::SpanKind::eq(&self, &Self) -> bool
 pub fn rust_web_server::otel::SpanKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::otel::StdoutExporter::export(&self, &[rust_web_server::otel::SpanData])
-pub fn rust_web_server::otel::StdoutExporter::shutdown(&self)
 pub fn rust_web_server::otel::TraceContext::as_header(&self, &[u8; 8]) -> alloc::string::String
 pub fn rust_web_server::otel::TraceContext::clone(&self) -> Self
 pub fn rust_web_server::otel::TraceContext::eq(&self, &Self) -> bool
@@ -8302,50 +8041,30 @@ pub fn rust_web_server::pagination::Page<T>::map<U>(self, impl core::ops::functi
 pub fn rust_web_server::pagination::Page<T>::new(alloc::vec::Vec<T>, u64, u64, u64) -> Self
 pub fn rust_web_server::pagination::Page<T>::next_page(&self) -> core::option::Option<u64>
 pub fn rust_web_server::pagination::Page<T>::prev_page(&self) -> core::option::Option<u64>
-pub fn rust_web_server::proxy::GrpcProxy::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::proxy::GrpcProxy::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::GrpcProxy::connect_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::GrpcProxy::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::proxy::GrpcProxy::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::GrpcProxy::new<I, S>(I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn rust_web_server::proxy::GrpcProxy::path_prefix(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::proxy::GrpcProxy::read_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::GrpcProxy::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::GrpcProxy::tls_ca_file(self, &str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::proxy::GrpcProxy::tls_client_cert(self, &str, &str) -> core::result::Result<Self, alloc::string::String>
-pub fn rust_web_server::proxy::H2ReverseProxy::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::proxy::H2ReverseProxy::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::H2ReverseProxy::connect_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::H2ReverseProxy::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::proxy::H2ReverseProxy::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::H2ReverseProxy::new<I, S>(I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn rust_web_server::proxy::H2ReverseProxy::path_prefix(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::proxy::H2ReverseProxy::read_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::H2ReverseProxy::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::H2ReverseProxy::tls_ca_file(self, &str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::proxy::H2ReverseProxy::tls_client_cert(self, &str, &str) -> core::result::Result<Self, alloc::string::String>
-pub fn rust_web_server::proxy::H3ReverseProxy::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::proxy::H3ReverseProxy::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::H3ReverseProxy::connect_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::H3ReverseProxy::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::proxy::H3ReverseProxy::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::H3ReverseProxy::name(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::proxy::H3ReverseProxy::new<I, S>(I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn rust_web_server::proxy::H3ReverseProxy::path_prefix(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::proxy::H3ReverseProxy::read_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::H3ReverseProxy::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::H3ReverseProxy::tls_ca_file(self, &str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::proxy::H3ReverseProxy::tls_client_cert(self, &str, &str) -> core::result::Result<Self, alloc::string::String>
-pub fn rust_web_server::proxy::ReverseProxy::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::proxy::ReverseProxy::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::ReverseProxy::connect_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::ReverseProxy::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::proxy::ReverseProxy::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::ReverseProxy::max_idle_conns(self, usize) -> Self
 pub fn rust_web_server::proxy::ReverseProxy::new<I, S>(I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn rust_web_server::proxy::ReverseProxy::path_prefix(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::proxy::ReverseProxy::read_timeout_ms(self, u64) -> Self
-pub fn rust_web_server::proxy::ReverseProxy::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::ReverseProxy::strategy(self, rust_web_server::proxy::LoadBalancing) -> Self
 pub fn rust_web_server::proxy::ReverseProxy::tls_ca_file(self, &str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::proxy::ReverseProxy::tls_client_cert(self, &str, &str) -> core::result::Result<Self, alloc::string::String>
@@ -8353,13 +8072,8 @@ pub fn rust_web_server::proxy::ReverseProxy::with_circuit_breaker(self, alloc::r
 pub fn rust_web_server::proxy::ReverseProxy::with_pool(self, alloc::rcs::arc::Arc<rust_web_server::proxy::pool::ConnPool>) -> Self
 pub fn rust_web_server::proxy::UpstreamTls::from_ca_file(&str) -> core::result::Result<rust_web_server::proxy::UpstreamTls, alloc::string::String>
 pub fn rust_web_server::proxy::UpstreamTls::new(core::option::Option<&str>, core::option::Option<(&str, &str)>) -> core::result::Result<rust_web_server::proxy::UpstreamTls, alloc::string::String>
-pub fn rust_web_server::proxy::grpc_web::GrpcWebLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::proxy::grpc_web::GrpcWebLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::grpc_web::GrpcWebLayer::default() -> Self
-pub fn rust_web_server::proxy::grpc_web::GrpcWebLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::proxy::grpc_web::GrpcWebLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::grpc_web::GrpcWebLayer::new() -> Self
-pub fn rust_web_server::proxy::grpc_web::GrpcWebLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::mirror::Mirror::clone(&self) -> Self
 pub fn rust_web_server::proxy::mirror::Mirror::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::proxy::mirror::Mirror::name(&self) -> &str
@@ -8367,14 +8081,9 @@ pub fn rust_web_server::proxy::mirror::Mirror::new(impl core::convert::Into<allo
 pub fn rust_web_server::proxy::mirror::Mirror::percent(self, f64) -> rust_web_server::proxy::mirror::Mirror
 pub fn rust_web_server::proxy::mirror::Mirror::send(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::mirror::Mirror::with_live_backends(impl core::convert::Into<alloc::string::String>, alloc::rcs::arc::Arc<std::sync::poison::rwlock::RwLock<alloc::vec::Vec<alloc::string::String>>>) -> rust_web_server::proxy::mirror::Mirror
-pub fn rust_web_server::proxy::mirror::MirrorLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::proxy::mirror::MirrorLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::mirror::MirrorLayer::clone(&self) -> Self
 pub fn rust_web_server::proxy::mirror::MirrorLayer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::proxy::mirror::MirrorLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::proxy::mirror::MirrorLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::mirror::MirrorLayer::new(rust_web_server::proxy::mirror::Mirror) -> rust_web_server::proxy::mirror::MirrorLayer
-pub fn rust_web_server::proxy::mirror::MirrorLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy::pool::Pool<S>::acquire(&self, &str) -> core::option::Option<S>
 pub fn rust_web_server::proxy::pool::Pool<S>::idle_count(&self) -> usize
 pub fn rust_web_server::proxy::pool::Pool<S>::new(usize, core::time::Duration) -> Self
@@ -8403,12 +8112,8 @@ pub fn rust_web_server::proxy_config::CacheConfig::clone(&self) -> Self
 pub fn rust_web_server::proxy_config::CacheConfig::default() -> Self
 pub fn rust_web_server::proxy_config::CacheConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::proxy_config::ConfigDrivenApp::clone(&self) -> Self
-pub fn rust_web_server::proxy_config::ConfigDrivenApp::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::proxy_config::ConfigDrivenApp::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::proxy_config::ConfigDrivenApp::reload_from_file(&self)
 pub fn rust_web_server::proxy_config::ConfigDrivenApp::reload_from_str(&self, &str) -> core::result::Result<rust_web_server::proxy_config::ReloadOutcome, rust_web_server::config_check::ConfigReport>
-pub fn rust_web_server::proxy_config::ConfigDrivenApp::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::proxy_config::ConfigDrivenApp::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::proxy_config::ConfigDrivenApp::with_config(self, rust_web_server::server_config::ServerConfig) -> Self
 pub fn rust_web_server::proxy_config::FastCgiAction::clone(&self) -> Self
 pub fn rust_web_server::proxy_config::FastCgiAction::default() -> Self
@@ -8518,7 +8223,6 @@ pub fn rust_web_server::proxy_config::validate::check_unknown_keys(&str, &mut ru
 pub fn rust_web_server::range::ContentRange::clone(&self) -> Self
 pub fn rust_web_server::range::ContentRange::eq(&self, &Self) -> bool
 pub fn rust_web_server::range::ContentRange::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::range::ContentRange::new() -> Self
 pub fn rust_web_server::range::Range::_convert_bytes_array_to_string(alloc::vec::Vec<u8>) -> alloc::string::String
 pub fn rust_web_server::range::Range::_parse_content_range_header_value(alloc::string::String) -> core::result::Result<(i64, i64, i64), alloc::string::String>
 pub fn rust_web_server::range::Range::_parse_line_as_bytes(&mut core::io::cursor::Cursor<&[u8]>) -> alloc::vec::Vec<u8>
@@ -8603,21 +8307,11 @@ pub fn rust_web_server::request::Request::parse(&[u8]) -> core::result::Result<r
 pub fn rust_web_server::request::Request::parse_http_request_header_string(&str) -> rust_web_server::header::Header
 pub fn rust_web_server::request::Request::parse_method_and_request_uri_and_http_version_string(&str) -> core::result::Result<(alloc::string::String, alloc::string::String, alloc::string::String), alloc::string::String>
 pub fn rust_web_server::request::Request::parse_request(&[u8]) -> core::result::Result<rust_web_server::request::Request, alloc::string::String>
-pub fn rust_web_server::request_id::RequestIdLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::request_id::RequestIdLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::request_id::RequestIdLayer::default() -> Self
-pub fn rust_web_server::request_id::RequestIdLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::request_id::RequestIdLayer::header(self, impl core::convert::Into<alloc::string::String>) -> Self
-pub fn rust_web_server::request_id::RequestIdLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::request_id::RequestIdLayer::new() -> Self
-pub fn rust_web_server::request_id::RequestIdLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::request_id::generate_request_id() -> alloc::string::String
 pub fn rust_web_server::request_log::LogEntry::clone(&self) -> Self
-pub fn rust_web_server::request_log::LogLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::request_log::LogLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::request_log::LogLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::request_log::LogLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::request_log::LogLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::request_log::RequestLog::is_empty(&self) -> bool
 pub fn rust_web_server::request_log::RequestLog::len(&self) -> usize
 pub fn rust_web_server::request_log::RequestLog::recent(&self, usize) -> alloc::vec::Vec<rust_web_server::request_log::LogEntry>
@@ -8645,9 +8339,7 @@ pub fn rust_web_server::response::Response::generate_response_parts(rust_web_ser
 pub fn rust_web_server::response::Response::get_header(&self, alloc::string::String) -> core::option::Option<&rust_web_server::header::Header>
 pub fn rust_web_server::response::Response::get_response(&rust_web_server::response::StatusCodeReasonPhrase, core::option::Option<alloc::vec::Vec<rust_web_server::header::Header>>, core::option::Option<alloc::vec::Vec<rust_web_server::range::ContentRange>>) -> rust_web_server::response::Response
 pub fn rust_web_server::response::Response::header(&self, &str) -> core::option::Option<&rust_web_server::header::Header>
-pub fn rust_web_server::response::Response::into_response(self) -> rust_web_server::response::Response
 pub fn rust_web_server::response::Response::json(&rust_web_server::response::StatusCodeReasonPhrase, alloc::vec::Vec<u8>) -> rust_web_server::response::Response
-pub fn rust_web_server::response::Response::new() -> Self
 pub fn rust_web_server::response::Response::parse(&[u8]) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::response::Response::parse_http_response_header_string(&str) -> core::result::Result<rust_web_server::header::Header, alloc::string::String>
 pub fn rust_web_server::response::Response::parse_raw_response_via_cursor(&mut core::io::cursor::Cursor<&[u8]>, usize, &mut rust_web_server::response::Response, usize, i32, i32) -> core::result::Result<(), alloc::string::String>
@@ -8669,10 +8361,6 @@ pub fn rust_web_server::response::Trailers::new() -> Self
 pub fn rust_web_server::response::Trailers::set(&self, alloc::vec::Vec<rust_web_server::header::Header>)
 pub fn rust_web_server::response::Trailers::with(alloc::vec::Vec<rust_web_server::header::Header>) -> Self
 pub fn rust_web_server::response::content_range_header_value(i16, &rust_web_server::range::ContentRange) -> core::option::Option<alloc::string::String>
-pub fn rust_web_server::rewrite::RewriteLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::rewrite::RewriteLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::rewrite::RewriteLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::rewrite::RewriteLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::rewrite::RewriteLayer::new() -> Self
 pub fn rust_web_server::rewrite::RewriteLayer::request_header_remove(self, &str) -> Self
 pub fn rust_web_server::rewrite::RewriteLayer::request_header_set(self, &str, &str) -> Self
@@ -8683,7 +8371,6 @@ pub fn rust_web_server::rewrite::RewriteLayer::response_body_replace(self, &str,
 pub fn rust_web_server::rewrite::RewriteLayer::response_header_remove(self, &str) -> Self
 pub fn rust_web_server::rewrite::RewriteLayer::response_header_set(self, &str, &str) -> Self
 pub fn rust_web_server::rewrite::RewriteLayer::response_status(self, i16, &str) -> Self
-pub fn rust_web_server::rewrite::RewriteLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::router::PathParams::clone(&self) -> Self
 pub fn rust_web_server::router::PathParams::get(&self, &str) -> core::option::Option<&str>
 pub fn rust_web_server::router::RouteInfo::clone(&self) -> Self
@@ -8881,22 +8568,17 @@ pub fn rust_web_server::sso::jwks::OidcClaims::clone(&self) -> Self
 pub fn rust_web_server::sso::jwks::OidcClaims::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
 pub fn rust_web_server::sso::jwks::OidcClaims::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::sso::jwks::OidcClaims::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-pub fn rust_web_server::sso::oidc_auth::OidcAuth::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::allow_domains(self, impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::allow_emails(self, impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::allow_groups(self, &str, impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> Self
-pub fn rust_web_server::sso::oidc_auth::OidcAuth::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::callback_path(self, &str) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::claims(&rust_web_server::request::Request) -> core::option::Option<rust_web_server::sso::jwks::OidcClaims>
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::email(&rust_web_server::request::Request) -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::exclude(self, &str) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::forward_headers(self, bool) -> Self
-pub fn rust_web_server::sso::oidc_auth::OidcAuth::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::sso::oidc_auth::OidcAuth::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::login_path(self, &str) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::logout_path(self, &str) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::new(rust_web_server::sso::config::OidcConfig, alloc::rcs::arc::Arc<rust_web_server::session::SessionStore>) -> Self
-pub fn rust_web_server::sso::oidc_auth::OidcAuth::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::session_ttl(self, u64) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::signed_cookies(self, impl core::convert::Into<alloc::vec::Vec<u8>>) -> Self
 pub fn rust_web_server::sso::oidc_auth::OidcAuth::signed_in(&self, &rust_web_server::request::Request) -> core::option::Option<rust_web_server::sso::oidc_auth::SignedIn>
@@ -8920,33 +8602,21 @@ pub fn rust_web_server::sso::saml::SamlClaims::serialize<__S>(&self, __S) -> cor
 pub fn rust_web_server::sso::saml::SamlIdpMetadata::from_file(&str) -> core::result::Result<Self, rust_web_server::sso::SsoError>
 pub fn rust_web_server::sso::saml::SamlIdpMetadata::from_str(&str) -> core::result::Result<Self, rust_web_server::sso::SsoError>
 pub fn rust_web_server::sso::saml::SamlIdpMetadata::from_url(&str) -> core::result::Result<Self, rust_web_server::sso::SsoError>
-pub fn rust_web_server::sso::saml::SamlSp::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::saml::SamlSp::acs_path(self, &str) -> Self
-pub fn rust_web_server::sso::saml::SamlSp::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::saml::SamlSp::attr(&rust_web_server::request::Request, &str) -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::sso::saml::SamlSp::attribute_map(self, rust_web_server::sso::saml::AttributeMap) -> Self
 pub fn rust_web_server::sso::saml::SamlSp::claims(&rust_web_server::request::Request) -> core::option::Option<rust_web_server::sso::saml::SamlClaims>
-pub fn rust_web_server::sso::saml::SamlSp::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::sso::saml::SamlSp::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::saml::SamlSp::login_path(self, &str) -> Self
 pub fn rust_web_server::sso::saml::SamlSp::logout_path(self, &str) -> Self
 pub fn rust_web_server::sso::saml::SamlSp::metadata_path(self, &str) -> Self
 pub fn rust_web_server::sso::saml::SamlSp::name_id(&rust_web_server::request::Request) -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::sso::saml::SamlSp::new(rust_web_server::sso::saml::SamlConfig) -> Self
 pub fn rust_web_server::sso::saml::SamlSp::post_login_redirect(self, &str) -> Self
-pub fn rust_web_server::sso::saml::SamlSp::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::sso::server::AuthServer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::sso::server::AuthServer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::sso::server::AuthServer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::sso::server::AuthServer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::server::AuthServer::login_url(self, &str) -> Self
 pub fn rust_web_server::sso::server::AuthServer::new(rust_web_server::sso::server::AuthServerConfig) -> Self
-pub fn rust_web_server::sso::server::AuthServer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::sso::server::AuthServer::subject_session_key(self, &str) -> Self
 pub fn rust_web_server::state::AppWithState<S>::clone(&self) -> Self
 pub fn rust_web_server::state::AppWithState<S>::delete<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
-pub fn rust_web_server::state::AppWithState<S>::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::state::AppWithState<S>::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::state::AppWithState<S>::get<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::mcp(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rust_web_server::mcp::McpServer
 pub fn rust_web_server::state::AppWithState<S>::new(S) -> Self
@@ -8956,50 +8626,28 @@ pub fn rust_web_server::state::AppWithState<S>::patch<F>(self, &str, F) -> Self 
 pub fn rust_web_server::state::AppWithState<S>::post<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::put<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
-pub fn rust_web_server::state::AppWithState<S>::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::state::AppWithState<S>::state(&self) -> &S
 pub fn rust_web_server::state::AppWithState<S>::stream_body(self, &str, &str) -> Self
-pub fn rust_web_server::state::AppWithState<S>::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::state::AppWithState<S>::websocket<F>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::websocket::WebSocketConnection, rust_web_server::router::PathParams, alloc::rcs::arc::Arc<S>) + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::with_config(self, rust_web_server::server_config::ServerConfig) -> Self
 pub fn rust_web_server::state::AppWithState<S>::wrap<M: rust_web_server::middleware::Middleware + 'static>(self, M) -> rust_web_server::middleware::WithMiddleware<rust_web_server::state::AppWithState<S>>
 pub fn rust_web_server::storage::AzureBlobConfig::clone(&self) -> Self
 pub fn rust_web_server::storage::AzureBlobConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::storage::AzureBlobConfig::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::AzureBlobStorage::delete(&self, &str) -> core::result::Result<(), rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::AzureBlobStorage::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::AzureBlobStorage::get(&self, &str) -> core::result::Result<alloc::vec::Vec<u8>, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::AzureBlobStorage::new(rust_web_server::storage::AzureBlobConfig) -> Self
-pub fn rust_web_server::storage::AzureBlobStorage::put(&self, &str, &[u8], &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::AzureBlobStorage::put_stream(&self, &str, &mut dyn alloc::io::read::Read, &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::AzureBlobStorage::url(&self, &str) -> alloc::string::String
 pub fn rust_web_server::storage::GcsConfig::clone(&self) -> Self
 pub fn rust_web_server::storage::GcsConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::storage::GcsConfig::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::GcsStorage::delete(&self, &str) -> core::result::Result<(), rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::GcsStorage::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::GcsStorage::get(&self, &str) -> core::result::Result<alloc::vec::Vec<u8>, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::GcsStorage::new(rust_web_server::storage::GcsConfig) -> Self
-pub fn rust_web_server::storage::GcsStorage::put(&self, &str, &[u8], &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::GcsStorage::put_stream(&self, &str, &mut dyn alloc::io::read::Read, &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::GcsStorage::url(&self, &str) -> alloc::string::String
-pub fn rust_web_server::storage::LocalStorage::delete(&self, &str) -> core::result::Result<(), rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::LocalStorage::get(&self, &str) -> core::result::Result<alloc::vec::Vec<u8>, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::LocalStorage::new(impl core::convert::Into<alloc::string::String>) -> Self
-pub fn rust_web_server::storage::LocalStorage::put(&self, &str, &[u8], &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::LocalStorage::put_stream(&self, &str, &mut dyn alloc::io::read::Read, &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::LocalStorage::url(&self, &str) -> alloc::string::String
 pub fn rust_web_server::storage::LocalStorage::with_base_url(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::storage::S3Config::clone(&self) -> Self
 pub fn rust_web_server::storage::S3Config::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::storage::S3Config::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::S3Storage::delete(&self, &str) -> core::result::Result<(), rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::S3Storage::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::S3Storage::get(&self, &str) -> core::result::Result<alloc::vec::Vec<u8>, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::S3Storage::new(rust_web_server::storage::S3Config) -> Self
-pub fn rust_web_server::storage::S3Storage::put(&self, &str, &[u8], &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::S3Storage::put_stream(&self, &str, &mut dyn alloc::io::read::Read, &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
-pub fn rust_web_server::storage::S3Storage::url(&self, &str) -> alloc::string::String
 pub fn rust_web_server::storage::Storage::delete(&self, &str) -> core::result::Result<(), rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::Storage::get(&self, &str) -> core::result::Result<alloc::vec::Vec<u8>, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::Storage::put(&self, &str, &[u8], &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
@@ -9041,12 +8689,8 @@ pub fn rust_web_server::test_client::TestResponse::status(&self) -> i16
 pub fn rust_web_server::thread_pool::ThreadPool::execute<F>(&self, F) where F: core::ops::function::FnOnce() + core::marker::Send + 'static
 pub fn rust_web_server::thread_pool::ThreadPool::join(self)
 pub fn rust_web_server::thread_pool::ThreadPool::new(usize) -> rust_web_server::thread_pool::ThreadPool
-pub fn rust_web_server::timeout::TimeoutLayer<A>::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::timeout::TimeoutLayer<A>::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::timeout::TimeoutLayer<A>::from_arc(alloc::rcs::arc::Arc<A>, core::time::Duration) -> Self
 pub fn rust_web_server::timeout::TimeoutLayer<A>::new(A, core::time::Duration) -> Self
-pub fn rust_web_server::timeout::TimeoutLayer<A>::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::timeout::TimeoutLayer<A>::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::timeout::with_timeout<F>(core::time::Duration, F) -> impl core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::timeout::with_timeout_async<S, F, Fut>(core::time::Duration, F) -> impl core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static)>> + core::marker::Send + core::marker::Sync + 'static where S: core::marker::Send + core::marker::Sync + 'static, F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::timeout::with_timeout_state<S, F>(core::time::Duration, F) -> impl core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static where S: core::clone::Clone + core::marker::Send + core::marker::Sync + 'static, F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
@@ -9065,17 +8709,8 @@ pub fn rust_web_server::tower::Mount<S, A>::streams_body(&self, &rust_web_server
 pub fn rust_web_server::tower::Next<'a>::call(&mut self, http::request::Request<ReqBody>) -> Self::Future
 pub fn rust_web_server::tower::Next<'a>::poll_ready(&mut self, &mut core::task::wake::Context<'_>) -> core::task::poll::Poll<core::result::Result<(), rust_web_server::tower::BoxError>>
 pub fn rust_web_server::tower::TowerApp<S>::clone(&self) -> Self
-pub fn rust_web_server::tower::TowerApp<S>::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::tower::TowerApp<S>::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::tower::TowerApp<S>::new(S) -> rust_web_server::tower::TowerApp<S>
-pub fn rust_web_server::tower::TowerApp<S>::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::tower::TowerApp<S>::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::tower::TowerLayer<L>::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::tower::TowerLayer<L>::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::tower::TowerLayer<L>::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::tower::TowerLayer<L>::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::tower::TowerLayer<L>::new(L) -> rust_web_server::tower::TowerLayer<L>
-pub fn rust_web_server::tower::TowerLayer<L>::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::tower::TowerService<A>::call(&mut self, http::request::Request<B>) -> Self::Future
 pub fn rust_web_server::tower::TowerService<A>::clone(&self) -> Self
 pub fn rust_web_server::tower::TowerService<A>::connection(self, rust_web_server::server::ConnectionInfo) -> Self
@@ -9136,7 +8771,6 @@ pub fn rust_web_server::url::path::UrlPath::is_matching(&str, &str) -> core::res
 pub fn rust_web_server::validate::FieldError::clone(&self) -> Self
 pub fn rust_web_server::validate::FieldError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::validate::Validate::validate(&self) -> core::result::Result<(), rust_web_server::validate::ValidationErrors>
-pub fn rust_web_server::validate::Validated<T>::from_request(&rust_web_server::request::Request) -> core::result::Result<Self, rust_web_server::response::Response>
 pub fn rust_web_server::validate::ValidationErrors::add(&mut self, &str, &str)
 pub fn rust_web_server::validate::ValidationErrors::errors(&self) -> &[rust_web_server::validate::FieldError]
 pub fn rust_web_server::validate::ValidationErrors::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -9183,12 +8817,7 @@ pub fn rust_web_server::waf::WafConfig::clone(&self) -> Self
 pub fn rust_web_server::waf::WafConfig::default() -> Self
 pub fn rust_web_server::waf::WafConfig::eq(&self, &Self) -> bool
 pub fn rust_web_server::waf::WafConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::waf::WafLayer::accepts_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::waf::WafLayer::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
-pub fn rust_web_server::waf::WafLayer::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
-pub fn rust_web_server::waf::WafLayer::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::waf::WafLayer::new(rust_web_server::waf::WafConfig) -> rust_web_server::waf::WafLayer
-pub fn rust_web_server::waf::WafLayer::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::waf::decode::html_entities(&str) -> alloc::string::String
 pub fn rust_web_server::waf::decode::js_escapes(&str) -> alloc::string::String
 pub fn rust_web_server::waf::decode::normalize(&str) -> alloc::string::String
@@ -9234,40 +8863,10 @@ pub fn rust_web_server::ws_proxy::WsProxy::connect_timeout_ms(self, u64) -> Self
 pub fn rust_web_server::ws_proxy::WsProxy::new<I, S>(I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
 pub fn rust_web_server::ws_proxy::WsProxy::read_timeout_ms(self, u64) -> Self
 pub fn rust_web_server::ws_proxy::WsProxy::with_live_backends(alloc::vec::Vec<alloc::string::String>, alloc::rcs::arc::Arc<std::sync::poison::rwlock::RwLock<alloc::vec::Vec<alloc::string::String>>>) -> Self
-pub fn serde_json::value::Value::is_optional() -> bool
-pub fn serde_json::value::Value::json_schema() -> alloc::string::String
 pub fn std::collections::hash::map::HashMap<alloc::string::String, T, S>::is_optional() -> bool
 pub fn std::collections::hash::map::HashMap<alloc::string::String, T, S>::json_schema() -> alloc::string::String
 pub fn std::collections::hash::set::HashSet<T, S>::is_optional() -> bool
 pub fn std::collections::hash::set::HashSet<T, S>::json_schema() -> alloc::string::String
-pub fn std::sync::poison::mutex::Mutex<rust_web_server::circuit_breaker::CircuitBreaker>::is_available(&self, &str) -> bool
-pub fn std::sync::poison::mutex::Mutex<rust_web_server::circuit_breaker::CircuitBreaker>::record_failure(&self, &str)
-pub fn std::sync::poison::mutex::Mutex<rust_web_server::circuit_breaker::CircuitBreaker>::record_success(&self, &str)
-pub fn str::is_optional() -> bool
-pub fn str::json_schema() -> alloc::string::String
-pub fn str::to_column(&self) -> rust_web_server::model::Value
-pub fn u128::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn u128::is_optional() -> bool
-pub fn u128::json_schema() -> alloc::string::String
-pub fn u16::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn u16::is_optional() -> bool
-pub fn u16::json_schema() -> alloc::string::String
-pub fn u32::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn u32::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn u32::is_optional() -> bool
-pub fn u32::json_schema() -> alloc::string::String
-pub fn u32::to_column(&self) -> rust_web_server::model::Value
-pub fn u64::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
-pub fn u64::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn u64::is_optional() -> bool
-pub fn u64::json_schema() -> alloc::string::String
-pub fn u64::to_column(&self) -> rust_web_server::model::Value
-pub fn u8::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn u8::is_optional() -> bool
-pub fn u8::json_schema() -> alloc::string::String
-pub fn usize::from_env_str(&str) -> core::result::Result<Self, alloc::string::String>
-pub fn usize::is_optional() -> bool
-pub fn usize::json_schema() -> alloc::string::String
 pub macro rust_web_server::prelude::routes!
 pub macro rust_web_server::routes!
 pub mod rust_web_server

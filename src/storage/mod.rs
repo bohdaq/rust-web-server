@@ -63,20 +63,13 @@
 //! # }
 //! ```
 
-// Also compiled under `secrets` (not just `storage-s3`) — `secrets::aws_secrets_manager`
-// reuses this exact SigV4 signer and IRSA/ECS/IMDSv2 credential chain rather than
-// duplicating AWS's auth story a second time.
-#[cfg(any(feature = "storage-s3", feature = "secrets"))]
-pub(crate) mod aws_credentials;
-#[cfg(any(feature = "storage-s3", feature = "secrets"))]
-pub(crate) mod aws_sigv4;
+
+// `StorageError` and the AWS / Azure credential helpers live in rws-server
+// (`secrets` uses them too); the backends are here.
+pub use rws_server::storage::*;
 
 #[cfg(feature = "storage-azure")]
 mod azure_blob;
-// Also compiled under `secrets` — `secrets::azure_key_vault` reuses the Managed
-// Identity token fetch (parameterized by `resource`) rather than duplicating it.
-#[cfg(any(feature = "storage-azure", feature = "secrets"))]
-pub(crate) mod azure_credentials;
 #[cfg(feature = "storage-azure")]
 mod azure_signature;
 
@@ -99,25 +92,6 @@ pub use azure_blob::{AzureBlobConfig, AzureBlobStorage};
 #[cfg(feature = "storage-gcs")]
 pub use gcs::{GcsConfig, GcsStorage};
 
-// ── StorageError ─────────────────────────────────────────────────────────────
-
-/// Error returned by all `Storage` operations.
-#[derive(Debug)]
-pub struct StorageError(pub String);
-
-impl StorageError {
-    pub fn new(msg: impl Into<String>) -> Self {
-        StorageError(msg.into())
-    }
-}
-
-impl std::fmt::Display for StorageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for StorageError {}
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 

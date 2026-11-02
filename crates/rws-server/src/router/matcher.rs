@@ -1,0 +1,108 @@
+//! Path-pattern parsing and segment matching shared by [`super::Router`] and
+//! `AsyncAppWithState` (`crate::async_state`).
+//!
+//! `AsyncAppWithState`'s handlers return `Future`s, which `Router`'s
+//! `HandlerFn` type doesn't support, so it can't reuse `Router` itself — but
+//! the underlying pattern-matching algorithm is identical, so it lives here
+//! once instead of being duplicated.
+
+use std::collections::HashMap;
+
+#[derive(Clone)]
+#[doc(hidden)]
+pub enum Segment {
+    Literal(String),
+    Param(String),
+    Wildcard(String),
+}
+
+/// The name inside a whole-segment `{name}` (not `{{escaped}}`).
+#[doc(hidden)]
+pub fn braced(segment: &str) -> Option<&str> {
+    let inner = segment.strip_prefix('{')?.strip_suffix('}')?;
+    let valid = !inner.is_empty() && !inner.starts_with('{') && !inner.contains(['{', '}', '/']);
+    valid.then_some(inner)
+}
+
+/// A route pattern: `/users/:id` or `/users/{id}` for one segment,
+/// `/files/*path` or `/files/{*path}` for the rest of the path.
+#[doc(hidden)]
+pub fn parse_pattern(pattern: &str) -> Vec<Segment> {
+    if pattern == "/" {
+        return vec![];
+    }
+    pattern
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .map(|seg| {
+            if let Some(name) = seg.strip_prefix(':') {
+                Segment::Param(name.to_string())
+            } else if let Some(name) = seg.strip_prefix('*') {
+                Segment::Wildcard(name.to_string())
+            } else if let Some(inner) = braced(seg) {
+                // `{name}` / `{*name}`, as in axum 0.8 and OpenAPI.
+                match inner.strip_prefix('*') {
+                    Some(name) => Segment::Wildcard(name.to_string()),
+                    None => Segment::Param(inner.to_string()),
+                }
+            } else {
+                // `{{` and `}}` are literal braces.
+                Segment::Literal(seg.replace("{{", "{").replace("}}", "}"))
+            }
+        })
+        .collect()
+}
+
+/// Matches `path` (already split on `/`, empty segments filtered out)
+/// against `pattern`. Returns the extracted named/wildcard values on a match.
+#[doc(hidden)]
+pub fn try_match(pattern: &[Segment], path: &[&str]) -> Option<HashMap<String, String>> {
+    let mut params = HashMap::new();
+    let mut pi = 0;
+
+    for (si, seg) in pattern.iter().enumerate() {
+        match seg {
+            Segment::Literal(lit) => {
+                if pi >= path.len() || path[pi] != lit.as_str() {
+                    return None;
+                }
+                pi += 1;
+            }
+            Segment::Param(name) => {
+                if pi >= path.len() {
+                    return None;
+                }
+                params.insert(name.clone(), path[pi].to_string());
+                pi += 1;
+            }
+            Segment::Wildcard(name) => {
+                if si != pattern.len() - 1 {
+                    return None; // wildcard must be the last segment
+                }
+                params.insert(name.clone(), path[pi..].join("/"));
+                pi = path.len();
+            }
+        }
+    }
+
+    if pi == path.len() { Some(params) } else { None }
+}
+
+/// Reconstructs the original `.get()`/`.post()`/etc. pattern string from
+/// parsed segments — the inverse of [`parse_pattern`]. Used by both
+/// `Router::route_entries` and `AsyncAppWithState::route_entries`.
+#[doc(hidden)]
+pub fn segments_to_pattern(segs: &[Segment]) -> String {
+    if segs.is_empty() {
+        return "/".to_string();
+    }
+    let parts: Vec<String> = segs
+        .iter()
+        .map(|s| match s {
+            Segment::Literal(l) => l.clone(),
+            Segment::Param(n) => format!(":{}", n),
+            Segment::Wildcard(n) => format!("*{}", n),
+        })
+        .collect();
+    format!("/{}", parts.join("/"))
+}

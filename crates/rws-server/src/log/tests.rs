@@ -1,0 +1,390 @@
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use file_ext::FileExt;
+use crate::app::App;
+use crate::core::New;
+use crate::header::Header;
+use crate::http::VERSION;
+use crate::log::Log;
+use crate::range::Range;
+use crate::mime_type::MimeType;
+use crate::request::{METHOD, Request};
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+#[test]
+fn log_request_response() {
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/script.js".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![
+            Header { name: Header::_HOST.into(), value: "127.0.0.1:7878".into() },
+            Header { name: Header::_USER_AGENT.into(), value: "SOME USER AGENT".into() },
+            Header { name: Header::_ACCEPT.into(), value: "*/*".into() },
+            Header { name: Header::_ACCEPT_LANGUAGE.into(), value: "en-US,en;q=0.5".into() },
+            Header { name: Header::_ACCEPT_ENCODING.into(), value: "gzip, deflate, br".into() },
+            Header { name: Header::_REFERER.into(), value: "https://127.0.0.1:7878/".into() },
+        ],
+        body: Default::default(),
+    };
+
+    let (response, request) = App::handle_request(request);
+
+    let working_directory = FileExt::get_static_filepath("").unwrap();
+    let node_path = [working_directory.as_str(), "src/app/controller/script/script.js"];
+    let path = FileExt::build_path(&node_path);
+    let file_content = FileExt::read_file(&path).unwrap();
+    // Security and nanosecond headers are opt-in since 18.0.0.
+    assert!(response._get_header(Header::_DATE_UNIX_EPOCH_NANOS.to_string()).is_none());
+    let date = response._get_header(Header::_DATE.to_string()).unwrap();
+    let expected_log = format!("\n\nRequest (thread id: log::tests::log_request_response peer address is 0.0.0.0:0):\n  HTTP/1.1 GET /script.js  \n  Host: 127.0.0.1:7878\n  User-Agent: SOME USER AGENT\n  Accept: */*\n  Accept-Language: en-US,en;q=0.5\n  Accept-Encoding: gzip, deflate, br\n  Referer: https://127.0.0.1:7878/\n  Body: 0 byte(s) total (including default initialization vector)\nEnd of Request\nResponse:\n  200 OK \n  Vary: Origin\n  X-Content-Type-Options: nosniff\n  Accept-Ranges: bytes\n  Date: {}\n  Cache-Control: no-store, no-cache, private, max-age=0, must-revalidate, proxy-revalidate\n\n  Body: 1 part(s), {} byte(s) total\nEnd of Response", date.value, file_content.len());
+
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let log = Log::request_response(&request, &response, &peer_addr);
+
+    assert_eq!(expected_log, log);
+}
+
+#[test]
+fn usage_info() {
+    let expected_info = "Usage:\n\n  RWS_CONFIG_PORT environment variable\n  -p or --port as command line line argument\n  Port\n\n  RWS_CONFIG_IP environment variable\n  -i or --ip as command line line argument\n  IP or domain\n\n  RWS_CONFIG_THREAD_COUNT environment variable\n  -t or --thread-count as command line line argument\n  Number of threads\n\n  RWS_CONFIG_CORS_ALLOW_ALL environment variable\n  -a or --cors-allow-all as command line line argument\n  If set to true, will allow all CORS requests, other CORS properties will be ignored\n\n  RWS_CONFIG_CORS_ALLOW_ORIGINS environment variable\n  -o or --cors-allow-origins as command line line argument\n  Comma separated list of allowed origins, example: https://foo.example,https://bar.example\n\n  RWS_CONFIG_CORS_ALLOW_METHODS environment variable\n  -m or --cors-allow-methods as command line line argument\n  Comma separated list of allowed methods, example: POST,PUT\n\n  RWS_CONFIG_CORS_ALLOW_HEADERS environment variable\n  -h or --cors-allow-headers as command line line argument\n  Comma separated list of allowed request headers, in lowercase, example: content-type,x-custom-header\n\n  RWS_CONFIG_CORS_ALLOW_CREDENTIALS environment variable\n  -c or --cors-allow-credentials as command line line argument\n  If set to true, will allow to transmit credentials via CORS requests\n\n  RWS_CONFIG_CORS_EXPOSE_HEADERS environment variable\n  -e or --cors-expose-headers as command line line argument\n  Comma separated list of allowed response headers, in lowercase, example: content-type,x-custom-header\n\n  RWS_CONFIG_CORS_MAX_AGE environment variable\n  -g or --cors-max-age as command line line argument\n  How long results of preflight requests can be cached (in seconds)\n\n  RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES environment variable\n  -r or --request-allocation-size-in-bytes as command line line argument\n  In bytes, how much memory to allocate for each request\n\n  RWS_CONFIG_TLS_CERT_FILE environment variable\n  -s or --tls-cert-file as command line line argument\n  Path to TLS certificate PEM file (enables HTTPS and HTTP/2)\n\n  RWS_CONFIG_TLS_KEY_FILE environment variable\n  -k or --tls-key-file as command line line argument\n  Path to TLS private key PEM file (enables HTTPS and HTTP/2)\n\n  RWS_CONFIG_HTTP_REDIRECT_PORT environment variable\n  --http-redirect-port as command line line argument\n  Plain-HTTP port that 301-redirects to HTTPS (and answers ACME HTTP-01 challenges), e.g. 80\n\n  RWS_CONFIG_ACME_DOMAINS environment variable\n  --acme-domains as command line line argument\n  Comma separated domains to get a Let's Encrypt certificate for; enables automatic HTTPS\n\n  RWS_CONFIG_ACME_EMAIL environment variable\n  --acme-email as command line line argument\n  Contact email for the ACME account\n\n  RWS_CONFIG_ACME_STAGING environment variable\n  --acme-staging as command line line argument\n  If set to true, uses the Let's Encrypt staging environment (untrusted test certificates)\n\n  RWS_CONFIG_ACME_DIRECTORY environment variable\n  --acme-directory as command line line argument\n  ACME directory URL of a CA other than Let's Encrypt\n\n  RWS_CONFIG_ACME_CA_FILE environment variable\n  --acme-ca-file as command line line argument\n  PEM file of extra root CAs to trust for the ACME directory (private ACME CAs)\n\n  RWS_CONFIG_ACME_CHALLENGE_PORT environment variable\n  --acme-challenge-port as command line line argument\n  Port the CA connects to for HTTP-01 challenges (default 80)\n\n  RWS_CONFIG_ACME_CERT_PATH environment variable\n  --acme-cert-path as command line line argument\n  Where to store the issued certificate (default: tls-cert-file, else .rws/acme/cert.pem)\n\n  RWS_CONFIG_ACME_KEY_PATH environment variable\n  --acme-key-path as command line line argument\n  Where to store the certificate's private key (default: tls-key-file, else .rws/acme/key.pem)\n\n  RWS_CONFIG_ACME_PROFILE environment variable\n  --acme-profile as command line line argument\n  Certificate profile to order, as the CA offers them (e.g. classic, tlsserver, shortlived)\n\n  RWS_CONFIG_ACME_CHALLENGE environment variable\n  --acme-challenge as command line line argument\n  How to prove control of the domains: http-01 (default), tls-alpn-01, dns-01 (wildcards) or dns-persist-01\n\n  RWS_CONFIG_ACME_DNS_PROVIDER environment variable\n  --acme-dns-provider as command line line argument\n  DNS-01: rfc2136 (DNS UPDATE), cloudflare, route53 or exec (a program)\n\n  RWS_CONFIG_ACME_DNS_SERVER environment variable\n  --acme-dns-server as command line line argument\n  DNS-01 rfc2136: the primary DNS server, host[:port]\n\n  RWS_CONFIG_ACME_DNS_ZONE environment variable\n  --acme-dns-zone as command line line argument\n  DNS-01: the zone of the records (found by SOA lookup when not set)\n\n  RWS_CONFIG_ACME_DNS_TSIG_KEY environment variable\n  --acme-dns-tsig-key as command line line argument\n  DNS-01 rfc2136: TSIG key name (the secret goes in RWS_CONFIG_ACME_DNS_TSIG_SECRET)\n\n  RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM environment variable\n  --acme-dns-tsig-algorithm as command line line argument\n  DNS-01 rfc2136: hmac-sha256 (default) or hmac-sha512\n\n  RWS_CONFIG_ACME_DNS_EXEC environment variable\n  --acme-dns-exec as command line line argument\n  DNS-01 exec: program run as <program> present|cleanup <fqdn> <value>\n\n  RWS_CONFIG_ACME_DNS_PROPAGATION_SECS environment variable\n  --acme-dns-propagation-secs as command line line argument\n  DNS-01: seconds to wait for the record to be visible (default 120)\n\n  RWS_CONFIG_ACME_DNS_API_URL environment variable\n  --acme-dns-api-url as command line line argument\n  DNS-01 cloudflare/route53: API base URL instead of the provider's (the token goes in RWS_CONFIG_ACME_DNS_API_TOKEN)\n\n  RWS_CONFIG_ACME_DNS_ZONE_ID environment variable\n  --acme-dns-zone-id as command line line argument\n  DNS-01 cloudflare/route53: the zone's id, instead of looking it up\n\n  RWS_CONFIG_ACME_REDIS environment variable\n  --acme-redis as command line line argument\n  Redis host:port shared by replicas: one orders each certificate, all install it\n\n  RWS_CONFIG_ACME_REDIS_PREFIX environment variable\n  --acme-redis-prefix as command line line argument\n  Key prefix in that Redis (default rws:acme)\n\n  RWS_CONFIG_ACME_ON_DEMAND environment variable\n  --acme-on-demand as command line line argument\n  true: order a certificate at the first handshake for a name the ask endpoint allows\n\n  RWS_CONFIG_ACME_ON_DEMAND_ASK environment variable\n  --acme-on-demand-ask as command line line argument\n  On-demand TLS: URL asked ?domain=<name> before each order; 2xx allows it\n\n  RWS_CONFIG_TLS environment variable\n  --tls as command line line argument\n  internal: HTTPS from rws's own CA (local development; see rws trust)\n\nEnd of usage section\n\n".to_string();
+    let actual_info = Log::usage_information();
+    assert_eq!(expected_info, actual_info)
+}
+
+#[test]
+fn info() {
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
+    const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+    const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
+    const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
+    const LICENSE: &str = env!("CARGO_PKG_LICENSE");
+
+    let user = Log::current_user();
+    let working_directory = crate::app::controller::static_resource::working_directory().to_string();
+
+    let expected_info = format!("HTTP to HTTPS with LetsEncrypt HTTP verification server\nVersion:           {}\nAuthors:           {}\nRepository:        {}\nDescription:       {}\nRust Version:      {}\nLicense:           {}\nUser:              {}\nWorking Directory: {}\n",
+        VERSION,
+        AUTHORS,
+        REPOSITORY,
+        DESCRIPTION,
+        RUST_VERSION,
+        LICENSE,
+        user,
+        working_directory
+    ).to_string();
+    let actual_info = Log::info("HTTP to HTTPS with LetsEncrypt HTTP verification server");
+    assert_eq!(expected_info, actual_info)
+}
+
+#[test]
+fn combined_log_format_empty_body_uses_dash() {
+    use crate::core::New;
+    use crate::response::Response;
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/nonexistent".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let response = Response::new();
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 80);
+    let log = Log::combined(&request, &response, &peer_addr);
+
+    // Empty body must appear as "-" per CLF spec
+    assert!(log.ends_with(" -"), "empty body should end with ' -': {}", log);
+}
+
+// ── Log::json ─────────────────────────────────────────────────────────────────
+
+fn make_request(method: &str, uri: &str) -> Request {
+    Request {
+        method: method.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    }
+}
+
+fn ok_response_with_body(body: &[u8]) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(body.to_vec(), MimeType::TEXT_PLAIN.to_string())];
+    r
+}
+
+#[test]
+fn json_contains_all_required_keys() {
+    let req  = make_request("GET", "/api/users");
+    let resp = ok_response_with_body(b"hello");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3)), 8080);
+
+    let line = Log::json(&req, &resp, &peer);
+
+    assert!(line.contains("\"time\""),        "missing time field");
+    assert!(line.contains("\"remote_addr\""), "missing remote_addr field");
+    assert!(line.contains("\"method\""),      "missing method field");
+    assert!(line.contains("\"path\""),        "missing path field");
+    assert!(line.contains("\"protocol\""),    "missing protocol field");
+    assert!(line.contains("\"status\""),      "missing status field");
+    assert!(line.contains("\"bytes\""),       "missing bytes field");
+}
+
+#[test]
+fn json_values_match_request_and_response() {
+    let req  = make_request("POST", "/submit");
+    let resp = ok_response_with_body(b"ok");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)), 9000);
+
+    let line = Log::json(&req, &resp, &peer);
+
+    assert!(line.contains("\"remote_addr\":\"1.2.3.4\""), "wrong IP: {}", line);
+    assert!(line.contains("\"method\":\"POST\""),          "wrong method: {}", line);
+    assert!(line.contains("\"path\":\"/submit\""),         "wrong path: {}", line);
+    assert!(line.contains("\"status\":200"),               "wrong status: {}", line);
+    assert!(line.contains("\"bytes\":2"),                  "wrong byte count: {}", line);
+}
+
+#[test]
+fn json_empty_body_reports_zero_bytes() {
+    let req  = make_request("GET", "/empty");
+    let resp = Response::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    let line = Log::json(&req, &resp, &peer);
+    assert!(line.contains("\"bytes\":0"), "expected 0 bytes: {}", line);
+}
+
+#[test]
+fn json_timestamp_is_iso8601_format() {
+    let req  = make_request("GET", "/");
+    let resp = Response::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    let line = Log::json(&req, &resp, &peer);
+
+    // Extract the value of "time" from the JSON string
+    let time_start = line.find("\"time\":\"").expect("no time field") + 8;
+    let time_end   = line[time_start..].find('"').expect("time field not closed") + time_start;
+    let ts = &line[time_start..time_end];
+
+    // Must match YYYY-MM-DDThh:mm:ssZ (20 chars)
+    assert_eq!(20, ts.len(), "unexpected timestamp length: {}", ts);
+    assert!(ts.ends_with('Z'),           "timestamp must end with Z: {}", ts);
+    assert_eq!(b'T', ts.as_bytes()[10],  "expected T separator at pos 10: {}", ts);
+}
+
+#[test]
+fn json_escapes_special_chars_in_method_and_path() {
+    // A method or path containing a quote or backslash must be escaped.
+    let mut req = make_request("GET", "/path/with\"quote");
+    req.method = "G\"ET".to_string();
+    let resp = Response::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    let line = Log::json(&req, &resp, &peer);
+    // The output must be valid JSON — raw unescaped `"` would break it.
+    assert!(line.contains("\\\""), "expected escaped quote in output: {}", line);
+}
+
+#[test]
+fn json_output_is_a_single_line() {
+    let req  = make_request("DELETE", "/items/1");
+    let resp = ok_response_with_body(b"deleted");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9)), 443);
+
+    let line = Log::json(&req, &resp, &peer);
+    assert!(!line.contains('\n'), "JSON log must be a single line: {}", line);
+    assert!(line.starts_with('{'), "must start with {{");
+    assert!(line.ends_with('}'),   "must end with }}");
+}
+
+// ── Log::log_access ───────────────────────────────────────────────────────────
+
+#[test]
+fn access_log_line_follows_log_format() {
+    let _g = crate::test_env::lock();
+    let var = crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT;
+    let saved = std::env::var(var).ok();
+    let req  = make_request("GET", "/ping");
+    let resp = ok_response_with_body(b"pong");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    // Direct env writes need invalidate(): the format comes from the cached
+    // ServerConfig::current() snapshot.
+    let set = |value: Option<&str>| {
+        match value { Some(v) => std::env::set_var(var, v), None => std::env::remove_var(var) }
+        crate::server_config::invalidate();
+    };
+    set(None);
+    let unset = Log::access_log_line(&req, &resp, &peer);
+    set(Some("json"));
+    let json = Log::access_log_line(&req, &resp, &peer);
+    set(Some("off"));
+    let off = Log::access_log_line(&req, &resp, &peer);
+    set(Some("NONE"));
+    let none = Log::access_log_line(&req, &resp, &peer);
+    Log::log_access(&req, &resp, &peer); // prints nothing, must not panic
+    set(saved.as_deref());
+
+    assert!(unset.unwrap().contains("\"GET /ping"), "unset -> Combined Log Format");
+    assert!(json.unwrap().starts_with('{'), "json -> a JSON object");
+    assert_eq!((None, None), (off, none));
+}
+
+// ── Log::server_url_thread_count ──────────────────────────────────────────────
+
+#[test]
+fn server_url_thread_count_contains_protocol_and_address() {
+    let msg = Log::server_url_thread_count("https", &"127.0.0.1:7878".to_string(), 4);
+    assert!(msg.contains("https://127.0.0.1:7878"), "missing URL: {}", msg);
+    assert!(msg.contains("4"),                       "missing thread count: {}", msg);
+}
+
+#[test]
+fn server_url_thread_count_two_lines() {
+    let msg = Log::server_url_thread_count("http", &"0.0.0.0:80".to_string(), 8);
+    let lines: Vec<&str> = msg.lines().collect();
+    assert_eq!(2, lines.len(), "expected exactly 2 lines: {:?}", lines);
+    assert!(lines[0].contains("http://0.0.0.0:80"));
+    assert!(lines[1].contains("8"));
+}
+#[test]
+fn current_user_never_fails_and_needs_no_external_program() {
+    // Must work in images without `whoami` (distroless) — never empty.
+    assert!(!Log::current_user().trim().is_empty());
+}
+
+#[test]
+fn json_and_combined_lines_escape_and_format_exactly() {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+    use crate::range::Range;
+    let request = Request {
+        method: "GET".to_string(),
+        request_uri: "/a\"b\\c\nd\re?q=1".to_string(),
+        http_version: "HTTP/1.1".to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+    let mut response = crate::response::Response::get_response(crate::response::STATUS_CODE_REASON_PHRASE.n200_ok, None, Some(vec![Range::get_content_range(vec![b'x'; 1234], "text/plain".to_string())]));
+    let v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)), 5555);
+    let json = Log::json(&request, &response, &v4);
+    let time_end = json.find("\",\"remote_addr\"").unwrap();
+    assert_eq!(
+        format!("{}\",\"remote_addr\":\"10.0.0.7\",\"method\":\"GET\",\"path\":\"/a\\\"b\\\\c\\nd\\re?q=1\",\"protocol\":\"HTTP/1.1\",\"status\":200,\"bytes\":1234}}", &json[..time_end]),
+        json
+    );
+    assert!(json.starts_with("{\"time\":\"20") && json[9..time_end].ends_with('Z'), "{json}");
+
+    // With Host, User-Agent and Referer they follow, escaped.
+    let mut with_headers = request.clone();
+    with_headers.headers = vec![
+        crate::header::Header::new("Host", "rws8.tech".to_string()),
+        crate::header::Header::new("User-Agent", "Mozilla/5.0 (X11) \"quoted\"".to_string()),
+        crate::header::Header::new("Referer", "https://example.com/?q=rws".to_string()),
+    ];
+    let json = Log::json(&with_headers, &response, &v4);
+    assert!(json.ends_with(r#""bytes":1234,"host":"rws8.tech","user_agent":"Mozilla/5.0 (X11) \"quoted\"","referer":"https://example.com/?q=rws"}"#), "{json}");
+
+    let v6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 1);
+    let combined = Log::combined(&request, &response, &v6);
+    assert!(combined.starts_with("::1 - - ["), "{combined}");
+    assert!(combined.ends_with("] \"GET /a\"b\\c\nd\re?q=1 HTTP/1.1\" 200 1234"), "{combined}");
+    response.content_range_list.clear();
+    response.status_code = 304;
+    assert!(Log::combined(&request, &response, &v6).ends_with("\" 304 -"));
+    assert!(Log::json(&request, &response, &v6).ends_with("\"status\":304,\"bytes\":0}"));
+}
+
+// ── 18.1.0: access log to a file, rotated by size, reopened on SIGUSR1 ───────
+
+mod access_log_file {
+    use crate::log::access_sink::{parse_size, LogFile};
+    use crate::test_env::TempPath;
+    use std::path::Path;
+
+    fn dir(name: &str) -> TempPath {
+        let dir = TempPath::new(name);
+        std::fs::create_dir_all(dir.as_str()).unwrap();
+        dir
+    }
+
+    fn read(path: &Path) -> String {
+        std::fs::read_to_string(path).unwrap_or_default()
+    }
+
+    #[test]
+    fn lines_are_appended_to_an_existing_file() {
+        let dir = dir("alog_append");
+        let path = Path::new(dir.as_str()).join("access.log");
+        std::fs::write(&path, "old line\n").unwrap();
+        let mut log = LogFile::open(&path, 0, 5).unwrap();
+        log.write(b"one\n", false).unwrap();
+        log.write(b"two\n", false).unwrap();
+        assert_eq!("old line\none\ntwo\n", read(&path));
+    }
+
+    #[test]
+    fn past_the_size_limit_the_file_rotates_keeping_n() {
+        let dir = dir("alog_rotate");
+        let path = Path::new(dir.as_str()).join("access.log");
+        let numbered = |n: u32| Path::new(dir.as_str()).join(format!("access.log.{n}"));
+        let mut log = LogFile::open(&path, 10, 2).unwrap();
+        for line in ["aaaaaaaa\n", "bbbbbbbb\n", "cccccccc\n", "dddddddd\n"] {
+            log.write(line.as_bytes(), false).unwrap();
+        }
+        // Each 9-byte line would take the file past 10 bytes, so every write
+        // after the first rotated: newest in the live file, two kept.
+        assert_eq!("dddddddd\n", read(&path));
+        assert_eq!("cccccccc\n", read(&numbered(1)));
+        assert_eq!("bbbbbbbb\n", read(&numbered(2)));
+        assert!(!numbered(3).exists(), "only `keep` rotated files are kept");
+        // A write larger than the limit goes into an empty file whole.
+        let mut big = LogFile::open(&Path::new(dir.as_str()).join("big.log"), 4, 1).unwrap();
+        big.write(b"0123456789\n", false).unwrap();
+        assert_eq!("0123456789\n", read(&Path::new(dir.as_str()).join("big.log")));
+    }
+
+    #[test]
+    fn keep_zero_empties_the_file_instead() {
+        let dir = dir("alog_keep0");
+        let path = Path::new(dir.as_str()).join("access.log");
+        let mut log = LogFile::open(&path, 10, 0).unwrap();
+        log.write(b"aaaaaaaa\n", false).unwrap();
+        log.write(b"bbbbbbbb\n", false).unwrap();
+        assert_eq!("bbbbbbbb\n", read(&path));
+        assert!(!Path::new(dir.as_str()).join("access.log.1").exists());
+    }
+
+    #[test]
+    fn a_reopen_after_logrotate_moved_the_file_writes_a_new_one() {
+        let dir = dir("alog_reopen");
+        let path = Path::new(dir.as_str()).join("access.log");
+        let moved = Path::new(dir.as_str()).join("access.log.2026-10-26");
+        let mut log = LogFile::open(&path, 0, 5).unwrap();
+        log.write(b"before\n", false).unwrap();
+        // logrotate renames the file, then sends SIGUSR1.
+        std::fs::rename(&path, &moved).unwrap();
+        log.write(b"still the old file\n", false).unwrap();
+        log.write(b"after\n", true).unwrap();
+        assert_eq!("before\nstill the old file\n", read(&moved));
+        assert_eq!("after\n", read(&path));
+    }
+
+    #[test]
+    fn sizes_parse_with_units() {
+        assert_eq!(Some(100), parse_size("100"));
+        assert_eq!(Some(100 << 20), parse_size("100M"));
+        assert_eq!(Some(2 << 10), parse_size(" 2k "));
+        assert_eq!(Some(1 << 30), parse_size("1G"));
+        assert_eq!(None, parse_size("lots"));
+        assert_eq!(None, parse_size(""));
+        assert_eq!(None, parse_size("99999999999999999999G"));
+        assert_eq!(None, parse_size("é"));
+    }
+}

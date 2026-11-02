@@ -59,7 +59,7 @@ optional default. The resolver is built once at startup (or after SIGHUP) by
 `create_tls_acceptor_from_vhosts()`:
 
 ```rust
-// src/tls/mod.rs (simplified)
+// crates/rws-server/src/tls/mod.rs (simplified)
 pub fn create_tls_acceptor_from_vhosts(
     vhosts: &[VirtualHostConfig],
     default_cert: &str,

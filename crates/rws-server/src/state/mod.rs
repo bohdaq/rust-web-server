@@ -1,0 +1,376 @@
+//! Shared application state and state-aware routing.
+//!
+//! [`AppWithState<S>`] combines a typed state value (database pools, config,
+//! caches) with route registration.  Routes are tried first; requests that do
+//! not match fall through to the built-in [`App`] controller chain (static
+//! files, healthz, metrics, …).
+//!
+//! State is stored as an [`Arc<S>`] and shared across all handlers. Handlers
+//! receive an immutable `&S` reference alongside the request context.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # extern crate rws_server as rust_web_server;
+//! use rust_web_server::state::AppWithState;
+//! use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+//! use rust_web_server::range::Range;
+//! use rust_web_server::mime_type::MimeType;
+//! use rust_web_server::core::New;
+//!
+//! struct AppState {
+//!     greeting: String,
+//! }
+//!
+//! let app = AppWithState::new(AppState { greeting: "Hello".to_string() })
+//!     .get("/greet", |_req, _params, _conn, state| {
+//!         let mut r = Response::new();
+//!         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+//!         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+//!         r.content_range_list = vec![
+//!             Range::get_content_range(
+//!                 state.greeting.as_bytes().to_vec(),
+//!                 MimeType::TEXT_PLAIN.to_string(),
+//!             )
+//!         ];
+//!         r
+//!     })
+//!     .get("/users/:id", |_req, params, _conn, state| {
+//!         let id = params.get("id").unwrap_or("?");
+//!         let body = format!("{}, user {}!", state.greeting, id);
+//!         let mut r = Response::new();
+//!         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+//!         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+//!         r.content_range_list = vec![
+//!             Range::get_content_range(body.into_bytes(), MimeType::TEXT_PLAIN.to_string())
+//!         ];
+//!         r
+//!     });
+//! ```
+
+#[cfg(test)]
+mod tests;
+
+use std::sync::Arc;
+
+use crate::app::App;
+use crate::application::Application;
+use crate::core::New;
+use crate::middleware::{Middleware, WithMiddleware};
+use crate::request::Request;
+use crate::response::Response;
+use crate::router::{PathParams, Router};
+use crate::server::ConnectionInfo;
+use crate::server_config::ServerConfig;
+#[cfg(feature = "openapi")]
+use crate::mime_type::MimeType;
+#[cfg(feature = "openapi")]
+use crate::range::Range;
+#[cfg(feature = "openapi")]
+use crate::response::STATUS_CODE_REASON_PHRASE;
+
+/// An [`Application`] that combines user-defined state-aware routes with the
+/// built-in [`App`] controller chain as a fallback.
+///
+/// Routes are matched in registration order. The first match wins; unmatched
+/// requests are forwarded to [`App`] (static files, health probes, etc.).
+#[derive(Clone)]
+pub struct AppWithState<S> {
+    state: Arc<S>,
+    router: Router,
+    /// Routes whose body the handler reads as a stream ([`Self::stream_body`]);
+    /// matched only, never dispatched.
+    streaming: Router,
+    /// When `Some`, the fallback `App` is pinned to this config (see
+    /// [`App::with_config`]); when `None`, the fallback reads
+    /// `RWS_CONFIG_*` env vars per request via `App::new()`, same as `App`'s
+    /// own default.
+    config: Option<Arc<ServerConfig>>,
+}
+
+impl<S: Send + Sync + 'static> AppWithState<S> {
+    /// Create a new `AppWithState` wrapping `state`.
+    ///
+    /// `state` is stored behind an `Arc` so it can be shared across threads
+    /// without cloning. Register routes with the builder methods.
+    pub fn new(state: S) -> Self {
+        AppWithState {
+            state: Arc::new(state),
+            router: Router::new(),
+            streaming: Router::new(),
+            config: None,
+        }
+    }
+
+    /// Pin the fallback [`App`] (used for any request this app's own routes
+    /// don't match) to an explicit [`ServerConfig`], instead of reading
+    /// `RWS_CONFIG_*` environment variables per request.
+    ///
+    /// Mirrors [`App::with_config`] — same rationale: safe for parallel
+    /// tests (no `test_env::lock()` needed) and lets multiple
+    /// differently-configured instances coexist in one process.
+    pub fn with_config(mut self, config: ServerConfig) -> Self {
+        self.config = Some(Arc::new(config));
+        self
+    }
+
+    /// Return a reference to the shared state.
+    pub fn state(&self) -> &S {
+        &self.state
+    }
+
+    /// The fallback `App` for requests this app's own routes don't match —
+    /// pinned to `self.config` if set, otherwise `App::new()`'s default
+    /// per-request env read.
+    fn fallback_app(&self) -> App {
+        match &self.config {
+            Some(c) => App::with_shared_config(Arc::clone(c)),
+            None => App::new(),
+        }
+    }
+
+    /// Register a `GET` handler for `pattern`.
+    pub fn get<F>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response + Send + Sync + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        self.router = self.router.get(pattern, move |req, params, conn| {
+            handler(req, params, conn, &state)
+        });
+        self
+    }
+
+    /// Register a `POST` handler for `pattern`.
+    pub fn post<F>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response + Send + Sync + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        self.router = self.router.post(pattern, move |req, params, conn| {
+            handler(req, params, conn, &state)
+        });
+        self
+    }
+
+    /// Register a `PUT` handler for `pattern`.
+    pub fn put<F>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response + Send + Sync + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        self.router = self.router.put(pattern, move |req, params, conn| {
+            handler(req, params, conn, &state)
+        });
+        self
+    }
+
+    /// Register a `PATCH` handler for `pattern`.
+    pub fn patch<F>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response + Send + Sync + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        self.router = self.router.patch(pattern, move |req, params, conn| {
+            handler(req, params, conn, &state)
+        });
+        self
+    }
+
+    /// Register a `DELETE` handler for `pattern`.
+    pub fn delete<F>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response + Send + Sync + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        self.router = self.router.delete(pattern, move |req, params, conn| {
+            handler(req, params, conn, &state)
+        });
+        self
+    }
+
+    /// Serve WebSocket connections at `pattern`: an upgrade request's
+    /// connection goes to `handler` with the route's parameters and the
+    /// state, anything else gets `426 Upgrade Required`. The handler runs
+    /// on a thread of its own for the connection's life.
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use std::sync::Mutex;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::websocket::Message;
+    ///
+    /// let app = App::with_state(Mutex::new(0u64)).websocket("/count", |mut ws, _params, state| {
+    ///     while let Ok(Some(Message::Text(_))) = ws.recv() {
+    ///         let n = { let mut n = state.lock().unwrap(); *n += 1; *n };
+    ///         let _ = ws.send_text(&n.to_string());
+    ///     }
+    /// });
+    /// ```
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn websocket<F>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(crate::websocket::WebSocketConnection, PathParams, Arc<S>) + Send + Sync + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        let handler = Arc::new(handler);
+        self.router = self.router.get(pattern, move |req, params, _conn| {
+            let (handler, params, state) = (Arc::clone(&handler), params.clone(), Arc::clone(&state));
+            crate::websocket::WebSocket::upgrade(req, move |ws| handler(ws, params, state))
+        });
+        self
+    }
+
+    /// Return a snapshot of all registered routes as `(method, pattern)` pairs.
+    /// Hand requests to `method` `pattern` (same pattern syntax as the route)
+    /// their body as a stream instead of reading it into memory first
+    /// (#31): the handler reads `request.body` with `std::io::Read` while
+    /// the upload is still arriving.
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use std::io::Read;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    ///
+    /// let app = App::with_state(())
+    ///     .put("/upload/:name", |request, params, _conn, _state| {
+    ///         let mut file = std::fs::File::create(format!("/tmp/{}", params.get("name").unwrap())).unwrap();
+    ///         let copied = std::io::copy(&mut &request.body, &mut file);
+    ///         Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("{copied:?}"))
+    ///     })
+    ///     .stream_body("PUT", "/upload/:name");
+    /// ```
+    pub fn stream_body(mut self, method: &str, pattern: &str) -> Self {
+        self.streaming = self.streaming.add(method, pattern, |_, _, _| Response::new());
+        self
+    }
+
+    pub fn route_entries(&self) -> Vec<crate::router::RouteInfo> {
+        self.router.route_entries()
+    }
+
+    /// Attach an MCP server to this application. Requests that do not match
+    /// the MCP endpoint (`POST /mcp`) are forwarded to `self`, so all
+    /// previously registered routes remain active.
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::mcp::{McpContent, extract_arg};
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// struct Db { url: String }
+    ///
+    /// let app = App::with_state(Db { url: "postgres://localhost/mydb".to_string() })
+    ///     .get("/api/users", |_req, _params, _conn, _db| {
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     })
+    ///     .mcp("my-server", "1.0")
+    ///     .tool("list_users", "List all users", "{}", |_| {
+    ///         Ok(McpContent::json(r#"[{"id":1,"name":"Alice"}]"#))
+    ///     });
+    /// ```
+    pub fn mcp(self, name: impl Into<String>, version: impl Into<String>) -> crate::mcp::McpServer {
+        crate::mcp::McpServer::new(name, version).wrap(self)
+    }
+
+    /// Wrap this application in a middleware layer.
+    ///
+    /// Enables fluent composition:
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::core::New;
+    /// use rust_web_server::middleware::RateLimitLayer;
+    /// use rust_web_server::response::Response;
+    ///
+    /// let app = App::with_state(())
+    ///     .get("/ping", |_, _, _, _| Response::new())
+    ///     .wrap(RateLimitLayer);
+    /// ```
+    pub fn wrap<M: Middleware + 'static>(self, layer: M) -> WithMiddleware<AppWithState<S>> {
+        WithMiddleware::new(self).wrap(layer)
+    }
+
+    /// Add `GET /openapi.json` (a generated OpenAPI 3.1 document covering
+    /// every route registered so far) and `GET /docs` (Swagger UI, loaded
+    /// from a CDN, pointed at `/openapi.json`).
+    ///
+    /// Call this *after* registering your routes — routes added afterward
+    /// still work but won't appear in the generated spec, since it's built
+    /// once at this call rather than read dynamically per request.
+    ///
+    /// Requires the `openapi` feature.
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::openapi::OpenApiConfig;
+    /// use rust_web_server::response::Response;
+    /// use rust_web_server::core::New;
+    ///
+    /// let app = App::with_state(())
+    ///     .get("/users", |_req, _params, _conn, _state| Response::new())
+    ///     .get("/users/:id", |_req, _params, _conn, _state| Response::new())
+    ///     .openapi(OpenApiConfig::new("My API", "1.0.0"));
+    /// ```
+    /// This app's OpenAPI document as JSON (what [`openapi`](Self::openapi)
+    /// serves), e.g. for [`McpServer::openapi_tools`](crate::mcp::McpServer::openapi_tools).
+    #[cfg(feature = "openapi")]
+    pub fn openapi_spec(&self, config: &crate::openapi::OpenApiConfig) -> String {
+        crate::openapi::build_spec(config, &self.route_entries())
+    }
+
+    #[cfg(feature = "openapi")]
+    pub fn openapi(self, config: crate::openapi::OpenApiConfig) -> Self {
+        let spec_json = Arc::new(crate::openapi::build_spec(&config, &self.route_entries()));
+        let html = Arc::new(crate::openapi::swagger_ui_html("/openapi.json"));
+
+        let spec_for_route = Arc::clone(&spec_json);
+        self.get("/openapi.json", move |_req, _params, _conn, _state| {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            r.content_range_list = vec![Range::get_content_range(
+                spec_for_route.as_bytes().to_vec(),
+                MimeType::APPLICATION_JSON.to_string(),
+            )];
+            r
+        })
+        .get("/docs", move |_req, _params, _conn, _state| {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            r.content_range_list = vec![Range::get_content_range(
+                html.as_bytes().to_vec(),
+                MimeType::TEXT_HTML.to_string(),
+            )];
+            r
+        })
+    }
+}
+
+impl<S: Send + Sync + 'static> Application for AppWithState<S> {
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        if let Some(response) = self.router.handle(request, connection) {
+            return Ok(response);
+        }
+        self.fallback_app().execute(request, connection)
+    }
+
+    /// Route handlers are user code and may block: only requests no route
+    /// matches, falling through to the built-in `App`, run inline.
+    fn runs_inline(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        !self.router.matches(request, connection) && App::is_inline_request(request)
+    }
+
+    fn streams_body(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        self.streaming.matches(request, connection)
+    }
+}

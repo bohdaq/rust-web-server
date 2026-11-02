@@ -1,0 +1,141 @@
+//! IP address allowlist and denylist middleware.
+//!
+//! [`IpFilter`] inspects the client IP from [`crate::server::ConnectionInfo`]
+//! and either allows or blocks the request based on a list of IPv4 or IPv6
+//! addresses and CIDR ranges. An IPv4 rule also matches the same client
+//! connecting over a dual-stack socket as an IPv4-mapped IPv6 address
+//! (`::ffff:1.2.3.4`).
+//!
+//! - **Allow mode** — only listed addresses/ranges pass; all others get `403 Forbidden`.
+//! - **Deny mode** — listed addresses/ranges get `403 Forbidden`; all others pass.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! # extern crate rws_server as rust_web_server;
+//! use rust_web_server::app::App;
+//! use rust_web_server::core::New;
+//! use rust_web_server::ip_filter::IpFilter;
+//!
+//! // Restrict to internal networks only.
+//! let app = App::new()
+//!     .wrap(IpFilter::allow(["10.0.0.0/8", "192.168.0.0/16", "127.0.0.1"]));
+//!
+//! // Block a known-bad address range.
+//! let app = App::new()
+//!     .wrap(IpFilter::deny(["1.2.3.4", "5.6.7.0/24", "2001:db8::/32"]));
+//! ```
+
+#[cfg(test)]
+mod tests;
+
+use crate::application::Application;
+use crate::middleware::Middleware;
+use crate::request::Request;
+use crate::response::Response;
+use crate::server::ConnectionInfo;
+// Address ranges and `TrustedProxies` live in rws-http (`server_config`
+// holds a `TrustedProxies`); this module adds the middleware.
+pub use rws_http::ip_filter::*;
+
+enum FilterMode {
+    Allow,
+    Deny,
+}
+
+
+
+
+
+
+/// Middleware that filters requests by client IP address.
+///
+/// Constructed via [`IpFilter::allow`] or [`IpFilter::deny`]. Each entry
+/// may be an exact address (`"1.2.3.4"`, `"2001:db8::1"`) or a CIDR range
+/// (`"10.0.0.0/8"`, `"2001:db8::/32"`). Malformed entries are skipped; check
+/// them with [`is_valid_entry`] (`rws --check` does).
+pub struct IpFilter {
+    mode: FilterMode,
+    ranges: Vec<IpRange>,
+}
+
+impl IpFilter {
+    /// Create an allowlist filter. Only IPs matching one of `entries` pass;
+    /// all others receive `403 Forbidden`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::ip_filter::IpFilter;
+    ///
+    /// let filter = IpFilter::allow(["127.0.0.1", "10.0.0.0/8"]);
+    /// ```
+    pub fn allow(entries: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        Self::from_entries(FilterMode::Allow, entries)
+    }
+
+    /// Create a denylist filter. IPs matching one of `entries` receive
+    /// `403 Forbidden`; all others pass.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::ip_filter::IpFilter;
+    ///
+    /// let filter = IpFilter::deny(["1.2.3.4", "192.0.2.0/24"]);
+    /// ```
+    pub fn deny(entries: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        Self::from_entries(FilterMode::Deny, entries)
+    }
+
+    fn from_entries(mode: FilterMode, entries: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        let ranges = entries.into_iter().filter_map(|e| IpRange::parse(e.as_ref())).collect();
+        IpFilter { mode, ranges }
+    }
+
+    fn matches(&self, ip: &str) -> bool {
+        match parse_ip(ip) {
+            Some(addr) => self.ranges.iter().any(|r| (addr & r.mask) == r.network),
+            None => false,
+        }
+    }
+}
+
+/// Whether `ip` is in `entry` (an address or CIDR range); for the WAF's
+/// `cidr` rules.
+#[doc(hidden)]
+pub fn matches(entry: &str, ip: &str) -> bool {
+    IpFilter::deny([entry]).matches(ip)
+}
+
+impl Middleware for IpFilter {
+    /// Headers only: a streamed body passes through untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+
+
+    fn handle(
+        &self,
+        request: &Request,
+        connection: &ConnectionInfo,
+        next: &dyn Application,
+    ) -> Result<Response, String> {
+        use crate::error::{AppError, IntoResponse};
+        let matched = self.matches(&connection.client.ip);
+        match self.mode {
+            FilterMode::Allow if !matched => Ok(AppError::Forbidden.into_response()),
+            FilterMode::Deny if matched => Ok(AppError::Forbidden.into_response()),
+            _ => next.execute(request, connection),
+        }
+    }
+
+    /// In-memory only: safe on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+}
+
+

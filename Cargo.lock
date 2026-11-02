@@ -3359,6 +3359,7 @@ dependencies = [
  "rws-base",
  "rws-http",
  "rws-macros",
+ "rws-server",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3540,6 +3541,45 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "rws-server"
+version = "18.25.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "aws-lc-rs",
+ "bytes",
+ "cryptoki",
+ "ctrlc",
+ "file-ext",
+ "h2",
+ "h3",
+ "h3-quinn",
+ "hmac 0.12.1",
+ "http",
+ "libc",
+ "memchr",
+ "p256",
+ "quinn",
+ "rand_core 0.6.4",
+ "rcgen",
+ "regex",
+ "rustls",
+ "rws-base",
+ "rws-http",
+ "rws-macros",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tokio",
+ "tokio-rustls",
+ "url-build-parse",
+ "url-search-params",
+ "wasip2 2.0.1+wasi-0.2.12",
+ "webpki-roots 1.0.11",
 ]
 
 [[package]]

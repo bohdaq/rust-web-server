@@ -9,7 +9,7 @@ use crate::mime_type::MimeType;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::Server;
-use crate::server::tests::MockTcpStream;
+use crate::server::test_support::MockTcpStream;
 use crate::symbol::SYMBOL;
 
 #[test]

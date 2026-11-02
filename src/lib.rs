@@ -37,72 +37,74 @@
 // tests, which is required by proc-macro derive output that uses that prefix.
 extern crate self as rust_web_server;
 
-pub mod app;
+pub use rws_server::app;
 #[cfg(feature = "auth")]
-pub mod auth;
+pub use rws_server::auth;
 
 #[cfg(feature = "macros")]
 pub use rws_macros::{delete, get, patch, post, put, route, Config, FromRequest, JsonSchema, Validate};
 #[cfg(all(feature = "macros", any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
 pub use rws_macros::Model;
 #[cfg(feature = "http2")]
-pub mod async_state;
+pub use rws_server::async_state;
 #[cfg(feature = "http2")]
-pub(crate) mod async_bridge;
-pub mod session;
+pub(crate) use rws_server::async_bridge;
+pub use rws_server::session;
 // Socket-coupled — see spec/WASM_SHIM.md for what a wasm32-wasip2 build
 // excludes and why (no OS threads, no raw TCP/TLS in a WASI guest).
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) mod redis_protocol;
-pub mod sse;
+pub(crate) use rws_server::redis_protocol;
+pub use rws_server::sse;
 pub use rws_http::compression;
-pub mod cookie;
+pub use rws_server::cookie;
 pub use rws_http::error;
 pub use rws_http::extract;
 #[cfg(all(test, feature = "macros"))]
 mod extract_derive_tests;
 #[cfg(test)]
 mod http_tests;
+#[cfg(test)]
+mod server_tests;
 pub mod i18n;
 pub mod a2a;
 #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
-pub mod systemd;
-pub mod ip_filter;
+pub use rws_server::systemd;
+pub use rws_server::ip_filter;
 pub mod macros;
-pub mod blocklist;
-pub mod cache;
-pub mod early_hints;
-pub mod disk_guard;
+pub use rws_server::blocklist;
+pub use rws_server::cache;
+pub use rws_server::early_hints;
+pub use rws_server::disk_guard;
 pub mod traffic;
-pub mod authz;
-pub mod config_reload;
+pub use rws_server::authz;
+pub use rws_server::config_reload;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod config_watch;
+pub use rws_server::config_watch;
 pub mod config_check;
 /// RSA public keys and RS256 / rsa-sha256 signature verification (no `rsa` crate).
 #[cfg(any(feature = "auth-asymmetric", feature = "sso"))]
-pub mod rsa_key;
+pub use rws_server::rsa_key;
 pub use rws_http::server_config;
-pub mod feature;
-pub mod maintenance;
-pub mod metrics;
-pub mod mcp;
-pub mod request_log;
-pub mod request_id;
+pub use rws_server::feature;
+pub use rws_server::maintenance;
+pub use rws_server::metrics;
+pub use rws_server::mcp;
+pub use rws_server::request_log;
+pub use rws_server::request_id;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod otel;
+pub use rws_server::otel;
 #[cfg(feature = "acme")]
 pub mod acme;
-pub mod middleware;
-pub mod rate_limit;
-pub mod router;
-pub mod schema;
-pub mod state;
-pub mod test_client;
-pub mod application;
+pub use rws_server::middleware;
+pub use rws_server::rate_limit;
+pub use rws_server::router;
+pub use rws_server::schema;
+pub use rws_server::state;
+pub use rws_server::test_client;
+pub use rws_server::application;
 pub use rws_http::body;
 pub use rws_http::client_hint;
-pub mod controller;
+pub use rws_server::controller;
 pub use rws_base::core;
 pub use rws_http::cors;
 pub use rws_http::entry_point;
@@ -110,24 +112,24 @@ pub use rws_base::ext;
 pub use rws_http::header;
 pub use rws_base::http;
 pub use rws_http::json;
-pub mod language;
+pub use rws_server::language;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod log;
+pub use rws_server::log;
 pub use rws_base::mime_type;
 pub use rws_base::null;
 pub use rws_http::range;
 pub use rws_http::request;
 pub use rws_http::response;
-pub mod server;
+pub use rws_server::server;
 pub use rws_base::symbol;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod thread_pool;
+pub use rws_server::thread_pool;
 pub use rws_base::url;
-pub mod pagination;
+pub use rws_server::pagination;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod proxy;
-pub mod rewrite;
-pub mod scheduler;
+pub use rws_server::rewrite;
+pub use rws_server::scheduler;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod tcp_proxy;
 #[cfg(not(target_arch = "wasm32"))]
@@ -137,16 +139,16 @@ pub mod ws_proxy;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod canary;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod circuit_breaker;
+pub use rws_server::circuit_breaker;
 // `BackendPool`/`DiscoverySource` (DNS/etcd/Consul/Docker) are native-only —
 // gated internally in service_discovery/mod.rs, not at this declaration —
 // because `json_lite` (a plain JSON parser, no sockets) must stay available
 // for `secrets`'s Vault/AWS-SM/Key-Vault backends on every target.
-pub mod service_discovery;
+pub use rws_server::service_discovery;
 /// DNS wire format, shared by the SRV service discovery and ACME's DNS-01.
 pub(crate) use rws_base::dns;
-pub mod config_binding;
-pub mod di;
+pub use rws_server::config_binding;
+pub use rws_server::di;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod proxy_config;
 #[cfg(not(target_arch = "wasm32"))]
@@ -173,22 +175,22 @@ pub mod wasm_plugin;
 pub mod ingress;
 #[cfg(feature = "tera")]
 pub mod template;
-pub mod validate;
+pub use rws_server::validate;
 pub use rws_http::virtual_host;
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
-pub mod model;
+pub use rws_server::model;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod websocket;
+pub use rws_server::websocket;
 // Has both a native (TcpStream/rustls) and a wasm32 (wasi:http outgoing-handler)
 // backend behind Client::send() — see the #[cfg(target_arch = "wasm32")]
 // `send_once` in this module. spec/WASM_SHIM.md Phase 2 item 7.
-pub mod http_client;
+pub use rws_server::http_client;
 #[cfg(feature = "crypto")]
-pub mod crypto;
+pub use rws_server::crypto;
 #[cfg(feature = "csrf")]
-pub mod csrf;
+pub use rws_server::csrf;
 #[cfg(feature = "sso")]
-pub mod sso;
+pub use rws_server::sso;
 // SMTP is a raw-TCP protocol with no wasi:http equivalent (unlike
 // http_client, which the host can proxy via outgoing-handler) — genuinely
 // can't work in a wasi:http guest, not just ungated. spec/WASM_SHIM.md.
@@ -201,7 +203,7 @@ pub mod jobs;
 #[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs", feature = "secrets"))]
 pub mod storage;
 #[cfg(feature = "openapi")]
-pub mod openapi;
+pub use rws_server::openapi;
 #[cfg(feature = "tower")]
 pub mod tower;
 #[cfg(feature = "gateway-api")]
@@ -209,24 +211,24 @@ pub mod gateway_api;
 #[cfg(feature = "webhook")]
 pub mod webhook;
 #[cfg(feature = "secrets")]
-pub mod secrets;
+pub use rws_server::secrets;
 // Runs wrapped work on a background OS thread to bound wait time — needs
 // `std::thread::spawn`, unavailable on wasm32-wasip2. See spec/WASM_SHIM.md.
 #[cfg(not(target_arch = "wasm32"))]
-pub mod timeout;
+pub use rws_server::timeout;
 pub mod prelude;
 
 #[cfg(feature = "http2")]
 #[doc(hidden)]
-pub mod tls;
+pub use rws_server::tls;
 
 #[cfg(feature = "http2")]
 #[doc(hidden)]
-pub mod h2_server;
+pub use rws_server::h2_server;
 
 #[cfg(feature = "http3")]
 #[doc(hidden)]
-pub mod h3_handler;
+pub use rws_server::h3_handler;
 
 /// Shared infrastructure for tests that write process-wide environment variables.
 ///
@@ -237,32 +239,13 @@ pub mod h3_handler;
 #[cfg(test)]
 mod stack_depth_tests;
 
-/// The rustls crypto provider every TLS config uses: aws-lc-rs, or with the
-/// `fips` feature its FIPS 140-3 validated module and only the algorithms
-/// FIPS approves (18.23.0).
+// The rustls crypto provider and client builder live in rws-server (its TLS
+// code uses them); `FIPS` too.
 #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
-pub fn crypto_provider() -> rustls::crypto::CryptoProvider {
-    #[cfg(feature = "fips")]
-    return rustls::crypto::default_fips_provider();
-    #[cfg(not(feature = "fips"))]
-    rustls::crypto::aws_lc_rs::default_provider()
-}
-
-/// Whether this build uses the FIPS module (`fips` feature).
-pub const FIPS: bool = cfg!(feature = "fips");
-
-/// A rustls client-config builder with this crate's crypto provider
-/// (aws-lc-rs) named explicitly. `rustls::ClientConfig::builder()` uses the
-/// process-wide default provider and panics when none is installed and more
-/// than one is compiled in — which happens as soon as any dependency enables
-/// rustls's `ring` backend (e.g. sqlx). Every outbound TLS client in the
-/// crate starts here.
+pub use rws_server::crypto_provider;
+pub use rws_server::FIPS;
 #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
-pub(crate) fn tls_client_builder() -> rustls::ConfigBuilder<rustls::ClientConfig, rustls::WantsVerifier> {
-    rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(crate::crypto_provider()))
-        .with_safe_default_protocol_versions()
-        .expect("aws-lc-rs supports rustls's default protocol versions")
-}
+pub(crate) use rws_server::tls_client_builder;
 
 #[cfg(test)]
 pub mod test_env {

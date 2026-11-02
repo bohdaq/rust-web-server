@@ -542,6 +542,7 @@ dependencies = [
  "rws-base",
  "rws-http",
  "rws-macros",
+ "rws-server",
  "serde",
  "serde_json",
  "tokio",
@@ -636,6 +637,32 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "rws-server"
+version = "18.25.0"
+dependencies = [
+ "aws-lc-rs",
+ "bytes",
+ "file-ext",
+ "h2",
+ "http",
+ "libc",
+ "memchr",
+ "rcgen",
+ "rustls",
+ "rws-base",
+ "rws-http",
+ "rws-macros",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-rustls",
+ "url-build-parse",
+ "url-search-params",
+ "wasip2",
+ "webpki-roots",
 ]
 
 [[package]]

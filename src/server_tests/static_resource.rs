@@ -1,0 +1,841 @@
+//! Tests of rws-server's `app::controller::static_resource` that read repository fixtures (`static/`,
+//! `index.html`): a crate's tests run in the crate's directory.
+#![allow(unused_imports, dead_code)]
+
+use file_ext::FileExt;
+use crate::app::controller::static_resource::StaticResourceController;
+use crate::controller::Controller;
+use crate::core::New;
+use crate::header::Header;
+use crate::http::VERSION;
+use crate::request::{METHOD, Request};
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::server::{Address, ConnectionInfo};
+
+fn spa_request(path: &str) -> (Request, ConnectionInfo) {
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+        tls: false,
+    };
+    (request, connection_info)
+}
+
+/// A file under `target/` (inside the working directory, so the static
+/// controller serves it), deleted on drop.
+struct ServedFile(String);
+
+impl ServedFile {
+    fn new(name: &str, len: usize) -> Self {
+        let url = format!("/target/rws_static_test_{}_{}", std::process::id(), name);
+        let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), url);
+        std::fs::write(&fs, vec![b'x'; len]).unwrap();
+        ServedFile(url)
+    }
+}
+
+impl Drop for ServedFile {
+    fn drop(&mut self) {
+        let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), self.0);
+        let _ = std::fs::remove_file(fs);
+    }
+}
+
+fn static_request(method: &str, uri: &str, headers: Vec<Header>) -> Request {
+    Request { method: method.to_string(), request_uri: uri.to_string(), http_version: VERSION.http_1_1.to_string(), headers, body: Default::default() }
+}
+
+fn served_with_mtime(name: &str, mtime_secs: u64) -> ServedFile {
+    let file = ServedFile::new(name, 100);
+    let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), file.0);
+    std::fs::File::options().write(true).open(&fs).unwrap()
+        .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(mtime_secs)).unwrap();
+    file
+}
+
+fn via_app(request: &Request, config: crate::server_config::ServerConfig) -> Response {
+    use crate::application::Application;
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+        tls: false,
+    };
+    crate::app::App::with_config(config).execute(request, &conn).unwrap()
+}
+
+fn static_status(uri: &str) -> i16 {
+    use crate::application::Application;
+    let request = Request { method: "GET".into(), request_uri: uri.to_string(), http_version: "HTTP/1.1".into(), headers: vec![], body: Default::default() };
+    let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None, tls: false };
+    crate::app::App::new().execute(&request, &conn).unwrap().status_code
+}
+
+fn get_with(uri: &str, headers: Vec<(&str, &str)>) -> Response {
+    use crate::application::Application;
+    let request = Request { method: "GET".into(), request_uri: uri.to_string(), http_version: "HTTP/1.1".into(),
+        headers: headers.into_iter().map(|(n, v)| Header { name: n.to_string().into(), value: v.to_string().into() }).collect(), body: Default::default() };
+    let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None, tls: false };
+    crate::app::App::new().execute(&request, &conn).unwrap()
+}
+
+fn etag_of(response: &Response) -> String {
+    response.headers.iter().find(|h| h.name == Header::_ETAG).map(|h| h.value.to_string()).expect("no ETag")
+}
+
+#[test]
+fn directory_index_html() {
+    let path = "/static/";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["static", "index.html"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn directory_index_html_no_slash() {
+    let path = "/static";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["static", "index.html"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn directory_index_html_no_slash_and_query() {
+    let path = "/static?param=1234";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["static", "index.html"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn directory_index_html_with_query() {
+    let path = "/static/?param=1234";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["static", "index.html"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn directory_listing_can_be_turned_off() {
+    use crate::server_config::ServerConfig;
+    let get = |uri: &str| Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+    let listing = via_app(&get("/static/no_index/"), ServerConfig::default());
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, listing.status_code, "listed by default");
+
+    let off = ServerConfig { directory_listing: false, ..ServerConfig::default() };
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, via_app(&get("/static/no_index/"), off.clone()).status_code);
+    // A directory with an index.html, and plain files, are unaffected.
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, via_app(&get("/static/"), off.clone()).status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, via_app(&get("/static/test.json"), off).status_code);
+}
+
+#[test]
+fn directory_listing_escapes_display_name_and_percent_encodes_href() {
+    let path_array = vec!["static", "no_index"];
+    let fs_path = FileExt::build_path(&path_array);
+
+    let html = StaticResourceController::render_directory_listing(&fs_path, "/static/no_index");
+
+    // display text is HTML-escaped ("a & b.txt" -> "a &amp; b.txt")...
+    assert!(html.contains("a &amp; b.txt"));
+    // ...but the href is percent-encoded, not HTML-escaped, so the raw name never
+    // appears unescaped inside an href attribute
+    assert!(html.contains("href=\"/static/no_index/a%20%26%20b.txt\""));
+    assert!(!html.contains("href=\"/static/no_index/a & b.txt\""));
+}
+
+#[test]
+fn directory_without_index_html_matches_and_renders_listing() {
+    let path = "/static/no_index/";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+        tls: false,
+    };
+
+    assert!(StaticResourceController::is_matching(&request, &connection_info));
+
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+    let body = String::from_utf8(response.content_range_list.get(0).unwrap().body.to_vec()).unwrap();
+    assert!(body.starts_with("<!DOCTYPE html>"));
+    assert!(body.contains("alpha.txt"));
+    assert!(body.contains("beta.json"));
+    assert!(body.contains("nested/"));
+}
+
+#[test]
+fn directory_without_index_html_matches_head_and_options() {
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+        tls: false,
+    };
+
+    let head_request = Request {
+        method: METHOD.head.to_string(),
+        request_uri: "/static/no_index/".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+    assert!(StaticResourceController::is_matching(&head_request, &connection_info));
+
+    let options_request = Request {
+        method: METHOD.options.to_string(),
+        request_uri: "/static/no_index/".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+    assert!(StaticResourceController::is_matching(&options_request, &connection_info));
+}
+
+#[test]
+fn fast_path_declines_directories_and_options() {
+    let dir = static_request(METHOD.get, "/src/", vec![]);
+    let mut response = Response::new();
+    assert!(StaticResourceController::serve_regular_file(&dir, &mut response, &crate::server_config::ServerConfig::default()).is_none());
+    let file = ServedFile::new("opts.txt", 10);
+    assert!(StaticResourceController::serve_regular_file(&static_request(METHOD.options, &file.0, vec![]), &mut Response::new(), &crate::server_config::ServerConfig::default()).is_none());
+}
+
+#[test]
+fn fast_path_matches_the_general_path() {
+    // Same file through the fast path (GET) and the general path (a Range
+    // covering the whole file): same bytes and same type.
+    let file = ServedFile::new("same.css", 700);
+    let fast = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    let general = StaticResourceController::process_static_resources(&static_request(METHOD.get, &file.0, vec![])).unwrap();
+    assert_eq!(general[0].body, fast.content_range_list[0].body);
+    assert_eq!(general[0].content_type, fast.content_range_list[0].content_type);
+}
+
+#[test]
+fn file_response_includes_etag_header() {
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/static/test.txt".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+
+    let etag = response._get_header(Header::_ETAG.to_string());
+    assert!(etag.is_some(), "ETag header should be present");
+
+    let etag_value = &etag.unwrap().value;
+    assert!(etag_value.starts_with('"'), "ETag should be quoted: {}", etag_value);
+    assert!(etag_value.ends_with('"'), "ETag should be quoted: {}", etag_value);
+    assert!(etag_value.contains('-'), "ETag should contain mtime-size separator: {}", etag_value);
+}
+
+#[test]
+fn file_retrieval() {
+    let path = "/static/test.txt";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["static", "test.txt"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn file_retrieval_no_html_suffix() {
+    let request_uri = "/configure";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["configure.html"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn file_retrieval_no_html_suffix_with_query_params() {
+    let request_uri = "/configure?param1=some_param&another";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["configure.html"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn file_retrieval_with_query_params() {
+    let request_uri = "/static/test.txt?param=as%20df&another_param=1234";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let is_matching = StaticResourceController::is_matching(&request, &connection_info);
+    assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["static", "test.txt"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
+}
+
+#[test]
+fn if_modified_since_answers_304_unless_if_none_match_is_present() {
+    use crate::server_config::ServerConfig;
+    let file = served_with_mtime("ims.txt", 1_767_222_000);
+    let get = |headers: Vec<Header>| via_app(&static_request(METHOD.get, &file.0, headers), ServerConfig::default()).status_code;
+    let ims = |v: &str| Header::new(Header::_IF_MODIFIED_SINCE, v.to_string());
+    assert_eq!(304, get(vec![ims("Wed, 31 Dec 2025 23:00:00 GMT")]), "same second");
+    assert_eq!(304, get(vec![ims("Fri, 01 Jan 2027 00:00:00 GMT")]), "later");
+    assert_eq!(200, get(vec![ims("Wed, 31 Dec 2025 22:59:59 GMT")]), "earlier");
+    assert_eq!(200, get(vec![ims("yesterday")]), "unparseable is ignored");
+    // If-None-Match decides when present (RFC 9110 §13.1.3).
+    assert_eq!(200, get(vec![ims("Fri, 01 Jan 2027 00:00:00 GMT"), Header::new(Header::_IF_NONE_MATCH, "\"nope\"")]));
+    assert_eq!(304, get(vec![ims("Wed, 31 Dec 2025 22:00:00 GMT"), Header::new(Header::_IF_NONE_MATCH, "*")]));
+    // The general path (a range request) evaluates it the same way.
+    assert_eq!(304, get(vec![ims("Fri, 01 Jan 2027 00:00:00 GMT"), Header::new(Header::_RANGE, "bytes=0-9")]));
+    // Only GET and HEAD.
+    let options = via_app(&static_request(METHOD.options, &file.0, vec![ims("Fri, 01 Jan 2027 00:00:00 GMT")]), ServerConfig::default());
+    assert_eq!(204, options.status_code);
+}
+
+#[test]
+fn if_none_match_returns_304_not_modified() {
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    // First request — get the ETag
+    let request1 = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/static/test.txt".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    let response1 = StaticResourceController::process(&request1, Response::new(), &connection_info);
+    assert_eq!(response1.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+    assert!(!response1.content_range_list.is_empty());
+
+    let etag = response1._get_header(Header::_ETAG.to_string()).unwrap().value.clone();
+
+    // Second request — send matching If-None-Match
+    let request2 = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/static/test.txt".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![Header { name: Header::_IF_NONE_MATCH.into(), value: etag.clone() }],
+        body: Default::default(),
+    };
+
+    let response2 = StaticResourceController::process(&request2, Response::new(), &connection_info);
+
+    assert_eq!(response2.status_code, *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code);
+    assert_eq!(response2.reason_phrase, STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase);
+    assert!(response2.content_range_list.is_empty(), "304 response must have no body");
+
+    // ETag should still be present in the 304
+    let etag304 = response2._get_header(Header::_ETAG.to_string());
+    assert!(etag304.is_some(), "ETag should be present in 304 response");
+    assert_eq!(etag304.unwrap().value, etag);
+}
+
+#[test]
+fn if_none_match_star_returns_304() {
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/static/test.txt".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![Header { name: Header::_IF_NONE_MATCH.into(), value: "*".into() }],
+        body: Default::default(),
+    };
+
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code);
+    assert!(response.content_range_list.is_empty(), "304 response must have no body");
+}
+
+#[test]
+fn is_matching_only_for_get_head_options_on_origin_form_targets() {
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+        tls: false,
+    };
+    let request = |method: &str, uri: &str| Request {
+        method: method.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+
+    for method in [METHOD.get, METHOD.head, METHOD.options] {
+        assert!(StaticResourceController::is_matching(&request(method, "/static/test.json"), &connection_info), "{}", method);
+        assert!(StaticResourceController::is_matching(&request(method, "/static/test.json?x=1#f"), &connection_info), "{}", method);
+    }
+    for method in [METHOD.post, METHOD.put, METHOD.delete] {
+        assert!(!StaticResourceController::is_matching(&request(method, "/static/test.json"), &connection_info), "{}", method);
+    }
+    assert!(!StaticResourceController::is_matching(&request(METHOD.get, "/"), &connection_info));
+    assert!(!StaticResourceController::is_matching(&request(METHOD.options, "*"), &connection_info));
+    assert!(!StaticResourceController::is_matching(&request(METHOD.get, "/static/no-such-file.json"), &connection_info));
+}
+
+#[test]
+fn large_compressible_file_is_gzipped_for_gzip_clients_and_streamed_otherwise() {
+    use crate::server_config::ServerConfig;
+    let file = ServedFile::new("large.js", (StaticResourceController::STREAM_THRESHOLD + 10_000) as usize);
+    let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), file.0);
+    std::fs::File::options().write(true).open(&fs).unwrap()
+        .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_767_222_000)).unwrap();
+
+    let gzip = via_app(&static_request(METHOD.get, &file.0, vec![Header::new(Header::_ACCEPT_ENCODING, "gzip")]), ServerConfig::default());
+    assert_eq!(200, gzip.status_code);
+    assert!(gzip.stream_file.is_none());
+    assert_eq!("gzip", gzip.header(Header::_CONTENT_ENCODING).unwrap().value);
+    let plain = std::fs::read(&fs).unwrap();
+    assert_eq!(crate::compression::gzip(&plain).unwrap(), gzip.content_range_list[0].body);
+
+    let identity = via_app(&static_request(METHOD.get, &file.0, vec![]), ServerConfig::default());
+    assert!(identity.stream_file.is_some(), "no gzip: sendfile as before");
+    assert!(identity.header(Header::_CONTENT_ENCODING).is_none());
+}
+
+#[test]
+fn large_file_honours_if_none_match() {
+    let file = ServedFile::new("etag.bin", (StaticResourceController::STREAM_THRESHOLD + 1) as usize);
+    let first = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    let etag = first.headers.iter().find(|h| h.name == Header::_ETAG).unwrap().value.clone();
+    let second = StaticResourceController::process_request(
+        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.into(), value: etag }]),
+        Response::new(),
+    );
+    assert_eq!(304, second.status_code);
+    assert!(second.stream_file.is_none());
+}
+
+#[test]
+fn large_file_is_streamed_without_being_read() {
+    let file = ServedFile::new("large.bin", (StaticResourceController::STREAM_THRESHOLD + 1) as usize);
+    let response = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    assert_eq!(200, response.status_code);
+    assert!(response.stream_file.is_some(), "large file must stream");
+    assert!(response.content_range_list.is_empty(), "and must not be loaded into memory");
+    let length = response.headers.iter().find(|h| h.name == Header::_CONTENT_LENGTH).map(|h| h.value.clone());
+    assert_eq!(Some((StaticResourceController::STREAM_THRESHOLD + 1).to_string()), length.map(|v| v.into_owned()));
+}
+
+#[test]
+fn last_modified_nanos_is_opt_in() {
+    use crate::server_config::ServerConfig;
+    let file = served_with_mtime("nanos.txt", 1_767_222_000);
+    // Fast path (plain GET) and general path (Range).
+    for headers in [vec![], vec![Header::new(Header::_RANGE, "bytes=0-9")]] {
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), ServerConfig::default());
+        assert!(response.header(Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS).is_none(), "{headers:?}");
+        assert!(response.header(Header::_LAST_MODIFIED).is_some());
+
+        let nanos = ServerConfig { nanos_headers: true, ..ServerConfig::default() };
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), nanos);
+        assert_eq!("1767222000000000000", response.header(Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS).unwrap().value, "{headers:?}");
+        assert!(response.header(Header::_DATE_UNIX_EPOCH_NANOS).is_some());
+    }
+}
+
+#[test]
+fn small_file_fast_path_serves_body_type_and_etag() {
+    let file = ServedFile::new("fast.txt", 300);
+    let response = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    assert_eq!(200, response.status_code);
+    assert_eq!(1, response.content_range_list.len());
+    assert_eq!(vec![b'x'; 300], response.content_range_list[0].body);
+    assert_eq!(crate::mime_type::MimeType::TEXT_PLAIN, response.content_range_list[0].content_type);
+    let etag = response.headers.iter().find(|h| h.name == Header::_ETAG).expect("ETag").value.clone();
+    assert!(etag.ends_with("-300\""), "{etag}");
+
+    let cached = StaticResourceController::process_request(
+        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.into(), value: etag }]),
+        Response::new(),
+    );
+    assert_eq!(304, cached.status_code);
+    assert!(cached.content_range_list.is_empty());
+}
+
+#[test]
+fn small_files_and_ranges_take_the_regular_path() {
+    let small = ServedFile::new("small.bin", 1024);
+    let response = StaticResourceController::process_request(&static_request(METHOD.get, &small.0, vec![]), Response::new());
+    assert!(response.stream_file.is_none());
+    assert_eq!(1024, response.content_range_list.iter().map(|c| c.body.len()).sum::<usize>());
+
+    let large = ServedFile::new("ranged.bin", (StaticResourceController::STREAM_THRESHOLD + 1) as usize);
+    let ranged = StaticResourceController::process_request(
+        &static_request(METHOD.get, &large.0, vec![Header { name: Header::_RANGE.into(), value: "bytes=0-9".into() }]),
+        Response::new(),
+    );
+    assert_eq!(206, ranged.status_code);
+    assert_eq!(10, ranged.content_range_list[0].body.len());
+}
+
+#[test]
+fn spa_fallback_respects_exclude_prefixes() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES", "/api,/healthz");
+
+    let (request, connection_info) = spa_request("/api/users/999");
+    assert!(
+        !StaticResourceController::is_matching(&request, &connection_info),
+        "an excluded prefix should still 404 rather than fall back"
+    );
+
+    // A path outside the excluded prefixes still gets the fallback.
+    let (request2, connection_info2) = spa_request("/dashboard/settings");
+    assert!(StaticResourceController::is_matching(&request2, &connection_info2));
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+}
+
+#[test]
+fn spa_fallback_serves_configured_file_for_unmatched_route() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+
+    let (request, connection_info) = spa_request("/dashboard/settings");
+    assert!(StaticResourceController::is_matching(&request, &connection_info));
+
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, response.status_code);
+
+    let expected = FileExt::read_file(FileExt::build_path(&["static", "index.html"]).as_str()).unwrap();
+    let actual = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(expected, actual);
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+}
+
+#[test]
+fn spa_fallback_still_serves_a_real_file_directly_when_one_exists() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+
+    // /static/test.txt is a real file — must be served as itself, not the fallback.
+    let (request, connection_info) = spa_request("/static/test.txt");
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+    let expected = FileExt::read_file(FileExt::build_path(&["static", "test.txt"]).as_str()).unwrap();
+    let actual = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(expected, actual);
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+}
+
+#[test]
+fn stale_etag_returns_200_with_body() {
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+    sni_hostname: None,
+    tls: false,
+    };
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/static/test.txt".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![Header {
+            name: Header::_IF_NONE_MATCH.into(),
+            value: "\"outdated-etag-value\"".into(),
+        }],
+        body: Default::default(),
+    };
+
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+    assert!(!response.content_range_list.is_empty(), "200 response must include file body");
+}
+
+#[test]
+fn static_files_are_revalidated_not_uncacheable() {
+    use crate::server_config::ServerConfig;
+    let file = served_with_mtime("cache.txt", 1_767_222_000);
+    // Range goes through the general path, plain GET through the fast path.
+    for headers in [vec![], vec![Header::new(Header::_RANGE, "bytes=0-9")]] {
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), ServerConfig::default());
+        assert_eq!("no-cache", response.header(Header::_CACHE_CONTROL).unwrap().value, "{headers:?}");
+        assert_eq!("Wed, 31 Dec 2025 23:00:00 GMT", response.header(Header::_LAST_MODIFIED).unwrap().value);
+
+        let custom = ServerConfig { static_cache_control: "public, max-age=60".to_string(), ..ServerConfig::default() };
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), custom);
+        assert_eq!("public, max-age=60", response.header(Header::_CACHE_CONTROL).unwrap().value);
+
+        let unset = ServerConfig { static_cache_control: String::new(), ..ServerConfig::default() };
+        let response = via_app(&static_request(METHOD.get, &file.0, headers), unset);
+        assert_eq!(Header::_DO_NOT_STORE_CACHE, response.header(Header::_CACHE_CONTROL).unwrap().value);
+    }
+    // Other responses keep no-store.
+    let health = via_app(&static_request(METHOD.get, "/healthz", vec![]), ServerConfig::default());
+    assert_eq!(Header::_DO_NOT_STORE_CACHE, health.header(Header::_CACHE_CONTROL).unwrap().value);
+}

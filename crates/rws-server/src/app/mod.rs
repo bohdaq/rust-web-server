@@ -1,0 +1,375 @@
+#[cfg(test)]
+mod tests;
+
+pub mod controller;
+
+use std::sync::Arc;
+
+use crate::app::controller::directory_listing::DirectoryListingAssetsController;
+use crate::app::controller::favicon::FaviconController;
+use crate::app::controller::health::HealthController;
+use crate::app::controller::ready::ReadyController;
+use crate::app::controller::metrics::MetricsController;
+use crate::app::controller::file::initiate::FileUploadInitiateController;
+use crate::app::controller::form::get_method::FormGetMethodController;
+use crate::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController;
+use crate::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController;
+use crate::app::controller::index::IndexController;
+use crate::app::controller::not_found::NotFoundController;
+use crate::app::controller::script::ScriptController;
+use crate::app::controller::static_resource::StaticResourceController;
+use crate::app::controller::style::StyleController;
+use crate::application::Application;
+use crate::controller::Controller;
+use crate::core::New;
+use crate::header::Header;
+use crate::mcp::McpServer;
+use crate::middleware::{Middleware, WithMiddleware};
+use crate::request::Request;
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::server::ConnectionInfo;
+use crate::server_config::ServerConfig;
+use crate::state::AppWithState;
+
+/// A pair of function pointers representing one entry in the controller chain.
+struct ControllerEntry {
+    is_matching: fn(&Request, &ConnectionInfo) -> bool,
+    process: fn(&Request, Response, &ConnectionInfo) -> Response,
+}
+
+/// Build a [`ControllerEntry`] from any type that implements [`Controller`].
+fn entry<C: Controller>() -> ControllerEntry {
+    ControllerEntry {
+        is_matching: C::is_matching,
+        process: C::process,
+    }
+}
+
+/// The built-in HTTP application. Serves static files, favicons, forms,
+/// file uploads, health probes, metrics, and a 404 fallback.
+///
+/// Use as-is or compose with the framework's building blocks:
+///
+/// ```rust,no_run
+/// # extern crate rws_server as rust_web_server;
+/// use rust_web_server::app::App;
+/// use rust_web_server::middleware::{WithMiddleware, RateLimitLayer};
+/// use rust_web_server::core::New;
+///
+/// // Middleware stack around the built-in app
+/// let app = App::new().wrap(RateLimitLayer);
+/// ```
+///
+/// For user-defined routes with shared state, call [`App::with_state`]:
+///
+/// ```rust,no_run
+/// # extern crate rws_server as rust_web_server;
+/// use rust_web_server::app::App;
+/// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+/// use rust_web_server::core::New;
+///
+/// struct State { version: &'static str }
+///
+/// let app = App::with_state(State { version: "1.0" })
+///     .get("/version", |_req, _params, _conn, state| {
+///         let mut r = Response::new();
+///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+///         r
+///     });
+/// ```
+///
+/// # Per-instance configuration
+///
+/// By default `App::new()` reads CORS, CSP, and other settings from
+/// environment variables on each request (matching the current process state,
+/// including hot-reloaded values). Call [`App::with_config`] to pin the
+/// configuration to a specific [`ServerConfig`] — this is the recommended
+/// pattern for parallel integration tests, which should not touch environment
+/// variables at all.
+///
+/// ```rust,ignore
+/// # extern crate rws_server as rust_web_server;
+/// use rust_web_server::app::App;
+/// use rust_web_server::server_config::ServerConfig;
+/// use rust_web_server::test_client::TestClient;
+///
+/// // No env writes, no lock needed — safe to run in parallel.
+/// let app = App::with_config(ServerConfig {
+///     cors_allow_all: false,
+///     cors_allow_origins: "https://trusted.example.com".to_string(),
+///     ..ServerConfig::default()
+/// });
+/// let client = TestClient::new(app);
+/// ```
+#[derive(Clone)]
+pub struct App {
+    /// When `Some`, every request is served using this fixed config.
+    /// When `None`, config is read from environment variables on each request
+    /// (supports hot-reload via SIGHUP / `POST /admin/config/reload`).
+    config: Option<Arc<ServerConfig>>,
+}
+
+impl New for App {
+    fn new() -> Self {
+        App { config: None }
+    }
+}
+
+impl App {
+    /// Create an `App` pinned to an explicit [`ServerConfig`].
+    ///
+    /// All CORS, CSP, and other header settings are taken from `config` rather
+    /// than from environment variables. The configuration is fixed for the
+    /// lifetime of the `App` instance — SIGHUP / hot-reload do not affect it.
+    ///
+    /// This is the preferred constructor for integration tests: build a
+    /// [`ServerConfig`] with the exact settings under test, pass it here, and
+    /// use [`TestClient`] to drive requests. No environment writes and no
+    /// [`test_env::lock()`] are needed.
+    ///
+    /// [`TestClient`]: crate::test_client::TestClient
+    /// [`test_env::lock()`]: crate::test_env::lock
+    pub fn with_config(config: ServerConfig) -> Self {
+        App { config: Some(Arc::new(config)) }
+    }
+
+    /// [`App::with_config`] sharing an existing `Arc` instead of copying it.
+    #[doc(hidden)]
+    pub fn with_shared_config(config: Arc<ServerConfig>) -> Self {
+        App { config: Some(config) }
+    }
+
+    /// Whether the built-in controllers answer `request` without blocking:
+    /// every GET/HEAD they serve is in memory or a local file read (health,
+    /// metrics, assets, static files — large files are only opened here and
+    /// streamed from the blocking pool). Uploads and form posts aren't.
+    #[doc(hidden)]
+    pub fn is_inline_request(request: &Request) -> bool {
+        request.method == crate::request::METHOD.get || request.method == crate::request::METHOD.head
+    }
+}
+
+impl Application for App {
+    // `App` dispatches through a fixed if-chain of built-in `Controller`s
+    // rather than a `Router`: the built-in set is small, static, and known
+    // at compile time, so a linear scan is simpler and just as fast as a
+    // segment-matching router would be here. This is a deliberate choice,
+    // not an oversight — `Router` (src/router/mod.rs) is the right tool for
+    // user-defined routes with named path params/wildcards, and `AppWithState`
+    // / `AsyncAppWithState` use exactly that, falling through to this same
+    // controller chain for anything they don't handle themselves.
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        let config = match &self.config {
+            Some(c) => Arc::clone(c),
+            None => ServerConfig::current(),
+        };
+        let header_list = Header::get_header_list_with_config(request, &config);
+        let response = crate::error::problem::with_headers(
+            STATUS_CODE_REASON_PHRASE.n501_not_implemented,
+            &format!("no handler for method {}", request.method),
+            "",
+            Some(header_list),
+        );
+
+        let controllers = [
+            entry::<IndexController>(),
+            entry::<StyleController>(),
+            entry::<ScriptController>(),
+            entry::<DirectoryListingAssetsController>(),
+            entry::<FileUploadInitiateController>(),
+            entry::<FormUrlEncodedEnctypePostMethodController>(),
+            entry::<FormGetMethodController>(),
+            entry::<FormMultipartEnctypePostMethodController>(),
+            entry::<HealthController>(),
+            entry::<ReadyController>(),
+            entry::<MetricsController>(),
+            entry::<FaviconController>(),
+        ];
+
+        for c in &controllers {
+            if (c.is_matching)(request, connection) {
+                return Ok((c.process)(request, response, connection));
+            }
+        }
+
+        // Static files, after every built-in route. A GET/HEAD of a regular
+        // file is answered in one pass — StaticResourceController::is_matching
+        // would build the path and look the file up, only for process to do
+        // both again; serving one implies is_matching would have said yes.
+        let mut response = response;
+        if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response, &config) {
+            return Ok(served);
+        }
+        if StaticResourceController::is_matching(request, connection)
+            && (config.directory_listing || !StaticResourceController::is_directory_without_index(request))
+        {
+            return Ok(StaticResourceController::process_general(request, response, &config));
+        }
+        // `/docs/http2/):` — a link copied with the prose around it.
+        if let Some(redirect) = StaticResourceController::trailing_punctuation_redirect(request) {
+            return Ok(redirect);
+        }
+        if NotFoundController::is_matching(request, connection) {
+            return Ok(NotFoundController::process(request, response, connection));
+        }
+
+        Ok(response)
+    }
+
+    fn runs_inline(&self, request: &Request, _connection: &ConnectionInfo) -> bool {
+        App::is_inline_request(request)
+    }
+}
+
+impl App {
+    /// Dispatch `request` through the controller chain and return the response.
+    ///
+    /// This is a convenience wrapper over [`Application::execute`] that uses a
+    /// synthetic loopback [`ConnectionInfo`]. Use it in tests or when no real
+    /// connection context is available. Prefer [`TestClient`] for structured
+    /// test code.
+    ///
+    /// [`TestClient`]: crate::test_client::TestClient
+    pub fn handle_request(request: Request) -> (Response, Request) {
+        use crate::server::Address;
+        let conn = ConnectionInfo {
+            client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+            server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+            request_size: 16000,
+            sni_hostname: None,
+            tls: false,
+        };
+        let app = App::new();
+        let response = app.execute(&request, &conn).unwrap_or_else(|_| {
+            let header_list = Header::get_header_list_with_config(&request, &ServerConfig::current());
+            Response::get_response(
+                STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+                Some(header_list),
+                None,
+            )
+        });
+        (response, request)
+    }
+
+    /// Create a state-aware application. Routes registered on the returned
+    /// [`AppWithState<S>`] are tried first; unmatched requests fall through to
+    /// the built-in controller chain (static files, health probes, etc.).
+    ///
+    /// The state is stored as `Arc<S>` and shared across all handlers.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// struct Db { url: String }
+    ///
+    /// let app = App::with_state(Db { url: "postgres://...".to_string() })
+    ///     .get("/ping", |_req, _params, _conn, db| {
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     });
+    /// ```
+    pub fn with_state<S: Send + Sync + 'static>(state: S) -> AppWithState<S> {
+        AppWithState::new(state)
+    }
+
+    /// Wrap this application in a middleware layer.
+    ///
+    /// Returns a [`WithMiddleware<App>`] that runs `layer` before every
+    /// request. Chain `.wrap()` calls to stack multiple layers:
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::middleware::RateLimitLayer;
+    /// use rust_web_server::core::New;
+    ///
+    /// let app = App::new().wrap(RateLimitLayer);
+    /// ```
+    pub fn wrap<M: Middleware + 'static>(self, layer: M) -> WithMiddleware<App> {
+        WithMiddleware::new(self).wrap(layer)
+    }
+
+    /// Attach an MCP server to this application. Tools, resources, and
+    /// prompts are registered on the returned [`McpServer`]; requests that
+    /// do not match the MCP endpoint are forwarded to `self` (static files,
+    /// health probes, any custom routes registered before this call).
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::mcp::{McpContent, extract_arg};
+    /// use rust_web_server::core::New;
+    ///
+    /// // Pure MCP — unmatched paths handled by built-in App
+    /// let app = App::new()
+    ///     .mcp("my-server", "1.0")
+    ///     .tool(
+    ///         "echo",
+    ///         "Echo text back",
+    ///         r#"{"type":"object","properties":{"text":{"type":"string"}}}"#,
+    ///         |args| Ok(McpContent::text(extract_arg(args, "text").unwrap_or_default())),
+    ///     );
+    /// ```
+    ///
+    /// To combine with custom HTTP routes, start from [`App::with_state`]:
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::mcp::McpContent;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// let app = App::with_state(())
+    ///     .get("/api/ping", |_, _, _, _| {
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     })
+    ///     .mcp("my-server", "1.0")
+    ///     .tool("ping", "Ping the server", "{}", |_| Ok(McpContent::text("pong")));
+    /// ```
+    pub fn mcp(self, name: impl Into<String>, version: impl Into<String>) -> McpServer {
+        McpServer::new(name, version).wrap(self)
+    }
+
+    /// Create an async state-aware application (requires the `http2` feature).
+    ///
+    /// Handlers are `async fn` closures that can `await` database queries,
+    /// HTTP clients, or any other async I/O. Unmatched routes fall through to
+    /// the built-in controller chain.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// use std::sync::Arc;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// struct Db { url: String }
+    ///
+    /// let app = App::with_async_state(Db { url: "postgres://...".to_string() })
+    ///     .get("/ping", |_req, _params, _conn, state| async move {
+    ///         // state: Arc<Db>
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     });
+    /// ```
+    #[cfg(feature = "http2")]
+    pub fn with_async_state<S: Send + Sync + 'static>(state: S) -> crate::async_state::AsyncAppWithState<S> {
+        crate::async_state::AsyncAppWithState::new(state)
+    }
+}

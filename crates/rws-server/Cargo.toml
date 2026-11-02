@@ -1,0 +1,91 @@
+[package]
+name = "rws-server"
+description = "The server layer of rust-web-server (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+[features]
+default = []
+# Test helpers rust-web-server's own tests use (its dev-dependency enables it).
+test-support = []
+http1 = ["dep:ctrlc", "dep:libc"]
+http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc"]
+http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
+http-client = ["dep:rustls", "dep:webpki-roots"]
+fips = ["http2", "rustls/fips", "rws-http/fips"]
+pkcs11 = ["http2", "dep:cryptoki", "dep:aws-lc-rs"]
+serde = ["dep:serde", "dep:serde_json", "rws-http/serde"]
+auth = ["dep:hmac", "dep:sha2"]
+auth-asymmetric = ["auth", "dep:p256", "dep:rand_core"]
+macros = ["dep:rws-macros"]
+model-sqlite = ["dep:sqlx", "sqlx/sqlite", "sqlx/runtime-tokio", "http2"]
+model-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/runtime-tokio-rustls", "http2"]
+model-mysql = ["dep:sqlx", "sqlx/mysql", "sqlx/runtime-tokio-rustls", "http2"]
+crypto = ["dep:argon2", "dep:rand_core", "dep:hmac", "dep:sha2", "dep:aes-gcm"]
+csrf = ["dep:rand_core"]
+sso = ["dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
+sso-server = ["sso", "auth"]
+sso-saml = ["sso"]
+storage-local = []
+storage-s3 = ["dep:hmac", "dep:sha2", "http-client"]
+storage-azure = ["dep:hmac", "dep:sha2", "http-client"]
+storage-gcs = ["http-client", "dep:aws-lc-rs"]
+openapi = []
+rewrite-regex = ["dep:regex"]
+secrets = ["dep:hmac", "dep:sha2", "http-client"]
+gateway-api = ["http2", "serde"]
+acme = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]
+
+[dependencies]
+rws-base.workspace = true
+rws-http.workspace = true
+ctrlc = { version = "3", optional = true }
+libc = { version = "0.2", optional = true }
+file-ext = "12.0.0"
+url-search-params = "12.0.0"
+url-build-parse = "12.1.0"
+memchr = "2.7"
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"], optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+h2 = { version = "0.4", optional = true }
+bytes = { version = "1", optional = true }
+http = { version = "1", optional = true }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "bloom"], optional = true }
+h3 = { version = "0.0.8", optional = true }
+h3-quinn = { version = "0.0.10", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+hmac  = { version = "0.12", optional = true }
+sha2  = { version = "0.10", features = ["oid"], optional = true }
+p256      = { version = "0.14", features = ["ecdsa"], optional = true }
+rws-macros = { path = "../../rws-macros", version = "17.28", optional = true }
+sqlx = { version = "0.8", default-features = false, optional = true }
+argon2    = { version = "0.5", features = ["password-hash"], optional = true }
+rand_core = { version = "0.6", features = ["getrandom"], optional = true }
+aes-gcm   = { version = "0.10", optional = true }
+regex     = { version = "1", optional = true }
+cryptoki  = { version = "0.12", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+webpki-roots = { version = "1.0.11", optional = true }
+aws-lc-rs = { version = "1", optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std", "prefer-post-quantum"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasip2 = "2.0"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros", "rt"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
+aws-lc-rs = "1"

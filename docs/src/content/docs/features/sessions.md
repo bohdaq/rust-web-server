@@ -3,7 +3,7 @@ title: Sessions
 description: Server-side session management with in-memory, database-backed, and Redis-backed session stores.
 ---
 
-`rust-web-server` ships three session store implementations in `src/session/mod.rs`:
+`rust-web-server` ships three session store implementations in `crates/rws-server/src/session/mod.rs`:
 
 | Store | Persistence | Scales horizontally |
 |-------|-------------|---------------------|

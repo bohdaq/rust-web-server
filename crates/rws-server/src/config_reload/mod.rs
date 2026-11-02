@@ -1,0 +1,271 @@
+//! Hot configuration reload.
+//!
+//! Re-reads `rws.config.toml` without restarting the server. Non-binding
+//! settings — those that would require a new TCP socket (IP, port,
+//! thread count) or a different default TLS cert/key path — are logged as
+//! ignored. All other settings take effect on the next incoming request.
+//! On TLS builds a `SIGHUP` also rebuilds the TLS acceptor, so renewed
+//! certificate files and changed `[[virtual_host]]` entries are picked up.
+//!
+//! # Triggering a reload
+//!
+//! * **Unix signal**: send `SIGHUP` to the server process.
+//!   ```bash
+//!   kill -HUP $(pidof rws)
+//!   ```
+//! * **HTTP endpoint**: `POST /admin/config/reload` (no body required).
+//!
+//! # What is hot-reloadable
+//!
+//! | Setting | Env var |
+//! |---------|---------|
+//! | CORS — all fields | `RWS_CONFIG_CORS_*` |
+//! | Rate-limit thresholds | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
+//! | Log format | `RWS_CONFIG_LOG_FORMAT` |
+//! | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
+//! | Max body size | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` |
+//! | Tera templates (`tera` feature, if `template::init()` was called) | re-read from disk — see `template` |
+//! | Proxy `[[route]]`, `[[upstream]]`, `[middleware]` (config-driven proxy) | validated, then swapped in; a file with errors leaves the running routes in place — see `proxy_config::ConfigDrivenApp::reload_from_str` |
+//! | Anything registered with [`on_reload`] | your hook |
+//!
+//! # What is NOT hot-reloadable (requires restart)
+//!
+//! | Setting | Why |
+//! |---------|-----|
+//! | IP / Port | Bound socket cannot be moved |
+//! | Thread count | Thread pool is fixed at startup |
+//! | Default TLS cert / key *path* | `run_tls` keeps the startup paths (the files themselves are re-read on `SIGHUP`) |
+//! | `[[tcp_proxy]]` / `[[udp_proxy]]` / `[[ws_proxy]]` | Bound listener sockets |
+
+#[cfg(test)]
+mod tests;
+
+use std::sync::{OnceLock, RwLock};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+
+use crate::entry_point::Config;
+use crate::entry_point::config_file::override_environment_variables_from_config;
+use crate::rate_limit;
+
+/// Global flag set by the SIGHUP signal handler.
+///
+/// The accept loop checks this between connections and calls [`reload`] when
+/// it is `true`, then resets it to `false`.
+pub static RELOAD_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Completed [`reload`]s since the process started.
+static RELOADS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn last_errors() -> &'static std::sync::Mutex<Vec<String>> {
+    static ERRORS: OnceLock<std::sync::Mutex<Vec<String>>> = OnceLock::new();
+    ERRORS.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// How many [`reload`]s have completed, and the errors the last one's hooks
+/// reported with [`report_error`] (empty: it applied cleanly). For the admin
+/// API, which requests a reload and waits for the count to move.
+pub fn last_reload() -> (u64, Vec<String>) {
+    let errors = last_errors().lock().unwrap_or_else(|e| e.into_inner()).clone();
+    (RELOADS.load(Ordering::SeqCst), errors)
+}
+
+/// A reload with one reported error, without re-reading anything: for the
+/// admin API's tests.
+#[cfg(any(test, feature = "test-support"))]
+#[doc(hidden)]
+pub fn on_reload_test_error() {
+    let mut errors = last_errors().lock().unwrap_or_else(|e| e.into_inner());
+    errors.clear();
+    errors.push("test reload error".to_string());
+    drop(errors);
+    RELOADS.fetch_add(1, Ordering::SeqCst);
+}
+
+/// A reload hook couldn't apply its part (the old state stays): recorded for
+/// [`last_reload`] until the next reload.
+pub fn report_error(message: impl Into<String>) {
+    last_errors().lock().unwrap_or_else(|e| e.into_inner()).push(message.into());
+}
+
+/// Snapshot of all hot-reloadable configuration values at a point in time.
+///
+/// Obtain the current snapshot with [`current()`]. The snapshot is updated
+/// atomically every time [`reload()`] completes — no partial reads are possible.
+#[derive(Debug, Clone)]
+pub struct ConfigSnapshot {
+    /// `RWS_CONFIG_CORS_ALLOW_ALL`
+    pub cors_allow_all: bool,
+    /// `RWS_CONFIG_CORS_ALLOW_ORIGINS`
+    pub cors_allow_origins: String,
+    /// `RWS_CONFIG_CORS_ALLOW_CREDENTIALS`
+    pub cors_allow_credentials: String,
+    /// `RWS_CONFIG_CORS_ALLOW_METHODS`
+    pub cors_allow_methods: String,
+    /// `RWS_CONFIG_CORS_ALLOW_HEADERS`
+    pub cors_allow_headers: String,
+    /// `RWS_CONFIG_CORS_EXPOSE_HEADERS`
+    pub cors_expose_headers: String,
+    /// `RWS_CONFIG_CORS_MAX_AGE`
+    pub cors_max_age: String,
+    /// `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`
+    pub rate_limit_max_requests: u32,
+    /// `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS`
+    pub rate_limit_window_secs: u64,
+    /// `RWS_CONFIG_LOG_FORMAT`
+    pub log_format: String,
+    /// `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES`
+    pub request_allocation_size: i64,
+    /// `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`
+    pub max_body_size: u64,
+}
+
+impl ConfigSnapshot {
+    fn from_env() -> Self {
+        let read = |key: &str| std::env::var(key).unwrap_or_default();
+        Self {
+            cors_allow_all: read(Config::RWS_CONFIG_CORS_ALLOW_ALL)
+                .eq_ignore_ascii_case("true"),
+            cors_allow_origins:     read(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS),
+            cors_allow_credentials: read(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS),
+            cors_allow_methods:     read(Config::RWS_CONFIG_CORS_ALLOW_METHODS),
+            cors_allow_headers:     read(Config::RWS_CONFIG_CORS_ALLOW_HEADERS),
+            cors_expose_headers:    read(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS),
+            cors_max_age:           read(Config::RWS_CONFIG_CORS_MAX_AGE),
+            rate_limit_max_requests: std::env::var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1000),
+            rate_limit_window_secs: std::env::var("RWS_CONFIG_RATE_LIMIT_WINDOW_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
+            log_format: read(Config::RWS_CONFIG_LOG_FORMAT),
+            request_allocation_size: std::env::var(
+                Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES,
+            )
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(*Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES),
+            max_body_size: crate::entry_point::get_max_body_size(),
+        }
+    }
+}
+
+static SNAPSHOT: OnceLock<RwLock<ConfigSnapshot>> = OnceLock::new();
+
+fn global() -> &'static RwLock<ConfigSnapshot> {
+    SNAPSHOT.get_or_init(|| RwLock::new(ConfigSnapshot::from_env()))
+}
+
+/// Returns a clone of the current hot-reloadable configuration snapshot.
+///
+/// This takes a brief read lock and clones a handful of strings — safe to call
+/// on every request if needed.
+pub fn current() -> ConfigSnapshot {
+    global().read().unwrap().clone()
+}
+
+/// Ask the running server to reload, exactly as `SIGHUP` does: on Unix it
+/// raises `SIGHUP` for this process, so the server's own handler reloads the
+/// config, the proxy routes and (TLS builds) the certificates; elsewhere it
+/// calls [`reload`]. Setting [`RELOAD_REQUESTED`] alone only reaches the
+/// HTTP/1.1-only server's accept loop — the async servers never read it, so
+/// the MCP `reload_config` tool did nothing in them.
+pub fn request_reload() {
+    #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
+    // SAFETY: kill(2) on our own pid with a signal both servers handle.
+    unsafe {
+        libc::kill(libc::getpid(), libc::SIGHUP);
+    }
+    #[cfg(not(all(unix, any(feature = "http1", feature = "http2"))))]
+    reload();
+}
+
+/// Re-read `rws.config.toml` and apply all hot-reloadable changes in-place.
+///
+/// Called automatically when [`RELOAD_REQUESTED`] is set (SIGHUP on Unix) or
+/// from the `POST /admin/config/reload` handler.
+///
+/// Settings that cannot be changed without a restart (IP, port, thread count,
+/// TLS cert/key) are silently ignored — they are re-parsed from the file but
+/// have no effect until the next process start.
+pub fn reload() {
+    #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
+    crate::systemd::reloading();
+    reload_settings();
+    #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
+    crate::systemd::reloaded();
+}
+
+fn reload_settings() {
+    // Re-parse rws.config.toml → updates process env vars for CORS, log format, etc.
+    // Only one thread ever calls this (the signal handler or admin endpoint),
+    // while workers only read env vars, so the single-writer / many-readers
+    // pattern is safe in practice on all supported platforms.
+    last_errors().lock().unwrap_or_else(|e| e.into_inner()).clear();
+    override_environment_variables_from_config(None);
+    crate::server_config::invalidate();
+
+    let snapshot = ConfigSnapshot::from_env();
+
+    // Apply rate-limit changes to the live global limiter immediately.
+    rate_limit::global().set_limits(
+        snapshot.rate_limit_max_requests,
+        snapshot.rate_limit_window_secs,
+    );
+
+    // Publish the new snapshot atomically.
+    *global().write().unwrap() = snapshot.clone();
+
+    // Hooks: proxy routes, Tera templates (`template::init()` registers one), …
+    for hook in hooks().lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        hook();
+    }
+    RELOADS.fetch_add(1, Ordering::SeqCst);
+
+    println!(
+        "Config reloaded — cors_allow_all={} rate_limit={}/{} log_format={}",
+        snapshot.cors_allow_all,
+        snapshot.rate_limit_max_requests,
+        snapshot.rate_limit_window_secs,
+        snapshot.log_format,
+    );
+}
+
+type ReloadHook = Box<dyn Fn() + Send + Sync>;
+
+fn hooks() -> &'static std::sync::Mutex<Vec<ReloadHook>> {
+    static HOOKS: OnceLock<std::sync::Mutex<Vec<ReloadHook>>> = OnceLock::new();
+    HOOKS.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// Run `hook` at the end of every [`reload`], after the settings have been
+/// re-read — for state that is built from the configuration file rather than
+/// read from `RWS_CONFIG_*` per request. The config-driven proxy registers
+/// one to reload its routes (`proxy_config::ConfigDrivenApp::reload_from_file`).
+pub fn on_reload(hook: impl Fn() + Send + Sync + 'static) {
+    hooks().lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(hook));
+}
+
+/// Install a `SIGHUP` signal handler that sets [`RELOAD_REQUESTED`].
+///
+/// Call this once at server startup (before the accept loop). Safe to call
+/// on non-Unix platforms — it compiles to a no-op.
+///
+/// The handler itself does the minimum allowed in a signal context: it stores
+/// `true` into an `AtomicBool`. The actual [`reload()`] call happens on the
+/// main thread between connection accepts.
+pub fn install_sighup_handler() {
+    #[cfg(all(unix, feature = "http1"))]
+    // SAFETY: The handler only writes to a process-global AtomicBool which is
+    // async-signal-safe. No allocation, no locks, no I/O.
+    unsafe {
+        libc::signal(libc::SIGHUP, sighup_handler as *const () as libc::sighandler_t);
+    }
+}
+
+#[cfg(all(unix, feature = "http1"))]
+extern "C" fn sighup_handler(_: libc::c_int) {
+    RELOAD_REQUESTED.store(true, Ordering::SeqCst);
+}

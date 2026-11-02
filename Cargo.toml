@@ -27,6 +27,7 @@ license = "MIT"
 [workspace.dependencies]
 rws-base = { path = "crates/rws-base", version = "=18.25.0" }
 rws-http = { path = "crates/rws-http", version = "=18.25.0" }
+rws-server = { path = "crates/rws-server", version = "=18.25.0" }
 
 [workspace]
 # Previously implicit (no [workspace] table at all — Cargo auto-added
@@ -34,7 +35,7 @@ rws-http = { path = "crates/rws-http", version = "=18.25.0" }
 # rws-wasm-shim depends ON rust-web-server rather than the other way around,
 # so it can't be pulled in as a path *dependency* the way rws-macros is —
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
-members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http"]
+members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http", "crates/rws-server"]
 # fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
 exclude = ["fuzz", "ci/e2e/grpc", "starters", "site/mcp", "examples/wasm_plugin"]
 
@@ -133,39 +134,39 @@ pkg-fmt = "zip"
 
 [features]
 default = ["http3", "brotli", "zstd"]
-http1 = ["dep:ctrlc", "dep:libc"]
-http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc"]
-http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
-http-client = ["dep:rustls", "dep:webpki-roots"]
+http1 = ["dep:ctrlc", "dep:libc", "rws-server/http1"]
+http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc", "rws-server/http2"]
+http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn", "rws-server/http3"]
+http-client = ["dep:rustls", "dep:webpki-roots", "rws-server/http-client"]
 # Content codings besides gzip (18.1.0): `br` (pure Rust) and `zstd` (C
 # libzstd, built with the crate). Both are in the default set.
 brotli = ["dep:brotli", "rws-http/brotli"]
 zstd   = ["dep:zstd", "rws-http/zstd"]
-acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]
-fips   = ["http2", "rustls/fips", "rws-http/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
-pkcs11 = ["http2", "dep:cryptoki", "dep:aws-lc-rs"] # TLS private keys in an HSM / cloud KMS through PKCS#11 (pkcs11: URIs)
-serde  = ["dep:serde", "dep:serde_json", "rws-http/serde"]
-auth   = ["dep:hmac", "dep:sha2"]
-auth-asymmetric = ["auth", "dep:p256", "dep:rand_core"]  # RS256 (in-crate rsa_key) / ES256 (p256) in JwtLayer
-macros = ["dep:rws-macros"]
+acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs", "rws-server/acme"]
+fips   = ["http2", "rustls/fips", "rws-http/fips", "rws-server/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
+pkcs11 = ["http2", "dep:cryptoki", "dep:aws-lc-rs", "rws-server/pkcs11"] # TLS private keys in an HSM / cloud KMS through PKCS#11 (pkcs11: URIs)
+serde  = ["dep:serde", "dep:serde_json", "rws-http/serde", "rws-server/serde"]
+auth   = ["dep:hmac", "dep:sha2", "rws-server/auth"]
+auth-asymmetric = ["auth", "dep:p256", "dep:rand_core", "rws-server/auth-asymmetric"]  # RS256 (in-crate rsa_key) / ES256 (p256) in JwtLayer
+macros = ["dep:rws-macros", "rws-server/macros"]
 # The `rws` binary allocates with mimalloc instead of the system allocator
 # (the library never sets a global allocator).
 mimalloc = ["dep:mimalloc"]
 tera   = ["dep:tera", "dep:serde", "dep:serde_json"]
-model-sqlite   = ["dep:sqlx", "sqlx/sqlite",   "sqlx/runtime-tokio", "http2"]
-model-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/runtime-tokio-rustls", "http2"]
-model-mysql    = ["dep:sqlx", "sqlx/mysql",    "sqlx/runtime-tokio-rustls", "http2"]
-crypto = ["dep:argon2", "dep:rand_core", "dep:hmac", "dep:sha2", "dep:aes-gcm"]
-csrf   = ["dep:rand_core"]
+model-sqlite   = ["dep:sqlx", "sqlx/sqlite",   "sqlx/runtime-tokio", "http2", "rws-server/model-sqlite"]
+model-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/runtime-tokio-rustls", "http2", "rws-server/model-postgres"]
+model-mysql    = ["dep:sqlx", "sqlx/mysql",    "sqlx/runtime-tokio-rustls", "http2", "rws-server/model-mysql"]
+crypto = ["dep:argon2", "dep:rand_core", "dep:hmac", "dep:sha2", "dep:aes-gcm", "rws-server/crypto"]
+csrf   = ["dep:rand_core", "rws-server/csrf"]
 mailer = []  # plain SMTP; STARTTLS/SMTPS additionally requires http-client or http2
-sso    = ["dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
-sso-server = ["sso", "auth"]  # AuthServer: rws as its own OAuth 2.0 token issuer; reuses auth's HS256 build_jwt/verify_jwt (see src/sso/server.rs docs for why not RSA/EC)
-sso-saml   = ["sso"]  # SamlSp: SAML 2.0 Service Provider; no new deps — hand-rolled XML parser, not quick-xml (see src/sso/saml/mod.rs docs)
+sso    = ["dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client", "rws-server/sso"]
+sso-server = ["sso", "auth", "rws-server/sso-server"]  # AuthServer: rws as its own OAuth 2.0 token issuer; reuses auth's HS256 build_jwt/verify_jwt (see src/sso/server.rs docs for why not RSA/EC)
+sso-saml   = ["sso", "rws-server/sso-saml"]  # SamlSp: SAML 2.0 Service Provider; no new deps — hand-rolled XML parser, not quick-xml (see src/sso/saml/mod.rs docs)
 jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
-storage-local = []  # LocalStorage; no new deps
-storage-s3    = ["dep:hmac", "dep:sha2", "http-client"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
-storage-azure = ["dep:hmac", "dep:sha2", "http-client"]  # AzureBlobStorage; Shared Key HMAC signing + Managed Identity, no Azure SDK
-storage-gcs   = ["http-client", "dep:aws-lc-rs"]  # GcsStorage; JSON API, service-account JWTs signed with aws-lc-rs (native), metadata server, no Google SDK
+storage-local = ["rws-server/storage-local"]  # LocalStorage; no new deps
+storage-s3    = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-s3"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
+storage-azure = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-azure"]  # AzureBlobStorage; Shared Key HMAC signing + Managed Identity, no Azure SDK
+storage-gcs   = ["http-client", "dep:aws-lc-rs", "rws-server/storage-gcs"]  # GcsStorage; JSON API, service-account JWTs signed with aws-lc-rs (native), metadata server, no Google SDK
 # Opt-in Tower interop (18.7.0, #23): tower layers as rws middleware, tower
 # services (tonic) as rws apps, an rws app as a tower service. Adapters only —
 # nothing in the default build changes.
@@ -174,20 +175,21 @@ tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:
 # on the aws-lc-rs provider (one rustls provider, as everywhere), and
 # k8s-openapi pinned to the oldest Kubernetes it supports, for the widest
 # range of clusters.
-gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util"]
+gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util", "rws-server/gateway-api"]
 # WasmLayer / [route.middleware.wasm]: middleware as WebAssembly core modules
 # (wasmtime + cranelift, no WASI). Off by default (several MB, long compile);
 # the release binaries enable it.
 wasm-plugins = ["dep:wasmtime"]
-openapi = []  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
+openapi = ["rws-server/openapi"]  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
-rewrite-regex = ["dep:regex"]  # RewriteLayer::request_uri_regex_rewrite
-secrets = ["dep:hmac", "dep:sha2", "http-client"]  # secrets::resolve(): vault:// / aws-sm:// / azkv:// reference resolution (Vault, AWS Secrets Manager, Azure Key Vault); reuses storage-s3's SigV4 signer/credential chain and storage-azure's Managed Identity token fetch
+rewrite-regex = ["dep:regex", "rws-server/rewrite-regex"]  # RewriteLayer::request_uri_regex_rewrite
+secrets = ["dep:hmac", "dep:sha2", "http-client", "rws-server/secrets"]  # secrets::resolve(): vault:// / aws-sm:// / azkv:// reference resolution (Vault, AWS Secrets Manager, Azure Key Vault); reuses storage-s3's SigV4 signer/credential chain and storage-azure's Managed Identity token fetch
 
 [dependencies]
 # The crates the facade is split into (spec/WORKSPACE_SPLIT.md).
 rws-base.workspace = true
 rws-http.workspace = true
+rws-server.workspace = true
 ctrlc = { version = "3", optional = true }
 mimalloc = { version = "0.1", optional = true, default-features = false, features = ["v3"] }
 libc = { version = "0.2", optional = true }
@@ -234,6 +236,8 @@ regex     = { version = "1", optional = true }
 cryptoki  = { version = "0.12", optional = true }
 
 [dev-dependencies]
+# rws-server's test helpers (MockTcpStream, credential env locks, …).
+rws-server = { workspace = true, features = ["test-support"] }
 # test-util: tokio::time::pause for timeout tests (src/server/http1_async.rs).
 tokio = { version = "1", features = ["test-util", "macros", "rt"] }
 

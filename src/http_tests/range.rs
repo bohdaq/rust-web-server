@@ -10,7 +10,7 @@ use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::Server;
-use crate::server::tests::MockTcpStream;
+use crate::server::test_support::MockTcpStream;
 
 #[test]
 fn check_range_response_is_ok_two_part() {

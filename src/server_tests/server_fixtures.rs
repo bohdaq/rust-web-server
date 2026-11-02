@@ -1,0 +1,1443 @@
+//! Tests of rws-server's `server` that read repository fixtures (`static/`,
+//! `index.html`): a crate's tests run in the crate's directory.
+#![allow(unused_imports, dead_code)]
+
+use std::borrow::Borrow;
+use std::{env, fs};
+use std::fs::File;
+use std::io::{BufReader, Read, Write};
+use std::cmp::min;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use crate::core::New;
+use crate::entry_point::config_file::override_environment_variables_from_config;
+use file_ext::FileExt;
+use crate::header::Header;
+use crate::http::VERSION;
+use crate::mime_type::MimeType;
+use crate::range::Range;
+use crate::request::{METHOD, Request};
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::server::Server;
+use crate::symbol::SYMBOL;
+
+pub struct MockTcpStream {
+    pub read_data: Vec<u8>,
+    pub write_data: Vec<u8>,
+}
+
+impl Read for MockTcpStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let size : usize = min(self.read_data.len(), buf.len());
+        buf[..size].copy_from_slice(&self.read_data[..size]);
+        Ok(size)
+    }
+}
+
+impl Write for MockTcpStream {
+
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.write_data = Vec::from(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Unpin for MockTcpStream {}
+
+/// A mock stream that returns one pre-built request per `read` call, then EOF.
+/// All writes are accumulated in `written`.
+struct SequentialMockStream {
+    requests: Vec<Vec<u8>>,
+    read_index: usize,
+    written: Vec<u8>,
+}
+
+impl SequentialMockStream {
+    fn new(requests: Vec<Vec<u8>>) -> Self {
+        SequentialMockStream { requests, read_index: 0, written: vec![] }
+    }
+}
+
+impl Read for SequentialMockStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.read_index >= self.requests.len() {
+            return Ok(0);
+        }
+        let data = &self.requests[self.read_index];
+        let n = data.len().min(buf.len());
+        buf[..n].copy_from_slice(&data[..n]);
+        self.read_index += 1;
+        Ok(n)
+    }
+}
+
+impl Write for SequentialMockStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.written.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+}
+
+impl Unpin for SequentialMockStream {}
+
+fn make_connection() -> crate::server::ConnectionInfo {
+    crate::server::ConnectionInfo {
+        client: crate::server::Address { ip: "127.0.0.1".to_string(), port: 12345 },
+        server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+    sni_hostname: None,
+    tls: false,
+    }
+}
+
+fn raw_get_request(uri: &str, http_version: &str, extra_headers: &[(&str, &str)]) -> Vec<u8> {
+    let mut req = format!("GET {} {}\r\nHost: localhost:7878\r\n", uri, http_version);
+    for (name, value) in extra_headers {
+        req.push_str(&format!("{}: {}\r\n", name, value));
+    }
+    req.push_str("\r\n");
+    req.into_bytes()
+}
+
+fn count_occurrences(haystack: &[u8], needle: &[u8]) -> usize {
+    haystack.windows(needle.len()).filter(|w| *w == needle).count()
+}
+
+/// Captures the request `Server::process` dispatched to the app, via a shared
+/// `Arc<Mutex<_>>` since `Server::process` takes `app` by value.
+struct BodyCapturingApp {
+    captured: std::sync::Arc<std::sync::Mutex<Option<Request>>>,
+}
+
+impl crate::application::Application for BodyCapturingApp {
+    fn execute(&self, request: &Request, _connection: &crate::server::ConnectionInfo) -> Result<Response, String> {
+        *self.captured.lock().unwrap() = Some(request.clone());
+        let mut response = Response::new();
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        Ok(response)
+    }
+}
+
+fn raw_post_request(body: &[u8]) -> Vec<u8> {
+    let mut req = format!(
+        "POST /echo HTTP/1.1\r\nHost: localhost:7878\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    ).into_bytes();
+    req.extend_from_slice(body);
+    req
+}
+
+/// Builds just the request line + headers (ending in the blank line), with no
+/// body bytes — simulating a 100-continue-aware client, which sends headers
+/// and then waits for an interim response before sending the body.
+fn raw_post_request_headers_only(content_length: usize, extra_headers: &[(&str, &str)]) -> Vec<u8> {
+    let mut req = format!(
+        "POST /echo HTTP/1.1\r\nHost: localhost:7878\r\nContent-Length: {}\r\nConnection: close\r\n",
+        content_length
+    );
+    for (name, value) in extra_headers {
+        req.push_str(&format!("{}: {}\r\n", name, value));
+    }
+    req.push_str("\r\n");
+    req.into_bytes()
+}
+
+#[cfg(feature = "http2")]
+async fn redirect_round_trip(request: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        Server::handle_redirect_connection(stream, 8443).await;
+    });
+    let mut client = tokio::net::TcpStream::connect(addr).await.unwrap();
+    client.write_all(request.as_bytes()).await.unwrap();
+    let mut out = String::new();
+    client.read_to_string(&mut out).await.unwrap();
+    server.await.unwrap();
+    out
+}
+
+/// Answers `uri=<uri> body=<body>` so a test can see how the request was framed.
+#[derive(Clone)]
+struct EchoFraming;
+
+impl crate::application::Application for EchoFraming {
+    fn execute(&self, request: &Request, _connection: &crate::server::ConnectionInfo) -> Result<crate::response::Response, String> {
+        let text = format!("uri={} body={}", request.request_uri, String::from_utf8_lossy(&request.body));
+        Ok(crate::response::Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &text))
+    }
+}
+
+fn websocket_echo_app() -> crate::state::AppWithState<()> {
+    crate::app::App::with_state(()).websocket("/echo", |mut ws, _params, _state| {
+        while let Ok(Some(crate::websocket::Message::Text(text))) = ws.recv() {
+            let _ = ws.send_text(&format!("echo: {text}"));
+        }
+    })
+}
+
+const UPGRADE: &str = "GET /echo HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+    Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+
+#[test]
+fn check_range_response_for_not_proper_range_header() {
+    let uri = "/static/test.txt";
+    let url = FileExt::get_static_filepath(uri).unwrap();
+
+    let file = File::open(url).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+    reader.read_to_end(&mut buffer).unwrap();
+
+    let length = buffer.len();
+    let mid = length / 2;
+    let end_of_first_range = mid;
+    let start_of_second_range = mid + 1;
+    let not_proper_end_of_second_range = length + 10;
+
+    let range_header_value = format!("bytdgdes=0-{}, {}-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let range = Header {
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
+    };
+
+    let headers = vec![host, range];
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("\n\n\n{}", &raw_request);
+    println!("\n\n\n{}", &response_string);
+
+    assert_eq!(VERSION.http_1_1, response.http_version);
+    let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
+    assert_eq!(Range::BYTES, header.value);
+
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(content_range.body, Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.as_bytes());
+}
+
+#[test]
+fn check_range_response_for_not_proper_range_header_malformed() {
+    let uri = "/static/test.txt";
+    let url = FileExt::get_static_filepath(uri).unwrap();
+
+    let file = File::open(url).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+    reader.read_to_end(&mut buffer).unwrap();
+
+    let range_header_value = format!("bytes=zaksd");
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let range = Header {
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
+    };
+
+    let headers = vec![host, range];
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("\n\n\n{}", &raw_request);
+    println!("\n\n\n{}", &response_string);
+
+    assert_eq!(VERSION.http_1_1, response.http_version);
+    let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
+    assert_eq!(Range::BYTES, header.value);
+
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());
+}
+
+#[test]
+fn check_range_response_for_not_proper_range_header_range_end_malformed() {
+    let uri = "/static/test.txt";
+    let url = FileExt::get_static_filepath(uri).unwrap();
+
+    let file = File::open(url).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+    reader.read_to_end(&mut buffer).unwrap();
+
+    let length = buffer.len();
+    let mid = length / 2;
+    let end_of_first_range = mid;
+    let start_of_second_range = length + 10;
+    let not_proper_end_of_second_range = mid;
+
+    let range_header_value = format!("bytes=0-{}zaksd, {}-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let range = Header {
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
+    };
+
+    let headers = vec![host, range];
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("\n\n\n{}", &raw_request);
+    println!("\n\n\n{}", &response_string);
+
+    assert_eq!(VERSION.http_1_1, response.http_version);
+    let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
+    assert_eq!(Range::BYTES, header.value);
+
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_END.as_bytes());
+}
+
+#[test]
+fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end() {
+    let uri = "/static/test.txt";
+    let url = FileExt::get_static_filepath(uri).unwrap();
+
+    let file = File::open(url).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+    reader.read_to_end(&mut buffer).unwrap();
+
+    let length = buffer.len();
+    let mid = length / 2;
+    let end_of_first_range = mid;
+    let start_of_second_range = length;
+    let not_proper_end_of_second_range = mid;
+
+    let range_header_value = format!("bytes=0-{}, {}-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let range = Header {
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
+    };
+
+    let headers = vec![host, range];
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("\n\n\n{}", &raw_request);
+    println!("\n\n\n{}", &response_string);
+
+    assert_eq!(VERSION.http_1_1, response.http_version);
+    let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
+    assert_eq!(Range::BYTES, header.value);
+
+    // One satisfiable range is enough: the bad one is skipped (#56).
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase, response.reason_phrase);
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(content_range.body, &buffer[..=mid]);
+}
+
+#[test]
+fn check_range_response_for_not_proper_range_header_range_start_malformed() {
+    let uri = "/static/test.txt";
+    let url = FileExt::get_static_filepath(uri).unwrap();
+
+    let file = File::open(url).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+    reader.read_to_end(&mut buffer).unwrap();
+
+    let length = buffer.len();
+    let mid = length / 2;
+    let end_of_first_range = mid;
+    let start_of_second_range = length + 10;
+    let not_proper_end_of_second_range = mid;
+
+    let range_header_value = format!("bytes=0-{}, {}zaksd-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let range = Header {
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
+    };
+
+    let headers = vec![host, range];
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("\n\n\n{}", &raw_request);
+    println!("\n\n\n{}", &response_string);
+
+    assert_eq!(VERSION.http_1_1, response.http_version);
+    let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
+    assert_eq!(Range::BYTES, header.value);
+
+    // One satisfiable range is enough: the bad one is skipped (#56).
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase, response.reason_phrase);
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(content_range.body, &buffer[..=mid]);
+}
+
+#[test]
+fn check_range_response_range_end_bigger_than_filesize_is_clamped() {
+    let uri = "/static/test.txt";
+    let url = FileExt::get_static_filepath(uri).unwrap();
+
+    let file = File::open(url).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+    reader.read_to_end(&mut buffer).unwrap();
+
+    let length = buffer.len();
+    let mid = length / 2;
+    let end_of_first_range = mid;
+    let start_of_second_range = mid + 1;
+    let not_proper_end_of_second_range = length + 10;
+
+    let range_header_value = format!("bytes=0-{}, {}-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let range = Header {
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
+    };
+
+    let headers = vec![host, range];
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("\n\n\n{}", &raw_request);
+    println!("\n\n\n{}", &response_string);
+
+    assert_eq!(VERSION.http_1_1, response.http_version);
+    let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
+    assert_eq!(Range::BYTES, header.value);
+
+    // RFC 9110 §14.1.2: a last-pos past the end is clamped, not rejected.
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, response.status_code);
+    assert_eq!(2, response.content_range_list.len());
+    let second = response.content_range_list.get(1).unwrap();
+    assert_eq!(start_of_second_range as u64, second.range.start);
+    assert_eq!((length - 1) as u64, second.range.end);
+    assert_eq!(&buffer[start_of_second_range..], second.body.as_slice());
+}
+
+#[test]
+fn connection_close_header_serves_one_request_and_stops() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "close")]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        1,
+        "expected exactly one response after Connection: close"
+    );
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("Connection: close"), "expected Connection: close in response");
+}
+
+#[test]
+fn http10_defaults_to_connection_close() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_0, &[]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_0, &[]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        1,
+        "HTTP/1.0 should close after one response"
+    );
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("Connection: close"));
+}
+
+#[test]
+fn http11_explicit_keep_alive_serves_multiple_requests() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "keep-alive")]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "keep-alive")]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        2,
+        "explicit Connection: keep-alive should serve both requests"
+    );
+}
+
+#[test]
+fn it_generates_directory_listing_for_static_directory_without_index_html() {
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/static/subdir/";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part — no `index.html` in `static/subdir/`, so a directory listing is
+    // generated (200 OK) instead of the previous 404.
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
+
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+
+    let body = String::from_utf8(response.content_range_list.get(0).unwrap().body.to_vec()).unwrap();
+    assert!(body.starts_with("<!DOCTYPE html>"));
+    assert!(body.contains("Index of /static/subdir/"));
+    assert!(body.contains("data.json"));
+}
+
+#[test]
+fn it_generates_directory_listing_with_parent_link_for_nested_static_subdirectory() {
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/static/no_index/";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+
+    let body = String::from_utf8(response.content_range_list.get(0).unwrap().body.to_vec()).unwrap();
+    assert!(body.contains("alpha.txt"));
+    assert!(body.contains("beta.json"));
+    assert!(body.contains("nested/"));
+    assert!(body.contains(".. (parent directory)"));
+    assert!(body.contains("href=\"/static/\""));
+
+    // directories sort before files: "nested/" must appear before "alpha.txt"
+    let nested_index = body.find("nested/").unwrap();
+    let alpha_index = body.find("alpha.txt").unwrap();
+    assert!(nested_index < alpha_index);
+}
+
+#[test]
+fn it_generates_not_found_page_for_absent_route() {
+    // StaticResourceController::is_matching now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/nonexistingroute";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
+
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+    let not_found_page_path = "404.html";
+
+    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
+
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
+}
+
+#[test]
+fn it_generates_not_found_page_for_absent_static_file() {
+    // StaticResourceController::is_matching now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/static/nonexistingfile";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
+
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+    let not_found_page_path = "404.html";
+
+    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
+
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
+}
+
+#[test]
+fn it_generates_successful_response_with_index_html() {
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = SYMBOL.slash;
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+    let response_filepath = "index.html";
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn it_generates_successful_response_with_index_html_as_symlink() {
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = [SYMBOL.slash, "index_rewrite"].join("");
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+    let response_filepath = "index.html";
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
+}
+
+#[test]
+fn it_generates_successful_response_with_static_file() {
+    let _g = crate::test_env::lock();
+    override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
+
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/static/test.txt";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
+
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
+}
+
+#[test]
+fn it_generates_successful_response_with_static_file_in_multiple_static_directories() {
+
+    // 1st reading file from /static folder
+
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/static/test.txt";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
+
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
+
+    // 2nd file read from /assets directory
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/assets/test.txt";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
+
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
+}
+
+#[test]
+fn it_generates_successful_response_with_static_file_in_subdirectory() {
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.get;
+    let request_uri = "/static/test.txt";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
+
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
+}
+
+#[test]
+fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_request() {
+    // request test data
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let request_method = METHOD.head;
+    let request_uri = "/static/test.txt";
+    let request_http_version = VERSION.http_1_1.to_string();
+
+    // request part
+    let host = Header {
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
+    };
+
+    let headers = vec![host];
+    let request = Request {
+        method: request_method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: request_http_version.to_string(),
+        headers,
+        body: Default::default(),
+    };
+
+    let raw_request = Request::_generate_request(request);
+
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
+    let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
+
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
+    assert_eq!(request_method.to_string(), request.method);
+    assert_eq!(request_uri.to_string(), request.request_uri);
+    assert_eq!(request_http_version.to_string(), request.http_version);
+
+    // response part
+    let response_http_version = VERSION.http_1_1.to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_value = response_html_file.len().to_string();
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
+
+    assert_eq!(response_content_length_header_value, header.value);
+    assert_eq!(response_http_version, response.http_version);
+    assert_eq!(*response_status_code, response.status_code);
+    assert_eq!(response_reason_phrase, response.reason_phrase);
+    assert_eq!(0, response.content_range_list.get(0).unwrap().range.end);
+    assert_eq!("0", response.content_range_list.get(0).unwrap().size);
+}
+
+#[test]
+fn keep_alive_http11_serves_two_requests_on_same_stream() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    let written = String::from_utf8_lossy(&stream.written);
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        2,
+        "expected two 200 responses, got:\n{}",
+        written
+    );
+    assert!(
+        written.contains("Connection: keep-alive"),
+        "expected Connection: keep-alive in written output"
+    );
+}
+
+#[test]
+fn the_sync_server_writes_early_hints_before_the_response_when_enabled() {
+    let _g = crate::test_env::lock();
+    let app = crate::middleware::WithMiddleware::new(crate::app::App::new())
+        .wrap(crate::early_hints::EarlyHintsLayer::new(["</a.css>; rel=preload; as=style"]));
+    let run = |app| {
+        let mut stream = SequentialMockStream::new(vec![raw_get_request("/static/test.txt", VERSION.http_1_1, &[])]);
+        Server::process(&mut stream, make_connection(), app).unwrap();
+        String::from_utf8_lossy(&stream.written).to_string()
+    };
+    std::env::remove_var("RWS_CONFIG_EARLY_HINTS_HTTP1");
+    crate::server_config::invalidate();
+    let off = run(app.clone());
+    assert!(off.starts_with("HTTP/1.1 200"), "{off}");
+    std::env::set_var("RWS_CONFIG_EARLY_HINTS_HTTP1", "true");
+    crate::server_config::invalidate();
+    let on = run(app);
+    std::env::remove_var("RWS_CONFIG_EARLY_HINTS_HTTP1");
+    crate::server_config::invalidate();
+    assert!(on.starts_with("HTTP/1.1 103 Early Hints\r\nLink: </a.css>; rel=preload; as=style\r\n\r\nHTTP/1.1 200"), "{on}");
+}

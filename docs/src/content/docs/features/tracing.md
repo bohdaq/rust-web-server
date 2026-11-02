@@ -3,7 +3,7 @@ title: Distributed Tracing
 description: OpenTelemetry-compatible HTTP server spans and nested child spans via OtelLayer and otel::span, with W3C traceparent propagation.
 ---
 
-`rust-web-server` includes an OpenTelemetry-compatible distributed tracing implementation in `src/otel/mod.rs`. `OtelLayer` middleware creates an HTTP server root span for every request, reads and propagates W3C `traceparent` headers, and exports spans to stdout or an OTLP-compatible collector (Jaeger, Grafana Tempo, OpenTelemetry Collector). Application code can nest child spans under that root (or under each other) with `otel::span`/`otel::client_span` — see [Child spans](#child-spans) below.
+`rust-web-server` includes an OpenTelemetry-compatible distributed tracing implementation in `crates/rws-server/src/otel/mod.rs`. `OtelLayer` middleware creates an HTTP server root span for every request, reads and propagates W3C `traceparent` headers, and exports spans to stdout or an OTLP-compatible collector (Jaeger, Grafana Tempo, OpenTelemetry Collector). Application code can nest child spans under that root (or under each other) with `otel::span`/`otel::client_span` — see [Child spans](#child-spans) below.
 
 ## Setup
 

@@ -3,7 +3,7 @@ title: Response Caching
 description: In-memory, capacity-bounded response cache middleware with TTL, Vary-header support, and manual invalidation.
 ---
 
-`CacheLayer` is a middleware that short-circuits the inner application for cacheable `GET` responses, serving them directly from an in-memory store until their TTL elapses. It lives in `src/cache/mod.rs` and implements the standard `Middleware` trait, so it composes with every application variant.
+`CacheLayer` is a middleware that short-circuits the inner application for cacheable `GET` responses, serving them directly from an in-memory store until their TTL elapses. It lives in `crates/rws-server/src/cache/mod.rs` and implements the standard `Middleware` trait, so it composes with every application variant.
 
 ## Basic setup
 

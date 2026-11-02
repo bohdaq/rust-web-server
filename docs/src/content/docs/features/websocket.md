@@ -153,7 +153,7 @@ Builds an HTTP `101 Switching Protocols` response with the correct
 base64(SHA-1(client_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
 ```
 
-Both SHA-1 and base64 are implemented from scratch in `src/websocket/mod.rs`
+Both SHA-1 and base64 are implemented from scratch in `crates/rws-server/src/websocket/mod.rs`
 with no external dependencies.
 
 If the request includes a `Sec-WebSocket-Protocol` header, the first listed

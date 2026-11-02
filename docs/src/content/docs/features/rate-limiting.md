@@ -3,7 +3,7 @@ title: Rate Limiting
 description: Per-IP sliding-window rate limiting with a global singleton, per-route custom limiters, and a Redis-backed distributed limiter for multi-instance deployments.
 ---
 
-`rust-web-server` ships a built-in sliding-window rate limiter in `src/rate_limit/mod.rs`. It is keyed by a string (typically the client IP) and is safe to share across threads.
+`rust-web-server` ships a built-in sliding-window rate limiter in `crates/rws-server/src/rate_limit/mod.rs`. It is keyed by a string (typically the client IP) and is safe to share across threads.
 
 ## Quick start
 

@@ -127,6 +127,25 @@ def main(parts, maps):
                     hit = r
                     break
         out.add(f"pub use {hit}" if hit else line)
+    # A trait's methods under each type that implements it: rustdoc lists a
+    # same-crate trait's provided methods there but not another crate's, so
+    # moving a trait down a crate would read as removing them. The trait's
+    # own method list and the `impl Trait for Type` line keep the facts.
+    traits = {l.split(" ")[2].split("<")[0].rstrip(":") for l in out if l.startswith("pub trait ")}
+    methods = {}
+    for l in out:
+        m = re.match(r"pub (?:async |const |unsafe )*fn (\S+?)::(\w+)(?:<|\()", l)
+        if m and m.group(1) in traits:
+            methods.setdefault(m.group(1), set()).add(m.group(2))
+    implemented = {}
+    for l in out:
+        m = re.match(r"impl(?:<.*?>)? (?:!)?(\S+?)(?:<.*?>)? for (\S+?)(?:<|$| )", l)
+        if m and m.group(1) in methods:
+            implemented.setdefault(m.group(2), set()).update(methods[m.group(1)])
+    def trait_method_under_type(l):
+        m = re.match(r"pub (?:async |const |unsafe )*fn (\S+?)::(\w+)(?:<[^:]*?>)?\(", l)
+        return bool(m) and m.group(2) in implemented.get(m.group(1).split("<")[0], ())
+    out = {l for l in out if not trait_method_under_type(l)}
     for line in sorted(out):
         print(line)
 

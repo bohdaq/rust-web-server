@@ -14,8 +14,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `url` — now lives in the new crate `rws-base`, and the HTTP layer —
   `request`, `response`, `header`, `range`, `body`, `json`, `extract`,
   `compression`, `cors`, `client_hint`, `error`, `entry_point`,
-  `server_config`, `virtual_host` — in `rws-http`, both published with
-  rust-web-server at the same version. Every `rust_web_server::…` path is
+  `server_config`, `virtual_host` — in `rws-http`, and the server core —
+  the servers, TLS, `App`, routing, middleware, MCP, OpenAPI, SSO, sessions,
+  metrics, OpenTelemetry, the HTTP client, the model layer — in
+  `rws-server`; all published with rust-web-server at the same version.
+  ACME, the proxy, the WAF, the LLM gateway, traffic insights and templates
+  plug into the server through registration hooks instead of being called
+  from it. Every `rust_web_server::…` path is
   unchanged; depend on `rust-web-server` as before.
 
 ## 18.25.0 — 2026-11-02

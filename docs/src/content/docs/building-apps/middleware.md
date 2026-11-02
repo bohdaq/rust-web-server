@@ -5,7 +5,7 @@ description: Add cross-cutting behaviour to any Application by implementing the 
 
 ## The Middleware trait
 
-`Middleware` is defined in `src/middleware/mod.rs`:
+`Middleware` is defined in `crates/rws-server/src/middleware/mod.rs`:
 
 ```rust
 pub trait Middleware: Send + Sync {

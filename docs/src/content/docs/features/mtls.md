@@ -33,7 +33,7 @@ HTTPS (TCP/TLS) listener and the QUIC listener used for HTTP/3.
 ## How the verifier is built
 
 ```rust
-// src/tls/mod.rs (simplified)
+// crates/rws-server/src/tls/mod.rs (simplified)
 let verifier = WebPkiClientVerifier::builder(Arc::new(root_store))
     .build()
     .unwrap();

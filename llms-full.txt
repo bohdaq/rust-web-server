@@ -3096,7 +3096,7 @@ Unmatched requests fall through to the built-in `App` controller chain (static f
 
 ## The Controller trait
 
-`Controller` is defined in `src/controller/mod.rs` and has two static methods:
+`Controller` is defined in `crates/rws-server/src/controller/mod.rs` and has two static methods:
 
 ```rust
 pub trait Controller {
@@ -3141,7 +3141,7 @@ impl Controller for HelloController {
 
 ## Registering a controller
 
-Controllers are hardcoded in `App::execute` inside `src/app/mod.rs`. To add your own, you currently need a custom `Application` implementation that checks your controller before (or after) the built-in list:
+Controllers are hardcoded in `App::execute` inside `crates/rws-server/src/app/mod.rs`. To add your own, you currently need a custom `Application` implementation that checks your controller before (or after) the built-in list:
 
 ```rust
 use rust_web_server::application::Application;
@@ -4181,7 +4181,7 @@ fn handler(...) -> Response {
 
 ## The Middleware trait
 
-`Middleware` is defined in `src/middleware/mod.rs`:
+`Middleware` is defined in `crates/rws-server/src/middleware/mod.rs`:
 
 ```rust
 pub trait Middleware: Send + Sync {
@@ -6691,7 +6691,7 @@ Both env vars are read fresh on every request, so they can be changed via `rws.c
 
 <https://rws8.tech/features/rate-limiting/>
 
-`rust-web-server` ships a built-in sliding-window rate limiter in `src/rate_limit/mod.rs`. It is keyed by a string (typically the client IP) and is safe to share across threads.
+`rust-web-server` ships a built-in sliding-window rate limiter in `crates/rws-server/src/rate_limit/mod.rs`. It is keyed by a string (typically the client IP) and is safe to share across threads.
 
 ## Quick start
 
@@ -7825,7 +7825,7 @@ HTTPS (TCP/TLS) listener and the QUIC listener used for HTTP/3.
 ## How the verifier is built
 
 ```rust
-// src/tls/mod.rs (simplified)
+// crates/rws-server/src/tls/mod.rs (simplified)
 let verifier = WebPkiClientVerifier::builder(Arc::new(root_store))
     .build()
     .unwrap();
@@ -7965,7 +7965,7 @@ optional default. The resolver is built once at startup (or after SIGHUP) by
 `create_tls_acceptor_from_vhosts()`:
 
 ```rust
-// src/tls/mod.rs (simplified)
+// crates/rws-server/src/tls/mod.rs (simplified)
 pub fn create_tls_acceptor_from_vhosts(
     vhosts: &[VirtualHostConfig],
     default_cert: &str,
@@ -8262,7 +8262,7 @@ HTTP/3 is built on the following crates:
 - `h3` — HTTP/3 framing over QUIC streams
 - `h3-quinn` — bridge between `quinn` and `h3`
 
-All parsing and protocol handling is contained in `src/h3_handler/mod.rs`.
+All parsing and protocol handling is contained in `crates/rws-server/src/h3_handler/mod.rs`.
 
 ## SNI from the QUIC handshake
 
@@ -8270,7 +8270,7 @@ The SNI hostname is extracted from the QUIC connection's TLS handshake data
 and placed in `ConnectionInfo::sni_hostname`, exactly as it is for HTTP/2:
 
 ```rust
-// src/h3_handler/mod.rs
+// crates/rws-server/src/h3_handler/mod.rs
 let sni_hostname: Option = conn
     .handshake_data()
     .and_then(|d| d.downcast::<quinn::crypto::rustls::HandshakeData>().ok())
@@ -8478,7 +8478,7 @@ Builds an HTTP `101 Switching Protocols` response with the correct
 base64(SHA-1(client_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
 ```
 
-Both SHA-1 and base64 are implemented from scratch in `src/websocket/mod.rs`
+Both SHA-1 and base64 are implemented from scratch in `crates/rws-server/src/websocket/mod.rs`
 with no external dependencies.
 
 If the request includes a `Sec-WebSocket-Protocol` header, the first listed
@@ -10020,7 +10020,7 @@ If neither is present, `403 Forbidden` is returned.
 
 <https://rws8.tech/features/sessions/>
 
-`rust-web-server` ships three session store implementations in `src/session/mod.rs`:
+`rust-web-server` ships three session store implementations in `crates/rws-server/src/session/mod.rs`:
 
 | Store | Persistence | Scales horizontally |
 |-------|-------------|---------------------|
@@ -10856,7 +10856,7 @@ Wire `store` in via [dependency injection](/building-apps/dependency-injection/)
 
 <https://rws8.tech/features/caching/>
 
-`CacheLayer` is a middleware that short-circuits the inner application for cacheable `GET` responses, serving them directly from an in-memory store until their TTL elapses. It lives in `src/cache/mod.rs` and implements the standard `Middleware` trait, so it composes with every application variant.
+`CacheLayer` is a middleware that short-circuits the inner application for cacheable `GET` responses, serving them directly from an in-memory store until their TTL elapses. It lives in `crates/rws-server/src/cache/mod.rs` and implements the standard `Middleware` trait, so it composes with every application variant.
 
 ## Basic setup
 
@@ -11312,7 +11312,7 @@ scrape_configs:
 
 <https://rws8.tech/features/tracing/>
 
-`rust-web-server` includes an OpenTelemetry-compatible distributed tracing implementation in `src/otel/mod.rs`. `OtelLayer` middleware creates an HTTP server root span for every request, reads and propagates W3C `traceparent` headers, and exports spans to stdout or an OTLP-compatible collector (Jaeger, Grafana Tempo, OpenTelemetry Collector). Application code can nest child spans under that root (or under each other) with `otel::span`/`otel::client_span` — see [Child spans](#child-spans) below.
+`rust-web-server` includes an OpenTelemetry-compatible distributed tracing implementation in `crates/rws-server/src/otel/mod.rs`. `OtelLayer` middleware creates an HTTP server root span for every request, reads and propagates W3C `traceparent` headers, and exports spans to stdout or an OTLP-compatible collector (Jaeger, Grafana Tempo, OpenTelemetry Collector). Application code can nest child spans under that root (or under each other) with `otel::span`/`otel::client_span` — see [Child spans](#child-spans) below.
 
 ## Setup
 

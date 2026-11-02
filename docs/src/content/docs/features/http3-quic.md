@@ -42,7 +42,7 @@ HTTP/3 is built on the following crates:
 - `h3` — HTTP/3 framing over QUIC streams
 - `h3-quinn` — bridge between `quinn` and `h3`
 
-All parsing and protocol handling is contained in `src/h3_handler/mod.rs`.
+All parsing and protocol handling is contained in `crates/rws-server/src/h3_handler/mod.rs`.
 
 ## SNI from the QUIC handshake
 
@@ -50,7 +50,7 @@ The SNI hostname is extracted from the QUIC connection's TLS handshake data
 and placed in `ConnectionInfo::sni_hostname`, exactly as it is for HTTP/2:
 
 ```rust
-// src/h3_handler/mod.rs
+// crates/rws-server/src/h3_handler/mod.rs
 let sni_hostname: Option<String> = conn
     .handshake_data()
     .and_then(|d| d.downcast::<quinn::crypto::rustls::HandshakeData>().ok())

@@ -5,7 +5,7 @@ description: The Controller trait is the lowest-level way to handle HTTP request
 
 ## The Controller trait
 
-`Controller` is defined in `src/controller/mod.rs` and has two static methods:
+`Controller` is defined in `crates/rws-server/src/controller/mod.rs` and has two static methods:
 
 ```rust
 pub trait Controller {
@@ -50,7 +50,7 @@ impl Controller for HelloController {
 
 ## Registering a controller
 
-Controllers are hardcoded in `App::execute` inside `src/app/mod.rs`. To add your own, you currently need a custom `Application` implementation that checks your controller before (or after) the built-in list:
+Controllers are hardcoded in `App::execute` inside `crates/rws-server/src/app/mod.rs`. To add your own, you currently need a custom `Application` implementation that checks your controller before (or after) the built-in list:
 
 ```rust
 use rust_web_server::application::Application;
