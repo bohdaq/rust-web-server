@@ -9,6 +9,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Changed
 
+- CI checks the public API (`public API` job, `ci/public_api.sh`) against
+  `ci/public-api.txt`, so a release can't drop or change a public item by
+  accident; additions update the listing in the same commit.
+
 - PKCS#11 keys: a handshake's signature no longer stalls the worker it runs
   on — on the shared runtime the worker's other connections move to the rest
   of the pool while the token works (`block_in_place`). The `rws` binary

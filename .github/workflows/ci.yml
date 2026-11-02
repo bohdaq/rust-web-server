@@ -74,6 +74,22 @@ jobs:
           key: windows
       - run: cargo check --locked --bin rws --features "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3"
 
+  # The public API against ci/public-api.txt: removals are breaking, additions
+  # must update the listing in the same commit (ci/public_api.sh says how).
+  public-api:
+    name: public API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-10-24
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: public-api
+      - run: cargo install cargo-public-api --locked --version 0.52.0
+      - run: ci/public_api.sh
+
   # FIPS 140-3 build (aws-lc's validated module; the runner has CMake and Go).
   fips:
     name: fips (aws-lc FIPS module)

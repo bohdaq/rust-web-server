@@ -38,6 +38,12 @@ Tag the commit with the exact `Cargo.toml` version (no `v` prefix) and push the 
 commit must be on `main` or a `<major>.<minor>.x` release line and its CI run must be green
 (install.sh jobs aside): since 18.24.0 the release workflow refuses anything else.
 
+That CI run includes the `public API` job (`ci/public_api.sh`, after 18.24.0): the crate's
+public API must match `ci/public-api.txt`. A removed or changed line there is a breaking change —
+a major release with a `reference/migrating-*.md` entry, or put it back. Additions need
+`ci/public_api.sh --update` in the same commit. The job pins cargo-public-api and a nightly
+(rustdoc JSON changes between nightlies); move both together in the script and `ci.yml`.
+
 ```bash
 git tag 17.110.0
 git push origin 17.110.0

@@ -32,5 +32,5 @@ compile error found by the release build).
 | 10 | FastCGI serves `/.well-known/` | **done**: dot segments other than `.well-known` still refused; test |
 
 Not in 18.24 (L, later): splitting the crate into a workspace, a
-`cargo public-api` gate (being added after 18.24.0); PKCS#11 signing off
+`cargo public-api` gate (done after 18.24.0: CI job `public API`, `ci/public_api.sh`, listing `ci/public-api.txt`); PKCS#11 signing off
 the worker done after 18.24.0 (item 4).
