@@ -236,6 +236,14 @@ Plan: [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) (2026-11-01).
 - **#79** **TLS keys in an HSM** — PKCS#11 URIs for `tls_key_file`.
 - **#80** **Fleet config pull** — instances pull signed config from HTTPS, S3 or git and report back.
 
+## 18.25.0 — Follow-ups (released 2026-11-02)
+
+The items 18.24.0 deferred ([CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md)), except the workspace split.
+
+- **One base64 decoder** — `core::base64::Decoder` replaces seven private ones and the quadratic `Base64::decode`.
+- **PKCS#11 off the worker** — the token's wait no longer stalls other connections; shared runtime by default with a `pkcs11:` key.
+- **Public API gate** — CI compares the public API with `ci/public-api.txt`.
+
 ## 18.24.0 — Consolidation (released 2026-11-01)
 
 No new features: the fixes and release gating from the review of 18.20–18.23. Plan: [CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md).
