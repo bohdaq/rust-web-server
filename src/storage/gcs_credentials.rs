@@ -252,26 +252,7 @@ pub(super) fn pem_body(pem: &str) -> Option<Vec<u8>> {
     let start = pem.find("-----BEGIN ")?;
     let body_start = start + pem[start..].find('\n')? + 1;
     let body_end = body_start + pem[body_start..].find("-----END ")?;
-    let mut out = Vec::new();
-    let (mut buffer, mut bits) = (0u32, 0u32);
-    for c in pem[body_start..body_end].bytes() {
-        let value = match c {
-            b'A'..=b'Z' => c - b'A',
-            b'a'..=b'z' => c - b'a' + 26,
-            b'0'..=b'9' => c - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' | b'\r' | b'\n' | b' ' | b'\t' => continue,
-            _ => return None,
-        };
-        buffer = buffer << 6 | value as u32;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buffer >> bits) as u8);
-            buffer &= (1 << bits) - 1;
-        }
-    }
+    let out = crate::core::base64::Decoder::STANDARD.skip_whitespace().decode(&pem[body_start..body_end]).ok()?;
     (!out.is_empty()).then_some(out)
 }
 

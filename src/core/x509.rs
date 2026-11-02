@@ -261,24 +261,7 @@ pub fn days_since_epoch(year: i64, month: i64, day: i64) -> Option<i64> {
 // ── standard base64 decoder (no padding required) ────────────────────────────
 
 pub fn base64_decode_std(s: &str) -> Option<Vec<u8>> {
-    let digits: Vec<u8> = s.bytes().filter_map(|b| match b {
-        b'A'..=b'Z' => Some(b - b'A'),
-        b'a'..=b'z' => Some(b - b'a' + 26),
-        b'0'..=b'9' => Some(b - b'0' + 52),
-        b'+' | b'-' => Some(62),
-        b'/' | b'_' => Some(63),
-        b'=' => None,
-        _ => None,
-    }).collect();
-    let mut out = Vec::with_capacity(digits.len() * 3 / 4);
-    for chunk in digits.chunks(4) {
-        let v = chunk.iter().enumerate()
-            .fold(0u32, |acc, (i, &d)| acc | ((d as u32) << (18 - i * 6)));
-        if chunk.len() >= 2 { out.push((v >> 16) as u8); }
-        if chunk.len() >= 3 { out.push((v >> 8) as u8); }
-        if chunk.len() >= 4 { out.push(v as u8); }
-    }
-    Some(out)
+    crate::core::base64::Decoder::EITHER.skip_invalid().decode(s).ok()
 }
 
 #[cfg(test)]

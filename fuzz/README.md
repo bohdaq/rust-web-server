@@ -34,6 +34,7 @@ cargo install cargo-fuzz
 | `accept_encoding` | `Accept-Encoding` negotiation for gzip / br / zstd (via `fuzz_api`) | any client |
 | `openapi_to_mcp` | OpenAPI documents to MCP tools: `$ref` inlining, schemas, request building (via `fuzz_api`) | an upstream API's OpenAPI document |
 | `waf_inspect` | the WAF's decoding and detections, JSON and multipart field extraction (`waf`) | any client, with the WAF on |
+| `base64_decode` | the shared base64 decoder (`core::base64::Decoder`): JWTs, PEM, PKCE, webhook secrets, gRPC-Web text, fleet keys | any client |
 | `fleet_signature` | fleet `.sig` files and Ed25519 verification (`fleet`) | whoever can serve the fleet source |
 | `pkcs11_uri` | `pkcs11:` URIs and PIN masking (`tls::pkcs11`) | config authors |
 | `fastcgi_record` | FastCGI records, name-value pairs and CGI response headers (`fastcgi`) | FastCGI servers (php-fpm) |

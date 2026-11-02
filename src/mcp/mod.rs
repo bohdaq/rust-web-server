@@ -3771,31 +3771,7 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
-    fn sextet(c: u8) -> Option<u32> {
-        match c {
-            b'A'..=b'Z' => Some((c - b'A') as u32),
-            b'a'..=b'z' => Some((c - b'a' + 26) as u32),
-            b'0'..=b'9' => Some((c - b'0' + 52) as u32),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-
-    let trimmed = s.trim_end_matches('=');
-    let bytes = trimmed.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len() * 3 / 4 + 3);
-    for chunk in bytes.chunks(4) {
-        if chunk.len() == 1 {
-            return None; // not a valid base64 length
-        }
-        let vals: Vec<u32> = chunk.iter().map(|&b| sextet(b)).collect::<Option<Vec<_>>>()?;
-        let n = vals.iter().enumerate().fold(0u32, |acc, (i, &v)| acc | (v << (18 - 6 * i)));
-        out.push(((n >> 16) & 0xFF) as u8);
-        if vals.len() > 2 { out.push(((n >> 8) & 0xFF) as u8); }
-        if vals.len() > 3 { out.push((n & 0xFF) as u8); }
-    }
-    Some(out)
+    crate::core::base64::Decoder::STANDARD.decode(s).ok()
 }
 
 fn uri_matches(template: &str, uri: &str) -> bool {

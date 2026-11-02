@@ -193,23 +193,6 @@ fn base64_encode(input: &[u8]) -> String {
     crate::websocket::base64_encode(input)
 }
 
-const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
 fn base64_decode(input: &str) -> Option<Vec<u8>> {
-    let input = input.trim_end_matches('=');
-    let mut out = Vec::with_capacity(input.len() * 3 / 4 + 3);
-    let mut buffer = 0u32;
-    let mut bits = 0u32;
-
-    for c in input.bytes() {
-        let value = BASE64_CHARS.iter().position(|&b| b == c)? as u32;
-        buffer = (buffer << 6) | value;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buffer >> bits) as u8);
-        }
-    }
-
-    Some(out)
+    crate::core::base64::Decoder::STANDARD.decode(input).ok()
 }

@@ -1,142 +1,55 @@
-//! Base64 encoding and decoding of byte arrays (standard alphabet).
-//! See the tests in this module for usage.
+//! Base64 encoding and decoding of byte arrays. [`Decoder`] is the one
+//! decoder in the crate (standard, URL-safe or either alphabet; optional
+//! whitespace); [`Base64`] keeps the original standard-alphabet API.
 
 use std::collections::HashMap;
 use crate::symbol::SYMBOL;
 
+mod decode;
+pub use decode::{Alphabet, DecodeError, Decoder};
+
 #[cfg(test)]
 mod tests;
+
+const STANDARD_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Standard, padded base64.
+fn encode_standard(bytes: &[u8]) -> String {
+    let mut out = Vec::with_capacity(bytes.len().div_ceil(3) * 4);
+    let (chunks, remainder) = bytes.as_chunks::<3>();
+    for c in chunks {
+        let n = (c[0] as usize) << 16 | (c[1] as usize) << 8 | c[2] as usize;
+        out.extend_from_slice(&[STANDARD_CHARS[n >> 18], STANDARD_CHARS[n >> 12 & 63], STANDARD_CHARS[n >> 6 & 63], STANDARD_CHARS[n & 63]]);
+    }
+    match *remainder {
+        [a] => {
+            let n = (a as usize) << 16;
+            out.extend_from_slice(&[STANDARD_CHARS[n >> 18], STANDARD_CHARS[n >> 12 & 63], b'=', b'=']);
+        }
+        [a, b] => {
+            let n = (a as usize) << 16 | (b as usize) << 8;
+            out.extend_from_slice(&[STANDARD_CHARS[n >> 18], STANDARD_CHARS[n >> 12 & 63], STANDARD_CHARS[n >> 6 & 63], b'=']);
+        }
+        _ => {}
+    }
+    // Only ASCII went in.
+    String::from_utf8(out).unwrap_or_default()
+}
 
 pub struct Base64;
 
 impl Base64 {
 
+    /// Standard, padded base64 of `bytes` (never fails; the `Result` is
+    /// kept for compatibility).
     pub fn encode(bytes: &[u8]) -> Result<String, String> {
-        if bytes.len() == 0 {
-            return Ok("".to_string())
-        }
-
-
-        let mut result : Vec<String> = vec![];
-
-
-        let mut index = 0;
-        let length = bytes.len();
-
-        while index < length {
-            let mut to_encrypt_chunk: Vec<u8> = vec![];
-            let boxed_char_as_u8 = bytes.get(index);
-            if boxed_char_as_u8.is_none() {
-                return Err(format!("unable to get char at index: {}", index));
-            }
-            to_encrypt_chunk.push(*boxed_char_as_u8.unwrap());
-
-            if index + 1 < length {
-                index = index + 1;
-
-                let boxed_char_as_u8 = bytes.get(index);
-                if boxed_char_as_u8.is_none() {
-                    return Err(format!("unable to get char at index: {}", index));
-                }
-                to_encrypt_chunk.push(*boxed_char_as_u8.unwrap());
-            }
-
-            if index + 1 < length {
-                index = index + 1;
-
-                let boxed_char_as_u8 = bytes.get(index);
-                if boxed_char_as_u8.is_none() {
-                    return Err(format!("unable to get char at index: {}", index));
-                }
-                to_encrypt_chunk.push(*boxed_char_as_u8.unwrap());
-            }
-
-            let chunk : &[u8] = to_encrypt_chunk.as_ref();
-            let boxed_encrypted_chunk = Base64::encode_sequence(chunk);
-            if boxed_encrypted_chunk.is_err() {
-                return Err(boxed_encrypted_chunk.err().unwrap());
-            }
-
-            let encrypted_chunk = boxed_encrypted_chunk.unwrap();
-            result.push(encrypted_chunk);
-
-            index = index + 1
-
-        }
-
-        let encoded_string = result.join(SYMBOL.empty_string);
-        Ok(encoded_string)
+        Ok(encode_standard(bytes))
     }
 
+    /// Decode standard base64 (padding optional, concatenated padded
+    /// segments allowed, no whitespace) — [`Decoder::STANDARD`].
     pub fn decode(text: String) -> Result<Vec<u8>, String> {
-        if text.chars().count() == 0 {
-            return Ok(vec![])
-        }
-
-        let mut result : Vec<u8> = vec![];
-
-        let mut index = 0;
-        let length = text.len();
-
-        while index < length {
-            let mut to_decrypt_chunk = vec![];
-
-            let boxed_char_as_u8 = text.chars().nth(index);
-            if boxed_char_as_u8.is_none() {
-                return Err(format!("unable to get char at index: {}", index));
-            }
-            to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
-
-            if index + 1 < length {
-                index = index + 1;
-
-                let boxed_char_as_u8 = text.chars().nth(index);
-                if boxed_char_as_u8.is_none() {
-                    return Err(format!("unable to get char at index: {}", index));
-                }
-                to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
-            }
-
-            if index + 1 < length {
-                index = index + 1;
-
-                let boxed_char_as_u8 = text.chars().nth(index);
-                if boxed_char_as_u8.is_none() {
-                    return Err(format!("unable to get char at index: {}", index));
-                }
-                to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
-            }
-
-            if index + 1 < length {
-                index = index + 1;
-
-                let boxed_char_as_u8 = text.chars().nth(index);
-                if boxed_char_as_u8.is_none() {
-                    return Err(format!("unable to get char at index: {}", index));
-                }
-                to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
-            }
-
-            let boxed_string = String::from_utf8(to_decrypt_chunk);
-            if boxed_string.is_err() {
-                let message = boxed_string.err().unwrap().to_string();
-                return Err(message)
-            }
-            let chunk : String = boxed_string.unwrap();
-            let boxed_decrypted_chunk = Base64::decode_sequence(chunk);
-            if boxed_decrypted_chunk.is_err() {
-                return Err(boxed_decrypted_chunk.err().unwrap());
-            }
-
-            let encrypted_chunk : Vec<u8> = boxed_decrypted_chunk.unwrap();
-            result.extend(encrypted_chunk);
-
-            index = index + 1
-
-        }
-
-
-        Ok(result)
+        Ok(Decoder::STANDARD.decode(text.as_bytes())?)
     }
 
     pub fn decode_sequence(text: String) -> Result<Vec<u8>, String> {

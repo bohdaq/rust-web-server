@@ -367,26 +367,5 @@ fn positive_integer(bytes: &[u8]) -> Result<&[u8], String> {
 
 /// Standard base64 (RFC 4648 §4), ignoring whitespace; padding optional.
 fn base64_decode(input: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(input.len() * 3 / 4);
-    let mut buf = 0u32;
-    let mut bits = 0u32;
-    for c in input.bytes() {
-        let v = match c {
-            b'A'..=b'Z' => c - b'A',
-            b'a'..=b'z' => c - b'a' + 26,
-            b'0'..=b'9' => c - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' => break,
-            b' ' | b'\n' | b'\r' | b'\t' => continue,
-            _ => return None,
-        };
-        buf = (buf << 6) | v as u32;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buf >> bits) as u8);
-        }
-    }
-    Some(out)
+    crate::core::base64::Decoder::STANDARD.skip_whitespace().decode(input).ok()
 }

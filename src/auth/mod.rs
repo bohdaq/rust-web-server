@@ -80,36 +80,7 @@ type HmacSha256 = Hmac<Sha256>;
 // Decodes standard base64 (+/) and base64url (-_) — accepts either alphabet.
 // Padding characters ('=') are stripped before decoding.
 fn base64_decode(input: &str) -> Option<Vec<u8>> {
-    let bytes: Vec<u8> = input.bytes().filter(|&b| b != b'=').collect();
-    if bytes.len() % 4 == 1 {
-        return None;
-    }
-    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
-    for chunk in bytes.chunks(4) {
-        let a = b64_val(chunk[0])?;
-        let b = b64_val(chunk[1])?;
-        out.push((a << 2) | (b >> 4));
-        if chunk.len() > 2 {
-            let c = b64_val(chunk[2])?;
-            out.push((b << 4) | (c >> 2));
-            if chunk.len() > 3 {
-                let d = b64_val(chunk[3])?;
-                out.push((c << 6) | d);
-            }
-        }
-    }
-    Some(out)
-}
-
-fn b64_val(b: u8) -> Option<u8> {
-    match b {
-        b'A'..=b'Z' => Some(b - b'A'),
-        b'a'..=b'z' => Some(b - b'a' + 26),
-        b'0'..=b'9' => Some(b - b'0' + 52),
-        b'+' | b'-' => Some(62),
-        b'/' | b'_' => Some(63),
-        _ => None,
-    }
+    crate::core::base64::Decoder::EITHER.decode(input).ok()
 }
 
 // URL-safe base64 encoding without padding — used for JWT signature computation.

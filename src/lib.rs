@@ -330,6 +330,18 @@ pub mod fuzz_api {
         assert!(crate::fleet::verify(body, sig, &[7u8; 32]).is_err(), "a fuzzed signature verified");
     }
 
+    /// The shared base64 decoder (18.25.0), every alphabet and option:
+    /// never panics, and whatever decodes re-encodes to the same bytes.
+    pub fn base64_decode(data: &[u8]) {
+        use crate::core::base64::{Base64, Decoder};
+        for d in [Decoder::STANDARD, Decoder::URL_SAFE, Decoder::EITHER.skip_whitespace(), Decoder::EITHER.skip_invalid()] {
+            if let Ok(bytes) = d.decode(data) {
+                let again = Decoder::STANDARD.decode(Base64::encode(&bytes).unwrap()).unwrap();
+                assert_eq!(bytes, again, "base64 round trip changed the bytes");
+            }
+        }
+    }
+
     /// An RFC 7512 `pkcs11:` URI (18.24.0). Must never panic.
     #[cfg(feature = "pkcs11")]
     pub fn pkcs11_uri(data: &[u8]) {

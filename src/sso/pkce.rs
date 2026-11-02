@@ -84,27 +84,5 @@ pub(crate) fn base64url_encode(bytes: &[u8]) -> String {
 /// Decode a base64url string (with or without `=` padding; accepts `-`/`_`
 /// and `+`/`/` variants).
 pub(crate) fn base64url_decode(s: &str) -> Result<Vec<u8>, String> {
-    let mut out = Vec::with_capacity(s.len() * 3 / 4 + 1);
-    let mut buf = 0u32;
-    let mut bits = 0u32;
-    for ch in s.chars() {
-        if ch == '=' {
-            break;
-        }
-        let v: u32 = match ch {
-            'A'..='Z' => ch as u32 - b'A' as u32,
-            'a'..='z' => ch as u32 - b'a' as u32 + 26,
-            '0'..='9' => ch as u32 - b'0' as u32 + 52,
-            '-' | '+' => 62,
-            '_' | '/' => 63,
-            _ => return Err(format!("invalid base64url char: {ch}")),
-        };
-        buf = (buf << 6) | v;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buf >> bits) as u8);
-        }
-    }
-    Ok(out)
+    Ok(crate::core::base64::Decoder::EITHER.decode(s)?)
 }

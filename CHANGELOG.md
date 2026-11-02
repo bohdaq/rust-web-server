@@ -5,6 +5,20 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- One base64 decoder: `core::base64::Decoder` (standard, URL-safe or
+  either alphabet; optional whitespace; padding optional, concatenated
+  padded segments allowed) replaces seven private decoders (JWT, PKCE,
+  PEM, webhook secrets, Azure keys, etcd values, MCP content).
+  `Base64::decode` was quadratic — a 200 KB input took minutes — and is now
+  linear; `Base64::encode` no longer allocates per 3 bytes. Input that was
+  never valid base64 (a lone trailing character, data after too much
+  padding) is now refused everywhere instead of being decoded to whatever
+  bits were left.
+
 ## 18.24.0 — 2026-11-01
 
 ### Changed

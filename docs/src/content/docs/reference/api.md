@@ -151,6 +151,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `build_jwt` / `verify_jwt` | `auth` (`auth`) | Sign and verify HS256 JWTs |
 | `Claims` | `auth` (`auth`) | Decoded JWT claims: `sub`, `exp`, raw JSON payload |
 | `verify_jwt_rs256` / `verify_jwt_es256` | `auth` (`auth-asymmetric`) | Standalone RS256/ES256 verification backing `JwtLayer::rs256`/`::es256` |
+| `Decoder`, `Alphabet`, `DecodeError` | `core::base64` | The one base64 decoder: `Decoder::STANDARD` / `URL_SAFE` / `EITHER`, `.skip_whitespace()`, `.decode(input)` (padding optional; errors carry the byte position). `Base64::encode`/`decode` keep the standard-alphabet API |
 | `RsaPublicKey` | `rsa_key` (`auth-asymmetric` / `sso`) | In-crate RSA public key (PEM, SPKI/PKCS#1 DER or components; 2048–8192 bits); `.verify_pkcs1v15_sha256(message, signature)` |
 | `hash_password` / `verify_password` | `crypto` (`crypto`) | Argon2id hashing (PHC string, salt embedded) and constant-time verification |
 | `generate_token` | `crypto` (`crypto`) | CSPRNG hex token for reset links and API keys |

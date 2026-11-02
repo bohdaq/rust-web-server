@@ -297,6 +297,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "base64_decode"
+path = "fuzz_targets/base64_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "fleet_signature"
 path = "fuzz_targets/fleet_signature.rs"
 test = false
