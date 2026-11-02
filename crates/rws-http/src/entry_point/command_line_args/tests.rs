@@ -299,7 +299,8 @@ fn args(list: &[&str]) -> Vec<String> {
 #[test]
 fn informational_flag_version_long_and_short() {
     use crate::entry_point::command_line_args::informational_flag_output;
-    let expected = format!("rws {}\n", env!("CARGO_PKG_VERSION"));
+    // `fips` (on with --all-features) labels the build.
+    let expected = format!("rws {}{}\n", env!("CARGO_PKG_VERSION"), if cfg!(feature = "fips") { " (FIPS)" } else { "" });
     assert_eq!(Some(expected.clone()), informational_flag_output(&args(&["rws", "--version"])));
     assert_eq!(Some(expected), informational_flag_output(&args(&["rws", "--port=80", "-V"])));
 }
