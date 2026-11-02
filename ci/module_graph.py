@@ -41,8 +41,23 @@ def files(module):
 
 
 def non_test(text):
-    cut = text.find("#[cfg(test)]\nmod tests")
-    return text if cut < 0 else text[:cut]
+    """text without `#[cfg(test)]` modules: an inline `mod x { … }` up to its
+    matching brace, a `mod x;` declaration (its file is skipped by name)."""
+    out, pos = [], 0
+    for m in re.finditer(r"#\[cfg\(test\)\]\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*([;{])", text):
+        if m.start() < pos:
+            continue
+        out.append(text[pos:m.start()])
+        if m.group(1) == ";":
+            pos = m.end()
+            continue
+        depth, i = 1, m.end()
+        while i < len(text) and depth:
+            depth += {"{": 1, "}": -1}.get(text[i], 0)
+            i += 1
+        pos = i
+    out.append(text[pos:])
+    return "".join(out)
 
 
 def references(text):

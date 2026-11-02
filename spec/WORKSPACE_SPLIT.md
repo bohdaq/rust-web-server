@@ -63,8 +63,8 @@ that can't silently grow back into one knot.
 
 | Crate | Holds | May depend on |
 |---|---|---|
-| `rws-base` | `symbol`, `ext`, `null`, `core` (base64, sha256, json escape, x509), `json`, `mime_type`, `url`, `http`, `cookie`, `dns` | std + its own deps |
-| `rws-http` | `request`, `response`, `header`, `range`, `body`, `client_hint`, `cors`, `compression`, `error`, `server_config`, `entry_point` (settings), `ConnectionInfo`, the `Application` / `Middleware` / `Controller` traits | `rws-base` |
+| `rws-base` | `symbol`, `ext`, `null`, `core` (base64, sha256, json escape, x509), `mime_type`, `url`, `http`, `dns` | std + its own deps |
+| `rws-http` | `json` (its `Json<T>` extractor needs `request`/`response`/`extract`), `extract`, `request`, `response`, `header`, `range`, `body`, `client_hint`, `cors`, `compression`, `error`, `server_config`, `entry_point` (settings), `ConnectionInfo`, the `Application` / `Middleware` / `Controller` traits | `rws-base` |
 | `rws-server` | `server`, `h2_server`, `h3_handler`, `thread_pool`, `log`, `metrics`, `app` + controllers, `router`, `state`, `extract`, `test_client`, `websocket`, `sse`, `tls` | `rws-http`, `rws-base` |
 | feature crates | `rws-proxy` (proxy, proxy_config, upstream pools, ws/tcp/udp proxies), `rws-mcp`, `rws-sso` (+ auth, rsa_key), `rws-acme`, `rws-model`, `rws-storage`, `rws-gateway-api`, `rws-tower`, `rws-a2a`, … | the layers below; not each other unless the table says so |
 | `rust-web-server` | re-exports, `main.rs`, `fuzz_api`, glue that wires features together (admin, config_check, ctl) | everything |
@@ -76,7 +76,7 @@ from `ci/module_graph.py`'s output at that point.
 
 | # | Tranche | Status |
 |---|---|---|
-| T0 | Tooling: `ci/module_graph.py` (SCCs, a crate's upward edges), `ci/public_api.sh` crate map, `[workspace.package]`, `crates/`, release.yml `crates` job publishes the workspace in order (`cargo publish --workspace`), `ci/e2e/starters.sh` patches every crate, `check_docs.py` / the settings scanner read `crates/*/src` too | **done**: `module_graph.py` (iterative Tarjan; today one cycle of 44 modules + admin/cluster/fleet); `public_api.sh` `CRATES` + `public_api_merge.py` — listing kept in a normal form (each re-export one `pub use` line, repeats counted once; baseline regenerated, same lines as before); tried on a throwaway `rws-mime`: equal. `[workspace.package]` (version etc.; facade inherits; tooling greps `^version = `); `ci/publish_order.py` drives the release `crates` job; starters patch every `crates/*`; settings scanner reads `crates/*/src`. `check_docs.py` reads `src/entry_point` — moves with that module in T2 |
+| T0 | Tooling: `ci/module_graph.py` (SCCs, a crate's upward edges), `ci/public_api.sh` crate map, `[workspace.package]`, `crates/`, release.yml `crates` job publishes the workspace in order (`cargo publish --workspace`), `ci/e2e/starters.sh` patches every crate, `check_docs.py` / the settings scanner read `crates/*/src` too | **done**: `module_graph.py` (iterative Tarjan; today one cycle of 76 modules); `public_api.sh` `CRATES` + `public_api_merge.py` — listing kept in a normal form (each re-export one `pub use` line, repeats counted once; baseline regenerated, same lines as before); tried on a throwaway `rws-mime`: equal. `[workspace.package]` (version etc.; facade inherits; tooling greps `^version = `); `ci/publish_order.py` drives the release `crates` job; starters patch every `crates/*`; settings scanner reads `crates/*/src`. `check_docs.py` reads `src/entry_point` — moves with that module in T2 |
 | T1 | `rws-base` | planned |
 | T2 | `rws-http`: cut `application` → `server` (`ConnectionInfo` down), `header` → `cors`/`client_hint` config, `http` → `scheduler`, `range` ↔ `response` (same crate) | planned |
 | T3 | `rws-server` | planned |
