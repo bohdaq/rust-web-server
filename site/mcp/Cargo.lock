@@ -540,6 +540,7 @@ dependencies = [
  "rcgen",
  "rustls",
  "rws-base",
+ "rws-http",
  "rws-macros",
  "serde",
  "serde_json",
@@ -614,6 +615,18 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "rws-http"
+version = "18.25.0"
+dependencies = [
+ "file-ext",
+ "flate2",
+ "memchr",
+ "rws-base",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

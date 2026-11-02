@@ -5,7 +5,7 @@ description: Map Rust errors to HTTP responses using IntoResponse and the built-
 
 ## IntoResponse trait
 
-`IntoResponse` is defined in `src/error/mod.rs`:
+`IntoResponse` is defined in `crates/rws-http/src/error/mod.rs`:
 
 ```rust
 pub trait IntoResponse {

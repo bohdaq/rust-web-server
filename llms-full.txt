@@ -1517,7 +1517,7 @@ struct passed through the call stack.
 
 | Priority | Source | Notes |
 |----------|--------|-------|
-| 1 | Built-in defaults | Hardcoded in `src/entry_point/mod.rs` |
+| 1 | Built-in defaults | Hardcoded in `crates/rws-http/src/entry_point/mod.rs` |
 | 2 | System environment variables | Set before the process starts |
 | 3 | `rws.config.toml` | Optional file in the working directory |
 | 4 | CLI arguments | Flags passed on the command line |
@@ -1531,7 +1531,7 @@ overrides `RWS_CONFIG_PORT=8888` in the environment.
 `Server::setup()` first calls `set_default_values()`, which gives the core
 settings (IP, port, thread count, request allocation size, CORS, TLS paths, …)
 their compiled-in default when no environment variable is set. Then
-`bootstrap()` in `src/entry_point/mod.rs` runs three steps in order:
+`bootstrap()` in `crates/rws-http/src/entry_point/mod.rs` runs three steps in order:
 
 ```rust
 read_system_environment_variables();       // step 1: read existing env vars
@@ -3380,7 +3380,7 @@ See the [API reference](/reference/api/) for the full list of public types.
 
 ## Request
 
-`Request` is defined in `src/request/mod.rs`:
+`Request` is defined in `crates/rws-http/src/request/mod.rs`:
 
 ```rust
 pub struct Request {
@@ -3464,7 +3464,7 @@ This is the TCP peer. Behind a load balancer it is the balancer's address; `X-Fo
 
 ## Response
 
-`Response` is defined in `src/response/mod.rs`:
+`Response` is defined in `crates/rws-http/src/response/mod.rs`:
 
 ```rust
 pub struct Response {
@@ -3581,7 +3581,7 @@ response.reason_phrase = STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase.to
 
 ## Header constants
 
-`Header` in `src/header/mod.rs` exposes string constants for all standard HTTP header names:
+`Header` in `crates/rws-http/src/header/mod.rs` exposes string constants for all standard HTTP header names:
 
 ```rust
 use rust_web_server::header::Header;
@@ -3840,7 +3840,7 @@ Routes are tried in registration order. Any request that does not match a regist
 
 ## FromRequest trait
 
-`FromRequest` is defined in `src/extract/mod.rs`:
+`FromRequest` is defined in `crates/rws-http/src/extract/mod.rs`:
 
 ```rust
 pub trait FromRequest: Sized {
@@ -4035,7 +4035,7 @@ This covers structs built from existing extractors (`Body`, `BodyText`, `Query`,
 
 ## IntoResponse trait
 
-`IntoResponse` is defined in `src/error/mod.rs`:
+`IntoResponse` is defined in `crates/rws-http/src/error/mod.rs`:
 
 ```rust
 pub trait IntoResponse {

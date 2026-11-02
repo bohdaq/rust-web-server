@@ -136,7 +136,7 @@ Skipping either is not acceptable. Docs and tests ship with the code, not after.
 
 ## Architecture
 
-**Workspace split in progress** (`spec/WORKSPACE_SPLIT.md`, status table there): modules are moving out of `src/` into layered crates under `crates/` (`rws-base` so far: `core`, `ext`, `http`, `mime_type`, `null`, `symbol`, `url`, `dns`). `src/lib.rs` re-exports each under its old name, so `crate::mime_type::…` and `rust_web_server::mime_type::…` keep working everywhere. A lower crate can't name a higher one: `ci/module_graph.py --up <modules>` lists the references that block a move. What the facade needs from a crate but users don't is `#[doc(hidden)] pub`, not `pub(crate)`. `ci/public_api.sh` lists every crate in its `CRATES` map; the listing must not change.
+**Workspace split in progress** (`spec/WORKSPACE_SPLIT.md`, status table there): modules are moving out of `src/` into layered crates under `crates/` (`rws-base`: `core`, `ext`, `http`, `mime_type`, `null`, `symbol`, `url`, `dns`; `rws-http`: `body`, `client_hint`, `compression`, `cors`, `entry_point`, `error`, `extract`, `header`, `json`, `range`, `request`, `response`, `server_config`, `virtual_host`, plus the low halves of `ip_filter` (`TrustedProxies`) and `early_hints` (`valid`), which the facade's modules of the same name glob-re-export and extend). `src/lib.rs` re-exports each under its old name, so `crate::mime_type::…` and `rust_web_server::mime_type::…` keep working everywhere. A lower crate can't name a higher one: `ci/module_graph.py --up <modules>` lists the references that block a move. What the facade needs from a crate but users don't is `#[doc(hidden)] pub`, not `pub(crate)`. `ci/public_api.sh` lists every crate in its `CRATES` map; the listing must not change. A crate's tests run in the crate's directory: tests that need repository-root fixtures (`static/`, `rws.config.toml`) or facade modules (`server`, `app`, `test_client`) live in the facade (`src/http_tests/`). Adding a crate also changes `site/mcp/Cargo.lock` (CI builds it `--locked`).
 
 The default build (`http3` feature) uses a tokio async runtime and serves HTTP/3 over QUIC, HTTP/2, and HTTP/1.1 over TLS. The `http1`-only build is a fully synchronous, thread-pool-based server with no async runtime. HTTP/1.1 parsing, JSON, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented from scratch (no hyper/Tower/Axum); HTTP/2 framing uses the `h2` crate, HTTP/3 uses `h3`/`quinn`, and TLS uses `rustls`.
 
@@ -190,14 +190,14 @@ Built-in middleware: `RateLimitLayer`, `MetricsLayer`, `CacheLayer`, `OtelLayer`
 ### Configuration
 
 Configuration is layered (lowest → highest priority):
-1. Defaults hardcoded in `src/entry_point/mod.rs` (`Config::*_DEFAULT_VALUE`)
+1. Defaults hardcoded in `crates/rws-http/src/entry_point/mod.rs` (`Config::*_DEFAULT_VALUE`)
 2. System environment variables
 3. `rws.config.toml` in the working directory
 4. Command-line args (`rws.command_line`)
 
-All config is read at startup into process environment variables (`RWS_CONFIG_*`); per-request code reads the typed `ServerConfig::current()` snapshot (`src/server_config/`, rebuilt after `server_config::invalidate()`), not `env::var(...)` — see the static-file hot path below.
+All config is read at startup into process environment variables (`RWS_CONFIG_*`); per-request code reads the typed `ServerConfig::current()` snapshot (`crates/rws-http/src/server_config/`, rebuilt after `server_config::invalidate()`), not `env::var(...)` — see the static-file hot path below.
 
-Key config constants (all in `src/entry_point/mod.rs`):
+Key config constants (all in `crates/rws-http/src/entry_point/mod.rs`):
 - `RWS_CONFIG_IP`, `RWS_CONFIG_PORT`, `RWS_CONFIG_THREAD_COUNT`
 - `RWS_CONFIG_TLS_CERT_FILE`, `RWS_CONFIG_TLS_KEY_FILE`
 - `RWS_CONFIG_TLS_CLIENT_CA_FILE` — mTLS CA cert; empty disables client cert verification
@@ -225,9 +225,9 @@ Hot reload: `SIGHUP` (or `POST /admin/config/reload`) calls `config_reload::relo
 
 ### Key types
 
-- `Request` (`src/request/mod.rs`) — method, request_uri, http_version, headers, body (`request::Body`, 18.0: bytes or a stream; derefs to `&[u8]`, build with `.into()`/`Default::default()`)
-- `Response` (`src/response/mod.rs`) — status code, headers, body as `Vec<ContentRange>`, and `stream_file: Option<String>` for chunked file streaming
-- `Header` (`src/header/mod.rs`) — name/value pair, both `Cow<'static, str>` (18.0.0): build built-in headers from the `Header::_X` constants and `&'static str` values (borrowed, no allocation) — never `Header::_X.to_string()` — and other values from a `String` (`Header::new(name, value)` or `.into()`); read via deref (`&*h.value`; `str::as_str` isn't stable on the MSRV, use `.as_ref()`). Both parsers take header names through `Header::name_from` (common names in their canonical or lower-case spelling are borrowed, anything else owned — same text)
+- `Request` (`crates/rws-http/src/request/mod.rs`) — method, request_uri, http_version, headers, body (`request::Body`, 18.0: bytes or a stream; derefs to `&[u8]`, build with `.into()`/`Default::default()`)
+- `Response` (`crates/rws-http/src/response/mod.rs`) — status code, headers, body as `Vec<ContentRange>`, and `stream_file: Option<String>` for chunked file streaming
+- `Header` (`crates/rws-http/src/header/mod.rs`) — name/value pair, both `Cow<'static, str>` (18.0.0): build built-in headers from the `Header::_X` constants and `&'static str` values (borrowed, no allocation) — never `Header::_X.to_string()` — and other values from a `String` (`Header::new(name, value)` or `.into()`); read via deref (`&*h.value`; `str::as_str` isn't stable on the MSRV, use `.as_ref()`). Both parsers take header names through `Header::name_from` (common names in their canonical or lower-case spelling are borrowed, anything else owned — same text)
 - `ConnectionInfo` (`src/server/mod.rs`) — client/server IP+port, request allocation size, and `sni_hostname: Option<String>` (SNI hostname from TLS handshake, `None` for plain HTTP), passed into every controller
 
 ### HTTP version constants
@@ -242,7 +242,7 @@ Call `.with_host("example.com")` before registering routes to restrict a `Router
 
 ### Typed extractors
 
-`src/extract/mod.rs` defines the `FromRequest` trait and built-in extractors:
+`crates/rws-http/src/extract/mod.rs` defines the `FromRequest` trait and built-in extractors:
 - `Body` — raw bytes (never fails)
 - `BodyText` — UTF-8 body (400 on invalid UTF-8)
 - `Query` — parsed query string as `HashMap<String, String>`
@@ -251,7 +251,7 @@ Call `.with_host("example.com")` before registering routes to restrict a `Router
 
 ### Typed errors
 
-`src/error/mod.rs` defines:
+`crates/rws-http/src/error/mod.rs` defines:
 - `IntoResponse` trait — implement on your error enum to map it to a `Response`; `Response` itself is the identity implementation
 - `AppError` enum — covers `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`, `PayloadTooLarge`, `Internal`; all implement `IntoResponse`
 
@@ -321,7 +321,7 @@ When compiled with `--no-default-features --features http1`, the server uses `st
 When built with the `http2` feature, the binary uses a `tokio` runtime and serves TLS via `rustls` (aws-lc-rs crypto backend). ALPN negotiation selects HTTP/2 (rws's own `h2_server`) or HTTP/1.1 per connection automatically. New modules:
 
 - `src/tls/mod.rs` — `SniCertResolver` implements `rustls::server::ResolvesServerCert`; `create_tls_acceptor_from_vhosts(vhosts, default_cert, default_key)` builds a multi-domain `TlsAcceptor` that picks the right cert per SNI hostname at handshake time. `create_tls_acceptor(cert, key)` is a backward-compat wrapper for single-cert deployments. When `RWS_CONFIG_TLS_CLIENT_CA_FILE` is set, `load_client_verifier()` builds a `WebPkiClientVerifier` that enforces mTLS on both HTTPS and QUIC listeners.
-- `src/virtual_host/mod.rs` — `VirtualHostConfig { domain, cert_file, key_file }` carries per-domain cert configuration.
+- `crates/rws-http/src/virtual_host/mod.rs` — `VirtualHostConfig { domain, cert_file, key_file }` carries per-domain cert configuration.
 - `src/h2_server/` — rws's own HTTP/2 server (RFC 9113), replacing the `h2` crate on the server side in 18.0.0 (`h2` remains the client of `H2ReverseProxy`/`GrpcProxy`): with `h2`, framing and HPACK cost more per 1 KiB request than all of nginx's request handling; same-run A/B: −20 to −37% CPU per HTTP/2 request. `handle_connection` runs one task per connection: reads frames into a buffer and handles each (`Conn::frame`), keeps stream states and both flow-control windows, and writes everything a loop iteration produced (SETTINGS ACKs, several streams' HEADERS and DATA) in one `write_all`. A complete bodiless request the app answers inline (`runs_inline`) executes in the connection task; others run in a spawned task (`http1_async::execute_request`) whose response returns over a channel (drained every iteration — the `select!` is unbiased so a client that keeps sending can't starve them); `stream_file`/`stream_pipe` bodies come from `body_stream::spawn_producer`, polled only while the stream has nothing queued, and are sent within the windows. `hpack.rs`: decoder (static + dynamic table, Huffman via a trie in `huffman.rs`, size updates only at block start and ≤ 4096, integers bounded in value and shift — the fuzzer found the unbounded shift) and encoder (`:status` from the static table, repeated headers inserted once then sent as one-byte indexes, `changes_every_response` values as non-indexed literals, raw octets — no Huffman). Limits: frames > 16 KiB → `FRAME_SIZE_ERROR`; header blocks > `MAX_HEADER_BLOCK` (CONTINUATION flood) and more than `MAX_RESETS_PER_WINDOW` stream resets per `RESET_WINDOW` — the client's (rapid reset) and the ones its rule-breaking makes the server send (`Conn::reset` with anything but `NO_ERROR`, MadeYouReset) → `GOAWAY(ENHANCE_YOUR_CALM)`; a connection with nothing in flight and no streamed body (`waiting_on_client`) that reads nothing for `http1_async::READ_TIMEOUT` → `GOAWAY(NO_ERROR)`; decoded lists > `MAX_HEADER_LIST_SIZE` → `431`; `MAX_CONCURRENT_STREAMS` → `REFUSED_STREAM`. Request validation per §8.3 (pseudo-headers first/once/known, lower-case names, no connection-specific headers, `te: trailers` only, `content-length` must match the DATA). `h2_server::fuzz` feeds `fuzz/fuzz_targets/h2_hpack.rs` and `h2_connection.rs`; `ci/e2e/h2spec.sh` must stay 146/146.
 - `src/server/mod.rs::Server::run_tls()` — async accept loop; extracts SNI hostname after the TLS handshake (`tls_stream.get_ref().1.server_name()`), routes by ALPN to `h2_server::handle_connection` or `http1_async::serve`, populates `ConnectionInfo::sni_hostname`.
 - `src/server/mod.rs::Server::run_redirect()` — optional second listener; sends `301 Moved Permanently` to HTTPS for every request; activated by `RWS_CONFIG_HTTP_REDIRECT_PORT`.

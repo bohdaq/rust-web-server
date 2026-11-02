@@ -3357,6 +3357,7 @@ dependencies = [
  "regex",
  "rustls",
  "rws-base",
+ "rws-http",
  "rws-macros",
  "serde",
  "serde_json",
@@ -3516,6 +3517,20 @@ dependencies = [
  "rcgen",
  "url-build-parse",
  "url-search-params",
+]
+
+[[package]]
+name = "rws-http"
+version = "18.25.0"
+dependencies = [
+ "brotli",
+ "file-ext",
+ "flate2",
+ "memchr",
+ "rws-base",
+ "serde",
+ "serde_json",
+ "zstd",
 ]
 
 [[package]]

@@ -1,0 +1,28 @@
+[package]
+name = "rws-http"
+description = "The HTTP layer of rust-web-server (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+serde = ["dep:serde", "dep:serde_json"]
+brotli = ["dep:brotli"]
+zstd = ["dep:zstd"]
+# Only labels `rws --version`; the FIPS module itself is rust-web-server's `fips`.
+fips = []
+
+[dependencies]
+rws-base.workspace = true
+file-ext = "12.0.0"
+flate2 = "1"
+memchr = "2.7"
+brotli = { version = "9", optional = true }
+zstd = { version = "0.14.3", optional = true }  # >= 0.14.3: RUSTSEC-2026-0391
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }

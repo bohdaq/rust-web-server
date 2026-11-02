@@ -5,7 +5,7 @@ description: The Request and Response types, status code constants, MIME type co
 
 ## Request
 
-`Request` is defined in `src/request/mod.rs`:
+`Request` is defined in `crates/rws-http/src/request/mod.rs`:
 
 ```rust
 pub struct Request {
@@ -90,7 +90,7 @@ This is the TCP peer. Behind a load balancer it is the balancer's address; `X-Fo
 
 ## Response
 
-`Response` is defined in `src/response/mod.rs`:
+`Response` is defined in `crates/rws-http/src/response/mod.rs`:
 
 ```rust
 pub struct Response {
@@ -207,7 +207,7 @@ response.reason_phrase = STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase.to
 
 ## Header constants
 
-`Header` in `src/header/mod.rs` exposes string constants for all standard HTTP header names:
+`Header` in `crates/rws-http/src/header/mod.rs` exposes string constants for all standard HTTP header names:
 
 ```rust
 use rust_web_server::header::Header;

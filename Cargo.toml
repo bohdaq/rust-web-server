@@ -26,6 +26,7 @@ license = "MIT"
 # pins together with `version` above.
 [workspace.dependencies]
 rws-base = { path = "crates/rws-base", version = "=18.25.0" }
+rws-http = { path = "crates/rws-http", version = "=18.25.0" }
 
 [workspace]
 # Previously implicit (no [workspace] table at all — Cargo auto-added
@@ -33,7 +34,7 @@ rws-base = { path = "crates/rws-base", version = "=18.25.0" }
 # rws-wasm-shim depends ON rust-web-server rather than the other way around,
 # so it can't be pulled in as a path *dependency* the way rws-macros is —
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
-members = ["rws-macros", "rws-wasm-shim", "crates/rws-base"]
+members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http"]
 # fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
 exclude = ["fuzz", "ci/e2e/grpc", "starters", "site/mcp", "examples/wasm_plugin"]
 
@@ -138,12 +139,12 @@ http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
 http-client = ["dep:rustls", "dep:webpki-roots"]
 # Content codings besides gzip (18.1.0): `br` (pure Rust) and `zstd` (C
 # libzstd, built with the crate). Both are in the default set.
-brotli = ["dep:brotli"]
-zstd   = ["dep:zstd"]
+brotli = ["dep:brotli", "rws-http/brotli"]
+zstd   = ["dep:zstd", "rws-http/zstd"]
 acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]
-fips   = ["http2", "rustls/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
+fips   = ["http2", "rustls/fips", "rws-http/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
 pkcs11 = ["http2", "dep:cryptoki", "dep:aws-lc-rs"] # TLS private keys in an HSM / cloud KMS through PKCS#11 (pkcs11: URIs)
-serde  = ["dep:serde", "dep:serde_json"]
+serde  = ["dep:serde", "dep:serde_json", "rws-http/serde"]
 auth   = ["dep:hmac", "dep:sha2"]
 auth-asymmetric = ["auth", "dep:p256", "dep:rand_core"]  # RS256 (in-crate rsa_key) / ES256 (p256) in JwtLayer
 macros = ["dep:rws-macros"]
@@ -186,6 +187,7 @@ secrets = ["dep:hmac", "dep:sha2", "http-client"]  # secrets::resolve(): vault:/
 [dependencies]
 # The crates the facade is split into (spec/WORKSPACE_SPLIT.md).
 rws-base.workspace = true
+rws-http.workspace = true
 ctrlc = { version = "3", optional = true }
 mimalloc = { version = "0.1", optional = true, default-features = false, features = ["v3"] }
 libc = { version = "0.2", optional = true }

@@ -55,10 +55,14 @@ pub mod session;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod redis_protocol;
 pub mod sse;
-pub mod compression;
+pub use rws_http::compression;
 pub mod cookie;
-pub mod error;
-pub mod extract;
+pub use rws_http::error;
+pub use rws_http::extract;
+#[cfg(all(test, feature = "macros"))]
+mod extract_derive_tests;
+#[cfg(test)]
+mod http_tests;
 pub mod i18n;
 pub mod a2a;
 #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
@@ -78,7 +82,7 @@ pub mod config_check;
 /// RSA public keys and RS256 / rsa-sha256 signature verification (no `rsa` crate).
 #[cfg(any(feature = "auth-asymmetric", feature = "sso"))]
 pub mod rsa_key;
-pub mod server_config;
+pub use rws_http::server_config;
 pub mod feature;
 pub mod maintenance;
 pub mod metrics;
@@ -96,24 +100,24 @@ pub mod schema;
 pub mod state;
 pub mod test_client;
 pub mod application;
-pub mod body;
-pub mod client_hint;
+pub use rws_http::body;
+pub use rws_http::client_hint;
 pub mod controller;
 pub use rws_base::core;
-pub mod cors;
-pub mod entry_point;
+pub use rws_http::cors;
+pub use rws_http::entry_point;
 pub use rws_base::ext;
-pub mod header;
+pub use rws_http::header;
 pub use rws_base::http;
-pub mod json;
+pub use rws_http::json;
 pub mod language;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod log;
 pub use rws_base::mime_type;
 pub use rws_base::null;
-pub mod range;
-pub mod request;
-pub mod response;
+pub use rws_http::range;
+pub use rws_http::request;
+pub use rws_http::response;
 pub mod server;
 pub use rws_base::symbol;
 #[cfg(not(target_arch = "wasm32"))]
@@ -170,7 +174,7 @@ pub mod ingress;
 #[cfg(feature = "tera")]
 pub mod template;
 pub mod validate;
-pub mod virtual_host;
+pub use rws_http::virtual_host;
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
 pub mod model;
 #[cfg(not(target_arch = "wasm32"))]

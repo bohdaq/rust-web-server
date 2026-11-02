@@ -41,7 +41,7 @@ jobs:
       # The crates the facade is split into (spec/WORKSPACE_SPLIT.md) run their
       # own tests; `cargo test` above covers only the root package.
       - if: matrix.args == ''
-        run: cargo test --locked --workspace --exclude rust-web-server --exclude rws-wasm-shim --exclude rws-macros
+        run: cargo test --locked --workspace --exclude rust-web-server --exclude rws-wasm-shim --exclude rws-macros --all-features
 
   msrv:
     name: msrv (1.99, all features)
@@ -77,6 +77,19 @@ jobs:
         with:
           key: windows
       - run: cargo check --locked --bin rws --features "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3"
+
+  # The crates as crates.io would get them (spec/WORKSPACE_SPLIT.md): each
+  # packaged and built from its tarball against the others' tarballs.
+  package:
+    name: package (workspace crates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: package
+      - run: cargo package --locked --workspace --exclude rws-wasm-shim --exclude rws-macros
 
   # The public API against ci/public-api.txt: removals are breaking, additions
   # must update the listing in the same commit (ci/public_api.sh says how).

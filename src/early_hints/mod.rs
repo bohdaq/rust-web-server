@@ -191,10 +191,8 @@ pub(crate) fn prometheus_text() -> String {
     out
 }
 
-/// A usable `Link` value: not empty, no CR, LF or NUL.
-pub fn valid(link: &str) -> bool {
-    !link.trim().is_empty() && !link.bytes().any(|b| matches!(b, b'\r' | b'\n' | 0))
-}
+// `valid` lives in rws-http: `server_config` checks the configured links with it.
+pub use rws_http::early_hints::valid;
 
 /// Whether this HTTP/1.x request may get `103`s: HTTP/1.1 with
 /// `early_hints_http1` on.

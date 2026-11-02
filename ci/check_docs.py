@@ -89,11 +89,15 @@ def check_repo_links():
                 errors.append(f"{os.path.relpath(path, ROOT)}: link to missing file {target}")
 
 
+# The settings module, in the rws-http crate since the workspace split.
+ENTRY_POINT = os.path.join(ROOT, "crates", "rws-http", "src", "entry_point")
+
+
 def check_settings_documented():
-    src = open(os.path.join(ROOT, "src", "entry_point", "config_file", "mod.rs")).read()
+    src = open(os.path.join(ENTRY_POINT, "config_file", "mod.rs")).read()
     block = re.search(r"SETTINGS_WITHOUT_FLAG[^=]*=\s*&\[(.*?)\];", src, re.S).group(1)
     settings = set(re.findall(r'"(RWS_CONFIG_[A-Z0-9_]+)"', block))
-    entry = open(os.path.join(ROOT, "src", "entry_point", "mod.rs")).read()
+    entry = open(os.path.join(ENTRY_POINT, "mod.rs")).read()
     settings |= {
         s for s in re.findall(r'"(RWS_CONFIG_[A-Z0-9_]+)"', entry) if not s.endswith("_DEFAULT_VALUE")
     }

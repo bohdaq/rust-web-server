@@ -11,7 +11,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 - The crate is being split into a workspace (`spec/WORKSPACE_SPLIT.md`):
   the base layer — `core`, `ext`, `http`, `mime_type`, `null`, `symbol`,
-  `url` — now lives in the new crate `rws-base`, published with
+  `url` — now lives in the new crate `rws-base`, and the HTTP layer —
+  `request`, `response`, `header`, `range`, `body`, `json`, `extract`,
+  `compression`, `cors`, `client_hint`, `error`, `entry_point`,
+  `server_config`, `virtual_host` — in `rws-http`, both published with
   rust-web-server at the same version. Every `rust_web_server::…` path is
   unchanged; depend on `rust-web-server` as before.
 

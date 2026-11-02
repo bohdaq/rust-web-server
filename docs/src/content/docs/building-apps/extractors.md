@@ -5,7 +5,7 @@ description: Parse request bodies, query strings, and headers into typed values 
 
 ## FromRequest trait
 
-`FromRequest` is defined in `src/extract/mod.rs`:
+`FromRequest` is defined in `crates/rws-http/src/extract/mod.rs`:
 
 ```rust
 pub trait FromRequest: Sized {

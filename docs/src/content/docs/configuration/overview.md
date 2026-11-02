@@ -12,7 +12,7 @@ struct passed through the call stack.
 
 | Priority | Source | Notes |
 |----------|--------|-------|
-| 1 | Built-in defaults | Hardcoded in `src/entry_point/mod.rs` |
+| 1 | Built-in defaults | Hardcoded in `crates/rws-http/src/entry_point/mod.rs` |
 | 2 | System environment variables | Set before the process starts |
 | 3 | `rws.config.toml` | Optional file in the working directory |
 | 4 | CLI arguments | Flags passed on the command line |
@@ -26,7 +26,7 @@ overrides `RWS_CONFIG_PORT=8888` in the environment.
 `Server::setup()` first calls `set_default_values()`, which gives the core
 settings (IP, port, thread count, request allocation size, CORS, TLS paths, …)
 their compiled-in default when no environment variable is set. Then
-`bootstrap()` in `src/entry_point/mod.rs` runs three steps in order:
+`bootstrap()` in `crates/rws-http/src/entry_point/mod.rs` runs three steps in order:
 
 ```rust
 read_system_environment_variables();       // step 1: read existing env vars
