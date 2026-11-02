@@ -57,3 +57,40 @@ fn pins_are_hidden_in_output() {
     assert_eq!(crate::entry_point::shown("RWS_CONFIG_TLS_KEY_FILE", "pkcs11:object=k?pin-value=9"), "pkcs11:object=k?pin-value=(hidden)");
     assert_eq!(crate::entry_point::shown("RWS_CONFIG_TLS_KEY_FILE", "/etc/key.pem"), "/etc/key.pem");
 }
+
+#[test]
+fn signing_waits_never_panic_on_any_runtime() {
+    // Outside tokio.
+    assert_eq!(1, off_the_worker(|| 1));
+    // A current-thread runtime (per-core): block_in_place would panic here.
+    let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    assert_eq!(2, rt.block_on(async { off_the_worker(|| 2) }));
+    // The multi-threaded runtime: a worker task, block_on's thread, the blocking pool.
+    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    assert_eq!(3, rt.block_on(async { tokio::spawn(async { off_the_worker(|| 3) }).await.unwrap() }));
+    assert_eq!(4, rt.block_on(async { off_the_worker(|| 4) }));
+    assert_eq!(5, rt.block_on(async { tokio::task::spawn_blocking(|| off_the_worker(|| 5)).await.unwrap() }));
+}
+
+#[test]
+fn a_slow_token_does_not_stall_the_shared_runtime() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+    // One worker: without block_in_place the slow "signature" would hold it,
+    // and the other task couldn't run until it finished.
+    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_time().build().unwrap();
+    let other_ran = Arc::new(AtomicBool::new(false));
+    let seen = Arc::clone(&other_ran);
+    let started = Instant::now();
+    let ran_after = rt.block_on(async move {
+        let slow = tokio::spawn(async { off_the_worker(|| std::thread::sleep(Duration::from_millis(800))) });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let other = tokio::spawn(async move { seen.store(true, Ordering::SeqCst) });
+        other.await.unwrap();
+        let at = started.elapsed();
+        slow.await.unwrap();
+        at
+    });
+    assert!(other_ran.load(Ordering::SeqCst));
+    assert!(ran_after < Duration::from_millis(600), "the other task waited for the token: {ran_after:?}");
+}

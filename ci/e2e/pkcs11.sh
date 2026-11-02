@@ -52,7 +52,7 @@ TOML
   else
     "$RWS" --check=rws.config.toml >check.log 2>&1 || fail "rws --check: $(cat check.log)"
   fi
-  (cd www && exec env RWS_CONFIG_FILE=../rws.config.toml "$RWS" >"../rws-$1.log" 2>&1) & PIDS+=($!)
+  (cd www && exec env RWS_CONFIG_FILE=../rws.config.toml ${RUNTIME:+RWS_CONFIG_RUNTIME=$RUNTIME} "$RWS" >"../rws-$1.log" 2>&1) & PIDS+=($!)
 }
 probe() { # <cert> <curl tls args…>
   local cert=$1; shift
@@ -67,6 +67,18 @@ serve ec ec-key HSM_PIN
 probe ec-key.pem --tlsv1.3 || fail "HTTPS with the EC key on the token (TLS 1.3)"
 probe ec-key.pem --tlsv1.2 --tls-max 1.2 || fail "HTTPS with the EC key on the token (TLS 1.2)"
 pass "EC P-256 key on the token: TLS 1.3 and 1.2"
+grep -q "runtime: shared (a TLS key is on a PKCS#11 token" rws-ec.log || fail "the binary didn't keep the shared runtime for a pkcs11: key"
+pids=(); for _ in $(seq 1 24); do curl -s --cacert ec-key.pem https://localhost:18571/ >par.out.$RANDOM & pids+=($!); done
+for p in "${pids[@]}"; do wait "$p" || fail "a parallel handshake failed"; done
+[ "$(cat par.out.* | grep -c hsm-ok)" = 24 ] || fail "parallel handshakes: $(cat par.out.* | grep -c hsm-ok)/24"
+rm -f par.out.*
+pass "shared runtime by default with a pkcs11: key; 24 parallel handshakes"
+kill "${PIDS[-1]}"; wait "${PIDS[-1]}" 2>/dev/null || true
+
+RUNTIME=per-core serve percore ec-key HSM_PIN
+probe ec-key.pem --tlsv1.3 || fail "HTTPS with the EC key on per-core runtimes"
+grep -q "per-core with a PKCS#11 TLS key" rws-percore.log || fail "no warning for per-core with a pkcs11: key"
+pass "explicit per-core still serves, with a startup warning"
 kill "${PIDS[-1]}"; wait "${PIDS[-1]}" 2>/dev/null || true
 
 serve rsa rsa-key HSM_PIN

@@ -41,11 +41,48 @@ pub fn enabled() -> bool {
 /// `runtime = "shared"` there (or in the environment) still wins. Library
 /// applications don't call it: their handlers may keep tokio I/O in
 /// process-wide structures, which per-core runtimes don't share.
+///
+/// A TLS key on a PKCS#11 token keeps the shared runtime (18.25.0): rustls
+/// asks for the signature synchronously inside the handshake, and only on
+/// the multi-threaded runtime can the token's wait be moved off the worker
+/// (`tokio::task::block_in_place`); on a per-core runtime every connection
+/// of that core would wait for the token.
 pub fn default_to_per_core() {
     if std::env::var_os(RWS_CONFIG_RUNTIME).is_none() {
-        std::env::set_var(RWS_CONFIG_RUNTIME, "per-core");
+        if pkcs11_key_configured() {
+            println!("  runtime: shared (a TLS key is on a PKCS#11 token; set runtime = \"per-core\" to override)");
+            std::env::set_var(RWS_CONFIG_RUNTIME, "shared");
+        } else {
+            std::env::set_var(RWS_CONFIG_RUNTIME, "per-core");
+        }
         crate::server_config::invalidate();
     }
+}
+
+/// Whether a `pkcs11:` key is configured, before the config file and flags
+/// are read: in the environment, the arguments or the config file's text.
+/// A false positive (a comment) only keeps the shared runtime.
+fn pkcs11_key_configured() -> bool {
+    let named = |v: &str| v.trim_start_matches(['"', '\'', ' ']).starts_with("pkcs11:");
+    let in_env = std::env::vars().any(|(k, v)| k.starts_with("RWS_CONFIG_") && k.ends_with("KEY_FILE") && named(&v));
+    let in_args = std::env::args().any(|a| a.split_once('=').is_some_and(|(_, v)| named(v)));
+    let file = std::env::var("RWS_CONFIG_FILE").ok().filter(|p| !p.trim().is_empty()).unwrap_or_else(|| "rws.config.toml".to_string());
+    let in_file = std::fs::read_to_string(file).is_ok_and(|text| mentions_pkcs11_key(&text));
+    in_env || in_args || in_file
+}
+
+/// A `*key_file = "pkcs11:…"` line in config text.
+pub(crate) fn mentions_pkcs11_key(text: &str) -> bool {
+    text.lines().any(|line| {
+        line.split_once('=').is_some_and(|(k, v)| k.trim().ends_with("key_file") && v.trim().trim_start_matches(['"', '\'']).starts_with("pkcs11:"))
+    })
+}
+
+/// Startup warning for a PKCS#11 key on per-core runtimes, which the
+/// signature wait stalls (`None` when that isn't the case).
+pub fn pkcs11_warning() -> Option<&'static str> {
+    let key_on_token = std::env::vars().any(|(k, v)| k.starts_with("RWS_CONFIG_") && k.ends_with("KEY_FILE") && v.trim().starts_with("pkcs11:"));
+    (enabled() && key_on_token).then_some("[runtime] per-core with a PKCS#11 TLS key: each handshake's signature blocks that core's connections while the token works; runtime = \"shared\" moves the wait off the worker")
 }
 
 /// How many per-core runtimes to start: `TOKIO_WORKER_THREADS` when set
@@ -111,6 +148,9 @@ where
     F: Fn(tokio::net::TcpListener, watch::Receiver<bool>) -> Fut + Send + Clone + 'static,
     Fut: std::future::Future<Output = ()>,
 {
+    if let Some(warning) = pkcs11_warning() {
+        eprintln!("{warning}");
+    }
     let mut handles = Vec::with_capacity(count);
     let (bound_tx, bound_rx) = std::sync::mpsc::channel::<()>();
     for slot in 1..=count {
@@ -151,6 +191,17 @@ pub(crate) async fn stopped(stop: &mut watch::Receiver<bool>) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn pkcs11_keys_are_spotted_in_config_text() {
+        use super::mentions_pkcs11_key;
+        assert!(mentions_pkcs11_key("tls_key_file = \"pkcs11:token=rws;object=k?module-path=/x.so\""));
+        assert!(mentions_pkcs11_key("[[virtual_host]]\ndomain = \"a\"\nkey_file = 'pkcs11:object=k'"));
+        assert!(!mentions_pkcs11_key("tls_key_file = \"/etc/rws/key.pem\""));
+        assert!(!mentions_pkcs11_key("comment = \"pkcs11:object=k\""));
+        assert!(!mentions_pkcs11_key(""));
+    }
+
     use super::*;
 
     #[cfg(unix)]

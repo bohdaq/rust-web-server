@@ -152,6 +152,16 @@ SoftHSM2; the same works with AWS CloudHSM (`libcloudhsm_pkcs11.so`),
 Google Cloud KMS (`libkmsp11.so`, with its config file in the environment),
 Azure Managed HSM and YubiHSM's PKCS#11 libraries.
 
+The token's wait doesn't hold up other connections: rustls asks for the
+signature synchronously inside the handshake, so rws hands the worker's
+other connections to the rest of the pool while the token works
+(`block_in_place` on the shared runtime). That's why the `rws` binary keeps
+the **shared runtime** when a TLS key is a `pkcs11:` URI and `runtime` isn't
+set (it says so at startup). With `runtime = "per-core"` set explicitly,
+each signature stalls that core's connections for as long as the token takes
+(sub-millisecond on a local HSM, more over the network to a cloud KMS) and
+rws warns at startup.
+
 Needs the `pkcs11` feature: in the macOS, Windows and Linux glibc
 (`…-linux-gnu-fips`) release binaries, not in the static musl ones (they
 can't load a library at runtime) — or `cargo install rust-web-server

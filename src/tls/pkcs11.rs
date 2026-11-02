@@ -291,6 +291,19 @@ pub fn ecdsa_der(raw: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Run `f`, which waits for the token, without stalling the async runtime
+/// when possible: on tokio's multi-threaded runtime the worker hands its
+/// other tasks to the rest of the pool first (`block_in_place`); on a
+/// current-thread runtime (per-core) or outside tokio it runs inline —
+/// `block_in_place` panics there. rustls has no asynchronous signer, so this
+/// is as far as the wait can move.
+pub(crate) fn off_the_worker<T>(f: impl FnOnce() -> T) -> T {
+    match tokio::runtime::Handle::try_current() {
+        Ok(h) if h.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => tokio::task::block_in_place(f),
+        _ => f(),
+    }
+}
+
 struct Pkcs11Signer {
     key: Arc<Pkcs11Key>,
     scheme: SignatureScheme,
@@ -304,6 +317,16 @@ impl std::fmt::Debug for Pkcs11Signer {
 
 impl Signer for Pkcs11Signer {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, rustls::Error> {
+        off_the_worker(|| self.sign_now(message))
+    }
+
+    fn scheme(&self) -> SignatureScheme {
+        self.scheme
+    }
+}
+
+impl Pkcs11Signer {
+    fn sign_now(&self, message: &[u8]) -> Result<Vec<u8>, rustls::Error> {
         let fail = |e: String| rustls::Error::General(format!("PKCS#11 signing: {e}"));
         // CK_ULONG is 32 bits on Windows: convert from usize, which fits either way.
         let pss = |hash: MechanismType, mgf: PkcsMgfType, len: usize| PkcsPssParams { hash_alg: hash, mgf, s_len: cryptoki::types::Ulong::try_from(len).expect("a salt length fits CK_ULONG") };
@@ -320,10 +343,6 @@ impl Signer for Pkcs11Signer {
             SignatureScheme::RSA_PKCS1_SHA384 => self.key.with_session(|s, k| s.sign(&Mechanism::Sha384RsaPkcs, k, message).map_err(|e| e.to_string())).map_err(fail),
             other => Err(fail(format!("unsupported scheme {other:?}"))),
         }
-    }
-
-    fn scheme(&self) -> SignatureScheme {
-        self.scheme
     }
 }
 

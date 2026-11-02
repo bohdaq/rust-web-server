@@ -9,6 +9,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Changed
 
+- PKCS#11 keys: a handshake's signature no longer stalls the worker it runs
+  on — on the shared runtime the worker's other connections move to the rest
+  of the pool while the token works (`block_in_place`). The `rws` binary
+  therefore keeps the shared runtime when a TLS key is a `pkcs11:` URI and
+  `runtime` isn't set (per-core was the default since 18.0.0); an explicit
+  `runtime = "per-core"` still wins, with a startup warning.
+
 - One base64 decoder: `core::base64::Decoder` (standard, URL-safe or
   either alphabet; optional whitespace; padding optional, concatenated
   padded segments allowed) replaces seven private decoders (JWT, PKCE,

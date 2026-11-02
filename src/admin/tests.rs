@@ -449,8 +449,8 @@ fn the_audit_log_is_appended_to_a_file() {
     call_as(&team(), "operator-token-0123456789", "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#);
     access::set_audit_file("");
     let text = std::fs::read_to_string(&*file).unwrap();
-    let line = text.lines().last().unwrap();
-    assert!(line.starts_with('{') && line.contains(r#""path":"/admin/api/v1/maintenance""#) && line.contains(r#""user":"deploy-bot""#), "{line}");
+    // Other tests' audited calls may land in the file while it's set: find ours.
+    assert!(text.lines().any(|line| line.starts_with('{') && line.contains(r#""path":"/admin/api/v1/maintenance""#) && line.contains(r#""user":"deploy-bot""#)), "{text}");
 }
 
 #[test]
