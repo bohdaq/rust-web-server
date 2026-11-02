@@ -35,6 +35,7 @@ for starter in "${starters[@]}"; do
 
 [patch.crates-io]
 rust-web-server = { path = "$ROOT" }
+$(for c in "$ROOT"/crates/*/; do [ -f "$c/Cargo.toml" ] && echo "$(basename "$c") = { path = \"$c\" }"; done)
 TOML
   echo "── $starter"
   (cd "$dest" && cargo test --quiet 2>&1 | tail -4)

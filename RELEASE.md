@@ -26,11 +26,16 @@ cargo build --release --no-default-features --features http1
 
 ## Publish to crates.io
 
-The release workflow publishes both crates when the tag is pushed: `rws-macros`
-first (only if its `rws-macros/Cargo.toml` version isn't on crates.io yet —
-bump it whenever the macros change), then `rust-web-server`. It needs the
-`CARGO_REGISTRY_TOKEN` repository secret (a crates.io token with publish rights
-for both crates); a version already on crates.io is skipped, so re-runs are safe.
+The release workflow publishes the workspace's crates when the tag is pushed,
+dependencies first (`ci/publish_order.py`): `rws-macros` (only if its
+`rws-macros/Cargo.toml` version isn't on crates.io yet — bump it whenever the
+macros change), the crates under `crates/` the facade is being split into
+(`spec/WORKSPACE_SPLIT.md`), then `rust-web-server`. The facade and `crates/`
+share one version, `[workspace.package] version` in the root `Cargo.toml` —
+that's the line a release bump edits. It needs the `CARGO_REGISTRY_TOKEN`
+repository secret (a crates.io token with publish rights for every crate; a new
+crate's first publish creates it under the token's owner); a version already on
+crates.io is skipped, so re-runs are safe.
 
 ## Publish a GitHub Release
 

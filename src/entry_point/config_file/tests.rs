@@ -126,7 +126,11 @@ fn every_setting_in_the_source_is_reachable_from_the_config_file() {
         .map(|a| a.environment_variable)
         .collect();
     let mut missing = vec![];
+    // The facade's src/ and every workspace crate's (spec/WORKSPACE_SPLIT.md).
     let mut stack = vec![std::path::PathBuf::from("src")];
+    if let Ok(crates) = std::fs::read_dir("crates") {
+        stack.extend(crates.flatten().map(|c| c.path().join("src")).filter(|p| p.is_dir()));
+    }
     while let Some(dir) = stack.pop() {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();

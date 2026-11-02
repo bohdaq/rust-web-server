@@ -61,7 +61,7 @@ jobs:
 
       - name: Check tag matches Cargo.toml
         run: |
-          crate_version=$(grep -m1 '^version' Cargo.toml | cut -d '"' -f2)
+          crate_version=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
           if [ "$crate_version" != "$TAG" ]; then
             echo "Tag $TAG does not match Cargo.toml version $crate_version" >&2
             exit 1
@@ -173,7 +173,7 @@ jobs:
         with:
           ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
-      - name: Publish rws-macros, then rust-web-server
+      - name: Publish the workspace crates, dependencies first
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
@@ -184,9 +184,17 @@ jobs:
           # --locked only where the branch tracks Cargo.lock (17.113.x doesn't).
           locked=""
           [ -f Cargo.lock ] && locked="--locked"
-          macros=$(grep -m1 '^version' rws-macros/Cargo.toml | cut -d '"' -f2)
-          if published rws-macros "$macros"; then echo "rws-macros $macros is already on crates.io"; else cargo publish -p rws-macros $locked; fi
-          if published rust-web-server "$TAG"; then echo "rust-web-server $TAG is already on crates.io"; else cargo publish -p rust-web-server $locked; fi
+          # rws-macros, the crates/ the facade is split into (spec/WORKSPACE_SPLIT.md),
+          # then rust-web-server; cargo publish waits until each is in the index.
+          if [ -f ci/publish_order.py ]; then
+            order=$(python3 ci/publish_order.py $locked)
+          else
+            order="rws-macros $(grep -m1 '^version' rws-macros/Cargo.toml | cut -d '"' -f2)
+          rust-web-server $TAG"
+          fi
+          echo "$order" | while read -r name version; do
+            if published "$name" "$version"; then echo "$name $version is already on crates.io"; else cargo publish -p "$name" $locked; fi
+          done
 
   binaries:
     needs: release

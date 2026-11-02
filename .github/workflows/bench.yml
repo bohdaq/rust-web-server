@@ -94,7 +94,7 @@ jobs:
           {
             echo "## rws vs Caddy vs nginx"
             echo
-            echo "rws $(grep -m1 '^version' Cargo.toml | cut -d'"' -f2) @ ${GITHUB_SHA::7} · Caddy 2.11.7 · $(nginx -v 2>&1)"
+            echo "rws $(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2) @ ${GITHUB_SHA::7} · Caddy 2.11.7 · $(nginx -v 2>&1)"
             echo
             cat bench-results.md
           } >> "$GITHUB_STEP_SUMMARY"
