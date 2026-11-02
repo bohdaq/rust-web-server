@@ -436,7 +436,10 @@ struct Counters {
 
 fn counters() -> &'static Counters {
     static C: OnceLock<Counters> = OnceLock::new();
-    C.get_or_init(|| Counters { blocked: AtomicU64::new(0), detected: AtomicU64::new(0), rules: Mutex::new(BTreeMap::new()) })
+    C.get_or_init(|| {
+        crate::metrics::register_section(crate::metrics::section::WAF, prometheus_text);
+        Counters { blocked: AtomicU64::new(0), detected: AtomicU64::new(0), rules: Mutex::new(BTreeMap::new()) }
+    })
 }
 
 /// `rws_waf_requests_total{action}` and `rws_waf_rule_matches_total{rule}`

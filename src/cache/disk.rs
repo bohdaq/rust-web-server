@@ -307,5 +307,5 @@ fn read_entry(path: &Path, key: &str) -> Option<Response> {
     if stored_key != key {
         return None;
     }
-    Response::parse_upstream(&bytes[offset..], crate::proxy::REGENERATED_OR_HOP_BY_HOP).ok()
+    Response::parse_upstream(&bytes[offset..], crate::response::REGENERATED_OR_HOP_BY_HOP).ok()
 }

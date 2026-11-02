@@ -18,7 +18,7 @@
 //! `0`=closed, `1`=half_open, `2`=open) is emitted automatically for every
 //! backend known to [`crate::circuit_breaker::global`], with no opt-in layer
 //! needed — see [`crate::circuit_breaker`] and
-//! [`crate::proxy::ReverseProxy::with_circuit_breaker`].
+//! `proxy::ReverseProxy::with_circuit_breaker`.
 //!
 //! # Example
 //!
@@ -239,77 +239,61 @@ fn prometheus_text_without_http() -> String {
         requests, errors, active
     );
 
-    let route_text = route_prometheus_text();
-    if !route_text.is_empty() {
-        out.push('\n');
-        out.push_str(&route_text);
-    }
-
+    // Sections in a fixed order: this layer's own, and those subsystems
+    // above it registered (`register_section`) when first used.
+    let mut sections: Vec<(u16, fn() -> String)> = vec![
+        (section::ROUTES, route_prometheus_text),
+        (section::DISK, crate::disk_guard::prometheus_text),
+        (section::EARLY_HINTS, crate::early_hints::prometheus_text),
+        (section::TLS, tls::prometheus_text),
+        (section::CIRCUIT_BREAKER, circuit_breaker_prometheus_text),
+    ];
     #[cfg(not(target_arch = "wasm32"))]
-    let upstream_text = crate::proxy_config::upstream::prometheus_text();
-    #[cfg(target_arch = "wasm32")]
-    let upstream_text = String::new();
-    if !upstream_text.is_empty() {
-        out.push('\n');
-        out.push_str(&upstream_text);
-    }
-    let waf_text = crate::waf::prometheus_text();
-    if !waf_text.is_empty() {
-        out.push('\n');
-        out.push_str(&waf_text);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let mirror_text = crate::proxy::mirror::prometheus_text();
-        if !mirror_text.is_empty() {
+    sections.push((section::LLM, llm::prometheus_text));
+    sections.extend(registered_sections());
+    sections.sort_by_key(|(order, _)| *order);
+    for (_, text) in sections {
+        let text = text();
+        if !text.is_empty() {
             out.push('\n');
-            out.push_str(&mirror_text);
+            out.push_str(&text);
         }
-    }
-
-    let disk_text = crate::disk_guard::prometheus_text();
-    if !disk_text.is_empty() {
-        out.push('\n');
-        out.push_str(&disk_text);
-    }
-
-    let hints_text = crate::early_hints::prometheus_text();
-    if !hints_text.is_empty() {
-        out.push('\n');
-        out.push_str(&hints_text);
-    }
-
-    #[cfg(feature = "wasm-plugins")]
-    {
-        let wasm_text = crate::wasm_plugin::metrics::prometheus_text();
-        if !wasm_text.is_empty() {
-            out.push('\n');
-            out.push_str(&wasm_text);
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let llm_text = llm::prometheus_text();
-        if !llm_text.is_empty() {
-            out.push('\n');
-            out.push_str(&llm_text);
-        }
-    }
-
-    let tls_text = tls::prometheus_text();
-    if !tls_text.is_empty() {
-        out.push('\n');
-        out.push_str(&tls_text);
-    }
-    let breaker_text = circuit_breaker_prometheus_text();
-    if !breaker_text.is_empty() {
-        out.push('\n');
-        out.push_str(&breaker_text);
     }
 
     out
+}
+
+/// Where each section of [`prometheus_text`] goes; subsystems above this
+/// layer pass theirs to [`register_section`]. The order is the output order.
+#[doc(hidden)]
+pub mod section {
+    pub const ROUTES: u16 = 10;
+    pub const UPSTREAMS: u16 = 20;
+    pub const WAF: u16 = 30;
+    pub const MIRROR: u16 = 40;
+    pub const DISK: u16 = 50;
+    pub const EARLY_HINTS: u16 = 60;
+    pub const WASM_PLUGINS: u16 = 70;
+    pub const LLM: u16 = 80;
+    pub const TLS: u16 = 90;
+    pub const CIRCUIT_BREAKER: u16 = 100;
+}
+
+static SECTIONS: std::sync::Mutex<Vec<(u16, fn() -> String)>> = std::sync::Mutex::new(Vec::new());
+
+/// Add a subsystem's series to [`prometheus_text`] at `order` (a
+/// [`section`] constant). Called when the subsystem is first used — its
+/// section is empty before that anyway; registering twice is a no-op.
+#[doc(hidden)]
+pub fn register_section(order: u16, text: fn() -> String) {
+    let mut sections = SECTIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if !sections.iter().any(|(o, _)| *o == order) {
+        sections.push((order, text));
+    }
+}
+
+fn registered_sections() -> Vec<(u16, fn() -> String)> {
+    SECTIONS.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 /// `rws_circuit_breaker_state{backend}` — the state of every backend known to

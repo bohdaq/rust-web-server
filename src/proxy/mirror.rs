@@ -196,7 +196,10 @@ fn deliver(job: &Job) -> bool {
 
 fn counts() -> &'static Mutex<BTreeMap<(String, &'static str), u64>> {
     static COUNTS: OnceLock<Mutex<BTreeMap<(String, &'static str), u64>>> = OnceLock::new();
-    COUNTS.get_or_init(Mutex::default)
+    COUNTS.get_or_init(|| {
+        crate::metrics::register_section(crate::metrics::section::MIRROR, prometheus_text);
+        Mutex::default()
+    })
 }
 
 fn count(mirror: &str, outcome: &'static str) {

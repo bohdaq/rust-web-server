@@ -932,17 +932,16 @@ pub(crate) async fn serve_tls_connection(
     let Some(peer_addr) = client_address(&mut tcp_stream, peer_addr).await else { return };
     let timed_out = || std::io::Error::from(std::io::ErrorKind::TimedOut);
     let handshake = async {
-        #[cfg(feature = "acme")]
-        if crate::acme::on_demand::enabled() {
+        if let Some(acme) = crate::tls::acme_hooks().filter(|acme| (acme.on_demand_enabled)()) {
             // On-demand TLS: read the ClientHello, get a certificate for
             // its name if it should have one (bounded by
             // `on_demand::HANDSHAKE_WAIT`), then finish the handshake.
             let lazy = tokio_rustls::LazyConfigAcceptor::new(rustls::server::Acceptor::default(), tcp_stream);
             let start = tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, lazy).await.map_err(|_| timed_out())??;
             let hello = start.client_hello();
-            let name = hello.server_name().filter(|_| !crate::acme::tls_alpn::is_challenge(&hello)).map(str::to_string);
+            let name = hello.server_name().filter(|_| !(acme.is_challenge)(&hello)).map(str::to_string);
             if let Some(name) = name {
-                crate::acme::on_demand::ensure(&name).await;
+                (acme.on_demand_ensure)(&name).await;
             }
             let finish = start.into_stream(acceptor.config().clone());
             return tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, finish).await.map_err(|_| timed_out())?;
@@ -963,8 +962,7 @@ pub(crate) async fn serve_tls_connection(
 
             match protocol.as_deref() {
                 // A TLS-ALPN-01 validation: the handshake was the answer.
-                #[cfg(feature = "acme")]
-                Some(crate::acme::tls_alpn::ALPN) => {}
+                Some(crate::tls::ACME_TLS_ALPN) => {}
                 Some(b"h2") => {
                     if let Err(e) = crate::h2_server::handle_connection(tls_stream, peer_addr, sni, app).await {
                         eprintln!("H2 connection error: {}", e);
@@ -1186,8 +1184,9 @@ impl Server {
             }
         };
         // From now on this listener answers TLS-ALPN-01 challenges itself.
-        #[cfg(feature = "acme")]
-        crate::acme::tls_alpn::note_tls_listener();
+        if let Some(acme) = crate::tls::acme_hooks() {
+            (acme.note_tls_listener)();
+        }
 
         #[cfg(unix)]
         if per_core::enabled() {
@@ -1407,8 +1406,9 @@ impl Server {
         };
 
         println!("HTTP→HTTPS redirect listening on http://{}:{}", server_ip, redirect_port);
-        #[cfg(feature = "acme")]
-        crate::acme::note_redirect_listener(redirect_port);
+        if let Some(acme) = crate::tls::acme_hooks() {
+            (acme.note_redirect_listener)(redirect_port);
+        }
 
         for listener in listeners {
             tokio::spawn(async move {
@@ -1459,8 +1459,11 @@ impl Server {
 
         // ACME HTTP-01 challenges must be answered over
         // plain HTTP, not redirected.
-        #[cfg(feature = "acme")]
-        if let Some(challenge) = crate::acme::challenge_http_response_shared(&uri).await {
+        let challenge = match crate::tls::acme_hooks() {
+            Some(acme) => (acme.http_challenge)(&uri).await,
+            None => None,
+        };
+        if let Some(challenge) = challenge {
             let _ = stream.write_all(challenge.as_bytes()).await;
             return;
         }

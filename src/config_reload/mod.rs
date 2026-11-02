@@ -24,8 +24,8 @@
 //! | Log format | `RWS_CONFIG_LOG_FORMAT` |
 //! | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
 //! | Max body size | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` |
-//! | Tera templates (`tera` feature, if `template::init()` was called) | re-read from disk — see [`crate::template`] |
-//! | Proxy `[[route]]`, `[[upstream]]`, `[middleware]` (config-driven proxy) | validated, then swapped in; a file with errors leaves the running routes in place — see [`crate::proxy_config::ConfigDrivenApp::reload_from_str`] |
+//! | Tera templates (`tera` feature, if `template::init()` was called) | re-read from disk — see `template` |
+//! | Proxy `[[route]]`, `[[upstream]]`, `[middleware]` (config-driven proxy) | validated, then swapped in; a file with errors leaves the running routes in place — see `proxy_config::ConfigDrivenApp::reload_from_str` |
 //! | Anything registered with [`on_reload`] | your hook |
 //!
 //! # What is NOT hot-reloadable (requires restart)
@@ -217,11 +217,7 @@ fn reload_settings() {
     // Publish the new snapshot atomically.
     *global().write().unwrap() = snapshot.clone();
 
-    // Re-glob Tera templates from disk, if the `tera` feature is enabled and
-    // `template::init()` was actually called — a no-op otherwise.
-    #[cfg(feature = "tera")]
-    crate::template::reload_if_initialized();
-
+    // Hooks: proxy routes, Tera templates (`template::init()` registers one), …
     for hook in hooks().lock().unwrap_or_else(|e| e.into_inner()).iter() {
         hook();
     }
@@ -246,7 +242,7 @@ fn hooks() -> &'static std::sync::Mutex<Vec<ReloadHook>> {
 /// Run `hook` at the end of every [`reload`], after the settings have been
 /// re-read — for state that is built from the configuration file rather than
 /// read from `RWS_CONFIG_*` per request. The config-driven proxy registers
-/// one to reload its routes ([`crate::proxy_config::ConfigDrivenApp::reload_from_file`]).
+/// one to reload its routes (`proxy_config::ConfigDrivenApp::reload_from_file`).
 pub fn on_reload(hook: impl Fn() + Send + Sync + 'static) {
     hooks().lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(hook));
 }

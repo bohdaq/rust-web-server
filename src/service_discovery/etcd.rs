@@ -3,7 +3,7 @@
 //! is called) a dedicated long-lived connection to `/v3/watch` applying
 //! `PUT`/`DELETE` events to the backend list incrementally as they arrive.
 //!
-//! Reuses [`crate::ingress::watch::read_chunked_lines`] — the same
+//! Reuses [`super::chunked_lines::read_chunked_lines`] — the same
 //! "chunked, newline-delimited JSON event stream" shape the Kubernetes
 //! Ingress watcher already solved, just applied to etcd's protocol instead
 //! of the Kubernetes API server's. Unlike that watcher (which treats every
@@ -60,7 +60,7 @@ fn run_once(endpoints: &[String], prefix: &str, pool: &super::BackendPool) -> Re
     );
     stream.write_all(request.as_bytes()).map_err(|e| format!("write failed: {}", e))?;
 
-    crate::ingress::watch::read_chunked_lines(&mut stream, |line| {
+    super::chunked_lines::read_chunked_lines(&mut stream, |line| {
         if let Ok(parsed) = json_lite::parse(line) {
             apply_watch_line(&parsed, &mut state, pool);
         }

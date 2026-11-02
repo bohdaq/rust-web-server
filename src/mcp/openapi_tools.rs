@@ -302,7 +302,7 @@ fn tool(doc: &JsonValue, path: &str, method: &str, op: &JsonValue, shared: &[Jso
 }
 
 fn json_text(value: &JsonValue) -> String {
-    crate::a2a::json_text(value)
+    json_lite::to_text(value)
 }
 
 /// Percent-encode everything but unreserved characters.

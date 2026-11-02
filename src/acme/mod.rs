@@ -263,6 +263,7 @@ impl AcmeConfig {
     pub fn from_env() -> Option<Self> {
         let domains_str = std::env::var(Config::RWS_CONFIG_ACME_DOMAINS).ok()?;
         if domains_str.trim().is_empty() { return None; }
+        install_hooks();
 
         let domains: Vec<String> = domains_str
             .split(',')
@@ -460,7 +461,37 @@ fn non_empty_env(name: &str) -> Option<String> {
 pub(crate) fn challenges() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
     static CHALLENGES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
         std::sync::OnceLock::new();
-    CHALLENGES.get_or_init(Default::default)
+    CHALLENGES.get_or_init(|| {
+        install_hooks();
+        Default::default()
+    })
+}
+
+/// Plug ACME into TLS and the listeners (`tls::AcmeHooks`): on-demand and
+/// TLS-ALPN-01 certificates, the `acme-tls/1` protocol, HTTP-01 answers on
+/// the redirect listener. Done at every entry point (config, manager,
+/// challenge stores), once.
+pub(crate) fn install_hooks() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        fn ensure(name: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+            Box::pin(on_demand::ensure(name))
+        }
+        fn http_challenge(uri: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send + '_>> {
+            Box::pin(challenge_http_response_shared(uri))
+        }
+        crate::tls::set_acme_hooks(crate::tls::AcmeHooks {
+            on_demand_enabled: on_demand::enabled,
+            on_demand_ensure: ensure,
+            on_demand_certificate: on_demand::certificate,
+            tls_alpn_enabled: tls_alpn::enabled,
+            is_challenge: tls_alpn::is_challenge,
+            challenge_certificate: tls_alpn::certificate,
+            note_tls_listener: tls_alpn::note_tls_listener,
+            note_redirect_listener,
+            http_challenge,
+        });
+    });
 }
 
 /// Port the HTTP→HTTPS redirect listener is bound to, `0` when not running.
@@ -514,6 +545,7 @@ pub struct AcmeManager {
 
 impl AcmeManager {
     pub fn new(config: AcmeConfig) -> Self {
+        install_hooks();
         AcmeManager { config }
     }
 

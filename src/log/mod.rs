@@ -16,6 +16,16 @@ pub mod tail;
 /// HTTP/2, HTTP/3) use it.
 pub struct Log;
 
+/// Called for every access-logged request, before the line is written: the
+/// traffic insights (`traffic`, above this layer) set it when enabled.
+static ACCESS_OBSERVER: std::sync::OnceLock<fn(&Request, &Response, std::net::IpAddr)> = std::sync::OnceLock::new();
+
+/// Set the [`Log::log_access`] observer (once; later calls are ignored).
+#[doc(hidden)]
+pub fn set_access_observer(observe: fn(&Request, &Response, std::net::IpAddr)) {
+    let _ = ACCESS_OBSERVER.set(observe);
+}
+
 impl Log {
     pub fn request_response(request: &Request, response: &Response, peer_addr: &SocketAddr) -> String {
         let mut request_headers = "".to_string();
@@ -191,7 +201,9 @@ impl Log {
     /// exits, and at process exit); [`Log::flush_access_log`] writes them now.
     pub fn log_access(request: &Request, response: &Response, peer_addr: &SocketAddr) {
         // Traffic insights count every request, whether lines are written.
-        crate::traffic::observe(request, response, peer_addr.ip());
+        if let Some(observe) = ACCESS_OBSERVER.get() {
+            observe(request, response, peer_addr.ip());
+        }
         let config = crate::server_config::ServerConfig::current();
         let format = &config.log_format;
         if format.eq_ignore_ascii_case("off") || format.eq_ignore_ascii_case("none") {

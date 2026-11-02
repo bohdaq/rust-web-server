@@ -53,7 +53,7 @@ pub const MAX_TASKS: usize = 10_000;
 
 /// JSON text of a parsed value (for the A2A gateway route).
 pub(crate) fn json_text(value: &JsonValue) -> String {
-    to_json(value)
+    json_lite::to_text(value)
 }
 
 /// A JSON string literal.

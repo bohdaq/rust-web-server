@@ -203,3 +203,36 @@ fn parse_number(chars: &[char], pos: &mut usize) -> Result<JsonValue, String> {
     let s: String = chars[start..*pos].iter().collect();
     s.parse::<f64>().map(JsonValue::Number).map_err(|_| format!("invalid number '{}'", s))
 }
+
+// ── JSON out (shared by A2A and MCP's OpenAPI tools) ───────────────────────
+
+pub(crate) fn quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A JSON value back to JSON text.
+pub(crate) fn to_text(value: &JsonValue) -> String {
+    match value {
+        JsonValue::Null => "null".to_string(),
+        JsonValue::Bool(b) => b.to_string(),
+        JsonValue::Number(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => format!("{}", *n as i64),
+        JsonValue::Number(n) => format!("{n}"),
+        JsonValue::String(s) => quote(s),
+        JsonValue::Array(items) => format!("[{}]", items.iter().map(to_text).collect::<Vec<_>>().join(",")),
+        JsonValue::Object(pairs) => format!("{{{}}}", pairs.iter().map(|(k, v)| format!("{}:{}", quote(k), to_text(v))).collect::<Vec<_>>().join(",")),
+    }
+}

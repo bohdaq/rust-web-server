@@ -16,6 +16,42 @@ pub mod pkcs11;
 #[cfg(test)]
 mod tests;
 
+/// What ACME (`acme`, a layer above this one) plugs into TLS and the
+/// listeners: TLS-ALPN-01 and on-demand certificates, HTTP-01 answers on the
+/// redirect listener. `acme` sets them the first time it is used; without
+/// them none of this happens (no ACME configured, or a build without it).
+#[doc(hidden)]
+pub struct AcmeHooks {
+    pub on_demand_enabled: fn() -> bool,
+    pub on_demand_ensure: for<'a> fn(&'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>>,
+    pub on_demand_certificate: fn(&str) -> Option<Arc<CertifiedKey>>,
+    pub tls_alpn_enabled: fn() -> bool,
+    pub is_challenge: fn(&ClientHello<'_>) -> bool,
+    pub challenge_certificate: fn(&str) -> Option<Arc<CertifiedKey>>,
+    pub note_tls_listener: fn(),
+    pub note_redirect_listener: fn(u16),
+    pub http_challenge: for<'a> fn(&'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send + 'a>>,
+}
+
+static ACME_HOOKS: std::sync::OnceLock<AcmeHooks> = std::sync::OnceLock::new();
+
+/// Install [`AcmeHooks`] (once; later calls are ignored).
+#[doc(hidden)]
+pub fn set_acme_hooks(hooks: AcmeHooks) {
+    let _ = ACME_HOOKS.set(hooks);
+}
+
+/// The installed [`AcmeHooks`], if ACME has been used.
+#[doc(hidden)]
+pub fn acme_hooks() -> Option<&'static AcmeHooks> {
+    ACME_HOOKS.get()
+}
+
+/// The TLS-ALPN-01 protocol (RFC 8737): a handshake that negotiated it was
+/// the challenge answer, nothing more.
+#[doc(hidden)]
+pub const ACME_TLS_ALPN: &[u8] = b"acme-tls/1";
+
 // ── SNI certificate resolver ──────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -60,14 +96,13 @@ impl ResolvesServerCert for SniCertResolver {
     fn resolve(&self, hello: ClientHello) -> Option<Arc<CertifiedKey>> {
         // A TLS-ALPN-01 validation gets the challenge certificate or
         // nothing — never the real one (RFC 8737 §3).
-        #[cfg(feature = "acme")]
-        if crate::acme::tls_alpn::is_challenge(&hello) {
-            return hello.server_name().and_then(crate::acme::tls_alpn::certificate);
+        let acme = acme_hooks();
+        if let Some(acme) = acme.filter(|acme| (acme.is_challenge)(&hello)) {
+            return hello.server_name().and_then(acme.challenge_certificate);
         }
         let sni = hello.server_name();
         let configured = sni.and_then(|sni| self.certs.get(sni).cloned());
-        #[cfg(feature = "acme")]
-        let configured = configured.or_else(|| sni.and_then(crate::acme::on_demand::certificate));
+        let configured = configured.or_else(|| sni.zip(acme).and_then(|(sni, acme)| (acme.on_demand_certificate)(sni)));
         configured.or_else(|| self.default.clone())
     }
 }
@@ -103,9 +138,8 @@ pub fn create_tls_acceptor_from_vhosts(
     };
 
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    #[cfg(feature = "acme")]
-    if crate::acme::tls_alpn::enabled() {
-        config.alpn_protocols.push(crate::acme::tls_alpn::ALPN.to_vec());
+    if acme_hooks().is_some_and(|acme| (acme.tls_alpn_enabled)()) {
+        config.alpn_protocols.push(ACME_TLS_ALPN.to_vec());
     }
 
     require_fips(config.fips())?;

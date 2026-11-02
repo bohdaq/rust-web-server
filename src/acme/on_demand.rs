@@ -66,6 +66,7 @@ pub fn enabled() -> bool {
 /// certificates ordered before and spawn their renewal loop. Refuses (and
 /// says why) without an ask endpoint or with DNS-01.
 pub fn start(base: &AcmeConfig) -> Result<(), String> {
+    super::install_hooks();
     let ask = super::non_empty_env(Config::RWS_CONFIG_ACME_ON_DEMAND_ASK)
         .ok_or("[acme] on_demand needs on_demand_ask: without it anyone could make rws order certificates for any name")?;
     if matches!(base.challenge, super::ChallengeType::Dns01 | super::ChallengeType::DnsPersist01) {

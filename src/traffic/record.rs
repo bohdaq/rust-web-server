@@ -191,6 +191,7 @@ fn recorder() -> &'static Recorder {
 
 /// Start counting (the binary does this when the admin API is on).
 pub fn enable() {
+    crate::log::set_access_observer(super::observe);
     let _ = recorder();
     ENABLED.store(true, Ordering::Relaxed);
 }

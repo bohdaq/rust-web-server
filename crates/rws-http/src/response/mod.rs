@@ -1248,3 +1248,11 @@ fn split_name_value(line: &str) -> Option<(&str, &str)> {
     }
     None
 }
+
+/// Headers rws regenerates for a buffered body, plus hop-by-hop headers
+/// (RFC 9110 §7.6.1) that must not be forwarded.
+#[doc(hidden)]
+pub const REGENERATED_OR_HOP_BY_HOP: &[&str] = &[
+    "content-length", "transfer-encoding", "connection", "keep-alive",
+    "proxy-connection", "te", "trailer", "upgrade",
+];

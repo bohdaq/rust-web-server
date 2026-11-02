@@ -23,7 +23,10 @@ pub const ALPN: &[u8] = b"acme-tls/1";
 
 fn store() -> &'static RwLock<HashMap<String, Arc<CertifiedKey>>> {
     static STORE: OnceLock<RwLock<HashMap<String, Arc<CertifiedKey>>>> = OnceLock::new();
-    STORE.get_or_init(Default::default)
+    STORE.get_or_init(|| {
+        super::install_hooks();
+        Default::default()
+    })
 }
 
 /// Whether rws answers TLS-ALPN-01 challenges (`[acme] challenge =
@@ -99,6 +102,7 @@ fn startup_listener() -> &'static Mutex<Option<std::net::TcpListener>> {
 /// for answering the first TLS-ALPN-01 challenges: the port is taken, and
 /// that is where the CA connects.
 pub fn set_startup_listener(listener: std::net::TcpListener) {
+    super::install_hooks();
     *startup_listener().lock().unwrap_or_else(|e| e.into_inner()) = Some(listener);
 }
 

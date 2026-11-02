@@ -2,7 +2,7 @@
 //! `Link` header builder.
 //!
 //! Not tied to the model layer or any feature flag — build one by hand if
-//! your data source isn't [`crate::model::QueryBuilder`] (an external API, an
+//! your data source isn't `model::QueryBuilder` (an external API, an
 //! in-memory `Vec`, ...). `QueryBuilder::paginate()` / `::paginate_after()`
 //! (require a `model-*` feature) are the batteries-included way to get one
 //! directly from a database query.

@@ -404,7 +404,7 @@ impl Done {
     fn record(self, usage: Option<Usage>, ttft: Option<Duration>) {
         let ok = (200..300).contains(&self.status);
         let usage = usage.filter(|_| ok);
-        crate::metrics::llm::observe(&self.provider, &self.model, &self.identity, &self.status.to_string(), usage, ttft);
+        crate::metrics::llm::observe(&self.provider, &self.model, &self.identity, &self.status.to_string(), usage.map(|u| (u.input_tokens, u.output_tokens)), ttft);
         if let (Some(usage), Some(budget)) = (usage, self.inner.budgets.get(&self.identity)) {
             self.inner.store.charge(&self.identity, budget.window_secs, usage.total());
         }

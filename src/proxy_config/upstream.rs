@@ -209,7 +209,10 @@ struct Stats {
 
 fn stats() -> &'static Mutex<Stats> {
     static STATS: OnceLock<Mutex<Stats>> = OnceLock::new();
-    STATS.get_or_init(Default::default)
+    STATS.get_or_init(|| {
+        crate::metrics::register_section(crate::metrics::section::UPSTREAMS, prometheus_text);
+        Default::default()
+    })
 }
 
 /// A request to `upstream` went over TCP because QUIC couldn't connect.

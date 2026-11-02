@@ -495,7 +495,7 @@ fn decode_entry(raw: &[u8]) -> (BreakerState, u32, u64, u32) {
 
 /// Object-safe interface implemented by both `Mutex<CircuitBreaker>` and
 /// [`RedisCircuitBreaker`], so a consumer like
-/// [`crate::proxy::ReverseProxy::with_circuit_breaker`] can accept either
+/// `proxy::ReverseProxy::with_circuit_breaker` can accept either
 /// breaker kind through one `Arc<dyn Breaker>` without a generic parameter
 /// leaking into its own type.
 ///

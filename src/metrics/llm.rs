@@ -1,4 +1,4 @@
-//! `rws_llm_*` series for the [LLM proxy](crate::llm) (18.9.0).
+//! `rws_llm_*` series for the LLM proxy (`llm`, 18.9.0).
 //!
 //! The `model` label is what clients asked for, so it is bounded: past
 //! [`MAX_MODELS`] distinct names, or for a name that isn't a plain model
@@ -78,12 +78,13 @@ fn model_label(stats: &mut Stats, model: &str) -> String {
 
 /// One finished request: its final status (`"error"` when no provider
 /// answered), tokens and time to first byte.
-pub(crate) fn observe(provider: &str, model: &str, identity: &str, status: &str, usage: Option<crate::llm::Usage>, ttft: Option<Duration>) {
+/// `tokens` = (input, output), from the LLM proxy's `Usage`.
+pub(crate) fn observe(provider: &str, model: &str, identity: &str, status: &str, tokens: Option<(u64, u64)>, ttft: Option<Duration>) {
     with(|stats| {
         let model = model_label(stats, model);
         *stats.requests.entry((provider.to_string(), model.clone(), status.to_string())).or_default() += 1;
-        if let Some(usage) = usage {
-            for (kind, n) in [("input", usage.input_tokens), ("output", usage.output_tokens)] {
+        if let Some((input, output)) = tokens {
+            for (kind, n) in [("input", input), ("output", output)] {
                 *stats.tokens.entry((provider.to_string(), model.clone(), identity.to_string(), kind)).or_default() += n;
             }
         }

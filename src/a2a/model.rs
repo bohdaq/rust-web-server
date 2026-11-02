@@ -208,23 +208,6 @@ pub struct Task {
 
 // ── JSON out ─────────────────────────────────────────────────────────────────
 
-pub(crate) fn quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
 
 /// Builds a JSON object field by field, leaving out absent ones.
 pub(crate) struct Obj(String);
@@ -355,18 +338,8 @@ impl Task {
     }
 }
 
-/// A JSON value back to JSON text.
-pub(crate) fn to_json(value: &JsonValue) -> String {
-    match value {
-        JsonValue::Null => "null".to_string(),
-        JsonValue::Bool(b) => b.to_string(),
-        JsonValue::Number(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => format!("{}", *n as i64),
-        JsonValue::Number(n) => format!("{n}"),
-        JsonValue::String(s) => quote(s),
-        JsonValue::Array(items) => format!("[{}]", items.iter().map(to_json).collect::<Vec<_>>().join(",")),
-        JsonValue::Object(pairs) => format!("{{{}}}", pairs.iter().map(|(k, v)| format!("{}:{}", quote(k), to_json(v))).collect::<Vec<_>>().join(",")),
-    }
-}
+// The JSON writer is shared with MCP's OpenAPI tools (`json_lite`).
+pub(crate) use crate::service_discovery::json_lite::{quote, to_text as to_json};
 
 // ── JSON in ──────────────────────────────────────────────────────────────────
 

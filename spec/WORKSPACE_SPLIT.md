@@ -28,6 +28,16 @@ incremental builds and test binaries (a change in `mcp` stops recompiling and
 relinking the server's tests), clearer boundaries, and a dependency graph
 that can't silently grow back into one knot.
 
+## Decisions
+
+- 2026-11-02: full split (after the measurements below).
+- 2026-11-02, T3: **keep the API.** `mcp()` / `openapi()` are inherent
+  methods on `WithMiddleware`, `AppWithState` and `AsyncAppWithState`, and
+  `DbSessionStore::new` takes a `model::DbPool`, so `mcp`, `openapi` and
+  `model` (and what they need: `sso`, `http_client`, `otel`, …) stay in the
+  server crate. Moving them out would mean extension traits — a 19.0. The
+  other cross-layer calls are cut with registration hooks instead.
+
 ## Rules
 
 1. **The facade keeps the API.** `src/lib.rs` re-exports each moved module
@@ -82,7 +92,8 @@ from `ci/module_graph.py`'s output at that point.
 | T0 | Tooling: `ci/module_graph.py` (SCCs, a crate's upward edges), `ci/public_api.sh` crate map, `[workspace.package]`, `crates/`, release.yml `crates` job publishes the workspace in order (`cargo publish --workspace`), `ci/e2e/starters.sh` patches every crate, `check_docs.py` / the settings scanner read `crates/*/src` too | **done**: `module_graph.py` (iterative Tarjan; today one cycle of 76 modules); `public_api.sh` `CRATES` + `public_api_merge.py` — listing kept in a normal form (each re-export one `pub use` line, repeats counted once; baseline regenerated, same lines as before); tried on a throwaway `rws-mime`: equal. `[workspace.package]` (version etc.; facade inherits; tooling greps `^version = `); `ci/publish_order.py` drives the release `crates` job; starters patch every `crates/*`; settings scanner reads `crates/*/src`. `check_docs.py` reads `src/entry_point` — moves with that module in T2 |
 | T1 | `rws-base` | **done**: `core`, `ext`, `http`, `mime_type`, `null`, `symbol`, `url`, `dns` (`json` moved to T2: its `Json<T>` extractor needs `request`); cut `http` → `scheduler` (`days_to_ymd`/`ymd_to_days` now in `http::date`); 40 `pub(crate)` items → `#[doc(hidden)] pub`; one test (PKCE) moved to `sso::pkce` |
 | T2 | `rws-http` | **done**: `body`, `client_hint`, `compression`, `cors`, `entry_point`, `error`, `extract`, `header`, `json`, `range`, `request`, `response`, `server_config`, `virtual_host`, new hidden `static_path`; cuts: `extract::RequestId` reads its own `REQUEST_ID_HEADER` (a facade test pins it to `request_id::DEFAULT_HEADER`), `range` uses `static_path` (moved out of `static_resource`), `TrustedProxies` + range parsing → rws-http `ip_filter` and `early_hints::valid` → rws-http `early_hints` (the facade modules `pub use rws_http::<m>::*` and add the middleware), doc links to higher layers → plain text, `rws --version`'s FIPS label from rws-http's `fips` feature. Features `serde`/`brotli`/`zstd`/`fips` forward. Tests needing the facade or repo fixtures → `src/http_tests/` (cors, range, server_config, 13 fixture tests, the `#[derive(FromRequest)]` tests); doctests use the `extern crate … as rust_web_server` line. API gate: `ci/public_api_merge.py` drops a facade `pub use` of a path a crate defines |
-| T3 | `rws-server` | planned |
+| T3a | Cut the server core's calls into feature modules (no move) | **done**: `metrics::register_section` (upstreams, WAF, mirroring, WASM plugins register their `/metrics` section on first use; fixed order keeps the output identical), `metrics::llm::observe` takes token counts, not `llm::Usage`; `log::set_access_observer` (set by `traffic::enable`); templates reload through `config_reload::on_reload` (set by `template::init`); `tls::AcmeHooks` (`acme` installs them at its entry points: config, manager, challenge stores, on-demand, startup listener) replace every `crate::acme` call in `server`/`tls`, so the server layer needs no `acme` feature; `REGENERATED_OR_HOP_BY_HOP` → rws-http `response`; the JSON writer → `service_discovery::json_lite`; `read_chunked_lines` → `service_discovery::chunked_lines`; doc links → plain text |
+| T3b | Move the core (57 modules: `server`, `app`, `state`, `middleware`, `mcp`, `openapi`, `model`, `sso`, `metrics`, `otel`, `tls`, …) to `rws-server`; slim `storage` (`StorageError` + the AWS/Azure credential helpers `secrets` shares) goes with it, the backends stay in the facade's `storage` | planned |
 | T4… | feature crates, one per tranche, largest dependency first (`gateway_api`, `tower`, `model`, `storage` are already outside the knot) | planned |
 | last | facade cleanup; docs (`reference/api.md` names the crate per row, CLAUDE.md architecture), measurements re-taken | planned |
 

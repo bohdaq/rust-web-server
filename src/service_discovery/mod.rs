@@ -40,6 +40,8 @@ mod tests;
 // rest of this module (DNS/etcd/Consul/Docker all need real network access
 // no wasi:http guest has). See spec/WASM_SHIM.md.
 pub(crate) mod json_lite;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod chunked_lines;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod consul;

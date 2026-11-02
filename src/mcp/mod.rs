@@ -2083,7 +2083,7 @@ impl McpServer {
     ///
     /// Requires the `http2` feature (tokio). `tools/call` bridges into the
     /// handler's future via [`crate::async_bridge::block_on_isolated`] —
-    /// the same mechanism [`crate::proxy::H2ReverseProxy`] and
+    /// the same mechanism `proxy::H2ReverseProxy` and
     /// [`crate::async_state::AsyncAppWithState`] already use to call async
     /// code from a synchronous [`Application::execute`] — rather than
     /// `tokio::task::block_in_place`, which panics outside a `multi_thread`

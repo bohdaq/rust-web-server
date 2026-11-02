@@ -5,7 +5,7 @@
 //!    an existing trace, or starts a fresh one.
 //! 2. Creates an HTTP server span with standard semantic attributes.
 //! 3. Stores the active span context in thread-local storage so downstream
-//!    middleware (e.g. [`crate::proxy::ReverseProxy`]) can propagate it.
+//!    middleware (e.g. `proxy::ReverseProxy`) can propagate it.
 //! 4. Records the completed span to a configurable exporter.
 //!
 //! # Quick start
@@ -1188,7 +1188,7 @@ pub fn flush() {
 /// - Reads W3C `traceparent` from the request to continue an existing trace.
 /// - Creates a new trace when no `traceparent` is present.
 /// - Stores the active span in thread-local storage so downstream middleware
-///   (e.g. [`crate::proxy::ReverseProxy`]) can propagate it.
+///   (e.g. `proxy::ReverseProxy`) can propagate it.
 /// - Records the span on the way out with `http.method`, `http.target`, and
 ///   `http.status_code` attributes.
 ///

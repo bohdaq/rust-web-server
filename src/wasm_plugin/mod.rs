@@ -578,7 +578,9 @@ pub(crate) mod metrics {
     }
 
     pub(crate) fn call(plugin: &str, hook: &'static str) {
-        ANY.fetch_add(1, Ordering::Relaxed);
+        if ANY.fetch_add(1, Ordering::Relaxed) == 0 {
+            crate::metrics::register_section(crate::metrics::section::WASM_PLUGINS, prometheus_text);
+        }
         *stats().lock().unwrap_or_else(|e| e.into_inner()).calls.entry((plugin.to_string(), hook)).or_default() += 1;
     }
 

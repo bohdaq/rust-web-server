@@ -483,7 +483,7 @@ pub mod fuzz_api {
     /// line and key, then the stored response. Must never panic.
     pub fn cache_entry(data: &[u8]) {
         if let Some((_, _, _, offset)) = crate::cache::disk::parse_entry_header(data) {
-            let _ = crate::response::Response::parse_upstream(&data[offset..], crate::proxy::REGENERATED_OR_HOP_BY_HOP);
+            let _ = crate::response::Response::parse_upstream(&data[offset..], crate::response::REGENERATED_OR_HOP_BY_HOP);
         }
     }
 

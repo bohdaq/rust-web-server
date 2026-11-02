@@ -149,7 +149,10 @@ pub fn init(dir: &str) -> Result<(), String> {
     let engine = TeraEngine::from_dir(dir)?;
     ENGINE
         .set(RwLock::new(engine))
-        .map_err(|_| "template engine already initialized".to_string())
+        .map_err(|_| "template engine already initialized".to_string())?;
+    // SIGHUP / `POST /admin/config/reload` re-glob the templates.
+    crate::config_reload::on_reload(reload_if_initialized);
+    Ok(())
 }
 
 /// Initialize the global engine from `RWS_CONFIG_TEMPLATE_DIR` (default: `"templates"`).

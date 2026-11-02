@@ -593,12 +593,8 @@ fn rewrite_as_content_length(buf: &mut Vec<u8>, header_end: usize, decoded: &[u8
     buf.extend_from_slice(decoded);
 }
 
-/// Headers rws regenerates for a buffered body, plus hop-by-hop headers
-/// (RFC 9110 §7.6.1) that must not be forwarded.
-pub(crate) const REGENERATED_OR_HOP_BY_HOP: &[&str] = &[
-    "content-length", "transfer-encoding", "connection", "keep-alive",
-    "proxy-connection", "te", "trailer", "upgrade",
-];
+// Lives in rws-http (`response`): the disk cache parses stored responses with it too.
+pub(crate) use crate::response::REGENERATED_OR_HOP_BY_HOP;
 
 /// Make a buffered upstream response safe to re-serialize. The body is
 /// already held in `content_range_list`, from which `Response::generate`
