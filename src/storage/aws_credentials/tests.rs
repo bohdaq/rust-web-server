@@ -354,7 +354,7 @@ fn cache_refetches_after_expiry_margin() {
 fn iso8601_from_epoch(epoch_secs: u64) -> String {
     let days = epoch_secs / 86400;
     let secs_in_day = epoch_secs % 86400;
-    let (y, m, d) = crate::scheduler::cron::days_to_ymd(days);
+    let (y, m, d) = crate::http::date::days_to_ymd(days);
     format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, secs_in_day / 3600, (secs_in_day % 3600) / 60, secs_in_day % 60)
 }
 

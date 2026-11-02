@@ -942,7 +942,7 @@ fn human_size(bytes: u64) -> String {
 
 fn format_modified(epoch_secs: u64) -> String {
     let (sec, min, hour, day, month, _dow) = crate::scheduler::cron::epoch_to_datetime(epoch_secs);
-    let (year, _, _) = crate::scheduler::cron::days_to_ymd(epoch_secs / 86400);
+    let (year, _, _) = crate::http::date::days_to_ymd(epoch_secs / 86400);
     format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", year, month, day, hour, min, sec)
 }
 

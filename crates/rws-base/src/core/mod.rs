@@ -8,7 +8,8 @@ pub mod x509;
 
 /// Compares in time independent of where the inputs first differ, so response
 /// timing doesn't reveal how much of a guessed token was right.
-pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+#[doc(hidden)]
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }

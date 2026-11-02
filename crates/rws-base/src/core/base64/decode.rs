@@ -22,6 +22,7 @@ pub enum Alphabet {
 /// A base64 decoder configuration.
 ///
 /// ```
+/// # extern crate rws_base as rust_web_server;
 /// use rust_web_server::core::base64::Decoder;
 ///
 /// assert_eq!(Decoder::STANDARD.decode("TWFu").unwrap(), b"Man");
@@ -110,7 +111,8 @@ impl Decoder {
 
     /// Ignore every character outside the alphabet, padding included —
     /// only for callers that always did (`x509::base64_decode_std`).
-    pub(crate) const fn skip_invalid(self) -> Decoder {
+    #[doc(hidden)]
+    pub const fn skip_invalid(self) -> Decoder {
         Decoder { whitespace: true, skip_invalid: true, ..self }
     }
 

@@ -258,6 +258,6 @@ pub(crate) fn parse_iso8601(s: &str) -> Option<u64> {
     let h: u64 = t.next()?.parse().ok()?;
     let mi: u64 = t.next()?.parse().ok()?;
     let se: u64 = t.next()?.parse().ok()?;
-    let days = crate::scheduler::cron::ymd_to_days(y, m, day);
+    let days = crate::http::date::ymd_to_days(y, m, day);
     Some(days * 86_400 + h * 3600 + mi * 60 + se)
 }

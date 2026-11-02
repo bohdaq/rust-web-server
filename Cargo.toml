@@ -22,13 +22,18 @@ edition = "2021"
 rust-version = "1.99"
 license = "MIT"
 
+# The split crates, pinned to the shared version: a release bump edits these
+# pins together with `version` above.
+[workspace.dependencies]
+rws-base = { path = "crates/rws-base", version = "=18.25.0" }
+
 [workspace]
 # Previously implicit (no [workspace] table at all — Cargo auto-added
 # rws-macros as a member since it's a path dependency of this package).
 # rws-wasm-shim depends ON rust-web-server rather than the other way around,
 # so it can't be pulled in as a path *dependency* the way rws-macros is —
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
-members = ["rws-macros", "rws-wasm-shim"]
+members = ["rws-macros", "rws-wasm-shim", "crates/rws-base"]
 # fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
 exclude = ["fuzz", "ci/e2e/grpc", "starters", "site/mcp", "examples/wasm_plugin"]
 
@@ -179,6 +184,8 @@ rewrite-regex = ["dep:regex"]  # RewriteLayer::request_uri_regex_rewrite
 secrets = ["dep:hmac", "dep:sha2", "http-client"]  # secrets::resolve(): vault:// / aws-sm:// / azkv:// reference resolution (Vault, AWS Secrets Manager, Azure Key Vault); reuses storage-s3's SigV4 signer/credential chain and storage-azure's Managed Identity token fetch
 
 [dependencies]
+# The crates the facade is split into (spec/WORKSPACE_SPLIT.md).
+rws-base.workspace = true
 ctrlc = { version = "3", optional = true }
 mimalloc = { version = "0.1", optional = true, default-features = false, features = ["v3"] }
 libc = { version = "0.2", optional = true }

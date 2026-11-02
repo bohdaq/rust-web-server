@@ -43,18 +43,21 @@ that can't silently grow back into one knot.
 3. **Items other crates need but users don't** become `pub` + `#[doc(hidden)]`
    (rustdoc JSON leaves them out, so the gate stays exact), never a new
    documented API.
-4. **Lockstep versions.** `[workspace.package] version` (and edition,
+4. **Doctests keep the user's path.** A doctest in a moved crate starts with
+   the hidden line `# extern crate <crate> as rust_web_server;`, so the
+   example still reads `use rust_web_server::…` in the rendered docs.
+5. **Lockstep versions.** `[workspace.package] version` (and edition,
    rust-version, license, repository); every crate `version.workspace = true`;
    path dependencies pinned `=<version>`. All crates are released together;
    each sub-crate's description says it's internal to rust-web-server.
-5. **Features forward.** A facade feature enables the same feature in the
+6. **Features forward.** A facade feature enables the same feature in the
    crates that implement it (`acme = ["rws-server/acme", …]`); default
    features unchanged.
-6. **Cycles are cut by moving the item down, not by traits for their own
+7. **Cycles are cut by moving the item down, not by traits for their own
    sake**: a type used below its module moves to the lower crate (e.g.
    `ConnectionInfo` out of `server`); a function that needs a higher layer
    moves up next to its caller.
-7. **Shared checkout.** Other sessions edit `src/` while this runs: each
+8. **Shared checkout.** Other sessions edit `src/` while this runs: each
    tranche starts from fresh `main`, moves with `git mv` (history follows),
    and is pushed as soon as it's green, so nobody's edits land on a file that
    has moved.
@@ -77,7 +80,7 @@ from `ci/module_graph.py`'s output at that point.
 | # | Tranche | Status |
 |---|---|---|
 | T0 | Tooling: `ci/module_graph.py` (SCCs, a crate's upward edges), `ci/public_api.sh` crate map, `[workspace.package]`, `crates/`, release.yml `crates` job publishes the workspace in order (`cargo publish --workspace`), `ci/e2e/starters.sh` patches every crate, `check_docs.py` / the settings scanner read `crates/*/src` too | **done**: `module_graph.py` (iterative Tarjan; today one cycle of 76 modules); `public_api.sh` `CRATES` + `public_api_merge.py` — listing kept in a normal form (each re-export one `pub use` line, repeats counted once; baseline regenerated, same lines as before); tried on a throwaway `rws-mime`: equal. `[workspace.package]` (version etc.; facade inherits; tooling greps `^version = `); `ci/publish_order.py` drives the release `crates` job; starters patch every `crates/*`; settings scanner reads `crates/*/src`. `check_docs.py` reads `src/entry_point` — moves with that module in T2 |
-| T1 | `rws-base` | planned |
+| T1 | `rws-base` | **done**: `core`, `ext`, `http`, `mime_type`, `null`, `symbol`, `url`, `dns` (`json` moved to T2: its `Json<T>` extractor needs `request`); cut `http` → `scheduler` (`days_to_ymd`/`ymd_to_days` now in `http::date`); 40 `pub(crate)` items → `#[doc(hidden)] pub`; one test (PKCE) moved to `sso::pkce` |
 | T2 | `rws-http`: cut `application` → `server` (`ConnectionInfo` down), `header` → `cors`/`client_hint` config, `http` → `scheduler`, `range` ↔ `response` (same crate) | planned |
 | T3 | `rws-server` | planned |
 | T4… | feature crates, one per tranche, largest dependency first (`gateway_api`, `tower`, `model`, `storage` are already outside the knot) | planned |

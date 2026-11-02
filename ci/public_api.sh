@@ -21,7 +21,7 @@ set -euo pipefail
 NIGHTLY=nightly-2026-10-24
 FEATURES="sso sso-server sso-saml auth-asymmetric http-client acme serde macros openapi tower gateway-api model-sqlite storage-local storage-s3 storage-azure storage-gcs pkcs11"
 cd "$(dirname "$0")/.."
-CRATES=""
+CRATES="rws-base="
 BASELINE=ci/public-api.txt
 current="$(mktemp)"
 parts="$(mktemp -d)"

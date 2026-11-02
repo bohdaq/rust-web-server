@@ -166,15 +166,6 @@ fn long_input_is_linear() {
 
 // ── what each former private decoder accepted, now through `Decoder` ────────
 
-#[cfg(feature = "sso")]
-#[test]
-fn pkce_takes_either_alphabet() {
-    // PKCE / JWT: URL-safe or standard, unpadded.
-    assert_eq!(vec![0xfb, 0xff], crate::sso::pkce::base64url_decode("-_8").unwrap());
-    assert_eq!(vec![0xfb, 0xff], crate::sso::pkce::base64url_decode("+/8=").unwrap());
-    assert!(crate::sso::pkce::base64url_decode("a b").is_err());
-}
-
 #[test]
 fn pem_bodies_decode() {
     // PEM: standard with line breaks.

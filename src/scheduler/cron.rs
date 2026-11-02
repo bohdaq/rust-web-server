@@ -151,34 +151,5 @@ pub(crate) fn epoch_to_datetime(epoch_secs: u64) -> (u32, u32, u32, u32, u32, u3
     (sec, min, hour, day, month, dow)
 }
 
-/// Gregorian calendar decomposition of days-since-1970-01-01 into (year, month, day).
-/// Uses Howard Hinnant's civil-from-days algorithm.
-pub(crate) fn days_to_ymd(days: u64) -> (u32, u32, u32) {
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y as u32, m as u32, d as u32)
-}
-
-/// Inverse of [`days_to_ymd`]: Gregorian (year, month, day) to days since
-/// 1970-01-01. Uses Howard Hinnant's days-from-civil algorithm. Only valid
-/// for `year >= 1970` (the only range this codebase ever parses — AWS
-/// credential expiration timestamps).
-// Callers are feature-gated (AWS credential expiry, SAML timestamps).
-#[cfg_attr(not(any(test, feature = "storage-s3", feature = "secrets", feature = "sso-saml")), allow(dead_code))]
-pub(crate) fn ymd_to_days(y: u32, m: u32, d: u32) -> u64 {
-    let y = if m <= 2 { (y - 1) as u64 } else { y as u64 };
-    let era = y / 400;
-    let yoe = y - era * 400;
-    let mp = if m > 2 { (m - 3) as u64 } else { (m + 9) as u64 };
-    let doy = (153 * mp + 2) / 5 + d as u64 - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe - 719468
-}
+// Calendar arithmetic lives in `http::date` (rws-base); cron and SAML use it.
+use crate::http::date::days_to_ymd;

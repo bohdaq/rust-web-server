@@ -342,7 +342,7 @@ fn parse_iso8601_epoch(s: &str) -> Option<u64> {
     let hour: u64 = s.get(11..13)?.parse().ok()?;
     let min: u64 = s.get(14..16)?.parse().ok()?;
     let sec: u64 = s.get(17..19)?.parse().ok()?;
-    let days = crate::scheduler::cron::ymd_to_days(year, month, day);
+    let days = crate::http::date::ymd_to_days(year, month, day);
     Some(days * 86400 + hour * 3600 + min * 60 + sec)
 }
 

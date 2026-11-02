@@ -4,7 +4,7 @@
 //! `URL::parse_request_target` gives a request's path and query without
 //! inventing a scheme and host. Percent encoding is what lets a query value
 //! carry a space (`%20`), `=` (`%3D`) or `&` (`%26`). Examples:
-//! `src/url/example/`.
+//! `crates/rws-base/src/url/example/`.
 
 #[cfg(test)]
 mod tests;
@@ -85,7 +85,8 @@ impl URL {
     /// first `?` or `#` — borrowed, without parsing or allocating. Same value
     /// as [`URL::parse_request_target`]`(target)?.path`; `None` for a target
     /// that isn't origin-form. For per-request matching on hot paths.
-    pub(crate) fn request_target_path(target: &str) -> Option<&str> {
+    #[doc(hidden)]
+    pub fn request_target_path(target: &str) -> Option<&str> {
         if !target.starts_with('/') {
             return None;
         }

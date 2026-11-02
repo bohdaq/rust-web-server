@@ -5,6 +5,16 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- The crate is being split into a workspace (`spec/WORKSPACE_SPLIT.md`):
+  the base layer — `core`, `ext`, `http`, `mime_type`, `null`, `symbol`,
+  `url` — now lives in the new crate `rws-base`, published with
+  rust-web-server at the same version. Every `rust_web_server::…` path is
+  unchanged; depend on `rust-web-server` as before.
+
 ## 18.25.0 — 2026-11-02
 
 ### Changed

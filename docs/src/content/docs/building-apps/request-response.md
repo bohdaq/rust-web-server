@@ -245,7 +245,7 @@ header_list.push(Header::new(Header::_CACHE_CONTROL, "no-store"));
 
 ## MimeType constants
 
-`MimeType` in `src/mime_type/mod.rs` provides string constants for common content types:
+`MimeType` (`rust_web_server::mime_type`) provides string constants for common content types:
 
 ```rust
 use rust_web_server::mime_type::MimeType;

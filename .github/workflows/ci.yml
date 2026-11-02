@@ -38,6 +38,10 @@ jobs:
         with:
           key: ${{ matrix.name }}
       - run: cargo test --locked ${{ matrix.args }}
+      # The crates the facade is split into (spec/WORKSPACE_SPLIT.md) run their
+      # own tests; `cargo test` above covers only the root package.
+      - if: matrix.args == ''
+        run: cargo test --locked --workspace --exclude rust-web-server --exclude rws-wasm-shim --exclude rws-macros
 
   msrv:
     name: msrv (1.99, all features)

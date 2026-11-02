@@ -4,26 +4,31 @@
 //! recursion), follows at most 128 compression pointers per name, and checks
 //! every length against the buffer.
 
-// Without `acme` only the SRV discovery uses this module.
-#![cfg_attr(not(feature = "acme"), allow(dead_code))]
-
 #[cfg(test)]
 mod tests;
 
 /// Record types used here.
-pub(crate) const TYPE_SOA: u16 = 6;
-pub(crate) const TYPE_TXT: u16 = 16;
-pub(crate) const TYPE_SRV: u16 = 33;
-pub(crate) const TYPE_TSIG: u16 = 250;
+#[doc(hidden)]
+pub const TYPE_SOA: u16 = 6;
+#[doc(hidden)]
+pub const TYPE_TXT: u16 = 16;
+#[doc(hidden)]
+pub const TYPE_SRV: u16 = 33;
+#[doc(hidden)]
+pub const TYPE_TSIG: u16 = 250;
 /// Classes.
-pub(crate) const CLASS_IN: u16 = 1;
-pub(crate) const CLASS_NONE: u16 = 254;
-pub(crate) const CLASS_ANY: u16 = 255;
+#[doc(hidden)]
+pub const CLASS_IN: u16 = 1;
+#[doc(hidden)]
+pub const CLASS_NONE: u16 = 254;
+#[doc(hidden)]
+pub const CLASS_ANY: u16 = 255;
 
 /// `name` in wire format, appended to `buf`: lower-cased labels (canonical,
 /// as TSIG needs), no compression. Labels over 63 bytes or a name over 255
 /// are refused.
-pub(crate) fn encode_name(name: &str, buf: &mut Vec<u8>) -> Result<(), String> {
+#[doc(hidden)]
+pub fn encode_name(name: &str, buf: &mut Vec<u8>) -> Result<(), String> {
     let start = buf.len();
     for label in name.trim_end_matches('.').split('.') {
         if label.is_empty() {
@@ -46,7 +51,8 @@ pub(crate) fn encode_name(name: &str, buf: &mut Vec<u8>) -> Result<(), String> {
 /// Returns the dotted name (no trailing dot) and the position just after it
 /// in the *original* buffer (after a first compression pointer, not after its
 /// target — a pointer ends the name in place).
-pub(crate) fn read_name(buf: &[u8], mut pos: usize) -> Result<(String, usize), String> {
+#[doc(hidden)]
+pub fn read_name(buf: &[u8], mut pos: usize) -> Result<(String, usize), String> {
     let mut labels = Vec::new();
     let mut jumped = false;
     let mut return_pos = pos;
@@ -85,7 +91,8 @@ pub(crate) fn read_name(buf: &[u8], mut pos: usize) -> Result<(String, usize), S
 }
 
 /// A query for `name`/`qtype` (class IN), recursion desired or not.
-pub(crate) fn build_query(id: u16, name: &str, qtype: u16, recursion_desired: bool) -> Result<Vec<u8>, String> {
+#[doc(hidden)]
+pub fn build_query(id: u16, name: &str, qtype: u16, recursion_desired: bool) -> Result<Vec<u8>, String> {
     let mut buf = Vec::with_capacity(32 + name.len());
     buf.extend_from_slice(&id.to_be_bytes());
     buf.extend_from_slice(&(if recursion_desired { 0x0100u16 } else { 0 }).to_be_bytes());
@@ -98,29 +105,42 @@ pub(crate) fn build_query(id: u16, name: &str, qtype: u16, recursion_desired: bo
 
 /// A resource record of a parsed message; its RDATA stays in the buffer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Record {
+#[doc(hidden)]
+pub struct Record {
     /// Owner name, dotted, without the trailing dot, as sent (case kept).
-    pub(crate) name: String,
-    pub(crate) rtype: u16,
-    pub(crate) class: u16,
-    pub(crate) ttl: u32,
+    #[doc(hidden)]
+    pub name: String,
+    #[doc(hidden)]
+    pub rtype: u16,
+    #[doc(hidden)]
+    pub class: u16,
+    #[doc(hidden)]
+    pub ttl: u32,
     /// Where the RDATA is in the message.
-    pub(crate) rdata: std::ops::Range<usize>,
+    #[doc(hidden)]
+    pub rdata: std::ops::Range<usize>,
 }
 
 /// A parsed DNS message: header fields and the three record sections.
 #[derive(Debug)]
-pub(crate) struct Message {
-    pub(crate) id: u16,
-    pub(crate) flags: u16,
-    pub(crate) answers: Vec<Record>,
-    pub(crate) authority: Vec<Record>,
-    pub(crate) additional: Vec<Record>,
+#[doc(hidden)]
+pub struct Message {
+    #[doc(hidden)]
+    pub id: u16,
+    #[doc(hidden)]
+    pub flags: u16,
+    #[doc(hidden)]
+    pub answers: Vec<Record>,
+    #[doc(hidden)]
+    pub authority: Vec<Record>,
+    #[doc(hidden)]
+    pub additional: Vec<Record>,
 }
 
 impl Message {
     /// RCODE (the low four bits of the flags).
-    pub(crate) fn rcode(&self) -> u16 {
+    #[doc(hidden)]
+    pub fn rcode(&self) -> u16 {
         self.flags & 0x000F
     }
 }
@@ -131,7 +151,8 @@ fn u16_at(buf: &[u8], pos: usize) -> Result<u16, String> {
 
 /// Parse a whole message. Questions are skipped; every record is checked to
 /// fit, RDATA included.
-pub(crate) fn parse(buf: &[u8]) -> Result<Message, String> {
+#[doc(hidden)]
+pub fn parse(buf: &[u8]) -> Result<Message, String> {
     if buf.len() < 12 {
         return Err("response shorter than DNS header".to_string());
     }
@@ -167,7 +188,8 @@ pub(crate) fn parse(buf: &[u8]) -> Result<Message, String> {
 
 /// The character-strings of TXT RDATA, joined (a long value is split into
 /// 255-byte strings).
-pub(crate) fn txt_value(rdata: &[u8]) -> Vec<u8> {
+#[doc(hidden)]
+pub fn txt_value(rdata: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(rdata.len());
     let mut pos = 0;
     while let Some(&len) = rdata.get(pos) {
@@ -179,7 +201,8 @@ pub(crate) fn txt_value(rdata: &[u8]) -> Vec<u8> {
 }
 
 /// TXT RDATA holding `value` (in 255-byte character-strings).
-pub(crate) fn txt_rdata(value: &[u8]) -> Vec<u8> {
+#[doc(hidden)]
+pub fn txt_rdata(value: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(value.len() + value.len() / 255 + 1);
     for chunk in value.chunks(255) {
         out.push(chunk.len() as u8);
@@ -192,7 +215,8 @@ pub(crate) fn txt_rdata(value: &[u8]) -> Vec<u8> {
 }
 
 /// The first `nameserver` in `/etc/resolv.conf`, port 53.
-pub(crate) fn system_resolver() -> Option<std::net::SocketAddr> {
+#[doc(hidden)]
+pub fn system_resolver() -> Option<std::net::SocketAddr> {
     let contents = std::fs::read_to_string("/etc/resolv.conf").ok()?;
     contents.lines().find_map(|line| {
         let ip: std::net::IpAddr = line.trim().strip_prefix("nameserver")?.trim().parse().ok()?;
@@ -201,7 +225,8 @@ pub(crate) fn system_resolver() -> Option<std::net::SocketAddr> {
 }
 
 /// Not cryptographically random — only to match our reply to our query.
-pub(crate) fn query_id() -> u16 {
+#[doc(hidden)]
+pub fn query_id() -> u16 {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     (nanos & 0xFFFF) as u16

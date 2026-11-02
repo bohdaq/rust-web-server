@@ -449,7 +449,7 @@ fn format_iso8601(total_secs: u64) -> String {
     format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
 }
 
-/// Inverse of `scheduler::cron::ymd_to_days` (days since the Unix epoch to
+/// Inverse of `http::date::ymd_to_days` (days since the Unix epoch to
 /// a proleptic-Gregorian calendar date) — Howard Hinnant's algorithm.
 fn days_to_ymd(days_since_epoch: u64) -> (u32, u32, u32) {
     let z = days_since_epoch as i64 + 719_468;

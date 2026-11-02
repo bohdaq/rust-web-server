@@ -17,7 +17,7 @@ const MONTH_NAMES: [&str; 12] =
 /// `x-ms-date` header — required on every request regardless of auth scheme.
 pub(super) fn rfc1123_date(epoch_secs: u64) -> String {
     let (sec, min, hour, day, month, dow) = crate::scheduler::cron::epoch_to_datetime(epoch_secs);
-    let (year, _, _) = crate::scheduler::cron::days_to_ymd(epoch_secs / 86400);
+    let (year, _, _) = crate::http::date::days_to_ymd(epoch_secs / 86400);
     format!(
         "{}, {:02} {} {:04} {:02}:{:02}:{:02} GMT",
         DAY_NAMES[dow as usize], day, MONTH_NAMES[(month - 1) as usize], year, hour, min, sec

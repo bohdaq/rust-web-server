@@ -136,6 +136,8 @@ Skipping either is not acceptable. Docs and tests ship with the code, not after.
 
 ## Architecture
 
+**Workspace split in progress** (`spec/WORKSPACE_SPLIT.md`, status table there): modules are moving out of `src/` into layered crates under `crates/` (`rws-base` so far: `core`, `ext`, `http`, `mime_type`, `null`, `symbol`, `url`, `dns`). `src/lib.rs` re-exports each under its old name, so `crate::mime_type::…` and `rust_web_server::mime_type::…` keep working everywhere. A lower crate can't name a higher one: `ci/module_graph.py --up <modules>` lists the references that block a move. What the facade needs from a crate but users don't is `#[doc(hidden)] pub`, not `pub(crate)`. `ci/public_api.sh` lists every crate in its `CRATES` map; the listing must not change.
+
 The default build (`http3` feature) uses a tokio async runtime and serves HTTP/3 over QUIC, HTTP/2, and HTTP/1.1 over TLS. The `http1`-only build is a fully synchronous, thread-pool-based server with no async runtime. HTTP/1.1 parsing, JSON, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented from scratch (no hyper/Tower/Axum); HTTP/2 framing uses the `h2` crate, HTTP/3 uses `h3`/`quinn`, and TLS uses `rustls`.
 
 ### Request lifecycle
@@ -230,7 +232,7 @@ Hot reload: `SIGHUP` (or `POST /admin/config/reload`) calls `config_reload::relo
 
 ### HTTP version constants
 
-`src/http/mod.rs` defines `VERSION` (HTTP/0.9 through HTTP/3.0) and `HTTP::version_list()` which is used by `Request::parse_method_and_request_uri_and_http_version_string` to validate the version token on every incoming request.
+`crates/rws-base/src/http/mod.rs` defines `VERSION` (HTTP/0.9 through HTTP/3.0) and `HTTP::version_list()` which is used by `Request::parse_method_and_request_uri_and_http_version_string` to validate the version token on every incoming request.
 
 ### Dynamic router
 

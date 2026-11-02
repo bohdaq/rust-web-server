@@ -86,3 +86,14 @@ pub(crate) fn base64url_encode(bytes: &[u8]) -> String {
 pub(crate) fn base64url_decode(s: &str) -> Result<Vec<u8>, String> {
     Ok(crate::core::base64::Decoder::EITHER.decode(s)?)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn pkce_takes_either_alphabet() {
+        // PKCE / JWT: URL-safe or standard, unpadded.
+        assert_eq!(vec![0xfb, 0xff], super::base64url_decode("-_8").unwrap());
+        assert_eq!(vec![0xfb, 0xff], super::base64url_decode("+/8=").unwrap());
+        assert!(super::base64url_decode("a b").is_err());
+    }
+}

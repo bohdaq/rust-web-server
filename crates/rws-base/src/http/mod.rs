@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
-pub(crate) mod date;
+#[doc(hidden)]
+pub mod date;
 
 pub struct Version {
     pub http_0_9: &'static str,

@@ -99,26 +99,26 @@ pub mod application;
 pub mod body;
 pub mod client_hint;
 pub mod controller;
-pub mod core;
+pub use rws_base::core;
 pub mod cors;
 pub mod entry_point;
-pub mod ext;
+pub use rws_base::ext;
 pub mod header;
-pub mod http;
+pub use rws_base::http;
 pub mod json;
 pub mod language;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod log;
-pub mod mime_type;
-pub mod null;
+pub use rws_base::mime_type;
+pub use rws_base::null;
 pub mod range;
 pub mod request;
 pub mod response;
 pub mod server;
-pub mod symbol;
+pub use rws_base::symbol;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod thread_pool;
-pub mod url;
+pub use rws_base::url;
 pub mod pagination;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod proxy;
@@ -140,7 +140,7 @@ pub mod circuit_breaker;
 // for `secrets`'s Vault/AWS-SM/Key-Vault backends on every target.
 pub mod service_discovery;
 /// DNS wire format, shared by the SRV service discovery and ACME's DNS-01.
-pub(crate) mod dns;
+pub(crate) use rws_base::dns;
 pub mod config_binding;
 pub mod di;
 #[cfg(not(target_arch = "wasm32"))]

@@ -2,13 +2,13 @@
 
 use std::cell::RefCell;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::scheduler::cron::{days_to_ymd, ymd_to_days};
 
 const DAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"]; // 1970-01-01 was a Thursday
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /// `secs` since the Unix epoch as an IMF-fixdate.
-pub(crate) fn format(secs: u64) -> String {
+#[doc(hidden)]
+pub fn format(secs: u64) -> String {
     let days = secs / 86_400;
     let (year, month, day) = days_to_ymd(days);
     let rem = secs % 86_400;
@@ -37,7 +37,8 @@ fn push2(out: &mut String, n: u64) {
 
 /// The current time as an IMF-fixdate, formatted at most once per second
 /// per thread (the value has one-second resolution).
-pub(crate) fn now() -> String {
+#[doc(hidden)]
+pub fn now() -> String {
     thread_local! {
         static CACHED: RefCell<(u64, String)> = const { RefCell::new((u64::MAX, String::new())) };
     }
@@ -56,7 +57,8 @@ pub(crate) fn now() -> String {
 /// §5.6.7, #56) — RFC 850 (`Sunday, 06-Nov-94 08:49:37 GMT`) and asctime
 /// (`Sun Nov  6 08:49:37 1994`). `None` for anything else (a recipient may
 /// ignore a date it can't parse, §13.1.3).
-pub(crate) fn parse(value: &str) -> Option<u64> {
+#[doc(hidden)]
+pub fn parse(value: &str) -> Option<u64> {
     let value = value.trim();
     parse_imf_fixdate(value).or_else(|| parse_rfc850(value)).or_else(|| parse_asctime(value))
 }
@@ -188,4 +190,36 @@ mod tests {
         let parsed = parse(&value).unwrap();
         assert!(secs.abs_diff(parsed) <= 1, "{value}");
     }
+}
+
+/// Gregorian calendar decomposition of days-since-1970-01-01 into (year, month, day).
+/// Uses Howard Hinnant's civil-from-days algorithm.
+#[doc(hidden)]
+pub fn days_to_ymd(days: u64) -> (u32, u32, u32) {
+    let z = days + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as u32, m as u32, d as u32)
+}
+
+/// Inverse of [`days_to_ymd`]: Gregorian (year, month, day) to days since
+/// 1970-01-01. Uses Howard Hinnant's days-from-civil algorithm. Only valid
+/// for `year >= 1970` (the only range this codebase ever parses — AWS
+/// credential expiration timestamps).
+#[doc(hidden)]
+pub fn ymd_to_days(y: u32, m: u32, d: u32) -> u64 {
+    let y = if m <= 2 { (y - 1) as u64 } else { y as u64 };
+    let era = y / 400;
+    let yoe = y - era * 400;
+    let mp = if m > 2 { (m - 3) as u64 } else { (m + 9) as u64 };
+    let doy = (153 * mp + 2) / 5 + d as u64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
 }

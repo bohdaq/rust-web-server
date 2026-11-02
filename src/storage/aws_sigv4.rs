@@ -42,7 +42,7 @@ fn hmac(key: &[u8], data: &[u8]) -> Vec<u8> {
 }
 
 /// `(date, datetime)` as `YYYYMMDD` and `YYYYMMDDTHHMMSSZ`, both required by
-/// SigV4. Built from `crate::scheduler::cron::days_to_ymd` (already
+/// SigV4. Built from `crate::http::date::days_to_ymd` (already
 /// implements Gregorian calendar decomposition) rather than a new date
 /// dependency.
 fn amz_date_and_datetime(epoch_secs: u64) -> (String, String) {
@@ -51,7 +51,7 @@ fn amz_date_and_datetime(epoch_secs: u64) -> (String, String) {
     let hour = secs_in_day / 3600;
     let min = (secs_in_day % 3600) / 60;
     let sec = secs_in_day % 60;
-    let (y, m, d) = crate::scheduler::cron::days_to_ymd(days);
+    let (y, m, d) = crate::http::date::days_to_ymd(days);
     let date = format!("{:04}{:02}{:02}", y, m, d);
     let datetime = format!("{date}T{:02}{:02}{:02}Z", hour, min, sec);
     (date, datetime)

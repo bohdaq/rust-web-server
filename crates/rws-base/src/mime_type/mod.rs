@@ -204,7 +204,8 @@ impl MimeType {
     /// its first character); other shapes — dotfiles, a trailing `/` — take
     /// the original suffix-by-suffix walk, whose `ends_with` and
     /// `Path::extension` checks disagree there. Case-sensitive, like that walk.
-    pub(crate) fn mime_type_for(path: &str) -> &'static str {
+    #[doc(hidden)]
+    pub fn mime_type_for(path: &str) -> &'static str {
         let name_start = path
             .rfind(|c: char| c == '/' || (cfg!(windows) && c == '\\'))
             .map_or(0, |i| i + 1);
