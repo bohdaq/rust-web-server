@@ -15,6 +15,8 @@ use crate::server::{Address, ConnectionInfo};
 
 #[test]
 fn file_retrieval() {
+    // Deletes and restores ./index.html: tests reading it hold the same lock.
+    let _g = crate::test_env::lock();
     // user provided html file
     let pwd = FileExt::working_directory().unwrap();
 

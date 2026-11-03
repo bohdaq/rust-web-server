@@ -10,7 +10,7 @@ all-features = true
 ignore = [
     # rsa "Marvin Attack" (no fixed release): only through sqlx-mysql
     # (`model-mysql`), which uses the MySQL server's *public* key — no
-    # private-key operation. rws's own RSA verification is in src/rsa_key.
+    # private-key operation. rws's own RSA verification is in crates/rws-server/src/rsa_key.
     { id = "RUSTSEC-2023-0071", reason = "public-key use only, via sqlx-mysql" },
 ]
 

@@ -10,9 +10,10 @@ on:
     # implementation.version must be the release).
     tags: ["[0-9]+.[0-9]+.[0-9]+"]
     paths:
-      - "src/gateway_api/**"
-      - "src/proxy/**"
-      - "src/server/**"
+      - "crates/rws-gateway-api/**"
+      - "crates/rws-proxy/src/proxy/**"
+      - "crates/rws-server/src/server/**"
+      - "crates/rws-server/src/tls/**"
       - "helm/**"
       - "ci/e2e/gateway_api*"
       - ".github/workflows/gateway-api.yml"

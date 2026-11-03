@@ -25,6 +25,7 @@ license = "MIT"
 # The split crates, pinned to the shared version: a release bump edits these
 # pins together with `version` above.
 [workspace.dependencies]
+rws-gateway-api = { path = "crates/rws-gateway-api", version = "=18.25.0" }
 rws-proxy = { path = "crates/rws-proxy", version = "=18.25.0" }
 rws-storage = { path = "crates/rws-storage", version = "=18.25.0" }
 rws-wasm-plugin = { path = "crates/rws-wasm-plugin", version = "=18.25.0" }
@@ -40,7 +41,7 @@ rws-server = { path = "crates/rws-server", version = "=18.25.0" }
 # rws-wasm-shim depends ON rust-web-server rather than the other way around,
 # so it can't be pulled in as a path *dependency* the way rws-macros is —
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
-members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http", "crates/rws-server", "crates/rws-tower", "crates/rws-acme", "crates/rws-wasm-plugin", "crates/rws-storage", "crates/rws-proxy"]
+members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http", "crates/rws-server", "crates/rws-tower", "crates/rws-acme", "crates/rws-wasm-plugin", "crates/rws-storage", "crates/rws-proxy", "crates/rws-gateway-api"]
 # fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
 exclude = ["fuzz", "ci/e2e/grpc", "starters", "site/mcp", "examples/wasm_plugin"]
 
@@ -140,23 +141,23 @@ pkg-fmt = "zip"
 [features]
 default = ["http3", "brotli", "zstd"]
 http1 = ["dep:ctrlc", "dep:libc", "rws-server/http1", "rws-proxy/http1"]
-http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc", "rws-server/http2", "rws-tower?/http2", "rws-acme?/http2", "rws-proxy/http2"]
+http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc", "rws-server/http2", "rws-tower?/http2", "rws-acme?/http2", "rws-proxy/http2", "rws-gateway-api?/http2"]
 http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn", "rws-server/http3", "rws-proxy/http3"]
-http-client = ["dep:rustls", "dep:webpki-roots", "rws-server/http-client", "rws-storage?/http-client", "rws-proxy/http-client"]
+http-client = ["dep:rustls", "dep:webpki-roots", "rws-server/http-client", "rws-storage?/http-client", "rws-proxy/http-client", "rws-gateway-api?/http-client"]
 # Content codings besides gzip (18.1.0): `br` (pure Rust) and `zstd` (C
 # libzstd, built with the crate). Both are in the default set.
-brotli = ["dep:brotli", "rws-http/brotli"]
-zstd   = ["dep:zstd", "rws-http/zstd"]
+brotli = ["dep:brotli", "rws-http/brotli", "rws-proxy/brotli"]
+zstd   = ["dep:zstd", "rws-http/zstd", "rws-proxy/zstd"]
 acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs", "rws-server/acme", "dep:rws-acme", "rws-acme?/acme", "rws-proxy/acme"]
-fips   = ["http2", "rustls/fips", "rws-http/fips", "rws-server/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
+fips   = ["http2", "rustls/fips", "rws-http/fips", "rws-server/fips", "rws-proxy/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
 pkcs11 = ["http2", "dep:cryptoki", "dep:aws-lc-rs", "rws-server/pkcs11"] # TLS private keys in an HSM / cloud KMS through PKCS#11 (pkcs11: URIs)
-serde  = ["dep:serde", "dep:serde_json", "rws-http/serde", "rws-server/serde", "rws-proxy/serde"]
+serde  = ["dep:serde", "dep:serde_json", "rws-http/serde", "rws-server/serde", "rws-proxy/serde", "rws-gateway-api?/serde"]
 auth   = ["dep:hmac", "dep:sha2", "rws-server/auth", "rws-proxy/auth"]
 auth-asymmetric = ["auth", "dep:p256", "dep:rand_core", "rws-server/auth-asymmetric"]  # RS256 (in-crate rsa_key) / ES256 (p256) in JwtLayer
-macros = ["dep:rws-macros", "rws-server/macros"]
+macros = ["dep:rws-macros", "rws-server/macros", "rws-proxy/macros"]
 # The `rws` binary allocates with mimalloc instead of the system allocator
 # (the library never sets a global allocator).
-mimalloc = ["dep:mimalloc"]
+mimalloc = ["dep:mimalloc", "rws-proxy/mimalloc"]
 tera   = ["dep:tera", "dep:serde", "dep:serde_json"]
 model-sqlite   = ["dep:sqlx", "sqlx/sqlite",   "sqlx/runtime-tokio", "http2", "rws-server/model-sqlite", "rws-proxy/model-sqlite"]
 model-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/runtime-tokio-rustls", "http2", "rws-server/model-postgres", "rws-proxy/model-postgres"]
@@ -165,8 +166,8 @@ crypto = ["dep:argon2", "dep:rand_core", "dep:hmac", "dep:sha2", "dep:aes-gcm", 
 csrf   = ["dep:rand_core", "rws-server/csrf"]
 mailer = []  # plain SMTP; STARTTLS/SMTPS additionally requires http-client or http2
 sso    = ["dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client", "rws-server/sso", "rws-proxy/sso"]
-sso-server = ["sso", "auth", "rws-server/sso-server"]  # AuthServer: rws as its own OAuth 2.0 token issuer; reuses auth's HS256 build_jwt/verify_jwt (see src/sso/server.rs docs for why not RSA/EC)
-sso-saml   = ["sso", "rws-server/sso-saml"]  # SamlSp: SAML 2.0 Service Provider; no new deps — hand-rolled XML parser, not quick-xml (see src/sso/saml/mod.rs docs)
+sso-server = ["sso", "auth", "rws-server/sso-server", "rws-proxy/sso-server"]  # AuthServer: rws as its own OAuth 2.0 token issuer; reuses auth's HS256 build_jwt/verify_jwt (see crates/rws-server/src/sso/server.rs docs for why not RSA/EC)
+sso-saml   = ["sso", "rws-server/sso-saml", "rws-proxy/sso-saml"]  # SamlSp: SAML 2.0 Service Provider; no new deps — hand-rolled XML parser, not quick-xml (see crates/rws-server/src/sso/saml/mod.rs docs)
 jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
 storage-local = ["rws-server/storage-local", "dep:rws-storage", "rws-storage/storage-local"]  # LocalStorage; no new deps
 storage-s3    = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-s3", "dep:rws-storage", "rws-storage/storage-s3", "rws-proxy/storage-s3"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
@@ -175,17 +176,17 @@ storage-gcs   = ["http-client", "dep:aws-lc-rs", "rws-server/storage-gcs", "dep:
 # Opt-in Tower interop (18.7.0, #23): tower layers as rws middleware, tower
 # services (tonic) as rws apps, an rws app as a tower service. Adapters only —
 # nothing in the default build changes.
-tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util", "dep:rws-tower", "rws-tower?/tower"]
+tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util", "dep:rws-tower", "rws-tower?/tower", "rws-proxy/tower"]
 # Kubernetes Gateway API controller (18.8.0, #19, spec/GATEWAY_API.md): kube-rs
 # on the aws-lc-rs provider (one rustls provider, as everywhere), and
 # k8s-openapi pinned to the oldest Kubernetes it supports, for the widest
 # range of clusters.
-gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util", "rws-server/gateway-api", "rws-proxy/gateway-api"]
+gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util", "rws-server/gateway-api", "rws-proxy/gateway-api", "dep:rws-gateway-api", "rws-gateway-api?/gateway-api"]
 # WasmLayer / [route.middleware.wasm]: middleware as WebAssembly core modules
 # (wasmtime + cranelift, no WASI). Off by default (several MB, long compile);
 # the release binaries enable it.
 wasm-plugins = ["dep:wasmtime", "dep:rws-wasm-plugin", "rws-wasm-plugin?/wasm-plugins", "rws-proxy/wasm-plugins"]
-openapi = ["rws-server/openapi"]  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
+openapi = ["rws-server/openapi", "rws-proxy/openapi"]  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 rewrite-regex = ["dep:regex", "rws-server/rewrite-regex"]  # RewriteLayer::request_uri_regex_rewrite
 secrets = ["dep:hmac", "dep:sha2", "http-client", "rws-server/secrets"]  # secrets::resolve(): vault:// / aws-sm:// / azkv:// reference resolution (Vault, AWS Secrets Manager, Azure Key Vault); reuses storage-s3's SigV4 signer/credential chain and storage-azure's Managed Identity token fetch
@@ -195,6 +196,7 @@ secrets = ["dep:hmac", "dep:sha2", "http-client", "rws-server/secrets"]  # secre
 rws-base.workspace = true
 rws-http.workspace = true
 rws-server.workspace = true
+rws-gateway-api = { workspace = true, optional = true }
 rws-proxy.workspace = true
 rws-storage = { workspace = true, optional = true }
 rws-wasm-plugin = { workspace = true, optional = true }
@@ -248,7 +250,7 @@ cryptoki  = { version = "0.12", optional = true }
 [dev-dependencies]
 # rws-server's test helpers (MockTcpStream, credential env locks, …).
 rws-server = { workspace = true, features = ["test-support"] }
-# test-util: tokio::time::pause for timeout tests (src/server/http1_async.rs).
+# test-util: tokio::time::pause for timeout tests (crates/rws-server/src/server/http1_async.rs).
 tokio = { version = "1", features = ["test-util", "macros", "rt"] }
 
 # rustls's own "aws-lc-rs" crypto-backend feature compiles C/asm (aws-lc-sys)
@@ -256,26 +258,26 @@ tokio = { version = "1", features = ["test-util", "macros", "rt"] }
 # so enabling `http-client` (and therefore `sso`/`secrets`/`storage-s3`/
 # `storage-azure`) doesn't drag in a dependency that can't compile for wasm32.
 # TLS itself still works there — the host performs it via `outgoing-handler`
-# (see the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs)
+# (see the #[cfg(target_arch = "wasm32")] send_once in crates/rws-server/src/http_client/mod.rs)
 # instead of rustls. http2/http3/acme (which also use rustls) were already
 # unsupported on wasm32 regardless, since tokio's rt-multi-thread requires
 # real OS threads.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-# Self-signed certificates for the in-process HTTP/3 test (src/h3_handler/tests.rs).
+# Self-signed certificates for the in-process HTTP/3 test (crates/rws-server/src/h3_handler/tests.rs).
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
-# RSA keys and signatures for tests of rsa_key (src/rsa_key/test_support.rs).
+# RSA keys and signatures for tests of rsa_key (crates/rws-server/src/rsa_key/test_support.rs).
 aws-lc-rs = "1"
 # Real Tower layers and a real tonic service for the `tower` adapters
-# (src/tower/tests.rs, examples/tower.rs). tonic pinned with no default
+# (crates/rws-tower/src/tower/tests.rs, examples/tower.rs). tonic pinned with no default
 # features: tonic-health only needs its generated-code support, not hyper.
 tower-http = { version = "0.7.1", default-features = false, features = ["set-header", "validate-request", "timeout"] }
 tonic = { version = "=0.14.6", default-features = false }
 tonic-prost = { version = "=0.14.6", default-features = false }
 tonic-health = { version = "=0.14.6", default-features = false }
 # A fake Kubernetes API server for the gateway-api controller's tests
-# (src/gateway_api/controller/tests.rs): kube's Client takes any tower Service.
+# (crates/rws-gateway-api/src/gateway_api/controller/tests.rs): kube's Client takes any tower Service.
 tower = { version = "0.5", default-features = false, features = ["util"] }
-# WebAssembly text modules for the wasm-plugins tests (src/wasm_plugin/tests.rs).
+# WebAssembly text modules for the wasm-plugins tests (crates/rws-wasm-plugin/src/wasm_plugin/tests.rs).
 wat = "1"
 http-body-util = "0.1.5"
 bytes = "1"
@@ -289,7 +291,7 @@ aws-lc-rs = { version = "1", optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std", "prefer-post-quantum"], optional = true }
 
 # wasm32-wasip2 outbound HTTP backend for http_client::Client::send() — see
-# the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs and
+# the #[cfg(target_arch = "wasm32")] send_once in crates/rws-server/src/http_client/mod.rs and
 # spec/WASM_SHIM.md Phase 2 item 7. Native builds never see this dependency.
 # `rws --windows-service=<dir>`: run under the Service Control Manager (src/main.rs).
 [target.'cfg(windows)'.dependencies]

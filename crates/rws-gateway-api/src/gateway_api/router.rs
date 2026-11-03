@@ -43,7 +43,8 @@ impl PortRouter {
 }
 
 /// The request's host, lower-cased, without a port.
-pub(crate) fn request_host(request: &Request) -> String {
+#[doc(hidden)]
+pub fn request_host(request: &Request) -> String {
     let host = request.header("host").map(|h| h.value.to_string()).unwrap_or_default();
     let host = if host.starts_with('[') {
         host.split(']').next().map(|h| format!("{h}]")).unwrap_or(host)
@@ -56,7 +57,8 @@ pub(crate) fn request_host(request: &Request) -> String {
 /// How specifically `pattern` (a hostname, maybe `*.`-wildcard) matches
 /// `host`: `None` for no match; non-wildcard matches score above wildcards,
 /// longer above shorter.
-pub(crate) fn host_score(pattern: &str, host: &str) -> Option<(usize, usize)> {
+#[doc(hidden)]
+pub fn host_score(pattern: &str, host: &str) -> Option<(usize, usize)> {
     let pattern = pattern.to_ascii_lowercase();
     match pattern.strip_prefix("*.") {
         None => (pattern == host).then_some((pattern.len(), pattern.len())),
@@ -66,7 +68,8 @@ pub(crate) fn host_score(pattern: &str, host: &str) -> Option<(usize, usize)> {
 
 /// The listener a request on this port belongs to: the most specific
 /// matching hostname; a listener without one matches any host.
-pub(crate) fn pick_listener<'a>(listeners: &'a [ListenerConfig], host: &str) -> Option<&'a ListenerConfig> {
+#[doc(hidden)]
+pub fn pick_listener<'a>(listeners: &'a [ListenerConfig], host: &str) -> Option<&'a ListenerConfig> {
     listeners
         .iter()
         .filter_map(|l| match l.hostname.as_deref().filter(|h| !h.is_empty()) {
@@ -99,7 +102,8 @@ fn grpc_method(path: &str) -> Option<&str> {
 
 /// A path prefix matches whole segments: `/foo` matches `/foo` and
 /// `/foo/bar`, not `/foobar`; a trailing `/` on the prefix is ignored.
-pub(crate) fn prefix_matches(prefix: &str, path: &str) -> bool {
+#[doc(hidden)]
+pub fn prefix_matches(prefix: &str, path: &str) -> bool {
     let prefix = if prefix.len() > 1 { prefix.trim_end_matches('/') } else { prefix };
     prefix == "/" || path == prefix || (path.starts_with(prefix) && path.as_bytes().get(prefix.len()) == Some(&b'/'))
 }
@@ -145,7 +149,8 @@ fn match_score(m: &HttpRouteMatch, request: &Request) -> Option<(u8, usize, u8, 
 }
 
 /// The rule a request goes to on a listener, and the match that chose it.
-pub(crate) fn select<'a>(listener: &'a ListenerConfig, request: &Request, host: &str) -> Option<(&'a CompiledHttpRoute, &'a CompiledRule, &'a HttpRouteMatch)> {
+#[doc(hidden)]
+pub fn select<'a>(listener: &'a ListenerConfig, request: &Request, host: &str) -> Option<(&'a CompiledHttpRoute, &'a CompiledRule, &'a HttpRouteMatch)> {
     type Key<'k> = ((usize, usize), (u8, usize, u8, usize, usize), std::cmp::Reverse<(&'k str, &'k (String, String), usize, usize)>);
     let mut best: Option<(Key, &CompiledHttpRoute, &CompiledRule, &HttpRouteMatch)> = None;
     for route in &listener.http_routes {

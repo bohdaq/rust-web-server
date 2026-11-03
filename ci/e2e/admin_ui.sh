@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The admin UI (admin-ui/, embedded in src/admin/ui/) in headless Chromium
+# The admin UI (admin-ui/, embedded in crates/rws-proxy/src/admin/ui/) in headless Chromium
 # against the rws binary: sign-in, drain from the upstreams page, maintenance
 # mode, purging a response cache (from the page and with HTTP PURGE),
 # authorization tuples and a check, the Traffic page, the live log, and no

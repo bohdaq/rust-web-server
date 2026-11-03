@@ -157,11 +157,11 @@ smoke-tests the image before pushing it.
 |---|---|
 | `src/` | the crate; one directory per module, module docs in `//!` at the top of `mod.rs` |
 | `src/main.rs` | the `rws` binary |
-| `src/app/` | `App` and the built-in controllers |
-| `src/server/` | listeners, HTTP/1.1 framing, TLS accept loops |
-| `src/h2_server/`, `src/h3_handler/` | HTTP/2 (rws's own server: frames, HPACK, flow control) and HTTP/3 |
-| `src/proxy/`, `src/proxy_config/` | reverse proxy and the config-driven proxy |
-| `src/entry_point/` | configuration loading (CLI, env, `rws.config.toml`) |
+| `crates/rws-server/src/app/` | `App` and the built-in controllers |
+| `crates/rws-server/src/server/` | listeners, HTTP/1.1 framing, TLS accept loops |
+| `crates/rws-server/src/h2_server/`, `crates/rws-server/src/h3_handler/` | HTTP/2 (rws's own server: frames, HPACK, flow control) and HTTP/3 |
+| `crates/rws-proxy/src/proxy/`, `crates/rws-proxy/src/proxy_config/` | reverse proxy and the config-driven proxy |
+| `crates/rws-http/src/entry_point/` | configuration loading (CLI, env, `rws.config.toml`) |
 | `rws-macros/` | proc macros (`macros` feature) |
 | `rws-wasm-shim/` | WASM guest component |
 | `docs/` | Astro/Starlight documentation site (rws8.tech) |

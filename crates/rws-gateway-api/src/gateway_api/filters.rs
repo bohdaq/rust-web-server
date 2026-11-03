@@ -90,7 +90,8 @@ pub fn redirect(request: &Request, host: &str, listener_https: bool, listener_po
     response
 }
 
-pub(crate) fn status(code: &'static crate::response::StatusCodeReasonPhrase) -> Response {
+#[doc(hidden)]
+pub fn status(code: &'static crate::response::StatusCodeReasonPhrase) -> Response {
     if *code.status_code >= 400 {
         return crate::error::problem(code, "");
     }

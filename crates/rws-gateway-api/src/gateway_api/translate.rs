@@ -887,7 +887,8 @@ fn allows(listener: &ListenerView, kind: &str, namespace: &str, snapshot: &Snaps
     namespace_admitted(from, namespaces.and_then(|n| n.selector.as_ref()), namespace, &listener.namespace, snapshot)
 }
 
-pub(crate) fn selector_matches(selector: &LabelSelector, labels: &BTreeMap<String, String>) -> bool {
+#[doc(hidden)]
+pub fn selector_matches(selector: &LabelSelector, labels: &BTreeMap<String, String>) -> bool {
     let labels_ok = selector.match_labels.as_ref().is_none_or(|m| m.iter().all(|(k, v)| labels.get(k) == Some(v)));
     let expressions_ok = selector.match_expressions.as_ref().is_none_or(|exprs| {
         exprs.iter().all(|e| {
@@ -907,7 +908,8 @@ pub(crate) fn selector_matches(selector: &LabelSelector, labels: &BTreeMap<Strin
 
 /// A listener's hostname and a route's hostnames have something in common
 /// (either side empty = any; `*.example.com` covers one or more labels).
-pub(crate) fn hostnames_intersect(listener: Option<&str>, route: &[String]) -> bool {
+#[doc(hidden)]
+pub fn hostnames_intersect(listener: Option<&str>, route: &[String]) -> bool {
     let Some(listener) = listener.filter(|h| !h.is_empty()) else { return true };
     route.is_empty() || route.iter().any(|r| hostname_overlap(listener, r))
 }
@@ -1003,7 +1005,8 @@ fn resolve_references(kind: &str, namespace: &str, references: &[&BackendObjectR
 /// A ReferenceGrant in `to_namespace` lets `from_kind`s in `from_namespace`
 /// refer to the `to_kind` named `to_name`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn granted(snapshot: &Snapshot, from_group: &str, from_kind: &str, from_namespace: &str, to_group: &str, to_kind: &str, to_namespace: &str, to_name: &str) -> bool {
+#[doc(hidden)]
+pub fn granted(snapshot: &Snapshot, from_group: &str, from_kind: &str, from_namespace: &str, to_group: &str, to_kind: &str, to_namespace: &str, to_name: &str) -> bool {
     snapshot.reference_grants.iter().filter(|g| g.namespace().as_deref() == Some(to_namespace)).any(|g| {
         g.spec.from.iter().any(|f| f.group == from_group && f.kind == from_kind && f.namespace == from_namespace)
             && g.spec.to.iter().any(|t| t.group == to_group && t.kind == to_kind && t.name.as_deref().is_none_or(|n| n == to_name))

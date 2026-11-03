@@ -919,6 +919,8 @@ fn it_generates_not_found_page_for_absent_static_file() {
 
 #[test]
 fn it_generates_successful_response_with_index_html() {
+    // `app_index::file_retrieval` moves ./index.html away for a moment.
+    let _g = crate::test_env::lock();
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
@@ -984,6 +986,8 @@ fn it_generates_successful_response_with_index_html() {
 #[test]
 #[cfg(target_family = "unix")]
 fn it_generates_successful_response_with_index_html_as_symlink() {
+    // `app_index::file_retrieval` moves ./index.html away for a moment.
+    let _g = crate::test_env::lock();
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";

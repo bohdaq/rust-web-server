@@ -1,0 +1,51 @@
+[package]
+name = "rws-gateway-api"
+description = "The Kubernetes Gateway API controller of rust-web-server (kube). (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)'] }
+
+[features]
+default = ["gateway-api"]
+# Test helpers rust-web-server's own tests use.
+test-support = []
+gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util", "rws-server/gateway-api", "rws-proxy/gateway-api"]
+# Named by the cfgs of the re-exports taken from rws-server.
+http-client = ["rws-server/http-client"]
+http2 = ["dep:rcgen", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "rws-server/http2", "rws-proxy/http2"]
+serde = ["dep:serde", "dep:serde_json", "rws-server/serde", "rws-proxy/serde"]
+
+[dependencies]
+rws-server.workspace = true
+rws-proxy.workspace = true
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"], optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+bytes = { version = "1", optional = true }
+http = { version = "1", optional = true }
+http-body-util = { version = "0.1.5", optional = true }
+kube = { version = "4.2", default-features = false, features = ["client", "runtime", "rustls-tls", "aws-lc-rs"], optional = true }
+k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32", "std"], optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+webpki-roots = { version = "1.0.11", optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std", "prefer-post-quantum"], optional = true }
+
+[dev-dependencies]
+rws-server = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1.5"
+bytes = "1"

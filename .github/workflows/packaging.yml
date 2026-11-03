@@ -8,9 +8,9 @@ name: Packages
 on:
   push:
     branches: [main]
-    paths: ["packaging/**", "src/main.rs", "src/tls/**", "Cargo.toml", ".github/workflows/packaging.yml"]
+    paths: ["packaging/**", "src/main.rs", "crates/rws-server/src/tls/**", "Cargo.toml", ".github/workflows/packaging.yml"]
   pull_request:
-    paths: ["packaging/**", "src/main.rs", "src/tls/**", "Cargo.toml", ".github/workflows/packaging.yml"]
+    paths: ["packaging/**", "src/main.rs", "crates/rws-server/src/tls/**", "Cargo.toml", ".github/workflows/packaging.yml"]
   workflow_dispatch:
 
 env:

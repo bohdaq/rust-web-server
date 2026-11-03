@@ -9,6 +9,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints.rust]
+# An undefined feature in a cfg is a bug here: a facade feature not forwarded.
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)'] }
+
 [features]
 default = []
 serde = ["dep:serde", "dep:serde_json"]

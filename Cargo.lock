@@ -3358,6 +3358,7 @@ dependencies = [
  "rustls",
  "rws-acme",
  "rws-base",
+ "rws-gateway-api",
  "rws-http",
  "rws-macros",
  "rws-proxy",
@@ -3539,6 +3540,28 @@ dependencies = [
  "rcgen",
  "url-build-parse",
  "url-search-params",
+]
+
+[[package]]
+name = "rws-gateway-api"
+version = "18.25.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body-util",
+ "k8s-openapi",
+ "kube",
+ "rcgen",
+ "rustls",
+ "rws-proxy",
+ "rws-server",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-rustls",
+ "tower",
+ "webpki-roots 1.0.11",
 ]
 
 [[package]]

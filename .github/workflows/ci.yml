@@ -54,6 +54,8 @@ jobs:
         run: cargo test --locked -p rws-proxy --features "http3 sso auth http-client acme serde model-sqlite storage-s3"
       - if: matrix.name == 'http1 only'
         run: cargo test --locked -p rws-proxy --features http1 --lib
+      - if: matrix.args == ''
+        run: cargo test --locked -p rws-gateway-api
 
   msrv:
     name: msrv (1.99, all features)
