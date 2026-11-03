@@ -5,6 +5,15 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- Helm chart: `configFile` — the `rws.config.toml` as a value, mounted from
+  a ConfigMap with `RWS_CONFIG_FILE` set (until now the chart had no way to
+  give rws routes, upstreams or middleware); `extraVolumes` /
+  `extraVolumeMounts`. Found by the stage end-to-end suite.
+
 ## 18.26.0 — 2026-11-03
 
 ### Changed

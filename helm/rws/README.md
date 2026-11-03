@@ -59,6 +59,9 @@ CI (`.github/workflows/helm.yml`) runs both for several value sets and installs 
 | `env` | see `values.yaml` | Map of `RWS_CONFIG_*` env vars rendered as plain `name`/`value` pairs. |
 | `extraEnv` | `[]` | Additional raw `{name, value}` / `{name, valueFrom}` entries, for anything `env` can't express (e.g. a Secret reference). |
 | `envFrom` | `[]` | Whole Secrets/ConfigMaps to import as env vars. |
+| `configFile` | `""` | The `rws.config.toml` as text (routes, upstreams, middleware, any setting). Rendered into a ConfigMap mounted at `configMountPath`, with `RWS_CONFIG_FILE` pointing at it. A change here rolls the pods (`checksum/config`); an edit of the ConfigMap in place is applied by `watch = true`. |
+| `configMountPath` | `/etc/rws` | Directory the config ConfigMap is mounted at (a whole directory, so in-place edits reach the file). |
+| `extraVolumes` / `extraVolumeMounts` | `[]` | More volumes and container mounts (static files from a PVC, a secret file a setting names, a CA bundle). |
 | `tls.enabled` | `true` | Mount a TLS Secret and set `RWS_CONFIG_TLS_CERT_FILE`/`RWS_CONFIG_TLS_KEY_FILE`; probes, scrape annotations and the Service port name follow (`https`/`http`). |
 | `tls.secretName` | `rws-tls` | Name of an existing `kubernetes.io/tls` Secret in the release namespace — **not created by this chart**. |
 | `tls.certPath` / `tls.keyPath` / `tls.mountPath` | `/tls/tls.crt` / `/tls/tls.key` / `/tls` | Where the Secret is mounted and the paths passed to `rws`. |

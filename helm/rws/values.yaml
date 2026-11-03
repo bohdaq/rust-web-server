@@ -76,6 +76,27 @@ extraEnv: []
 # Whole Secrets/ConfigMaps to import as env vars via envFrom.
 envFrom: []
 
+# The rws.config.toml (routes, upstreams, middleware, any setting), as text.
+# Rendered into a ConfigMap, mounted at configMountPath/rws.config.toml and
+# named by RWS_CONFIG_FILE. Changing it here rolls the pods; editing the
+# ConfigMap in place is picked up with `watch = true` in the file.
+configFile: ""
+#  configFile: |
+#    watch = true
+#    [[route]]
+#    name = "api"
+#    [route.match]
+#    path = "/api/*"
+#    [route.action]
+#    type = "proxy"
+#    upstream = "http://api:8080"
+configMountPath: /etc/rws
+
+# More volumes and mounts for the rws container (static files from a PVC,
+# a secret file a setting points at, a CA bundle).
+extraVolumes: []
+extraVolumeMounts: []
+
 # TLS is on by default, matching docs/deployment/kubernetes.md — set
 # tls.enabled to false to run plain HTTP/1.1 (e.g. behind a TLS-terminating
 # load balancer or ingress controller).

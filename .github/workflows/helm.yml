@@ -34,6 +34,9 @@ jobs:
                 --set autoscaling.enabled=true --set autoscaling.customMetric.enabled=true
           check --set tls.enabled=false --set ingress.enabled=true --set ingress.className=nginx \
                 --set 'ingress.tls[0].secretName=x' --set 'ingress.tls[0].hosts[0]=rws.example.com'
+          check --set tls.enabled=false --set quic.enabled=false --set-string 'configFile=watch = true' \
+                --set 'extraVolumes[0].name=www' --set 'extraVolumes[0].emptyDir.medium=Memory' \
+                --set 'extraVolumeMounts[0].name=www' --set 'extraVolumeMounts[0].mountPath=/srv'
 
   install:
     runs-on: ubuntu-latest
@@ -72,10 +75,14 @@ jobs:
           kill %1
       - name: Install without TLS
         run: |
+          # configFile: a route from the mounted rws.config.toml answers.
+          printf '[[route]]\nname = "hello"\n[route.match]\npath = "/hello"\n[route.action]\ntype = "respond"\nstatus = 200\nbody = "from configFile"\n' > rws.config.toml
           helm install plain dist/rws-*.tgz --set replicaCount=1 --set podDisruptionBudget.enabled=false \
-            --set image.tag="$IMAGE_TAG" --set tls.enabled=false --set quic.enabled=false --wait --timeout 5m
+            --set image.tag="$IMAGE_TAG" --set tls.enabled=false --set quic.enabled=false \
+            --set-file configFile=rws.config.toml --wait --timeout 5m
           kubectl port-forward svc/plain-rws 8080:80 & sleep 3
           curl -sSf http://localhost:8080/healthz
+          [ "$(curl -sSf http://localhost:8080/hello)" = "from configFile" ]
           kill %1
       - name: Diagnostics
         if: failure()

@@ -1,0 +1,11 @@
+{{- if .Values.configFile }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rws.fullname" . }}-config
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+data:
+  rws.config.toml: |
+    {{- .Values.configFile | nindent 4 }}
+{{- end }}

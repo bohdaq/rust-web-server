@@ -20655,6 +20655,13 @@ helm install my-rws oci://ghcr.io/bohdaq/charts/rws --version 18.2.0
 ```
 
 It renders the same `Deployment`, `Service`, `PodDisruptionBudget` and `HorizontalPodAutoscaler`, plus an optional `Ingress` and prometheus-operator `ServiceMonitor`; CI installs it into a kind cluster with TLS on and off. Its values are documented in [`helm/rws/README.md`](https://github.com/bohdaq/rust-web-server/tree/main/helm/rws).
+
+Routes, upstreams and middleware come from `rws.config.toml`; give it to the chart as `configFile` (since 18.27.0). The chart mounts it from a ConfigMap and sets `RWS_CONFIG_FILE`. A new value rolls the pods; with `watch = true` in the file, an edit of the ConfigMap itself is applied in place, within a minute (the kubelet's sync).
+
+```bash
+helm install my-rws oci://ghcr.io/bohdaq/charts/rws --set tls.enabled=false --set quic.enabled=false \
+  --set-file configFile=rws.config.toml
+```
 :::
 
 ## Deployment YAML

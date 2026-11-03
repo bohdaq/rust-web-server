@@ -18,8 +18,13 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- if or .Values.podAnnotations .Values.metrics.podAnnotations }}
+      {{- if or .Values.podAnnotations .Values.metrics.podAnnotations .Values.configFile }}
       annotations:
+        {{- if .Values.configFile }}
+        # A new config file rolls the pods (`helm upgrade`); an edit of the
+        # ConfigMap itself is picked up in place with `watch = true`.
+        checksum/config: {{ .Values.configFile | sha256sum }}
+        {{- end }}
         {{- if .Values.metrics.podAnnotations }}
         prometheus.io/scrape: "true"
         prometheus.io/path: /metrics
@@ -63,6 +68,10 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            {{- if .Values.configFile }}
+            - name: RWS_CONFIG_FILE
+              value: {{ printf "%s/rws.config.toml" .Values.configMountPath | quote }}
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: RWS_CONFIG_TLS_CERT_FILE
               value: {{ .Values.tls.certPath | quote }}
@@ -104,11 +113,23 @@ spec:
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.tls.enabled }}
+          {{- if or .Values.tls.enabled .Values.configFile .Values.extraVolumeMounts }}
           volumeMounts:
+            {{- if .Values.tls.enabled }}
             - name: tls
               mountPath: {{ .Values.tls.mountPath }}
               readOnly: true
+            {{- end }}
+            {{- if .Values.configFile }}
+            # The directory, not a subPath: a subPath mount never sees the
+            # ConfigMap change, so `watch = true` couldn't reload it.
+            - name: config
+              mountPath: {{ .Values.configMountPath }}
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           livenessProbe:
             httpGet:
@@ -137,11 +158,21 @@ spec:
           {{- end }}
           resources:
             {{- toYaml $resources | nindent 12 }}
-      {{- if .Values.tls.enabled }}
+      {{- if or .Values.tls.enabled .Values.configFile .Values.extraVolumes }}
       volumes:
+        {{- if .Values.tls.enabled }}
         - name: tls
           secret:
             secretName: {{ .Values.tls.secretName }}
+        {{- end }}
+        {{- if .Values.configFile }}
+        - name: config
+          configMap:
+            name: {{ include "rws.fullname" . }}-config
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
