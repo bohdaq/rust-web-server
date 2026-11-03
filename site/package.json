@@ -16,6 +16,7 @@
     "@lit-material/code-block": "0.1.1",
     "@lit-material/jump-links": "0.2.0",
     "@lit-material/navigation": "0.0.2",
+    "@lit-material/site-kit": "0.1.0",
     "@lit-material/tabs": "0.1.1",
     "@lit-material/tokens": "0.0.1",
     "lit": "3.3.3"

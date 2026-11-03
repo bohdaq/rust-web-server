@@ -3,6 +3,7 @@ import { html } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { mark } from "./brand/mark.js";
 import { icon } from "./icons.js";
+import { themeBootScript } from "@lit-material/site-kit/client/theme.js";
 
 export const NAV = [
   ["/", "Home"],
@@ -61,7 +62,7 @@ export function footer() {
 
 // Applies a saved theme before first paint, so a dark-mode visitor never sees
 // a cream flash. Storage can throw (private windows), hence the try.
-const THEME_BOOT = `document.documentElement.classList.add("js");try{var t=localStorage.getItem("rws-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}`;
+const THEME_BOOT = themeBootScript("rws-theme");
 
 export function documentHtml({ title, description, path, body, assets, noindex = false, canonical = path, jsonLd = [] }) {
   const css = assets.css.map((href) => `<link rel="stylesheet" href="${href}">`).join("");
