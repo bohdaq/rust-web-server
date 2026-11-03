@@ -236,6 +236,15 @@ Plan: [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) (2026-11-01).
 - **#79** **TLS keys in an HSM** — PKCS#11 URIs for `tls_key_file`.
 - **#80** **Fleet config pull** — instances pull signed config from HTTPS, S3 or git and report back.
 
+## 18.27.0 — Behind a load balancer (released 2026-11-03)
+
+Fixes from the first stage end-to-end run (rws 3 replicas behind the kube-dc gateway): [STAGE_E2E_FINDINGS.md](STAGE_E2E_FINDINGS.md), harness `ci/stage/`.
+
+- **Client address** — from a trusted proxy's `X-Forwarded-For` for rate limits, IP filters, WAF, `ip_hash` and logs (`client_ip = "peer"` opts out).
+- **Replicas agree** — content-hash ETags; `Forwarded` carries the proxy's `X-Forwarded-*` hops.
+- **Safer defaults** — `/metrics` only for loopback and private ranges (`metrics_allow`); a 5 s SIGTERM drain delay; `504` on backend timeouts; `[cors]` on routes; the basic-auth challenge on wrong credentials.
+- **Helm** — `configFile`, `extraVolumes`, `extraVolumeMounts`.
+
 ## 18.26.0 — Workspace split (released 2026-11-03)
 
 The crate split into layered crates with an unchanged public API. Plan and measurements: [WORKSPACE_SPLIT.md](WORKSPACE_SPLIT.md).
