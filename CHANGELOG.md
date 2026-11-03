@@ -32,6 +32,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   time) gets `504 Gateway Timeout` instead of `502 Bad Gateway`, as nginx
   answers; `Proxy-Status` already said `http_response_timeout`. Found by the
   stage end-to-end suite.
+- Basic auth answers wrong credentials with `WWW-Authenticate` too (only
+  missing ones had it), so a browser asks again (RFC 9110 §11.6.1). Found by
+  the stage end-to-end suite.
 
 ## 18.26.0 — 2026-11-03
 

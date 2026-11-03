@@ -536,7 +536,9 @@ impl<F: Fn(&str, &str) -> bool + Send + Sync + 'static> Middleware for BasicAuth
                 None => next.execute(request, connection),
             }
         } else {
-            Ok(AppError::Unauthorized.into_response())
+            // A 401 always carries the challenge (RFC 9110 §11.6.1), wrong
+            // credentials included: browsers ask again only when it's there.
+            Ok(challenge())
         }
     }
 }

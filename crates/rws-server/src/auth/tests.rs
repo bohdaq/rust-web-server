@@ -188,6 +188,8 @@ fn basic_auth_wrong_password_returns_401() {
     let req = with_header(get("/"), "Authorization", &basic_header("admin", "wrong"));
     let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
     assert_eq!(401, resp.status_code);
+    // The challenge again, so a browser asks for the password once more.
+    assert!(resp.headers.iter().any(|h| h.name.eq_ignore_ascii_case("www-authenticate") && h.value.starts_with("Basic ")));
 }
 
 #[test]
