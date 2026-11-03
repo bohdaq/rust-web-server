@@ -168,7 +168,7 @@ let auth = App::new().wrap(
 | `Connection: keep-alive` + `Content-Length` ≤ 1 MB | Stream returned to pool after body is read |
 | `Transfer-Encoding: chunked` | Streamed to client (raw passthrough); connection not pooled |
 | `Content-Type: text/event-stream` | Streamed to client (chunked re-encoding); connection not pooled |
-| `Content-Length` > 1 MB | Streamed to client; connection not pooled |
+| `Content-Length` > 1 MB | Streamed to client with the same `Content-Length`; connection not pooled |
 | `Connection: close` or EOF | Stream dropped; TCP connection closed |
 | Idle stream older than `idle_timeout` | Evicted on next `acquire()` |
 | Pool at `max_idle` for this backend | Extra stream dropped (TCP closed) |
@@ -226,7 +226,10 @@ let proxy = ReverseProxy::new(["https://billing.internal:8443"])
 2. It creates a `Response` with the parsed headers and sets `Response::stream_pipe` to a reader backed by the live backend TCP connection.
 3. The server detects `stream_pipe` and calls `Server::pipe_stream()`:
    - **Chunked backend**: raw chunk frames are forwarded byte-for-byte (client handles decoding).
-   - **SSE / plain body**: bytes are re-encoded as `Transfer-Encoding: chunked` so the client receives each fragment immediately.
+   - **`Content-Length` body** (a large download): the length is kept and exactly that many bytes are copied, unframed, so the client can tell a complete body from a cut one.
+   - **SSE / body of unknown length**: bytes are re-encoded as `Transfer-Encoding: chunked` so the client receives each fragment immediately.
+
+   Reads and writes are up to 64 KiB. If the backend fails or closes early, the body is not ended (no final chunk, fewer bytes than the `Content-Length`) and the connection is closed, so the client sees a failed transfer rather than a short body that looks complete.
 
 Streamed connections are never returned to the `ConnPool` — the backend socket is consumed by the pipe.
 

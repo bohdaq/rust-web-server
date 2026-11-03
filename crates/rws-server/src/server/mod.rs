@@ -104,6 +104,32 @@ use crate::thread_pool::ThreadPool;
 /// for weeks with a 64 KiB head.
 pub const REQUEST_HEAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
+/// Largest read (and write) [`Server::pipe_stream`] makes. It was 8 KiB with
+/// three writes per chunk: over HTTP/1.1 a proxied 55 MB download ran at
+/// 1.8 MB/s against 90 MB/s over HTTP/2.
+#[doc(hidden)]
+pub const PIPE_CHUNK: usize = 64 * 1024;
+
+/// The response's `Content-Length`, when it has exactly one valid value
+/// (repeats of the same value count as one). `None` for none, an invalid
+/// value, or conflicting values: the body is then sent chunked.
+#[cfg(not(target_arch = "wasm32"))]
+fn single_content_length(response: &Response) -> Option<u64> {
+    let mut found: Option<u64> = None;
+    for h in response.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("content-length")) {
+        let value = h.value.trim();
+        if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let len: u64 = value.parse().ok()?;
+        match found {
+            Some(prev) if prev != len => return None,
+            _ => found = Some(len),
+        }
+    }
+    found
+}
+
 pub struct Server {}
 #[cfg(not(target_arch = "wasm32"))]
 impl Server {
@@ -604,13 +630,19 @@ impl Server {
         (head.into_bytes(), chunked)
     }
 
-    /// Streams a `Read` source to `stream` using HTTP/1.1 chunked transfer encoding.
+    /// Streams a `Read` source to `stream` over HTTP/1.1.
     ///
     /// Called when `response.stream_pipe` is set (proxy passthrough for SSE, AI token
-    /// streams, and large downloads). The response headers are written first (with
-    /// `Transfer-Encoding: chunked` injected and any `Content-Length` stripped), then
-    /// bytes are read from `reader` and forwarded in 8 KB chunks. Each chunk is flushed
-    /// immediately so the client sees data as it arrives.
+    /// streams, and large downloads). The framing follows the response's headers:
+    /// - `Transfer-Encoding: chunked` (a chunked upstream): its frames are passed through;
+    /// - one valid `Content-Length` (a large upstream download): kept, and exactly that
+    ///   many bytes are copied, so the client can tell a complete body from a cut one;
+    /// - neither (SSE, a pipe of unknown length): wrapped in chunked framing here.
+    ///
+    /// A read error, or a body shorter than its `Content-Length`, returns `Err` without
+    /// ending the body (no terminating chunk), and the caller closes the connection:
+    /// the client sees a broken transfer, never a truncated body that looks complete.
+    /// Reads are up to [`PIPE_CHUNK`] bytes and each becomes one write.
     #[doc(hidden)]
     pub fn pipe_stream(
         stream: &mut impl Write,
@@ -618,16 +650,16 @@ impl Server {
         request: Request,
         mut reader: Box<dyn std::io::Read + Send>,
     ) -> Result<(), String> {
-        // If the backend already uses chunked encoding we pass the raw chunk
-        // frames through; otherwise we wrap the raw bytes in our own chunked
-        // framing so the client can receive data incrementally.
         let backend_is_chunked = response.headers.iter().any(|h| {
             h.name.eq_ignore_ascii_case("transfer-encoding")
                 && h.value.to_lowercase().contains("chunked")
         });
+        let declared_length = if backend_is_chunked { None } else { single_content_length(&response) };
 
         response.headers.retain(|h| !h.name.eq_ignore_ascii_case("content-length"));
-        if !backend_is_chunked {
+        if let Some(len) = declared_length {
+            response.headers.push(Header { name: Header::_CONTENT_LENGTH.into(), value: len.to_string().into() });
+        } else if !backend_is_chunked {
             response.headers.push(Header {
                 name: Header::_TRANSFER_ENCODING.into(),
                 value: "chunked".into(),
@@ -651,35 +683,49 @@ impl Server {
         stream.write_all(head.as_bytes()).map_err(|e| e.to_string())?;
 
         if request.method != METHOD.head {
-            let mut buf = [0u8; 8192];
+            // Room for a chunk-size line in front and the CRLF behind, so a
+            // re-encoded chunk is one write too.
+            const FRAME_ROOM: usize = 16;
+            let mut buf = vec![0u8; FRAME_ROOM + PIPE_CHUNK + 2];
+            let read_failed = |e: std::io::Error| format!("upstream body read failed: {}", e);
             if backend_is_chunked {
                 // Passthrough: forward raw chunk frames as-is; the client
                 // decodes them itself (avoids double-chunking).
                 loop {
-                    match reader.read(&mut buf) {
-                        Ok(0) | Err(_) => break,
-                        Ok(n) => {
-                            stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-                            stream.flush().map_err(|e| e.to_string())?;
-                        }
+                    let n = reader.read(&mut buf[..PIPE_CHUNK]).map_err(read_failed)?;
+                    if n == 0 {
+                        break;
                     }
+                    stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+                    stream.flush().map_err(|e| e.to_string())?;
+                }
+            } else if let Some(len) = declared_length {
+                // Known length: copy exactly that many bytes, unframed.
+                let mut remaining = len;
+                while remaining > 0 {
+                    let want = remaining.min(PIPE_CHUNK as u64) as usize;
+                    let n = reader.read(&mut buf[..want]).map_err(read_failed)?;
+                    if n == 0 {
+                        return Err(format!("upstream body ended after {} of {} bytes", len - remaining, len));
+                    }
+                    stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+                    remaining -= n as u64;
                 }
             } else {
                 // Re-encode: wrap the raw byte stream in chunked framing so
-                // the client can receive each fragment as it arrives (SSE,
-                // large downloads).
+                // the client receives each fragment as it arrives (SSE).
                 loop {
-                    match reader.read(&mut buf) {
-                        Ok(0) | Err(_) => break,
-                        Ok(n) => {
-                            stream
-                                .write_all(format!("{:x}\r\n", n).as_bytes())
-                                .map_err(|e| e.to_string())?;
-                            stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-                            stream.write_all(b"\r\n").map_err(|e| e.to_string())?;
-                            stream.flush().map_err(|e| e.to_string())?;
-                        }
+                    let n = reader.read(&mut buf[FRAME_ROOM..FRAME_ROOM + PIPE_CHUNK]).map_err(read_failed)?;
+                    if n == 0 {
+                        break;
                     }
+                    let size_line = format!("{:x}\r\n", n);
+                    let start = FRAME_ROOM - size_line.len();
+                    buf[start..FRAME_ROOM].copy_from_slice(size_line.as_bytes());
+                    let end = FRAME_ROOM + n;
+                    buf[end..end + 2].copy_from_slice(b"\r\n");
+                    stream.write_all(&buf[start..end + 2]).map_err(|e| e.to_string())?;
+                    stream.flush().map_err(|e| e.to_string())?;
                 }
                 stream.write_all(b"0\r\n\r\n").map_err(|e| e.to_string())?;
             }

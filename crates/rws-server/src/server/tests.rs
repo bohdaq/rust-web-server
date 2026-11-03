@@ -727,3 +727,190 @@ fn server_process_without_a_socket_to_hand_over_refuses_the_upgrade() {
     assert!(String::from_utf8_lossy(&stream.write_data).starts_with("HTTP/1.1 500 "));
 }
 
+
+// ---- Server::pipe_stream: framing of proxied streamed bodies over HTTP/1.1 ----
+
+fn piped_response(headers: &[(&str, &str)]) -> Response {
+    Response {
+        http_version: VERSION.http_1_1.to_string(),
+        status_code: *STATUS_CODE_REASON_PHRASE.n200_ok.status_code,
+        reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
+        headers: headers.iter().map(|(n, v)| Header::new(n.to_string(), v.to_string())).collect(),
+        content_range_list: vec![],
+        stream_file: None,
+        stream_pipe: None,
+        trailers: None,
+    }
+}
+
+fn piped_request(method: &str) -> Request {
+    Request {
+        method: method.to_string(),
+        request_uri: "/".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    }
+}
+
+/// Yields `data` in reads of at most `step` bytes, then fails if `fail_at_end`.
+struct StepReader {
+    data: Vec<u8>,
+    pos: usize,
+    step: usize,
+    fail_at_end: bool,
+}
+
+impl Read for StepReader {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        if self.pos >= self.data.len() {
+            return if self.fail_at_end {
+                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "backend stalled"))
+            } else {
+                Ok(0)
+            };
+        }
+        let n = self.step.min(out.len()).min(self.data.len() - self.pos);
+        out[..n].copy_from_slice(&self.data[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+fn step_reader(data: &[u8], step: usize, fail_at_end: bool) -> Box<dyn Read + Send> {
+    Box::new(StepReader { data: data.to_vec(), pos: 0, step, fail_at_end })
+}
+
+fn split_head(out: &[u8]) -> (String, &[u8]) {
+    let end = out.windows(4).position(|w| w == b"\r\n\r\n").expect("no head") + 4;
+    (String::from_utf8_lossy(&out[..end]).to_string(), &out[end..])
+}
+
+/// Decodes a chunked body strictly: every chunk followed by CRLF, a final
+/// zero-size chunk and nothing after it. Returns the data and chunk sizes.
+fn decode_chunked_strict(mut body: &[u8]) -> (Vec<u8>, Vec<usize>) {
+    let mut data = vec![];
+    let mut sizes = vec![];
+    loop {
+        let eol = body.windows(2).position(|w| w == b"\r\n").expect("chunk size line");
+        let size = usize::from_str_radix(std::str::from_utf8(&body[..eol]).unwrap(), 16).unwrap();
+        body = &body[eol + 2..];
+        if size == 0 {
+            assert_eq!(body, b"\r\n", "no clean end after the last chunk");
+            return (data, sizes);
+        }
+        data.extend_from_slice(&body[..size]);
+        assert_eq!(&body[size..size + 2], b"\r\n", "chunk not followed by CRLF");
+        sizes.push(size);
+        body = &body[size + 2..];
+    }
+}
+
+fn large_body() -> Vec<u8> {
+    (0..300_000u32).map(|i| (i % 251) as u8).collect()
+}
+
+#[test]
+fn pipe_stream_keeps_an_upstream_content_length() {
+    let body = large_body();
+    let len = body.len().to_string();
+    let response = piped_response(&[("Content-Type", "application/octet-stream"), ("Content-Length", &len)]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(&body, 100_000, false)).unwrap();
+    let (head, rest) = split_head(&out);
+    assert!(head.contains(&format!("Content-Length: {}\r\n", len)), "{head}");
+    assert!(!head.to_ascii_lowercase().contains("transfer-encoding"), "{head}");
+    assert_eq!(rest, &body[..], "the body goes out unframed and complete");
+}
+
+#[test]
+fn pipe_stream_fails_a_body_shorter_than_its_content_length() {
+    let body = large_body();
+    let response = piped_response(&[("Content-Length", "400000")]);
+    let mut out = vec![];
+    let err = Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(&body, 65_536, false))
+        .unwrap_err();
+    assert!(err.contains("300000 of 400000"), "{err}");
+    let (_, rest) = split_head(&out);
+    assert_eq!(rest.len(), body.len(), "only what arrived is written");
+}
+
+#[test]
+fn pipe_stream_never_writes_more_than_its_content_length() {
+    let body = large_body();
+    let response = piped_response(&[("Content-Length", "1000")]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(&body, 65_536, false)).unwrap();
+    let (_, rest) = split_head(&out);
+    assert_eq!(rest, &body[..1000]);
+}
+
+#[test]
+fn pipe_stream_read_error_with_a_content_length_is_an_error() {
+    let body = large_body();
+    let len = (body.len() + 10).to_string();
+    let response = piped_response(&[("Content-Length", &len)]);
+    let mut out = vec![];
+    let err = Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(&body, 65_536, true))
+        .unwrap_err();
+    assert!(err.contains("backend stalled"), "{err}");
+}
+
+#[test]
+fn pipe_stream_without_a_length_is_chunked_in_large_frames() {
+    let body = large_body();
+    let response = piped_response(&[("Content-Type", "application/octet-stream")]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(&body, 1 << 20, false)).unwrap();
+    let (head, rest) = split_head(&out);
+    assert!(head.contains("Transfer-Encoding: chunked\r\n"), "{head}");
+    assert!(!head.to_ascii_lowercase().contains("content-length"), "{head}");
+    let (data, sizes) = decode_chunked_strict(rest);
+    assert_eq!(data, body);
+    assert_eq!(sizes[0], crate::server::PIPE_CHUNK, "{sizes:?}");
+}
+
+#[test]
+fn pipe_stream_read_error_never_ends_the_chunked_body() {
+    // An SSE-like pipe that breaks: the client must not see a clean end.
+    let response = piped_response(&[("Content-Type", "text/event-stream")]);
+    let mut out = vec![];
+    let err = Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(b"data: 1\n\n", 64, true))
+        .unwrap_err();
+    assert!(err.contains("backend stalled"), "{err}");
+    assert!(!out.ends_with(b"0\r\n\r\n"), "a terminating chunk was written");
+    let (_, rest) = split_head(&out);
+    assert_eq!(rest, b"9\r\ndata: 1\n\n\r\n");
+}
+
+#[test]
+fn pipe_stream_conflicting_content_lengths_go_chunked() {
+    let response = piped_response(&[("Content-Length", "5"), ("Content-Length", "6")]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(b"hello!", 64, false)).unwrap();
+    let (head, rest) = split_head(&out);
+    assert!(head.contains("Transfer-Encoding: chunked\r\n"), "{head}");
+    assert!(!head.to_ascii_lowercase().contains("content-length"), "{head}");
+    assert_eq!(decode_chunked_strict(rest).0, b"hello!");
+}
+
+#[test]
+fn pipe_stream_passes_upstream_chunked_frames_through() {
+    let framed = b"5\r\nhello\r\n0\r\n\r\n";
+    let response = piped_response(&[("Transfer-Encoding", "chunked")]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(framed, 3, false)).unwrap();
+    let (head, rest) = split_head(&out);
+    assert_eq!(head.matches("Transfer-Encoding").count(), 1, "{head}");
+    assert_eq!(rest, framed);
+}
+
+#[test]
+fn pipe_stream_head_keeps_the_length_and_sends_no_body() {
+    let response = piped_response(&[("Content-Length", "300000")]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.head), step_reader(&large_body(), 64, false)).unwrap();
+    let (head, rest) = split_head(&out);
+    assert!(head.contains("Content-Length: 300000\r\n"), "{head}");
+    assert!(rest.is_empty());
+}

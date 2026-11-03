@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Fixed
+
+- **Large proxied downloads over HTTP/1.1** (an upstream `Content-Length`
+  over 1 MB, e.g. Git LFS objects behind rws). The HTTP/1.1 writer dropped
+  the length and re-chunked the body in 8 KiB pieces of three writes each:
+  1.8 MB/s where HTTP/2 did 90 MB/s, and a backend that failed mid-body got
+  a final chunk, so the client received a short body that looked complete.
+  Now the `Content-Length` is kept and exactly that many bytes are copied;
+  reads and writes are 64 KiB (one write per re-encoded chunk too); a read
+  error or an early end closes the connection without ending the body.
+
 ## 18.27.0 — 2026-11-03
 
 ### Added
