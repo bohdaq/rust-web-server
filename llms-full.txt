@@ -1676,6 +1676,8 @@ order.
 | `RWS_CONFIG_CACHE_STATUS` | `true` | boolean | `Cache-Status` (RFC 9211) on responses that pass through a response cache: `hit; ttl=…`, `fwd=uri-miss; stored`, … (since 18.17.0). See [Caching](/features/caching/#cache-status-header). |
 | `RWS_CONFIG_TRUSTED_PROXIES` | loopback + private ranges | list of addresses / CIDR | Peers whose `X-Forwarded-*` and `Forwarded` headers are passed on; from others they're replaced (since 18.24.0). `*` trusts everyone, `none` no one. See [Reverse proxy](/proxy/reverse-proxy/). |
 | `RWS_CONFIG_CLIENT_IP` | `forwarded` | `forwarded` / `peer` | Which address is the client: behind a `trusted_proxies` peer, the first untrusted address from the right of `X-Forwarded-For` (or `Forwarded: for=`); `peer` keeps the TCP peer. Rate limits, IP filters, the blocklist, WAF, `ip_hash` and logs use it (since 18.27.0). See [The client address](/proxy/reverse-proxy/#the-client-address). |
+| `RWS_CONFIG_METRICS_ALLOW` | loopback + private ranges | list of addresses / CIDR | Clients `GET /metrics` answers (the client as [`client_ip`](/proxy/reverse-proxy/#the-client-address) sees it); others get `404` (since 18.27.0). `*` everyone, `none` no one. |
+| `RWS_CONFIG_SHUTDOWN_DELAY_SECS` | `5` | seconds | On SIGTERM, `/readyz` answers `503` at once but rws keeps accepting this long before it drains, so a load balancer takes it out of rotation first; `0` drains at once (since 18.27.0). See [Graceful shutdown](/deployment/kubernetes/#graceful-shutdown). |
 | `RWS_CONFIG_FORWARDED_HEADER` | `add` | string | Proxied requests carry RFC 7239 `Forwarded` beside `X-Forwarded-*` (since 18.20.0); `off` leaves it out and passes the client's through. |
 | `RWS_CONFIG_TLS_CLIENT_CRL_FILE` | (empty) | paths | Certificate revocation lists for client certificates (mTLS), PEM or DER, comma-separated; revoked certificates fail the handshake (since 18.20.0). See [mTLS](/features/mtls/#revoked-certificates-crls). |
 | `RWS_CONFIG_TLS_CLIENT_CRL_STRICT` | `false` | boolean | Refuse a CRL past its `nextUpdate` and certificates no CRL covers. |
@@ -2089,6 +2091,11 @@ account_key_path          = "acme_account.key"  # ACME account key, kept between
 
 CORS policy applied to every response. All fields are hot-reloadable.
 
+Since 18.27.0 that includes `[[route]]` responses (before, only static
+files): rws answers an allowed origin's preflight `OPTIONS` itself, and adds
+the headers to a route's response unless the route (its backend) sent its
+own `Access-Control-Allow-Origin`.
+
 ```toml
 [cors]
 # Allow every origin, with credentials (default false since 18.0.0). When
@@ -2186,6 +2193,8 @@ cache_status            = true       # RWS_CONFIG_CACHE_STATUS: Cache-Status on 
 forwarded_header        = "add"      # RWS_CONFIG_FORWARDED_HEADER: RFC 7239 Forwarded on proxied requests; "off" leaves it out
 trusted_proxies         = ["10.0.0.0/8"]  # RWS_CONFIG_TRUSTED_PROXIES: whose X-Forwarded-*/Forwarded to believe (default: loopback + private ranges)
 client_ip               = "forwarded"     # RWS_CONFIG_CLIENT_IP: the client behind a trusted proxy (default) or "peer"
+shutdown_delay_secs     = 5               # RWS_CONFIG_SHUTDOWN_DELAY_SECS: on SIGTERM, not ready but still serving this long before draining
+metrics_allow           = ["10.0.0.0/8"]  # RWS_CONFIG_METRICS_ALLOW: who GET /metrics answers (default: loopback + private ranges); "*" anyone
 tls_client_crl_file     = "/etc/rws/clients.crl.pem"  # RWS_CONFIG_TLS_CLIENT_CRL_FILE: revoked client certificates (PEM or DER, comma-separated)
 tls_client_crl_strict   = false      # RWS_CONFIG_TLS_CLIENT_CRL_STRICT: refuse stale CRLs and certificates no CRL covers
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas
@@ -6541,7 +6550,13 @@ ranges are merged (and then sorted); more than 16 ranges are answered with
 the whole file as one range, so a response never holds more than the file
 (17.113.1).
 
-Conditional requests: every file response carries an `ETag`. `If-None-Match`
+Conditional requests: every file response carries an `ETag`, made from a
+hash of the file's bytes and its size (`"<hash>-<size>"`, since 18.27.0;
+before, its modification time), so replicas serving the same file — from one
+ConfigMap or image, unpacked at different times — give the same tag, and a
+revalidation through a load balancer gets its `304` from any of them. The
+hash is worked out once per file version; files over 256 MiB keep the
+modification time. `If-None-Match`
 takes a list of tags or `*` and compares weakly (`W/"x"` matches `"x"`), as
 RFC 9110 §13.1.2 requires; a match is a `304 Not Modified` (17.113.2).
 A `Range` with `If-Range` is honored only while the `If-Range` tag strongly
@@ -6975,7 +6990,7 @@ request: the open-file cache keeps the brotli, zstd and gzip forms of each
 file up to 1 MiB, keyed by its size and modification time, within the same
 8 MiB memory budget, at the higher `Level::Static` (brotli 6, zstd 6,
 gzip 6). An edit is picked up at once; a file modified less than 2 seconds
-ago isn't cached yet. The `ETag` carries the coding (`"<mtime>-<size>-br"`),
+ago isn't cached yet. The `ETag` carries the coding (`"<hash>-<size>-br"`),
 so a client revalidating gets a `304` for the representation it holds.
 
 ### Precompressed files
@@ -11122,6 +11137,18 @@ These functions are called by the server core, but you can also call them from c
 
 The built-in endpoint returns all metrics in Prometheus text format. No setup is needed — it is registered automatically by `App::new()`.
 
+It answers only clients in `metrics_allow` (`RWS_CONFIG_METRICS_ALLOW`):
+loopback and the private ranges by default, where Prometheus scrapes pods
+from, so the internet gets a `404` — the metrics name upstreams and backend
+addresses (since 18.27.0; before, anyone). Behind a load balancer the client
+is the one in its `X-Forwarded-For` ([the client address](/proxy/reverse-proxy/#the-client-address)),
+so a public visitor through the balancer is refused too. A scraper that
+reaches rws over a public address needs it listed; `"*"` serves everyone.
+
+```toml
+metrics_allow = ["10.0.0.0/8", "203.0.113.7"]   # RWS_CONFIG_METRICS_ALLOW
+```
+
 ```
 # HELP rws_requests_total Total HTTP requests handled
 # TYPE rws_requests_total counter
@@ -14344,7 +14371,7 @@ The following headers are never forwarded to the upstream or back to the client,
 | `Host` | Backend host (replaces the original `Host` header) |
 | `X-Forwarded-Host` | The `Host` the client sent, unless it already carries an `X-Forwarded-Host` (since 18.8.4) |
 | `X-Forwarded-Proto` | `https` when the client connected over TLS (HTTPS, HTTP/2 over TLS, HTTP/3), else `http`; an incoming `X-Forwarded-Proto` is kept, so rws behind another TLS terminator passes its answer on (since 18.9.0) |
-| `Forwarded` | RFC 7239: `for=<client>;proto=<http|https>;host=` (IPv6 as `for="[2001:db8::1]"`), appended to an incoming `Forwarded` like `X-Forwarded-For` (since 18.20.0). `forwarded_header = "off"` (`RWS_CONFIG_FORWARDED_HEADER`) leaves it out and passes the client's through unchanged |
+| `Forwarded` | RFC 7239: `for=<client>;proto=<http|https>;host=` (IPv6 as `for="[2001:db8::1]"`), appended to an incoming `Forwarded` like `X-Forwarded-For` (since 18.20.0). From a trusted proxy that sent only `X-Forwarded-*`, its hops come first, the client's with the proto and host it reported (`for=198.51.100.7;proto=https;host=app.example, for=10.0.0.2;proto=http;…`, since 18.27.0). `forwarded_header = "off"` (`RWS_CONFIG_FORWARDED_HEADER`) leaves it out and passes the client's through unchanged |
 
 **Which incoming values are believed** (since 18.24.0): an incoming
 `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host` or `Forwarded` is
@@ -20671,11 +20698,12 @@ The `SERVER_READY` flag is set to `true` after `Server::setup()` completes and c
 When Kubernetes sends `SIGTERM`, the server:
 
 1. Clears `SERVER_READY` — `/readyz` begins returning `503`, Kubernetes stops sending new traffic.
-2. Stops accepting new TCP connections.
-3. Waits for all in-flight requests to complete (thread-pool drain on `http1`; tokio task drain on `http2`/`http3`).
-4. Exits cleanly.
+2. Keeps accepting for `shutdown_delay_secs` (default 5, since 18.27.0): endpoint removal reaches kube-proxy and ingress controllers a moment after the pod is told to stop, and until then they still send it requests. Before 18.27 rws stopped accepting at once and those got a `502`/`503` from the load balancer.
+3. Stops accepting new TCP connections.
+4. Waits for all in-flight requests to complete (thread-pool drain on `http1`; tokio task drain on `http2`/`http3`).
+5. Exits cleanly.
 
-Set `terminationGracePeriodSeconds` to at least `30` to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
+Ctrl+C (SIGINT) skips the delay. Set `terminationGracePeriodSeconds` to at least `30` (the delay counts toward it) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
 :::tip[Helm chart]
 The manifests below are also a Helm chart, published with every release (since 18.2.0):
@@ -23061,6 +23089,11 @@ client from `X-Forwarded-For` instead of the balancer. An allowlist written
 against the balancer's address (e.g. `allow_ips = ["10.0.0.5"]`) now meets the
 real clients: list them, or set `client_ip = "peer"` (`RWS_CONFIG_CLIENT_IP`)
 for the old behaviour. See [The client address](/proxy/reverse-proxy/#the-client-address).
+
+`GET /metrics` now answers only loopback and private-range clients
+(`metrics_allow`). A Prometheus that scrapes rws over a public address gets
+`404`: add it, `metrics_allow = ["203.0.113.7"]`, or `"*"` for the old
+behaviour.
 
 ## 18.24: trusted proxies
 

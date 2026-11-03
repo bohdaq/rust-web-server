@@ -92,3 +92,18 @@ fn a_scraper_that_asks_for_protobuf_gets_it() {
     let text = MetricsController::process(&make_metrics_request(), Response::new(), &make_connection());
     assert_eq!("text/plain; version=0.0.4", text.content_range_list[0].content_type);
 }
+
+#[test]
+fn metrics_only_for_allowed_clients() {
+    // Default metrics_allow: loopback and the private ranges.
+    let mut conn = make_connection();
+    conn.client.ip = "10.1.2.3".to_string();
+    assert!(MetricsController::is_matching(&make_metrics_request(), &conn));
+    conn.client.ip = "203.0.113.9".to_string();
+    assert!(!MetricsController::is_matching(&make_metrics_request(), &conn));
+    // Through a trusted proxy the client counts, not the proxy.
+    conn.client.ip = "10.0.0.1".to_string();
+    let mut req = make_metrics_request();
+    req.headers.push(crate::header::Header::new("X-Forwarded-For", "203.0.113.9"));
+    assert!(!MetricsController::is_matching(&req, &conn));
+}

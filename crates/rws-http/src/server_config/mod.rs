@@ -145,6 +145,15 @@ pub struct ServerConfig {
     /// client's address from a trusted proxy's `X-Forwarded-For`
     /// (`ip_filter::client_ip`); `"peer"` always uses the TCP peer.
     pub client_ip_forwarded: bool,
+    /// `RWS_CONFIG_METRICS_ALLOW` (18.27.0): clients `GET /metrics` answers
+    /// (the client as `ip_filter::client_ip` sees it); anyone else gets a
+    /// `404`. Default loopback and the private ranges, where scrapers sit;
+    /// `*` everyone (before 18.27), `none` no one.
+    pub metrics_allow: crate::ip_filter::TrustedProxies,
+    /// `RWS_CONFIG_SHUTDOWN_DELAY_SECS` (18.27.0): on SIGTERM, `/readyz`
+    /// answers `503` at once but connections are still accepted this long
+    /// before draining, so a load balancer takes the pod out first. Default 5.
+    pub shutdown_delay_secs: u64,
     /// `RWS_CONFIG_EARLY_HINTS_HTTP1` — also send `103 Early Hints` to
     /// HTTP/1.1 clients. Default `false`: browsers use them only over HTTP/2
     /// and HTTP/3, and some old HTTP/1.1 clients mishandle extra `1xx`
@@ -192,6 +201,8 @@ impl Default for ServerConfig {
             forwarded_header: true,
             trusted_proxies: crate::ip_filter::TrustedProxies::parse("").expect("the default parses"),
             client_ip_forwarded: true,
+            metrics_allow: crate::ip_filter::TrustedProxies::parse("").expect("the default parses"),
+            shutdown_delay_secs: 5,
             early_hints_http1: false,
             compression_dictionaries: Vec::new(),
             directory_listing: true,
@@ -245,6 +256,9 @@ impl ServerConfig {
             trusted_proxies: crate::ip_filter::TrustedProxies::parse(&read("RWS_CONFIG_TRUSTED_PROXIES"))
                 .unwrap_or_else(|_| crate::ip_filter::TrustedProxies::parse("").expect("the default parses")),
             client_ip_forwarded: !read("RWS_CONFIG_CLIENT_IP").trim().eq_ignore_ascii_case("peer"),
+            metrics_allow: crate::ip_filter::TrustedProxies::parse(&read("RWS_CONFIG_METRICS_ALLOW"))
+                .unwrap_or_else(|_| crate::ip_filter::TrustedProxies::parse("").expect("the default parses")),
+            shutdown_delay_secs: read("RWS_CONFIG_SHUTDOWN_DELAY_SECS").trim().parse().unwrap_or(5),
             early_hints_http1: read("RWS_CONFIG_EARLY_HINTS_HTTP1").eq_ignore_ascii_case("true"),
             compression_dictionaries: read("RWS_CONFIG_COMPRESSION_DICTIONARIES")
                 .split(',')

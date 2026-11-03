@@ -167,6 +167,11 @@ account_key_path          = "acme_account.key"  # ACME account key, kept between
 
 CORS policy applied to every response. All fields are hot-reloadable.
 
+Since 18.27.0 that includes `[[route]]` responses (before, only static
+files): rws answers an allowed origin's preflight `OPTIONS` itself, and adds
+the headers to a route's response unless the route (its backend) sent its
+own `Access-Control-Allow-Origin`.
+
 ```toml
 [cors]
 # Allow every origin, with credentials (default false since 18.0.0). When
@@ -264,6 +269,8 @@ cache_status            = true       # RWS_CONFIG_CACHE_STATUS: Cache-Status on 
 forwarded_header        = "add"      # RWS_CONFIG_FORWARDED_HEADER: RFC 7239 Forwarded on proxied requests; "off" leaves it out
 trusted_proxies         = ["10.0.0.0/8"]  # RWS_CONFIG_TRUSTED_PROXIES: whose X-Forwarded-*/Forwarded to believe (default: loopback + private ranges)
 client_ip               = "forwarded"     # RWS_CONFIG_CLIENT_IP: the client behind a trusted proxy (default) or "peer"
+shutdown_delay_secs     = 5               # RWS_CONFIG_SHUTDOWN_DELAY_SECS: on SIGTERM, not ready but still serving this long before draining
+metrics_allow           = ["10.0.0.0/8"]  # RWS_CONFIG_METRICS_ALLOW: who GET /metrics answers (default: loopback + private ranges); "*" anyone
 tls_client_crl_file     = "/etc/rws/clients.crl.pem"  # RWS_CONFIG_TLS_CLIENT_CRL_FILE: revoked client certificates (PEM or DER, comma-separated)
 tls_client_crl_strict   = false      # RWS_CONFIG_TLS_CLIENT_CRL_STRICT: refuse stale CRLs and certificates no CRL covers
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas

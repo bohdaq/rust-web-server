@@ -297,6 +297,18 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.warn(format!("{key} = \"*\": every client can set X-Forwarded-Proto/Host and Forwarded (claim https, another host); list your load balancers instead"));
                 }
             }
+            "RWS_CONFIG_SHUTDOWN_DELAY_SECS" => {
+                if !value.trim().is_empty() && value.trim().parse::<u64>().is_err() {
+                    report.error(format!("{key} = {value:?}: expected a whole number of seconds"));
+                }
+            }
+            "RWS_CONFIG_METRICS_ALLOW" => {
+                if let Err(e) = crate::ip_filter::TrustedProxies::parse(value) {
+                    report.error(format!("{key}: {}", e.replace("trusted_proxies: ", "")));
+                } else if value.trim() == "*" {
+                    report.warn(format!("{key} = \"*\": /metrics (upstream names, backend addresses, traffic) is served to anyone"));
+                }
+            }
             "RWS_CONFIG_CLIENT_IP" => {
                 let v = value.trim();
                 if !v.is_empty() && !v.eq_ignore_ascii_case("forwarded") && !v.eq_ignore_ascii_case("peer") {

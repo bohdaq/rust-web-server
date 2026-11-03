@@ -2696,3 +2696,51 @@ fn waf_setting_errors_are_reported() {
     let text = format!("{report:?}");
     assert!(text.contains("expected block, detect or off") && text.contains("expected 1, 2 or 3") && text.contains("field = \\\"cookie\\\""), "{text}");
 }
+
+// ── [cors] on route responses (18.27.0) ─────────────────────────────────────
+
+fn cors_config() -> crate::server_config::ServerConfig {
+    crate::server_config::ServerConfig {
+        cors_allow_origins: "https://app.example.com".to_string(),
+        cors_allow_methods: "GET,POST".to_string(),
+        ..Default::default()
+    }
+}
+
+fn with_origin(method: &str, origin: &str) -> crate::request::Request {
+    let mut r = make_request(method, "/api");
+    r.headers.push(Header::new("Origin", origin.to_string()));
+    r
+}
+
+#[test]
+fn route_preflight_from_an_allowed_origin_is_answered() {
+    let mut req = with_origin("OPTIONS", "https://app.example.com");
+    req.headers.push(Header::new("Access-Control-Request-Method", "POST"));
+    let resp = super::route_cors::preflight(&req, &cors_config()).expect("answered");
+    assert_eq!(resp.status_code, 204);
+    let get = |n: &str| resp.headers.iter().find(|h| h.name.eq_ignore_ascii_case(n)).map(|h| h.value.to_string());
+    assert_eq!(get("access-control-allow-origin").as_deref(), Some("https://app.example.com"));
+    assert_eq!(get("access-control-allow-methods").as_deref(), Some("GET,POST"));
+    // Another origin, no [cors], or not a preflight: the route answers.
+    let mut other = with_origin("OPTIONS", "https://evil.example");
+    other.headers.push(Header::new("Access-Control-Request-Method", "POST"));
+    assert!(super::route_cors::preflight(&other, &cors_config()).is_none());
+    assert!(super::route_cors::preflight(&req, &Default::default()).is_none());
+    assert!(super::route_cors::preflight(&with_origin("OPTIONS", "https://app.example.com"), &cors_config()).is_none());
+}
+
+#[test]
+fn route_responses_get_cors_unless_the_backend_set_its_own() {
+    let req = with_origin("GET", "https://app.example.com");
+    let resp = super::route_cors::add(&req, crate::response::Response::default(), &cors_config());
+    assert!(resp.headers.iter().any(|h| h.name.eq_ignore_ascii_case("access-control-allow-origin") && h.value == "https://app.example.com"));
+    assert!(resp.headers.iter().any(|h| h.name.eq_ignore_ascii_case("vary") && h.value.contains("Origin")));
+    let mut own = crate::response::Response::default();
+    own.headers.push(Header::new("Access-Control-Allow-Origin", "*"));
+    let resp = super::route_cors::add(&req, own, &cors_config());
+    assert_eq!(resp.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("access-control-allow-origin")).count(), 1);
+    // No Origin, no headers.
+    let resp = super::route_cors::add(&make_request("GET", "/api"), crate::response::Response::default(), &cors_config());
+    assert!(!resp.headers.iter().any(|h| h.name.eq_ignore_ascii_case("access-control-allow-origin")));
+}

@@ -15,6 +15,7 @@ use crate::url::URL;
 
 #[cfg(test)]
 mod tests;
+mod etag;
 pub(crate) mod dictionaries;
 pub(crate) mod open_file_cache;
 
@@ -165,7 +166,7 @@ impl StaticResourceController {
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
-                    let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
+                    let etag_value = format!("\"{}-{}\"", etag::tag(&static_filepath, file_size, modified_date_time), file_size);
                     set_static_cache_control(&mut response, &config.static_cache_control);
                     if push_validators(request, &mut response, modified_date_time, &etag_value, config.nanos_headers) {
                         response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
@@ -292,7 +293,7 @@ impl StaticResourceController {
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
-                    let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
+                    let etag_value = format!("\"{}-{}\"", etag::tag(&static_filepath, file_size, modified_date_time), file_size);
                     set_static_cache_control(&mut response, &config.static_cache_control);
                     if push_validators(request, &mut response, modified_date_time, &etag_value, config.nanos_headers) {
                         response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
@@ -415,15 +416,15 @@ impl StaticResourceController {
             }
             None => None,
         };
-        // ETag "<modified>-<len>", plus "-<coding>" when the file goes out
+        // ETag "<content hash>-<len>" (etag.rs), plus "-<coding>" when the file goes out
         // compressed (each representation needs its own strong ETag), and the
         // nanosecond Last-Modified, built without format!: this runs for
         // every request.
-        let modified = Decimal::new(state.modified);
+        let tag = etag::tag(&fs_path, state.len, state.modified);
         let len = Decimal::new(state.len as u128);
-        let mut etag_value = String::with_capacity(modified.as_str().len() + len.as_str().len() + 8);
+        let mut etag_value = String::with_capacity(tag.len() + len.as_str().len() + 8);
         etag_value.push('"');
-        etag_value.push_str(modified.as_str());
+        etag_value.push_str(&tag);
         etag_value.push('-');
         etag_value.push_str(len.as_str());
         if let Some((coding, held, _)) = &delta {
@@ -470,7 +471,7 @@ impl StaticResourceController {
         let mut response = std::mem::replace(response, Response::empty());
         set_static_cache_control(&mut response, &config.static_cache_control);
         if config.nanos_headers {
-            response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified.as_str().to_string().into() });
+            response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: state.modified.to_string().into() });
         }
         response.headers.push(Header { name: Header::_LAST_MODIFIED.into(), value: crate::http::date::format((state.modified / 1_000_000_000) as u64).into() });
         response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
@@ -1073,7 +1074,7 @@ pub fn range_is_stale(request: &Request) -> bool {
     let Ok(fs_path) = static_fs_path(&os_specific_path(path)) else { return true };
     let (Ok(modified), Ok(md)) = (file_modified_utc(&fs_path), metadata(&fs_path)) else { return true };
     if validator.starts_with('"') {
-        return validator != format!("\"{}-{}\"", modified, md.len());
+        return validator != format!("\"{}-{}\"", etag::tag(&fs_path, md.len(), modified), md.len());
     }
     let modified_secs = (modified / 1_000_000_000) as u64;
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);

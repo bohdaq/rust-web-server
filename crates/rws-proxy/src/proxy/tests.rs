@@ -1480,3 +1480,20 @@ fn trusted_proxy_lists_parse() {
     assert!(TrustedProxies::parse("173.245.48.0/20, 2400:cb00::/32").unwrap().trusts("173.245.48.7"));
     assert!(TrustedProxies::parse("10.0.0.0/8, cloudflare").is_err());
 }
+
+#[test]
+fn forwarded_carries_a_trusted_proxys_x_forwarded_hops() {
+    let _g = crate::test_env::lock();
+    // The kube-dc gateway: TLS ended there, X-Forwarded-* only.
+    let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: app.example\r\nX-Forwarded-For: 88.99.218.47\r\nX-Forwarded-Proto: https\r\nX-Forwarded-Host: app.example\r\n\r\n").unwrap();
+    let gateway = crate::proxy::Peer::plain("172.30.0.3");
+    assert_eq!(
+        Some("for=88.99.218.47;proto=https;host=app.example, for=172.30.0.3;proto=http;host=app.example".to_string()),
+        crate::proxy::forwarded_value(&req, gateway)
+    );
+    // From an untrusted peer they don't count.
+    assert_eq!(
+        Some("for=203.0.113.9;proto=http;host=app.example".to_string()),
+        crate::proxy::forwarded_value(&req, crate::proxy::Peer::plain("203.0.113.9"))
+    );
+}

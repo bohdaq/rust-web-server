@@ -367,25 +367,78 @@ pub fn forwarded_value(request: &Request, client: Peer<'_>) -> Option<String> {
     if !crate::server_config::ServerConfig::current().forwarded_header {
         return None;
     }
-    let node = match client.ip.parse::<std::net::IpAddr>() {
-        Ok(std::net::IpAddr::V4(v4)) => v4.to_string(),
-        Ok(std::net::IpAddr::V6(v6)) => match v6.to_ipv4_mapped() {
+    let mut element = format!("for={};proto={}", forwarded_node(client.ip), client.proto());
+    if let Some(host) = request.header(crate::header::Header::_HOST).map(|h| h.value.as_ref()) {
+        push_forwarded_host(&mut element, host);
+    }
+    let prior = request.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("forwarded")).map(|h| h.value.trim()).filter(|v| !v.is_empty() && !v.bytes().any(|b| b < 0x20)).collect::<Vec<_>>();
+    if prior.is_empty() {
+        // A trusted proxy that sent only X-Forwarded-* (most do): its hops
+        // become Forwarded elements first, the client's with the proto and
+        // host it reported (RFC 7239 §7.4, since 18.27.0), so the chain says
+        // proto=https like X-Forwarded-Proto instead of just this hop's http.
+        if let Some(earlier) = forwarded_from_x_forwarded(request, client) {
+            return Some(format!("{earlier}, {element}"));
+        }
+    }
+    Some(if prior.is_empty() { element } else { format!("{}, {element}", prior.join(", ")) })
+}
+
+/// An RFC 7239 node for an address: IPv4 bare, IPv6 quoted in brackets,
+/// `unknown` for anything else.
+fn forwarded_node(ip: &str) -> String {
+    let ip = ip.trim();
+    let parsed = ip.parse::<std::net::IpAddr>().ok().or_else(|| ip.parse::<std::net::SocketAddr>().ok().map(|a| a.ip()));
+    match parsed {
+        Some(std::net::IpAddr::V4(v4)) => v4.to_string(),
+        Some(std::net::IpAddr::V6(v6)) => match v6.to_ipv4_mapped() {
             Some(v4) => v4.to_string(),
             None => format!("\"[{v6}]\""),
         },
-        Err(_) => "unknown".to_string(),
-    };
-    let mut element = format!("for={node};proto={}", client.proto());
-    if let Some(host) = request.header(crate::header::Header::_HOST).map(|h| h.value.as_ref()).filter(|h: &&str| !h.is_empty() && h.bytes().all(|b| b.is_ascii_graphic() && b != b'"' && b != b'\\')) {
-        let token = host.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b));
-        if token {
-            element.push_str(&format!(";host={host}"));
-        } else {
-            element.push_str(&format!(";host=\"{host}\""));
-        }
+        None => "unknown".to_string(),
     }
-    let prior = request.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("forwarded")).map(|h| h.value.trim()).filter(|v| !v.is_empty() && !v.bytes().any(|b| b < 0x20)).collect::<Vec<_>>();
-    Some(if prior.is_empty() { element } else { format!("{}, {element}", prior.join(", ")) })
+}
+
+fn push_forwarded_host(element: &mut String, host: &str) {
+    if host.is_empty() || !host.bytes().all(|b| b.is_ascii_graphic() && b != b'"' && b != b'\\') {
+        return;
+    }
+    if host.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b)) {
+        element.push_str(&format!(";host={host}"));
+    } else {
+        element.push_str(&format!(";host=\"{host}\""));
+    }
+}
+
+/// `X-Forwarded-For` hops from a trusted peer as `Forwarded` elements, the
+/// first with `X-Forwarded-Proto` and `-Host`; `None` without one.
+fn forwarded_from_x_forwarded(request: &Request, client: Peer<'_>) -> Option<String> {
+    if !crate::server_config::ServerConfig::current().trusted_proxies.trusts(client.ip) {
+        return None;
+    }
+    let hops: Vec<&str> = request.headers.iter()
+        .filter(|h| h.name.eq_ignore_ascii_case("x-forwarded-for"))
+        .flat_map(|h| h.value.split(','))
+        .map(str::trim)
+        .filter(|h| !h.is_empty())
+        .collect();
+    if hops.is_empty() {
+        return None;
+    }
+    let mut elements = Vec::with_capacity(hops.len());
+    for (i, hop) in hops.iter().enumerate() {
+        let mut element = format!("for={}", forwarded_node(hop));
+        if i == 0 {
+            if let Some(proto) = request.header("X-Forwarded-Proto").map(|h| h.value.trim().to_ascii_lowercase()).filter(|p| p == "http" || p == "https") {
+                element.push_str(&format!(";proto={proto}"));
+            }
+            if let Some(host) = request.header("X-Forwarded-Host").map(|h| h.value.trim().to_string()) {
+                push_forwarded_host(&mut element, &host);
+            }
+        }
+        elements.push(element);
+    }
+    Some(elements.join(", "))
 }
 
 #[doc(hidden)]

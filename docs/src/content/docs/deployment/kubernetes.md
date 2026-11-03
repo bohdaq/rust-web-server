@@ -19,11 +19,12 @@ The `SERVER_READY` flag is set to `true` after `Server::setup()` completes and c
 When Kubernetes sends `SIGTERM`, the server:
 
 1. Clears `SERVER_READY` — `/readyz` begins returning `503`, Kubernetes stops sending new traffic.
-2. Stops accepting new TCP connections.
-3. Waits for all in-flight requests to complete (thread-pool drain on `http1`; tokio task drain on `http2`/`http3`).
-4. Exits cleanly.
+2. Keeps accepting for `shutdown_delay_secs` (default 5, since 18.27.0): endpoint removal reaches kube-proxy and ingress controllers a moment after the pod is told to stop, and until then they still send it requests. Before 18.27 rws stopped accepting at once and those got a `502`/`503` from the load balancer.
+3. Stops accepting new TCP connections.
+4. Waits for all in-flight requests to complete (thread-pool drain on `http1`; tokio task drain on `http2`/`http3`).
+5. Exits cleanly.
 
-Set `terminationGracePeriodSeconds` to at least `30` to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
+Ctrl+C (SIGINT) skips the delay. Set `terminationGracePeriodSeconds` to at least `30` (the delay counts toward it) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
 :::tip[Helm chart]
 The manifests below are also a Helm chart, published with every release (since 18.2.0):

@@ -17,8 +17,12 @@ pub struct MetricsController;
 const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 
 impl Controller for MetricsController {
-    fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        request.method == METHOD.get && request.request_uri == "/metrics"
+    /// Only for `metrics_allow` clients (loopback and private ranges by
+    /// default, since 18.27.0): the rest fall through to a `404`.
+    fn is_matching(request: &Request, connection: &ConnectionInfo) -> bool {
+        request.method == METHOD.get
+            && request.request_uri == "/metrics"
+            && crate::server_config::ServerConfig::current().metrics_allow.trusts(&crate::ip_filter::client_ip(request, &connection.client.ip))
     }
 
     fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {

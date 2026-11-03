@@ -79,7 +79,7 @@ request: the open-file cache keeps the brotli, zstd and gzip forms of each
 file up to 1 MiB, keyed by its size and modification time, within the same
 8 MiB memory budget, at the higher `Level::Static` (brotli 6, zstd 6,
 gzip 6). An edit is picked up at once; a file modified less than 2 seconds
-ago isn't cached yet. The `ETag` carries the coding (`"<mtime>-<size>-br"`),
+ago isn't cached yet. The `ETag` carries the coding (`"<hash>-<size>-br"`),
 so a client revalidating gets a `304` for the representation it holds.
 
 ### Precompressed files

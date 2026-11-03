@@ -87,7 +87,7 @@ The following headers are never forwarded to the upstream or back to the client,
 | `Host` | Backend host (replaces the original `Host` header) |
 | `X-Forwarded-Host` | The `Host` the client sent, unless it already carries an `X-Forwarded-Host` (since 18.8.4) |
 | `X-Forwarded-Proto` | `https` when the client connected over TLS (HTTPS, HTTP/2 over TLS, HTTP/3), else `http`; an incoming `X-Forwarded-Proto` is kept, so rws behind another TLS terminator passes its answer on (since 18.9.0) |
-| `Forwarded` | RFC 7239: `for=<client>;proto=<http|https>;host=<Host>` (IPv6 as `for="[2001:db8::1]"`), appended to an incoming `Forwarded` like `X-Forwarded-For` (since 18.20.0). `forwarded_header = "off"` (`RWS_CONFIG_FORWARDED_HEADER`) leaves it out and passes the client's through unchanged |
+| `Forwarded` | RFC 7239: `for=<client>;proto=<http|https>;host=<Host>` (IPv6 as `for="[2001:db8::1]"`), appended to an incoming `Forwarded` like `X-Forwarded-For` (since 18.20.0). From a trusted proxy that sent only `X-Forwarded-*`, its hops come first, the client's with the proto and host it reported (`for=198.51.100.7;proto=https;host=app.example, for=10.0.0.2;proto=http;…`, since 18.27.0). `forwarded_header = "off"` (`RWS_CONFIG_FORWARDED_HEADER`) leaves it out and passes the client's through unchanged |
 
 **Which incoming values are believed** (since 18.24.0): an incoming
 `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host` or `Forwarded` is

@@ -1196,7 +1196,10 @@ impl Application for RouteDispatch {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
         for route in self.routes.iter() {
             if route.matcher.matches(request, conn) {
-                return route.handler.execute(request, conn);
+                if let Some(preflight) = route_cors::preflight(request, &crate::server_config::ServerConfig::current()) {
+                    return Ok(preflight);
+                }
+                return route.handler.execute(request, conn).map(|r| route_cors::add(request, r, &crate::server_config::ServerConfig::current()));
             }
         }
         self.fallback.execute(request, conn)
@@ -1492,7 +1495,66 @@ impl Application for ConfigDrivenApp {
         let request = normalized(request);
         let route = generation.dispatch.routes.iter().find(|r| r.matcher.matches(&request, conn))?;
         let proxy = Arc::clone(route.async_proxy.as_ref()?);
-        Some(Box::pin(async move { proxy.execute_async(&request, conn).await }))
+        if let Some(preflight) = route_cors::preflight(&request, &crate::server_config::ServerConfig::current()) {
+            return Some(Box::pin(std::future::ready(Ok(preflight))));
+        }
+        Some(Box::pin(async move {
+            let response = proxy.execute_async(&request, conn).await;
+            response.map(|r| route_cors::add(&request, r, &crate::server_config::ServerConfig::current()))
+        }))
+    }
+}
+
+/// `[cors]` on `[[route]]` responses (18.27.0; before, only the static
+/// files had it): a preflight from an allowed origin is answered here, and
+/// an actual response gets the headers unless the route (its backend) set
+/// its own `Access-Control-Allow-Origin`.
+mod route_cors {
+    use crate::header::Header;
+    use crate::request::{Request, METHOD};
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    use crate::server_config::ServerConfig;
+
+    fn headers(request: &Request, config: &ServerConfig) -> Vec<Header> {
+        if request.header(Header::_ORIGIN).is_none() {
+            return Vec::new();
+        }
+        rws_server::cors::Cors::get_headers_from_config(request, config)
+    }
+
+    /// `204` with the CORS headers for an allowed origin's preflight; `None`
+    /// sends the request to the route (no `[cors]`, another origin, or not a
+    /// preflight).
+    pub(super) fn preflight(request: &Request, config: &ServerConfig) -> Option<Response> {
+        if request.method != METHOD.options || request.header(Header::_ACCESS_CONTROL_REQUEST_METHOD).is_none() {
+            return None;
+        }
+        let headers = headers(request, config);
+        if headers.is_empty() {
+            return None;
+        }
+        let mut response = Response::default();
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n204_no_content.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase.to_string();
+        response.headers = headers;
+        response.headers.push(Header { name: Header::_VARY.into(), value: "Origin".into() });
+        Some(response)
+    }
+
+    pub(super) fn add(request: &Request, mut response: Response, config: &ServerConfig) -> Response {
+        if response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_ACCESS_CONTROL_ALLOW_ORIGIN)) {
+            return response;
+        }
+        let headers = headers(request, config);
+        if headers.is_empty() {
+            return response;
+        }
+        response.headers.extend(headers);
+        let varies = response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_VARY) && h.value.split(',').any(|v| v.trim().eq_ignore_ascii_case("origin") || v.trim() == "*"));
+        if !varies {
+            response.headers.push(Header { name: Header::_VARY.into(), value: "Origin".into() });
+        }
+        response
     }
 }
 

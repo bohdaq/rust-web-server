@@ -1119,8 +1119,42 @@ pub fn request_shutdown() {
 
 /// Resolves when SIGTERM is received (Unix) or [`request_shutdown`] is
 /// called. Enables a single `select!` branch to handle both, beside Ctrl+C.
+///
+/// After a SIGTERM (since 18.27.0) `/readyz` answers `503` at once, but this
+/// resolves only `shutdown_delay_secs` later: the accept loops keep serving
+/// while the load balancer notices and takes the pod out, then drain. The
+/// deadline is shared, so a loop's `select!` dropping and re-creating this
+/// future (on every accepted connection) keeps the same one.
 #[cfg(feature = "http2")]
 async fn sigterm() {
+    static DEADLINE: std::sync::OnceLock<tokio::time::Instant> = std::sync::OnceLock::new();
+    if let Some(deadline) = DEADLINE.get() {
+        return tokio::time::sleep_until(*deadline).await;
+    }
+    if terminate_or_requested().await {
+        let delay = std::time::Duration::from_secs(crate::server_config::ServerConfig::current().shutdown_delay_secs);
+        let mut first = false;
+        let deadline = *DEADLINE.get_or_init(|| {
+            first = true;
+            tokio::time::Instant::now() + delay
+        });
+        crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+        #[cfg(unix)]
+        crate::systemd::stopping();
+        if first && !delay.is_zero() {
+            println!("SIGTERM: not ready; draining in {} s (shutdown_delay_secs)", delay.as_secs());
+        }
+        tokio::time::sleep_until(deadline).await;
+    } else {
+        #[cfg(unix)]
+        crate::systemd::stopping();
+    }
+}
+
+/// `true` for a SIGTERM, `false` for [`request_shutdown`] (no delay: no load
+/// balancer is waiting on that path).
+#[cfg(feature = "http2")]
+async fn terminate_or_requested() -> bool {
     let requested = async {
         let mut requests = shutdown_requests().subscribe();
         let _ = requests.wait_for(|stop| *stop).await;
@@ -1131,17 +1165,19 @@ async fn sigterm() {
             tokio::signal::unix::SignalKind::terminate()
         ) {
             tokio::select! {
-                _ = s.recv() => {}
-                _ = requested => {}
+                _ = s.recv() => true,
+                _ = requested => false,
             }
         } else {
-            requested.await
+            requested.await;
+            false
         }
     }
     #[cfg(not(unix))]
-    requested.await;
-    #[cfg(unix)]
-    crate::systemd::stopping();
+    {
+        requested.await;
+        false
+    }
 }
 
 /// Returns a stream that fires on each SIGHUP on Unix; never fires elsewhere.

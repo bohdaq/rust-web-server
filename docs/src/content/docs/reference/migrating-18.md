@@ -177,6 +177,11 @@ against the balancer's address (e.g. `allow_ips = ["10.0.0.5"]`) now meets the
 real clients: list them, or set `client_ip = "peer"` (`RWS_CONFIG_CLIENT_IP`)
 for the old behaviour. See [The client address](/proxy/reverse-proxy/#the-client-address).
 
+`GET /metrics` now answers only loopback and private-range clients
+(`metrics_allow`). A Prometheus that scrapes rws over a public address gets
+`404`: add it, `metrics_allow = ["203.0.113.7"]`, or `"*"` for the old
+behaviour.
+
 ## 18.24: trusted proxies
 
 Not a breaking release, but one default changed: an incoming

@@ -32,6 +32,33 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   time) gets `504 Gateway Timeout` instead of `502 Bad Gateway`, as nginx
   answers; `Proxy-Status` already said `http_response_timeout`. Found by the
   stage end-to-end suite.
+- `[cors]` reaches `[[route]]` responses too, as documented ("every
+  response"): an allowed origin's preflight is answered by rws, and a
+  route's response gets the headers unless its backend sent its own
+  `Access-Control-Allow-Origin`. Until now only static files had them.
+  Found by the stage end-to-end suite.
+- Static-file ETags come from a hash of the file's bytes instead of its
+  modification time, so every replica gives the same ETag and
+  `If-None-Match` gets a `304` from any of them (behind a load balancer it
+  was 1 pod in 3). Worked out once per file version; files over 256 MiB keep
+  the modification time. Cached ETags from before revalidate once with a
+  `200`. Found by the stage end-to-end suite.
+- On SIGTERM rws keeps accepting for `shutdown_delay_secs` (default 5,
+  `RWS_CONFIG_SHUTDOWN_DELAY_SECS`) with `/readyz` already `503`, then
+  drains: a load balancer still sending to the pod in the moment after the
+  stop got errors (a `503` in a rolling restart behind the kube-dc gateway).
+  `0` restores the immediate drain; Ctrl+C has no delay. Found by the stage
+  end-to-end suite.
+- `Forwarded` behind a proxy that sends only `X-Forwarded-*` (a TLS
+  terminator, most load balancers) starts with its hops, the client's with
+  the `X-Forwarded-Proto`/`-Host` it reported: it said only this hop's
+  `for=<proxy>;proto=http` while `X-Forwarded-Proto` said `https`. Found by
+  the stage end-to-end suite.
+- **`/metrics` only for scrapers.** `GET /metrics` answers clients in
+  `metrics_allow` (`RWS_CONFIG_METRICS_ALLOW`; loopback and private ranges by
+  default) and `404`s the rest: it was public, upstream names and backend
+  addresses included. `"*"` restores it. Found by the stage end-to-end
+  suite.
 - Basic auth answers wrong credentials with `WWW-Authenticate` too (only
   missing ones had it), so a browser asks again (RFC 9110 §11.6.1). Found by
   the stage end-to-end suite.

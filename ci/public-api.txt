@@ -10263,12 +10263,14 @@ pub rust_web_server::server_config::ServerConfig::early_hints_http1: bool
 pub rust_web_server::server_config::ServerConfig::error_format_text: bool
 pub rust_web_server::server_config::ServerConfig::forwarded_header: bool
 pub rust_web_server::server_config::ServerConfig::log_format: alloc::string::String
+pub rust_web_server::server_config::ServerConfig::metrics_allow: rust_web_server::ip_filter::TrustedProxies
 pub rust_web_server::server_config::ServerConfig::nanos_headers: bool
 pub rust_web_server::server_config::ServerConfig::proxy_name: alloc::string::String
 pub rust_web_server::server_config::ServerConfig::proxy_status: alloc::string::String
 pub rust_web_server::server_config::ServerConfig::proxy_status_next_hop: bool
 pub rust_web_server::server_config::ServerConfig::request_allocation_size: i64
 pub rust_web_server::server_config::ServerConfig::security_headers: bool
+pub rust_web_server::server_config::ServerConfig::shutdown_delay_secs: u64
 pub rust_web_server::server_config::ServerConfig::static_cache_control: alloc::string::String
 pub rust_web_server::server_config::ServerConfig::trusted_proxies: rust_web_server::ip_filter::TrustedProxies
 pub rust_web_server::service_discovery::DiscoverySource::Consul

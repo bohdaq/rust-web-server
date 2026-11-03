@@ -33,6 +33,18 @@ These functions are called by the server core, but you can also call them from c
 
 The built-in endpoint returns all metrics in Prometheus text format. No setup is needed — it is registered automatically by `App::new()`.
 
+It answers only clients in `metrics_allow` (`RWS_CONFIG_METRICS_ALLOW`):
+loopback and the private ranges by default, where Prometheus scrapes pods
+from, so the internet gets a `404` — the metrics name upstreams and backend
+addresses (since 18.27.0; before, anyone). Behind a load balancer the client
+is the one in its `X-Forwarded-For` ([the client address](/proxy/reverse-proxy/#the-client-address)),
+so a public visitor through the balancer is refused too. A scraper that
+reaches rws over a public address needs it listed; `"*"` serves everyone.
+
+```toml
+metrics_allow = ["10.0.0.0/8", "203.0.113.7"]   # RWS_CONFIG_METRICS_ALLOW
+```
+
 ```
 # HELP rws_requests_total Total HTTP requests handled
 # TYPE rws_requests_total counter

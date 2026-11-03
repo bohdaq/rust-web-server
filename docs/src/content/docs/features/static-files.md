@@ -48,7 +48,13 @@ ranges are merged (and then sorted); more than 16 ranges are answered with
 the whole file as one range, so a response never holds more than the file
 (17.113.1).
 
-Conditional requests: every file response carries an `ETag`. `If-None-Match`
+Conditional requests: every file response carries an `ETag`, made from a
+hash of the file's bytes and its size (`"<hash>-<size>"`, since 18.27.0;
+before, its modification time), so replicas serving the same file — from one
+ConfigMap or image, unpacked at different times — give the same tag, and a
+revalidation through a load balancer gets its `304` from any of them. The
+hash is worked out once per file version; files over 256 MiB keep the
+modification time. `If-None-Match`
 takes a list of tags or `*` and compares weakly (`W/"x"` matches `"x"`), as
 RFC 9110 §13.1.2 requires; a match is a `304 Not Modified` (17.113.2).
 A `Range` with `If-Range` is honored only while the `If-Range` tag strongly
