@@ -25,6 +25,10 @@ license = "MIT"
 # The split crates, pinned to the shared version: a release bump edits these
 # pins together with `version` above.
 [workspace.dependencies]
+rws-storage = { path = "crates/rws-storage", version = "=18.25.0" }
+rws-wasm-plugin = { path = "crates/rws-wasm-plugin", version = "=18.25.0" }
+rws-acme = { path = "crates/rws-acme", version = "=18.25.0" }
+rws-tower = { path = "crates/rws-tower", version = "=18.25.0" }
 rws-base = { path = "crates/rws-base", version = "=18.25.0" }
 rws-http = { path = "crates/rws-http", version = "=18.25.0" }
 rws-server = { path = "crates/rws-server", version = "=18.25.0" }
@@ -35,7 +39,7 @@ rws-server = { path = "crates/rws-server", version = "=18.25.0" }
 # rws-wasm-shim depends ON rust-web-server rather than the other way around,
 # so it can't be pulled in as a path *dependency* the way rws-macros is —
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
-members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http", "crates/rws-server"]
+members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http", "crates/rws-server", "crates/rws-tower", "crates/rws-acme", "crates/rws-wasm-plugin", "crates/rws-storage"]
 # fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
 exclude = ["fuzz", "ci/e2e/grpc", "starters", "site/mcp", "examples/wasm_plugin"]
 
@@ -135,14 +139,14 @@ pkg-fmt = "zip"
 [features]
 default = ["http3", "brotli", "zstd"]
 http1 = ["dep:ctrlc", "dep:libc", "rws-server/http1"]
-http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc", "rws-server/http2"]
+http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc", "rws-server/http2", "rws-tower?/http2", "rws-acme?/http2"]
 http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn", "rws-server/http3"]
-http-client = ["dep:rustls", "dep:webpki-roots", "rws-server/http-client"]
+http-client = ["dep:rustls", "dep:webpki-roots", "rws-server/http-client", "rws-storage?/http-client"]
 # Content codings besides gzip (18.1.0): `br` (pure Rust) and `zstd` (C
 # libzstd, built with the crate). Both are in the default set.
 brotli = ["dep:brotli", "rws-http/brotli"]
 zstd   = ["dep:zstd", "rws-http/zstd"]
-acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs", "rws-server/acme"]
+acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs", "rws-server/acme", "dep:rws-acme", "rws-acme?/acme"]
 fips   = ["http2", "rustls/fips", "rws-http/fips", "rws-server/fips"] # FIPS 140-3: aws-lc's validated module (needs CMake + Go to build); TLS uses only FIPS-approved algorithms
 pkcs11 = ["http2", "dep:cryptoki", "dep:aws-lc-rs", "rws-server/pkcs11"] # TLS private keys in an HSM / cloud KMS through PKCS#11 (pkcs11: URIs)
 serde  = ["dep:serde", "dep:serde_json", "rws-http/serde", "rws-server/serde"]
@@ -163,14 +167,14 @@ sso    = ["dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json"
 sso-server = ["sso", "auth", "rws-server/sso-server"]  # AuthServer: rws as its own OAuth 2.0 token issuer; reuses auth's HS256 build_jwt/verify_jwt (see src/sso/server.rs docs for why not RSA/EC)
 sso-saml   = ["sso", "rws-server/sso-saml"]  # SamlSp: SAML 2.0 Service Provider; no new deps — hand-rolled XML parser, not quick-xml (see src/sso/saml/mod.rs docs)
 jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
-storage-local = ["rws-server/storage-local"]  # LocalStorage; no new deps
-storage-s3    = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-s3"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
-storage-azure = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-azure"]  # AzureBlobStorage; Shared Key HMAC signing + Managed Identity, no Azure SDK
-storage-gcs   = ["http-client", "dep:aws-lc-rs", "rws-server/storage-gcs"]  # GcsStorage; JSON API, service-account JWTs signed with aws-lc-rs (native), metadata server, no Google SDK
+storage-local = ["rws-server/storage-local", "dep:rws-storage", "rws-storage/storage-local"]  # LocalStorage; no new deps
+storage-s3    = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-s3", "dep:rws-storage", "rws-storage/storage-s3"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
+storage-azure = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-azure", "dep:rws-storage", "rws-storage/storage-azure"]  # AzureBlobStorage; Shared Key HMAC signing + Managed Identity, no Azure SDK
+storage-gcs   = ["http-client", "dep:aws-lc-rs", "rws-server/storage-gcs", "dep:rws-storage", "rws-storage/storage-gcs"]  # GcsStorage; JSON API, service-account JWTs signed with aws-lc-rs (native), metadata server, no Google SDK
 # Opt-in Tower interop (18.7.0, #23): tower layers as rws middleware, tower
 # services (tonic) as rws apps, an rws app as a tower service. Adapters only —
 # nothing in the default build changes.
-tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util"]
+tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util", "dep:rws-tower", "rws-tower?/tower"]
 # Kubernetes Gateway API controller (18.8.0, #19, spec/GATEWAY_API.md): kube-rs
 # on the aws-lc-rs provider (one rustls provider, as everywhere), and
 # k8s-openapi pinned to the oldest Kubernetes it supports, for the widest
@@ -179,7 +183,7 @@ gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-uti
 # WasmLayer / [route.middleware.wasm]: middleware as WebAssembly core modules
 # (wasmtime + cranelift, no WASI). Off by default (several MB, long compile);
 # the release binaries enable it.
-wasm-plugins = ["dep:wasmtime"]
+wasm-plugins = ["dep:wasmtime", "dep:rws-wasm-plugin", "rws-wasm-plugin?/wasm-plugins"]
 openapi = ["rws-server/openapi"]  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 rewrite-regex = ["dep:regex", "rws-server/rewrite-regex"]  # RewriteLayer::request_uri_regex_rewrite
@@ -190,6 +194,10 @@ secrets = ["dep:hmac", "dep:sha2", "http-client", "rws-server/secrets"]  # secre
 rws-base.workspace = true
 rws-http.workspace = true
 rws-server.workspace = true
+rws-storage = { workspace = true, optional = true }
+rws-wasm-plugin = { workspace = true, optional = true }
+rws-acme = { workspace = true, optional = true }
+rws-tower = { workspace = true, optional = true }
 ctrlc = { version = "3", optional = true }
 mimalloc = { version = "0.1", optional = true, default-features = false, features = ["v3"] }
 libc = { version = "0.2", optional = true }

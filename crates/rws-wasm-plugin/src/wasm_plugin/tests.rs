@@ -232,36 +232,3 @@ fn output_parsing() {
     assert!(parse_response_output(b"uri /x").is_err());
 }
 
-#[test]
-fn the_config_file_section_parses_and_counts_as_middleware() {
-    let toml = r#"
-[[upstream]]
-name = "u"
-backends = ["http://127.0.0.1:9"]
-
-[[route]]
-[route.match]
-path = "/"
-[route.action]
-type = "proxy"
-upstream = "u"
-[route.middleware.wasm]
-module = "plugins/tag.wasm"
-fuel = 1000
-memory_mb = 4
-config = "hello"
-"#;
-    let config = crate::proxy_config::ProxyConfig::from_str(toml);
-    let mw = &config.routes[0].middleware;
-    assert_eq!(
-        mw.wasm,
-        Some(crate::proxy_config::WasmConfig { module: "plugins/tag.wasm".into(), fuel: 1000, memory_mb: 4, config: "hello".into() })
-    );
-    assert!(!mw.is_empty(), "a plugin must keep the route off the middleware-free fast path");
-    let offline = crate::config_check::check_str_offline(toml);
-    assert!(offline.errors.is_empty(), "{:?}", offline.errors);
-    let online = crate::config_check::check_str(toml);
-    assert!(online.errors.iter().any(|e| e.contains("plugins/tag.wasm")), "{:?}", online.errors);
-    let typo = toml.replace("memory_mb = 4", "memory = 4");
-    assert!(crate::config_check::check_str_offline(&typo).errors.iter().any(|e| e.contains("memory: unknown key")));
-}

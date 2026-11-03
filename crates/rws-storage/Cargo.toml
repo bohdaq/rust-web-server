@@ -1,0 +1,35 @@
+[package]
+name = "rws-storage"
+description = "Object storage for rust-web-server: local files, S3, Azure Blob and Google Cloud Storage backends. (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+[features]
+default = []
+# Test helpers rust-web-server's own tests use.
+test-support = []
+http-client = ["rws-server/http-client"]
+storage-azure = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-azure"]
+storage-gcs = ["http-client", "dep:aws-lc-rs", "rws-server/storage-gcs"]
+storage-local = ["rws-server/storage-local"]
+storage-s3 = ["dep:hmac", "dep:sha2", "http-client", "rws-server/storage-s3"]
+
+[dependencies]
+rws-server.workspace = true
+http = { version = "1", optional = true }
+hmac  = { version = "0.12", optional = true }
+sha2  = { version = "0.10", features = ["oid"], optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+aws-lc-rs = { version = "1", optional = true }
+
+[dev-dependencies]
+rws-server = { workspace = true, features = ["test-support"] }

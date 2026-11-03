@@ -11,6 +11,7 @@
 /// ```
 ///
 /// ```rust,no_run
+/// # extern crate rws_acme as rust_web_server;
 /// use rust_web_server::acme::{AcmeConfig, AcmeManager};
 ///
 /// # async fn run() {
@@ -46,10 +47,12 @@
 
 mod crypto;
 mod client;
-pub(crate) mod dns01;
+#[doc(hidden)]
+pub mod dns01;
 pub mod dns_api;
 pub mod on_demand;
-pub(crate) mod shared;
+#[doc(hidden)]
+pub mod shared;
 pub mod tls_alpn;
 
 #[cfg(test)]
@@ -62,9 +65,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Parsers of CA-supplied input, for `fuzz_api`.
 #[cfg(fuzzing)]
-pub(crate) mod fuzzing {
-    pub(crate) use super::crypto::cert_info_from_der;
-    pub(crate) use super::{json_object_keys, parse_rfc3339, parse_suggested_window};
+#[doc(hidden)]
+pub mod fuzzing {
+    pub use super::crypto::cert_info_from_der;
+    pub use super::{json_object_keys, parse_rfc3339, parse_suggested_window};
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -196,7 +200,8 @@ impl std::fmt::Debug for Tsig {
 }
 
 /// A base64 TSIG secret, decoded; `None` if it isn't base64 (or is empty).
-pub(crate) fn base64_secret(value: &str) -> Option<Vec<u8>> {
+#[doc(hidden)]
+pub fn base64_secret(value: &str) -> Option<Vec<u8>> {
     crypto::base64_decode_std(value.trim()).filter(|s| !s.is_empty())
 }
 
@@ -354,7 +359,8 @@ impl AcmeConfig {
     }
 }
 
-pub(crate) fn renew_check_interval_secs() -> u64 {
+#[doc(hidden)]
+pub fn renew_check_interval_secs() -> u64 {
     non_empty_env(Config::RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS)
         .and_then(|v| v.parse().ok())
         .filter(|secs| *secs > 0)
@@ -458,7 +464,8 @@ fn non_empty_env(name: &str) -> Option<String> {
 // HTTP→HTTPS listener once it holds port 80 — renewal would otherwise fail to
 // bind the port the redirect listener already has.
 
-pub(crate) fn challenges() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
+#[doc(hidden)]
+pub fn challenges() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
     static CHALLENGES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
         std::sync::OnceLock::new();
     CHALLENGES.get_or_init(|| {
@@ -471,7 +478,8 @@ pub(crate) fn challenges() -> &'static std::sync::Mutex<std::collections::HashMa
 /// TLS-ALPN-01 certificates, the `acme-tls/1` protocol, HTTP-01 answers on
 /// the redirect listener. Done at every entry point (config, manager,
 /// challenge stores), once.
-pub(crate) fn install_hooks() {
+#[doc(hidden)]
+pub fn install_hooks() {
     static INSTALLED: std::sync::Once = std::sync::Once::new();
     INSTALLED.call_once(|| {
         fn ensure(name: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
@@ -499,7 +507,8 @@ static REDIRECT_LISTENER_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic:
 
 /// Called by `Server::run_redirect` once it has bound `port`, so challenges
 /// on that port are served by it instead of a standalone server.
-pub(crate) fn note_redirect_listener(port: u16) {
+#[doc(hidden)]
+pub fn note_redirect_listener(port: u16) {
     REDIRECT_LISTENER_PORT.store(port, std::sync::atomic::Ordering::SeqCst);
 }
 
@@ -507,7 +516,8 @@ const CHALLENGE_PATH_PREFIX: &str = "/.well-known/acme-challenge/";
 
 /// The full HTTP/1.1 response for a request to `uri` if it's a pending
 /// HTTP-01 challenge (`200` with the key authorization), else `None`.
-pub(crate) fn challenge_http_response(uri: &str) -> Option<String> {
+#[doc(hidden)]
+pub fn challenge_http_response(uri: &str) -> Option<String> {
     let token = uri.strip_prefix(CHALLENGE_PATH_PREFIX)?;
     let key_auth = challenges().lock().unwrap().get(token)?.clone();
     Some(challenge_response(&key_auth))
@@ -515,7 +525,8 @@ pub(crate) fn challenge_http_response(uri: &str) -> Option<String> {
 
 /// [`challenge_http_response`], also answering a challenge another replica
 /// presented (`[acme] redis`).
-pub(crate) async fn challenge_http_response_shared(uri: &str) -> Option<String> {
+#[doc(hidden)]
+pub async fn challenge_http_response_shared(uri: &str) -> Option<String> {
     if let Some(response) = challenge_http_response(uri) {
         return Some(response);
     }
@@ -563,7 +574,8 @@ impl AcmeManager {
     /// 6-day certificate at once and leave a 45-day one too little margin.
     /// Renewal information that can't be fetched is not an error: the
     /// two-thirds point still applies.
-    pub(crate) async fn check(&self) -> Result<RenewalCheck, String> {
+    #[doc(hidden)]
+    pub async fn check(&self) -> Result<RenewalCheck, String> {
         // Another replica renewed it: install theirs (the caller hot-swaps).
         if self.adopt_shared().await {
             return Ok(RenewalCheck::Renewed);
@@ -1331,7 +1343,8 @@ fn generate_csr(domains: &[String]) -> Result<(rcgen::KeyPair, Vec<u8>), String>
 
 /// The `newOrder` payload: identifiers, plus `replaces` (RFC 9773 §5) and
 /// `profile` (draft-ietf-acme-profiles) when given.
-pub(crate) fn new_order_payload(domains: &[String], replaces: Option<&str>, profile: Option<&str>) -> String {
+#[doc(hidden)]
+pub fn new_order_payload(domains: &[String], replaces: Option<&str>, profile: Option<&str>) -> String {
     let ids: Vec<String> = domains.iter()
         .map(|d| format!(r#"{{"type":"dns","value":"{}"}}"#, json_escape(d)))
         .collect();
@@ -1351,7 +1364,8 @@ fn json_escape(s: &str) -> String {
 }
 
 /// The renewal loop's state, for the admin API.
-pub(crate) struct Renewal {
+#[doc(hidden)]
+pub struct Renewal {
     running: std::sync::atomic::AtomicBool,
     now: tokio::sync::Notify,
     /// The last check's outcome: (Unix time, `renewed` / `current` / the error).
@@ -1369,7 +1383,8 @@ impl Renewal {
     }
 }
 
-pub(crate) fn renewal() -> &'static Renewal {
+#[doc(hidden)]
+pub fn renewal() -> &'static Renewal {
     static RENEWAL: std::sync::OnceLock<Renewal> = std::sync::OnceLock::new();
     RENEWAL.get_or_init(|| Renewal {
         running: std::sync::atomic::AtomicBool::new(false),
@@ -1397,7 +1412,8 @@ pub fn renewal_status() -> (bool, Option<(u64, String)>) {
 
 /// Outcome of [`AcmeManager::check`].
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum RenewalCheck {
+#[doc(hidden)]
+pub enum RenewalCheck {
     /// A certificate was issued; the server should reload it.
     Renewed,
     /// Nothing to do yet; check again in this many seconds.
@@ -1423,7 +1439,8 @@ fn unix_now() -> i64 {
 /// The configured domains a certificate with the DNS names `have` doesn't
 /// cover (DNS names compare case-insensitively; a wildcard only covers the
 /// same wildcard, as ordered). Unreadable names (`None`) cover nothing.
-pub(crate) fn missing_names(domains: &[String], have: Option<&[String]>) -> Vec<String> {
+#[doc(hidden)]
+pub fn missing_names(domains: &[String], have: Option<&[String]>) -> Vec<String> {
     let have = have.unwrap_or(&[]);
     domains
         .iter()
@@ -1432,7 +1449,8 @@ pub(crate) fn missing_names(domains: &[String], have: Option<&[String]>) -> Vec<
         .collect()
 }
 
-pub(crate) fn renewal_time(info: &crypto::CertInfo, window: Option<(i64, i64)>, renew_before_days: Option<i64>) -> i64 {
+#[doc(hidden)]
+pub fn renewal_time(info: &crypto::CertInfo, window: Option<(i64, i64)>, renew_before_days: Option<i64>) -> i64 {
     let lifetime = (info.not_after - info.not_before).max(0);
     let fallback = match renew_before_days {
         Some(days) => info.not_after - days.saturating_mul(86_400),
@@ -1462,7 +1480,8 @@ fn window_fraction(info: &crypto::CertInfo) -> f64 {
 
 /// `suggestedWindow.start` / `.end` of a renewalInfo response, as Unix
 /// seconds; `None` when missing or malformed.
-pub(crate) fn parse_suggested_window(body: &str) -> Option<(i64, i64)> {
+#[doc(hidden)]
+pub fn parse_suggested_window(body: &str) -> Option<(i64, i64)> {
     let window = &body[body.find("\"suggestedWindow\"")?..];
     let start = parse_rfc3339(&json_str(window, "start")?)?;
     let end = parse_rfc3339(&json_str(window, "end")?)?;
@@ -1471,7 +1490,8 @@ pub(crate) fn parse_suggested_window(body: &str) -> Option<(i64, i64)> {
 
 /// An RFC 3339 timestamp (`2026-10-26T12:00:00Z`, fractional seconds and
 /// `±hh:mm` offsets allowed) as Unix seconds.
-pub(crate) fn parse_rfc3339(value: &str) -> Option<i64> {
+#[doc(hidden)]
+pub fn parse_rfc3339(value: &str) -> Option<i64> {
     let b = value.trim().as_bytes();
     if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || !matches!(b[10], b'T' | b't') || b[13] != b':' || b[16] != b':' {
         return None;
@@ -1511,7 +1531,8 @@ pub(crate) fn parse_rfc3339(value: &str) -> Option<i64> {
 
 /// The keys of the JSON object at `field` (e.g. a directory's
 /// `meta.profiles`), skipping nested values; empty when absent.
-pub(crate) fn json_object_keys(json: &str, field: &str) -> Vec<String> {
+#[doc(hidden)]
+pub fn json_object_keys(json: &str, field: &str) -> Vec<String> {
     let key = format!("\"{}\"", field);
     let Some(at) = json.find(&key) else { return vec![] };
     let rest = json[at + key.len()..].trim_start_matches([' ', ':', '\n', '\r', '\t']);
@@ -1551,7 +1572,8 @@ pub(crate) fn json_object_keys(json: &str, field: &str) -> Vec<String> {
     keys
 }
 
-pub(crate) fn json_str(json: &str, field: &str) -> Option<String> {
+#[doc(hidden)]
+pub fn json_str(json: &str, field: &str) -> Option<String> {
     let key = format!("\"{}\"", field);
     let start = json.find(&key)? + key.len();
     let rest = json[start..].trim_start_matches([' ', ':'].as_ref()).trim_start();
@@ -1613,7 +1635,8 @@ fn parse_challenges(json: &str) -> Vec<Challenge> {
 }
 
 /// The objects in the array `field` (the first one in `json`), as slices.
-pub(crate) fn json_objects<'a>(json: &'a str, field: &str) -> Vec<&'a str> {
+#[doc(hidden)]
+pub fn json_objects<'a>(json: &'a str, field: &str) -> Vec<&'a str> {
     let marker = format!("\"{field}\"");
     let start = match json.find(&marker) {
         Some(s) => s + marker.len(),

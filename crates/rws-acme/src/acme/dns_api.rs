@@ -72,7 +72,8 @@ async fn send(method: &str, url: &str, headers: &[(String, String)], body: Optio
 
 /// The record name's parents that could be its zone, longest first
 /// (`_acme-challenge.a.example.com` → `a.example.com`, `example.com`).
-pub(crate) fn zone_candidates(name: &str) -> Vec<String> {
+#[doc(hidden)]
+pub fn zone_candidates(name: &str) -> Vec<String> {
     let labels: Vec<&str> = name.trim_end_matches('.').split('.').collect();
     (1..labels.len().saturating_sub(1)).map(|i| labels[i..].join(".")).collect()
 }
@@ -122,7 +123,8 @@ async fn cloudflare_delete(token: &str, api: &str, zone: &str, id: &str) -> Resu
 }
 
 /// Replace the TXT records at `name` with `value`.
-pub(crate) async fn cloudflare_present(token: &str, api: &str, zone_id: Option<&str>, name: &str, value: &str) -> Result<(), String> {
+#[doc(hidden)]
+pub async fn cloudflare_present(token: &str, api: &str, zone_id: Option<&str>, name: &str, value: &str) -> Result<(), String> {
     let zone = cloudflare_zone(token, api, zone_id, name).await?;
     for id in cloudflare_records(token, api, &zone, name, None).await? {
         cloudflare_delete(token, api, &zone, &id).await?;
@@ -137,7 +139,8 @@ pub(crate) async fn cloudflare_present(token: &str, api: &str, zone_id: Option<&
 }
 
 /// Remove the TXT record `value` at `name`.
-pub(crate) async fn cloudflare_cleanup(token: &str, api: &str, zone_id: Option<&str>, name: &str, value: &str) -> Result<(), String> {
+#[doc(hidden)]
+pub async fn cloudflare_cleanup(token: &str, api: &str, zone_id: Option<&str>, name: &str, value: &str) -> Result<(), String> {
     let zone = cloudflare_zone(token, api, zone_id, name).await?;
     for id in cloudflare_records(token, api, &zone, name, Some(value)).await? {
         cloudflare_delete(token, api, &zone, &id).await?;
@@ -148,7 +151,8 @@ pub(crate) async fn cloudflare_cleanup(token: &str, api: &str, zone_id: Option<&
 // ── Route 53 ──────────────────────────────────────────────────────────────────
 
 /// The text of the first `<tag>` element.
-pub(crate) fn xml_text<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
+#[doc(hidden)]
+pub fn xml_text<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
     let open = format!("<{tag}>");
     let start = xml.find(&open)? + open.len();
     let end = xml[start..].find(&format!("</{tag}>"))?;
@@ -196,7 +200,8 @@ async fn route53_zone(credentials: &AwsCredentials, api: &str, zone_id: Option<&
 }
 
 /// A `ChangeResourceRecordSets` body for one TXT change.
-pub(crate) fn route53_change_body(action: &str, name: &str, value: &str) -> String {
+#[doc(hidden)]
+pub fn route53_change_body(action: &str, name: &str, value: &str) -> String {
     format!(
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -215,7 +220,8 @@ pub(crate) fn route53_change_body(action: &str, name: &str, value: &str) -> Stri
 /// Apply `action` (`UPSERT`: replace the TXT records at `name` with
 /// `value`; `DELETE`: remove it) and, for an UPSERT, wait up to `wait` for
 /// Route 53 to report the change in sync.
-pub(crate) async fn route53_change(credentials: &AwsCredentials, api: &str, zone_id: Option<&str>, action: &str, name: &str, value: &str, wait: Duration) -> Result<(), String> {
+#[doc(hidden)]
+pub async fn route53_change(credentials: &AwsCredentials, api: &str, zone_id: Option<&str>, action: &str, name: &str, value: &str, wait: Duration) -> Result<(), String> {
     let zone = route53_zone(credentials, api, zone_id, name).await?;
     let path = format!("/2013-04-01/hostedzone/{zone}/rrset");
     let reply = route53_send(credentials, api, "POST", &path, "", Some(route53_change_body(action, name, value))).await?;
@@ -237,7 +243,8 @@ pub(crate) async fn route53_change(credentials: &AwsCredentials, api: &str, zone
 }
 
 /// `YYYYMMDDTHHMMSSZ` for a Unix time.
-pub(crate) fn amz_date(unix: u64) -> String {
+#[doc(hidden)]
+pub fn amz_date(unix: u64) -> String {
     let (days, secs) = (unix / 86_400, unix % 86_400);
     // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
     let z = days as i64 + 719_468;
@@ -270,7 +277,8 @@ fn sha256_hex(data: &[u8]) -> String {
 /// `query` is the canonical query string (parameters sorted, values
 /// URI-encoded) — what is sent.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn sigv4_headers(
+#[doc(hidden)]
+pub fn sigv4_headers(
     credentials: &AwsCredentials,
     method: &str,
     host: &str,

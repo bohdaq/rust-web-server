@@ -12,7 +12,8 @@ use tokio_rustls::TlsConnector;
 
 /// RFC 8555 §6.1: "ACME clients MUST send a User-Agent header field".
 /// Pebble rejects requests without one; Let's Encrypt uses it for diagnostics.
-pub(crate) const USER_AGENT: &str = concat!(
+#[doc(hidden)]
+pub const USER_AGENT: &str = concat!(
     "rws-acme/", env!("CARGO_PKG_VERSION"), " (+https://github.com/bohdaq/rust-web-server)"
 );
 
@@ -45,7 +46,8 @@ impl HttpResp {
 
 /// Trust every certificate in the PEM file at `path` in addition to the
 /// public roots — for a private ACME CA (`RWS_CONFIG_ACME_CA_FILE`).
-pub(crate) fn add_extra_roots(store: &mut RootCertStore, path: &str) -> Result<(), String> {
+#[doc(hidden)]
+pub fn add_extra_roots(store: &mut RootCertStore, path: &str) -> Result<(), String> {
     use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer};
     let bytes = std::fs::read(path)
         .map_err(|e| format!("failed to read ACME CA file '{path}': {e}"))?;
@@ -63,7 +65,8 @@ pub(crate) fn add_extra_roots(store: &mut RootCertStore, path: &str) -> Result<(
 
 impl AcmeHttpClient {
     #[cfg(test)]
-    pub(crate) fn with_roots(root_store: RootCertStore) -> Self {
+    #[doc(hidden)]
+    pub fn with_roots(root_store: RootCertStore) -> Self {
         let config = crate::tls_client_builder().with_root_certificates(root_store).with_no_client_auth();
         AcmeHttpClient { connector: TlsConnector::from(Arc::new(config)) }
     }
@@ -150,7 +153,8 @@ impl AcmeHttpClient {
 /// `Host` header value: RFC 9110 §7.2 requires the port whenever it isn't
 /// the scheme default — ACME servers (Pebble, step-ca on :9000) build the
 /// URLs in their responses from it.
-pub(crate) fn host_header(host: &str, port: u16) -> String {
+#[doc(hidden)]
+pub fn host_header(host: &str, port: u16) -> String {
     if port == 443 { host.to_string() } else { format!("{host}:{port}") }
 }
 

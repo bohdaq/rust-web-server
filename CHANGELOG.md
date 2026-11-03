@@ -17,7 +17,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `server_config`, `virtual_host` — in `rws-http`, and the server core —
   the servers, TLS, `App`, routing, middleware, MCP, OpenAPI, SSO, sessions,
   metrics, OpenTelemetry, the HTTP client, the model layer — in
-  `rws-server`; all published with rust-web-server at the same version.
+  `rws-server`; ACME, the storage backends, the Tower adapters and WASM
+  plugins in `rws-acme`, `rws-storage`, `rws-tower` and `rws-wasm-plugin`
+  (built only with the feature that enables each); all published with
+  rust-web-server at the same version.
   ACME, the proxy, the WAF, the LLM gateway, traffic insights and templates
   plug into the server through registration hooks instead of being called
   from it. Every `rust_web_server::…` path is

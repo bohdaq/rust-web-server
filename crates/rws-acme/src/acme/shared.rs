@@ -25,7 +25,8 @@ const LOCK_MS: u64 = 5 * 60 * 1000;
 /// Challenge answers expire after this.
 const CHALLENGE_MS: u64 = 10 * 60 * 1000;
 
-pub(crate) struct Shared {
+#[doc(hidden)]
+pub struct Shared {
     conn: RespConn,
     prefix: String,
     /// Identifies this replica in the lock.
@@ -33,7 +34,8 @@ pub(crate) struct Shared {
 }
 
 /// The configured store, or `None` (read once).
-pub(crate) fn shared() -> Option<&'static Shared> {
+#[doc(hidden)]
+pub fn shared() -> Option<&'static Shared> {
     static SHARED: OnceLock<Option<Shared>> = OnceLock::new();
     SHARED
         .get_or_init(|| {
@@ -93,13 +95,15 @@ impl Shared {
     }
 
     /// The certificate and key another replica stored for `domains`.
-    pub(crate) fn certificate(&self, domains: &[String]) -> Option<(Vec<u8>, Vec<u8>)> {
+    #[doc(hidden)]
+    pub fn certificate(&self, domains: &[String]) -> Option<(Vec<u8>, Vec<u8>)> {
         let cert = self.get(&self.certificate_key(domains, "cert"))?;
         let key = self.get(&self.certificate_key(domains, "key"))?;
         Some((cert, key))
     }
 
-    pub(crate) fn store_certificate(&self, domains: &[String], cert: &[u8], key: &[u8]) {
+    #[doc(hidden)]
+    pub fn store_certificate(&self, domains: &[String], cert: &[u8], key: &[u8]) {
         // The key first: a replica that sees the new certificate finds its key.
         if !(self.set(&self.certificate_key(domains, "key"), key, None) && self.set(&self.certificate_key(domains, "cert"), cert, None)) {
             eprintln!("[ACME] The new certificate couldn't be stored in Redis; other replicas keep theirs.");
@@ -108,7 +112,8 @@ impl Shared {
 
     /// Take the ordering lock for `domains`: `Some(true)` taken, `Some(false)`
     /// another replica holds it, `None` Redis unreachable.
-    pub(crate) fn lock(&self, domains: &[String]) -> Option<bool> {
+    #[doc(hidden)]
+    pub fn lock(&self, domains: &[String]) -> Option<bool> {
         let ms = LOCK_MS.to_string();
         let key = self.certificate_key(domains, "lock");
         match self.conn.cmd(&[b"SET", key.as_bytes(), self.owner.as_bytes(), b"NX", b"PX", ms.as_bytes()]) {
@@ -122,39 +127,47 @@ impl Shared {
     }
 
     /// Release the lock if this replica still holds it.
-    pub(crate) fn unlock(&self, domains: &[String]) {
+    #[doc(hidden)]
+    pub fn unlock(&self, domains: &[String]) {
         let key = self.certificate_key(domains, "lock");
         let script = b"if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
         let _ = self.conn.cmd(&[b"EVAL", script, b"1", key.as_bytes(), self.owner.as_bytes()]);
     }
 
-    pub(crate) fn put_challenge(&self, token: &str, key_authorization: &str) {
+    #[doc(hidden)]
+    pub fn put_challenge(&self, token: &str, key_authorization: &str) {
         self.set(&self.key(&["challenge", token]), key_authorization.as_bytes(), Some(CHALLENGE_MS));
     }
 
-    pub(crate) fn challenge(&self, token: &str) -> Option<String> {
+    #[doc(hidden)]
+    pub fn challenge(&self, token: &str) -> Option<String> {
         self.get(&self.key(&["challenge", token])).and_then(|v| String::from_utf8(v).ok())
     }
 
-    pub(crate) fn remove_challenge(&self, token: &str) {
+    #[doc(hidden)]
+    pub fn remove_challenge(&self, token: &str) {
         self.del(&self.key(&["challenge", token]));
     }
 
-    pub(crate) fn put_tls_alpn(&self, domain: &str, key_authorization: &str) {
+    #[doc(hidden)]
+    pub fn put_tls_alpn(&self, domain: &str, key_authorization: &str) {
         self.set(&self.key(&["tls-alpn", &domain.to_ascii_lowercase()]), key_authorization.as_bytes(), Some(CHALLENGE_MS));
     }
 
-    pub(crate) fn tls_alpn(&self, domain: &str) -> Option<String> {
+    #[doc(hidden)]
+    pub fn tls_alpn(&self, domain: &str) -> Option<String> {
         self.get(&self.key(&["tls-alpn", &domain.to_ascii_lowercase()])).and_then(|v| String::from_utf8(v).ok())
     }
 
-    pub(crate) fn remove_tls_alpn(&self, domain: &str) {
+    #[doc(hidden)]
+    pub fn remove_tls_alpn(&self, domain: &str) {
         self.del(&self.key(&["tls-alpn", &domain.to_ascii_lowercase()]));
     }
 }
 
 /// How long a replica that lost the lock waits for the other's certificate.
-pub(crate) const WAIT_FOR_OTHER: Duration = Duration::from_millis(LOCK_MS);
+#[doc(hidden)]
+pub const WAIT_FOR_OTHER: Duration = Duration::from_millis(LOCK_MS);
 
 #[cfg(test)]
 mod tests {

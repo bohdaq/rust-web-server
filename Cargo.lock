@@ -3356,10 +3356,14 @@ dependencies = [
  "rcgen",
  "regex",
  "rustls",
+ "rws-acme",
  "rws-base",
  "rws-http",
  "rws-macros",
  "rws-server",
+ "rws-storage",
+ "rws-tower",
+ "rws-wasm-plugin",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3511,6 +3515,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "rws-acme"
+version = "18.25.0"
+dependencies = [
+ "aws-lc-rs",
+ "hmac 0.12.1",
+ "http",
+ "libc",
+ "rcgen",
+ "rustls",
+ "rws-server",
+ "tokio",
+ "tokio-rustls",
+ "webpki-roots 1.0.11",
+]
+
+[[package]]
 name = "rws-base"
 version = "18.25.0"
 dependencies = [
@@ -3580,6 +3600,43 @@ dependencies = [
  "url-search-params",
  "wasip2 2.0.1+wasi-0.2.12",
  "webpki-roots 1.0.11",
+]
+
+[[package]]
+name = "rws-storage"
+version = "18.25.0"
+dependencies = [
+ "aws-lc-rs",
+ "hmac 0.12.1",
+ "http",
+ "rws-server",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "rws-tower"
+version = "18.25.0"
+dependencies = [
+ "bytes",
+ "http",
+ "http-body",
+ "http-body-util",
+ "rws-server",
+ "tokio",
+ "tonic-health",
+ "tower",
+ "tower-http 0.7.1",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "rws-wasm-plugin"
+version = "18.25.0"
+dependencies = [
+ "rws-server",
+ "wasmtime",
+ "wat",
 ]
 
 [[package]]

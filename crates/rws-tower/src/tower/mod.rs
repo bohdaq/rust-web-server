@@ -61,7 +61,8 @@ const CHUNK: usize = 64 * 1024;
 /// Hop-by-hop and framing headers rws regenerates; never copied across.
 const NOT_COPIED: &[&str] = &["connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-connection", "te", "content-length"];
 
-pub(crate) fn runtime() -> &'static tokio::runtime::Runtime {
+#[doc(hidden)]
+pub fn runtime() -> &'static tokio::runtime::Runtime {
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
@@ -404,6 +405,7 @@ where
 /// (`grpc-status`). The service runs on the `rws-tower` runtime.
 ///
 /// ```rust,ignore
+/// # extern crate rws_tower as rust_web_server;
 /// // A tonic service, e.g. tonic-health's:
 /// let (_, health) = tonic_health::server::health_reporter();
 /// let app = rust_web_server::tower::mount("/grpc.health.v1.Health/", health, App::new());
@@ -522,7 +524,8 @@ where
 /// Drive `future` to completion on this thread (it may borrow from the
 /// caller, so it can't be spawned), inside the `rws-tower` runtime's context
 /// so timers and spawns inside it have a driver.
-pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
+#[doc(hidden)]
+pub fn block_on<F: Future>(future: F) -> F::Output {
     struct Unpark(std::thread::Thread);
     impl std::task::Wake for Unpark {
         fn wake(self: std::sync::Arc<Self>) {

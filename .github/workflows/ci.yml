@@ -46,6 +46,10 @@ jobs:
         run: cargo test --locked -p rws-server --features "http3 test-support sso sso-server sso-saml auth-asymmetric http-client acme serde macros openapi gateway-api model-sqlite storage-local storage-s3 storage-azure storage-gcs pkcs11"
       - if: matrix.name == 'http1 only'
         run: cargo test --locked -p rws-server --features "http1 test-support" --lib
+      - if: matrix.args == ''
+        run: cargo test --locked -p rws-acme -p rws-tower -p rws-wasm-plugin
+      - if: matrix.args == ''
+        run: cargo test --locked -p rws-storage --features "storage-local storage-s3 storage-azure storage-gcs"
 
   msrv:
     name: msrv (1.99, all features)

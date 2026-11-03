@@ -9,6 +9,7 @@
 //! # Local disk (requires the `storage-local` feature)
 //!
 //! ```rust
+//! # extern crate rws_storage as rust_web_server;
 //! # #[cfg(feature = "storage-local")]
 //! # fn example() -> Result<(), rust_web_server::storage::StorageError> {
 //! use rust_web_server::storage::{LocalStorage, Storage};
@@ -29,6 +30,7 @@
 //! # S3-compatible object storage (requires the `storage-s3` feature)
 //!
 //! ```rust,no_run
+//! # extern crate rws_storage as rust_web_server;
 //! # #[cfg(feature = "storage-s3")]
 //! # fn example() -> Result<(), rust_web_server::storage::StorageError> {
 //! use rust_web_server::storage::{S3Storage, Storage};
@@ -47,6 +49,7 @@
 //! # Azure Blob Storage (requires the `storage-azure` feature)
 //!
 //! ```rust,no_run
+//! # extern crate rws_storage as rust_web_server;
 //! # #[cfg(feature = "storage-azure")]
 //! # fn example() -> Result<(), rust_web_server::storage::StorageError> {
 //! use rust_web_server::storage::{AzureBlobStorage, Storage};

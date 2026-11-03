@@ -65,6 +65,8 @@ mod extract_derive_tests;
 mod http_tests;
 #[cfg(test)]
 mod server_tests;
+#[cfg(test)]
+mod feature_tests;
 pub mod i18n;
 pub mod a2a;
 #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
@@ -94,7 +96,7 @@ pub use rws_server::request_id;
 #[cfg(not(target_arch = "wasm32"))]
 pub use rws_server::otel;
 #[cfg(feature = "acme")]
-pub mod acme;
+pub use rws_acme::acme;
 pub use rws_server::middleware;
 pub use rws_server::rate_limit;
 pub use rws_server::router;
@@ -170,7 +172,7 @@ pub mod fastcgi;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ctl;
 #[cfg(feature = "wasm-plugins")]
-pub mod wasm_plugin;
+pub use rws_wasm_plugin::wasm_plugin;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ingress;
 #[cfg(feature = "tera")]
@@ -200,12 +202,15 @@ pub mod mailer;
 pub mod jobs;
 // Also compiled under `secrets` — `secrets::aws_secrets_manager`/`azure_key_vault`
 // reuse `StorageError` and the SigV4/Managed-Identity credential helpers from here.
-#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs", feature = "secrets"))]
-pub mod storage;
+#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs"))]
+pub use rws_storage::storage;
+// `secrets` alone needs only what rws-server's slim `storage` has.
+#[cfg(all(feature = "secrets", not(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs"))))]
+pub use rws_server::storage;
 #[cfg(feature = "openapi")]
 pub use rws_server::openapi;
 #[cfg(feature = "tower")]
-pub mod tower;
+pub use rws_tower::tower;
 #[cfg(feature = "gateway-api")]
 pub mod gateway_api;
 #[cfg(feature = "webhook")]

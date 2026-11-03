@@ -28,19 +28,22 @@ const RECORD_TTL: u32 = 60;
 const TSIG_FUDGE: u16 = 300;
 
 /// `_acme-challenge.<domain>` — for a wildcard, the authorization's base name.
-pub(crate) fn record_name(domain: &str) -> String {
+#[doc(hidden)]
+pub fn record_name(domain: &str) -> String {
     format!("_acme-challenge.{}", domain.trim_end_matches('.'))
 }
 
 /// The TXT value: base64url(SHA-256(key authorization)), unpadded.
-pub(crate) fn record_value(key_authorization: &str) -> String {
+#[doc(hidden)]
+pub fn record_value(key_authorization: &str) -> String {
     let digest = aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, key_authorization.as_bytes());
     crypto::base64url(digest.as_ref())
 }
 
 /// Publish `value` at `name`, replacing whatever TXT was there (a record
 /// from a failed earlier run mustn't satisfy the lookup that follows).
-pub(crate) async fn present(config: &DnsConfig, name: &str, value: &str) -> Result<(), String> {
+#[doc(hidden)]
+pub async fn present(config: &DnsConfig, name: &str, value: &str) -> Result<(), String> {
     match &config.provider {
         DnsProvider::Rfc2136 { server, tsig } => {
             let zone = zone_of(config, server, name).await?;
@@ -58,7 +61,8 @@ pub(crate) async fn present(config: &DnsConfig, name: &str, value: &str) -> Resu
 }
 
 /// Remove the record published by [`present`].
-pub(crate) async fn cleanup(config: &DnsConfig, name: &str, value: &str) -> Result<(), String> {
+#[doc(hidden)]
+pub async fn cleanup(config: &DnsConfig, name: &str, value: &str) -> Result<(), String> {
     match &config.provider {
         DnsProvider::Rfc2136 { server, tsig } => {
             let zone = zone_of(config, server, name).await?;
@@ -78,7 +82,8 @@ pub(crate) async fn cleanup(config: &DnsConfig, name: &str, value: &str) -> Resu
 /// from `dns_server` (`rfc2136`'s primary, or the one given for `exec`),
 /// else from the system resolver. `false` when it never did — the CA may
 /// still see it.
-pub(crate) async fn wait_visible(config: &DnsConfig, name: &str, value: &str) -> bool {
+#[doc(hidden)]
+pub async fn wait_visible(config: &DnsConfig, name: &str, value: &str) -> bool {
     let Some((server, recursive)) = lookup_server(config) else { return false };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(config.propagation_secs);
     loop {
@@ -111,13 +116,15 @@ fn lookup_server(config: &DnsConfig) -> Option<(String, bool)> {
 }
 
 /// `_validation-persist.<domain>` — for a wildcard, its base name.
-pub(crate) fn persist_record_name(domain: &str) -> String {
+#[doc(hidden)]
+pub fn persist_record_name(domain: &str) -> String {
     format!("_validation-persist.{}", domain.trim_end_matches('.'))
 }
 
 /// The DNS-PERSIST-01 record value for `issuer` and `account_url`, with
 /// `policy=wildcard` when it must also cover `*.<domain>`.
-pub(crate) fn persist_record_value(issuer: &str, account_url: &str, wildcard: bool) -> String {
+#[doc(hidden)]
+pub fn persist_record_value(issuer: &str, account_url: &str, wildcard: bool) -> String {
     let mut value = format!("{issuer}; accounturi={account_url}");
     if wildcard {
         value.push_str("; policy=wildcard");
@@ -127,7 +134,8 @@ pub(crate) fn persist_record_value(issuer: &str, account_url: &str, wildcard: bo
 
 /// Whether TXT value `record` authorizes `account_url` for one of
 /// `issuers` (and wildcards, if `wildcard`) at `now`, as the CA checks it.
-pub(crate) fn persist_record_matches(record: &str, issuers: &[String], account_url: &str, wildcard: bool, now: i64) -> bool {
+#[doc(hidden)]
+pub fn persist_record_matches(record: &str, issuers: &[String], account_url: &str, wildcard: bool, now: i64) -> bool {
     let mut parts = record.split(';');
     let issuer = parts.next().unwrap_or("").trim_matches([' ', '\t']);
     if !issuers.iter().any(|i| i == issuer) {
@@ -150,7 +158,8 @@ pub(crate) fn persist_record_matches(record: &str, issuers: &[String], account_u
 }
 
 /// Whether a DNS-PERSIST-01 record for `account_url` is visible at `name`.
-pub(crate) async fn persist_record_published(config: &DnsConfig, name: &str, issuers: &[String], account_url: &str, wildcard: bool) -> Result<bool, String> {
+#[doc(hidden)]
+pub async fn persist_record_published(config: &DnsConfig, name: &str, issuers: &[String], account_url: &str, wildcard: bool) -> Result<bool, String> {
     let (server, recursive) = lookup_server(config).ok_or("no DNS server to look the record up (set dns_server)")?;
     let now = unix_now() as i64;
     Ok(lookup_txt(&server, name, recursive)
@@ -225,7 +234,8 @@ async fn zone_of(config: &DnsConfig, server: &str, name: &str) -> Result<String,
 }
 
 /// One change to the RRset of the challenge name.
-pub(crate) enum Change<'a> {
+#[doc(hidden)]
+pub enum Change<'a> {
     /// Delete every TXT record at the name.
     DeleteAll,
     /// Add a TXT record with this RDATA.
@@ -246,7 +256,8 @@ async fn update(server: &str, tsig: Option<&Tsig>, zone: &str, name: &str, chang
 
 /// An RFC 2136 UPDATE: zone section (zone SOA IN), no prerequisites, the
 /// changes as update records.
-pub(crate) fn update_message(id: u16, zone: &str, name: &str, changes: &[Change<'_>]) -> Result<Vec<u8>, String> {
+#[doc(hidden)]
+pub fn update_message(id: u16, zone: &str, name: &str, changes: &[Change<'_>]) -> Result<Vec<u8>, String> {
     let mut message = Vec::with_capacity(128);
     message.extend_from_slice(&id.to_be_bytes());
     message.extend_from_slice(&(5u16 << 11).to_be_bytes()); // opcode UPDATE
@@ -277,7 +288,8 @@ pub(crate) fn update_message(id: u16, zone: &str, name: &str, changes: &[Change<
 /// covers the message (its ARCOUNT not yet counting the TSIG record), then
 /// the TSIG variables — key name and algorithm in canonical form, class ANY,
 /// TTL 0, time signed, fudge, error 0, no other data.
-pub(crate) fn sign(message: &mut Vec<u8>, tsig: &Tsig, time_signed: u64) -> Result<(), String> {
+#[doc(hidden)]
+pub fn sign(message: &mut Vec<u8>, tsig: &Tsig, time_signed: u64) -> Result<(), String> {
     if message.len() < 12 {
         return Err("DNS message shorter than its header".to_string());
     }
@@ -325,7 +337,8 @@ pub(crate) fn sign(message: &mut Vec<u8>, tsig: &Tsig, time_signed: u64) -> Resu
 
 /// The update's reply: our id, RCODE NOERROR; a refusal names the RCODE and
 /// the TSIG error (BADSIG, BADKEY, BADTIME) when the server sent one.
-pub(crate) fn check_update_reply(reply: &[u8], id: u16) -> Result<(), String> {
+#[doc(hidden)]
+pub fn check_update_reply(reply: &[u8], id: u16) -> Result<(), String> {
     let message = dns::parse(reply)?;
     if message.id != id {
         return Err("reply to another message".to_string());

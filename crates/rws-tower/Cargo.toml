@@ -1,0 +1,40 @@
+[package]
+name = "rws-tower"
+description = "Tower interop for rust-web-server: adapters between rws apps and Tower services and layers. (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+[features]
+default = ["tower"]
+# Test helpers rust-web-server's own tests use.
+test-support = []
+http2 = ["dep:tokio", "dep:bytes", "dep:http", "rws-server/http2"]
+tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util"]
+
+[dependencies]
+rws-server.workspace = true
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }
+bytes = { version = "1", optional = true }
+http = { version = "1", optional = true }
+tower-service = { version = "0.3.3", optional = true }
+tower-layer = { version = "0.3.3", optional = true }
+http-body = { version = "1.1", optional = true }
+http-body-util = { version = "0.1.5", optional = true }
+
+[dev-dependencies]
+rws-server = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tower-http = { version = "0.7.1", default-features = false, features = ["set-header", "validate-request", "timeout"] }
+tonic-health = { version = "=0.14.6", default-features = false }
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1.5"
+bytes = "1"

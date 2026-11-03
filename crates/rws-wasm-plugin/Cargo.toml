@@ -1,0 +1,29 @@
+[package]
+name = "rws-wasm-plugin"
+description = "WebAssembly plugins for rust-web-server (wasmtime). (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+[features]
+default = ["wasm-plugins"]
+# Test helpers rust-web-server's own tests use.
+test-support = []
+wasm-plugins = ["dep:wasmtime"]
+
+[dependencies]
+rws-server.workspace = true
+wasmtime = { version = "49.0", default-features = false, features = ["cranelift", "runtime", "std", "anyhow"], optional = true }
+
+[dev-dependencies]
+rws-server = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+wat = "1"

@@ -560,7 +560,8 @@ fn STATUS_CODE_REASON_PHRASE_FOR(status: u16) -> &'static crate::response::Statu
 }
 
 /// `rws_wasm_plugin_*` series.
-pub(crate) mod metrics {
+#[doc(hidden)]
+pub mod metrics {
     use super::*;
     use std::collections::BTreeMap;
 
@@ -577,14 +578,16 @@ pub(crate) mod metrics {
         STATS.get_or_init(Mutex::default)
     }
 
-    pub(crate) fn call(plugin: &str, hook: &'static str) {
+    #[doc(hidden)]
+    pub fn call(plugin: &str, hook: &'static str) {
         if ANY.fetch_add(1, Ordering::Relaxed) == 0 {
             crate::metrics::register_section(crate::metrics::section::WASM_PLUGINS, prometheus_text);
         }
         *stats().lock().unwrap_or_else(|e| e.into_inner()).calls.entry((plugin.to_string(), hook)).or_default() += 1;
     }
 
-    pub(crate) fn error(plugin: &str, kind: &'static str) {
+    #[doc(hidden)]
+    pub fn error(plugin: &str, kind: &'static str) {
         *stats().lock().unwrap_or_else(|e| e.into_inner()).errors.entry((plugin.to_string(), kind)).or_default() += 1;
     }
 
@@ -592,7 +595,8 @@ pub(crate) mod metrics {
         value.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
     }
 
-    pub(crate) fn prometheus_text() -> String {
+    #[doc(hidden)]
+    pub fn prometheus_text() -> String {
         if ANY.load(Ordering::Relaxed) == 0 {
             return String::new();
         }

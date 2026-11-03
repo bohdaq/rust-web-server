@@ -1,0 +1,40 @@
+[package]
+name = "rws-acme"
+description = "ACME for rust-web-server: certificates from Let's Encrypt and other ACME CAs (HTTP-01, TLS-ALPN-01, DNS-01, on-demand, shared storage). (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+[features]
+default = ["acme"]
+# Test helpers rust-web-server's own tests use.
+test-support = []
+acme = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs", "rws-server/acme"]
+http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:http", "dep:webpki-roots", "dep:libc", "rws-server/http2"]
+
+[dependencies]
+rws-server.workspace = true
+libc = { version = "0.2", optional = true }
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"], optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+http = { version = "1", optional = true }
+hmac  = { version = "0.12", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+webpki-roots = { version = "1.0.11", optional = true }
+aws-lc-rs = { version = "1", optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std", "prefer-post-quantum"], optional = true }
+
+[dev-dependencies]
+rws-server = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }

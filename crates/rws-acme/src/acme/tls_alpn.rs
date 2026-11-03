@@ -56,19 +56,22 @@ pub fn is_challenge(hello: &ClientHello) -> bool {
 }
 
 /// Serve `key_authorization` for `domain` until [`remove`].
-pub(crate) fn add(domain: &str, key_authorization: &str) -> Result<(), String> {
+#[doc(hidden)]
+pub fn add(domain: &str, key_authorization: &str) -> Result<(), String> {
     let certificate = challenge_certificate(domain, key_authorization)?;
     store().write().unwrap_or_else(|e| e.into_inner()).insert(domain.to_ascii_lowercase(), Arc::new(certificate));
     Ok(())
 }
 
-pub(crate) fn remove(domain: &str) {
+#[doc(hidden)]
+pub fn remove(domain: &str) {
     store().write().unwrap_or_else(|e| e.into_inner()).remove(&domain.to_ascii_lowercase());
 }
 
 /// The RFC 8737 §3 certificate: SAN = `domain`, critical acmeIdentifier =
 /// SHA-256(key authorization), a fresh P-256 key.
-pub(crate) fn challenge_certificate(domain: &str, key_authorization: &str) -> Result<CertifiedKey, String> {
+#[doc(hidden)]
+pub fn challenge_certificate(domain: &str, key_authorization: &str) -> Result<CertifiedKey, String> {
     let digest = aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, key_authorization.as_bytes());
     let mut params = rcgen::CertificateParams::new(vec![domain.to_string()]).map_err(|e| format!("TLS-ALPN-01 certificate for {domain}: {e}"))?;
     params.custom_extensions = vec![rcgen::CustomExtension::new_acme_identifier(digest.as_ref())];
@@ -82,14 +85,16 @@ pub(crate) fn challenge_certificate(domain: &str, key_authorization: &str) -> Re
 /// Set once the TLS listener serves (it then answers challenges itself).
 static TLS_LISTENER_UP: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn note_tls_listener() {
+#[doc(hidden)]
+pub fn note_tls_listener() {
     TLS_LISTENER_UP.store(true, Ordering::SeqCst);
     // Release the startup socket's clone: per-core runtimes bind the port
     // anew (SO_REUSEPORT), which an open plain socket on it would block.
     startup_listener().lock().unwrap_or_else(|e| e.into_inner()).take();
 }
 
-pub(crate) fn tls_listener_up() -> bool {
+#[doc(hidden)]
+pub fn tls_listener_up() -> bool {
     TLS_LISTENER_UP.load(Ordering::SeqCst)
 }
 
@@ -122,7 +127,8 @@ impl ResolvesServerCert for ChallengesOnly {
 
 /// A temporary listener answering TLS-ALPN-01 handshakes until `shutdown`:
 /// on the startup socket when there is one, else bound to `addr`.
-pub(crate) async fn serve(addr: String, shutdown: tokio::sync::oneshot::Receiver<()>) -> Result<(), String> {
+#[doc(hidden)]
+pub async fn serve(addr: String, shutdown: tokio::sync::oneshot::Receiver<()>) -> Result<(), String> {
     let std_listener = match startup_listener().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
         Some(listener) => Some(listener.try_clone().map_err(|e| e.to_string())?),
         None => None,
