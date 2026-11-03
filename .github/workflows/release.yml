@@ -194,13 +194,16 @@ jobs:
           fi
           # crates.io limits new crate names to a burst, then about one per 10
           # minutes (429, "try again after <date>"): wait until then and retry.
+          # The log goes outside the checkout: in it, cargo publish of the
+          # root package (rust-web-server) refuses the dirty tree.
+          log="$RUNNER_TEMP/publish.log"
           publish() {
             for _ in 1 2 3 4 5 6; do
-              rc=0; cargo publish -p "$1" $locked >publish.log 2>&1 || rc=$?
-              cat publish.log
+              rc=0; cargo publish -p "$1" $locked >"$log" 2>&1 || rc=$?
+              cat "$log"
               [ "$rc" = 0 ] && return 0
-              grep -q "429 Too Many Requests" publish.log || return 1
-              after=$(grep -oE "try again after [A-Za-z]{3}, [0-9]+ [A-Za-z]{3} [0-9]{4} [0-9:]+ GMT" publish.log | tail -1 | sed 's/try again after //')
+              grep -q "429 Too Many Requests" "$log" || return 1
+              after=$(grep -oE "try again after [A-Za-z]{3}, [0-9]+ [A-Za-z]{3} [0-9]{4} [0-9:]+ GMT" "$log" | tail -1 | sed 's/try again after //')
               wait=$(( $(date -u -d "${after:-now}" +%s) - $(date -u +%s) + 30 ))
               [ "$wait" -lt 30 ] && wait=30
               echo "rate limited: retrying $1 in ${wait}s"
