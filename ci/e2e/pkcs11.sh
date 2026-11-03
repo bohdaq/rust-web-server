@@ -68,7 +68,7 @@ probe ec-key.pem --tlsv1.3 || fail "HTTPS with the EC key on the token (TLS 1.3)
 probe ec-key.pem --tlsv1.2 --tls-max 1.2 || fail "HTTPS with the EC key on the token (TLS 1.2)"
 pass "EC P-256 key on the token: TLS 1.3 and 1.2"
 grep -q "runtime: shared (a TLS key is on a PKCS#11 token" rws-ec.log || fail "the binary didn't keep the shared runtime for a pkcs11: key"
-pids=(); for _ in $(seq 1 24); do curl -s --cacert ec-key.pem https://localhost:18571/ >par.out.$RANDOM & pids+=($!); done
+pids=(); for i in $(seq 1 24); do curl -s --cacert ec-key.pem https://localhost:18571/ >"par.out.$i" & pids+=($!); done
 for p in "${pids[@]}"; do wait "$p" || fail "a parallel handshake failed"; done
 [ "$(cat par.out.* | grep -c hsm-ok)" = 24 ] || fail "parallel handshakes: $(cat par.out.* | grep -c hsm-ok)/24"
 rm -f par.out.*
