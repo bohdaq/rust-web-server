@@ -566,6 +566,7 @@ dependencies = [
  "rws-base",
  "rws-http",
  "rws-macros",
+ "rws-proxy",
  "rws-server",
  "rws-tower",
  "serde",
@@ -677,6 +678,23 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "rws-proxy"
+version = "18.25.0"
+dependencies = [
+ "aws-lc-rs",
+ "bytes",
+ "h2",
+ "http",
+ "rcgen",
+ "rustls",
+ "rws-acme",
+ "rws-server",
+ "tokio",
+ "tokio-rustls",
+ "webpki-roots",
 ]
 
 [[package]]

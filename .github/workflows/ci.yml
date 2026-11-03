@@ -50,6 +50,10 @@ jobs:
         run: cargo test --locked -p rws-acme -p rws-tower -p rws-wasm-plugin
       - if: matrix.args == ''
         run: cargo test --locked -p rws-storage --features "storage-local storage-s3 storage-azure storage-gcs"
+      - if: matrix.args == ''
+        run: cargo test --locked -p rws-proxy --features "http3 sso auth http-client acme serde model-sqlite storage-s3"
+      - if: matrix.name == 'http1 only'
+        run: cargo test --locked -p rws-proxy --features http1 --lib
 
   msrv:
     name: msrv (1.99, all features)

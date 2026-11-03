@@ -8538,7 +8538,7 @@ WebSocket::send_pong(&mut stream, ping_payload)?;
 ```
 
 :::note[WebSocket proxy]
-`src/ws_proxy/mod.rs` provides `WsProxy` — a standalone WebSocket proxy that
+`crates/rws-proxy/src/ws_proxy/mod.rs` provides `WsProxy` — a standalone WebSocket proxy that
 forwards upgrade requests and relays raw bytes bidirectionally between the
 client and a backend server.
 :::
@@ -14249,7 +14249,7 @@ backends = ["8.8.8.8:53", "8.8.4.4:53"]
 
 <https://rws8.tech/proxy/reverse-proxy/>
 
-`ReverseProxy` is a [`Middleware`](/building-apps/middleware/) that forwards incoming HTTP/1.1 requests to one or more backends. It lives in `src/proxy/mod.rs` and requires no feature flags.
+`ReverseProxy` is a [`Middleware`](/building-apps/middleware/) that forwards incoming HTTP/1.1 requests to one or more backends. It lives in `crates/rws-proxy/src/proxy/mod.rs` and requires no feature flags.
 
 ## Basic usage
 
@@ -14796,13 +14796,13 @@ If all backends fail their health checks, the live list becomes empty. `DynamicP
 
 ## Implementation reference
 
-The health checker lives in `src/proxy_config/health.rs`:
+The health checker lives in `crates/rws-proxy/src/proxy_config/health.rs`:
 
 - `start_health_checker(upstream_name, backends, live, config, stop, trust)` — spawns the daemon thread. It exits when `stop` is set (a `SIGHUP` reload sets it for the replaced configuration's checkers); `trust` is the upstream's `tls_ca_file` roots, if any, so probes to `https://` backends verify against the same CA as requests.
 - `check_backend(backend, path, timeout, trust)` — sends a single probe, returns `true` on `2xx`.
 - `parse_backend_url(backend)` — strips the `https://`/`http://`/`h2://`/`wss://`/`ws://` prefix (or none) and returns `(host, port, tls)`.
 
-`WsProxy`'s side of this lives in `src/ws_proxy/mod.rs`:
+`WsProxy`'s side of this lives in `crates/rws-proxy/src/ws_proxy/mod.rs`:
 
 - `WsProxy::with_live_backends(all_backends, live)` — the constructor `[ws_proxy.health_check]` uses internally, also public for library use.
 - `pick_backend()` reads the current `live` list on every new connection and returns `None` (→ `503`) if it's empty.

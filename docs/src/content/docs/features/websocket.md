@@ -215,7 +215,7 @@ WebSocket::send_pong(&mut stream, ping_payload)?;
 ```
 
 :::note[WebSocket proxy]
-`src/ws_proxy/mod.rs` provides `WsProxy` — a standalone WebSocket proxy that
+`crates/rws-proxy/src/ws_proxy/mod.rs` provides `WsProxy` — a standalone WebSocket proxy that
 forwards upgrade requests and relays raw bytes bidirectionally between the
 client and a backend server.
 :::

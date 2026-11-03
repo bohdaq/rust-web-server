@@ -1,0 +1,60 @@
+[package]
+name = "rws-proxy"
+description = "The proxy and operations layer of rust-web-server: reverse proxy, config-driven routes, load balancing, L4 and WebSocket proxies, the admin API, cluster sync, fleet pull, WAF, LLM and A2A gateways, FastCGI, traffic insights. (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+[features]
+default = []
+# Test helpers rust-web-server's own tests use.
+test-support = []
+http1 = ["rws-server/http1"]
+acme = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:aws-lc-rs", "rws-server/acme", "dep:rws-acme", "rws-acme/acme"]
+auth = ["rws-server/auth"]
+gateway-api = ["http2", "serde", "rws-server/gateway-api"]
+http-client = ["dep:rustls", "dep:webpki-roots", "rws-server/http-client", "rws-storage?/http-client"]
+http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "rws-server/http2", "rws-acme?/http2"]
+http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn", "rws-server/http3"]
+model-mysql = ["http2", "rws-server/model-mysql"]
+model-postgres = ["http2", "rws-server/model-postgres"]
+model-sqlite = ["http2", "rws-server/model-sqlite"]
+serde = ["rws-server/serde"]
+sso = ["dep:rand_core", "http-client", "rws-server/sso"]
+storage-s3 = ["http-client", "rws-server/storage-s3", "dep:rws-storage", "rws-storage/storage-s3"]
+wasm-plugins = ["dep:rws-wasm-plugin", "rws-wasm-plugin/wasm-plugins"]
+
+[dependencies]
+rws-server.workspace = true
+rws-acme = { workspace = true, optional = true }
+rws-storage = { workspace = true, optional = true }
+rws-wasm-plugin = { workspace = true, optional = true }
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"], optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+h2 = { version = "0.4", optional = true }
+bytes = { version = "1", optional = true }
+http = { version = "1", optional = true }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "bloom"], optional = true }
+h3 = { version = "0.0.8", optional = true }
+h3-quinn = { version = "0.0.10", optional = true }
+rand_core = { version = "0.6", features = ["getrandom"], optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+webpki-roots = { version = "1.0.11", optional = true }
+aws-lc-rs = { version = "1", optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std", "prefer-post-quantum"], optional = true }
+
+[dev-dependencies]
+rws-server = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
+bytes = "1"

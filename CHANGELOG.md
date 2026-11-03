@@ -19,8 +19,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   metrics, OpenTelemetry, the HTTP client, the model layer — in
   `rws-server`; ACME, the storage backends, the Tower adapters and WASM
   plugins in `rws-acme`, `rws-storage`, `rws-tower` and `rws-wasm-plugin`
-  (built only with the feature that enables each); all published with
-  rust-web-server at the same version.
+  (built only with the feature that enables each), and the proxy and
+  operations layer (proxy, config routes, admin API, cluster, fleet, WAF,
+  LLM and A2A gateways, FastCGI, traffic insights) in `rws-proxy`; all
+  published with rust-web-server at the same version.
   ACME, the proxy, the WAF, the LLM gateway, traffic insights and templates
   plug into the server through registration hooks instead of being called
   from it. Every `rust_web_server::…` path is

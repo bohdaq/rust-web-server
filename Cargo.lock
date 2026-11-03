@@ -3360,6 +3360,7 @@ dependencies = [
  "rws-base",
  "rws-http",
  "rws-macros",
+ "rws-proxy",
  "rws-server",
  "rws-storage",
  "rws-tower",
@@ -3561,6 +3562,29 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "rws-proxy"
+version = "18.25.0"
+dependencies = [
+ "aws-lc-rs",
+ "bytes",
+ "h2",
+ "h3",
+ "h3-quinn",
+ "http",
+ "quinn",
+ "rand_core 0.6.4",
+ "rcgen",
+ "rustls",
+ "rws-acme",
+ "rws-server",
+ "rws-storage",
+ "rws-wasm-plugin",
+ "tokio",
+ "tokio-rustls",
+ "webpki-roots 1.0.11",
 ]
 
 [[package]]

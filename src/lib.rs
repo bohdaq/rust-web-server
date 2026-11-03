@@ -68,7 +68,7 @@ mod server_tests;
 #[cfg(test)]
 mod feature_tests;
 pub mod i18n;
-pub mod a2a;
+pub use rws_proxy::a2a;
 #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
 pub use rws_server::systemd;
 pub use rws_server::ip_filter;
@@ -77,12 +77,12 @@ pub use rws_server::blocklist;
 pub use rws_server::cache;
 pub use rws_server::early_hints;
 pub use rws_server::disk_guard;
-pub mod traffic;
+pub use rws_proxy::traffic;
 pub use rws_server::authz;
 pub use rws_server::config_reload;
 #[cfg(not(target_arch = "wasm32"))]
 pub use rws_server::config_watch;
-pub mod config_check;
+pub use rws_proxy::config_check;
 /// RSA public keys and RS256 / rsa-sha256 signature verification (no `rsa` crate).
 #[cfg(any(feature = "auth-asymmetric", feature = "sso"))]
 pub use rws_server::rsa_key;
@@ -129,17 +129,17 @@ pub use rws_server::thread_pool;
 pub use rws_base::url;
 pub use rws_server::pagination;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod proxy;
+pub use rws_proxy::proxy;
 pub use rws_server::rewrite;
 pub use rws_server::scheduler;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod tcp_proxy;
+pub use rws_proxy::tcp_proxy;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod udp_proxy;
+pub use rws_proxy::udp_proxy;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod ws_proxy;
+pub use rws_proxy::ws_proxy;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod canary;
+pub use rws_proxy::canary;
 #[cfg(not(target_arch = "wasm32"))]
 pub use rws_server::circuit_breaker;
 // `BackendPool`/`DiscoverySource` (DNS/etcd/Consul/Docker) are native-only —
@@ -152,29 +152,29 @@ pub(crate) use rws_base::dns;
 pub use rws_server::config_binding;
 pub use rws_server::di;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod proxy_config;
+pub use rws_proxy::proxy_config;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod llm;
+pub use rws_proxy::llm;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod admin;
+pub use rws_proxy::admin;
 /// Fleet config pull: signed configs from HTTPS, S3 or git (18.23.0).
 #[cfg(all(feature = "http2", not(target_arch = "wasm32")))]
-pub mod fleet;
+pub use rws_proxy::fleet;
 /// Web application firewall: rws's own rules (18.22.0).
-pub mod waf;
+pub use rws_proxy::waf;
 /// Runtime state shared across replicas through Redis (18.22.0).
 #[cfg(not(target_arch = "wasm32"))]
-pub mod cluster;
+pub use rws_proxy::cluster;
 /// FastCGI client: PHP through php-fpm (18.21.0).
 #[cfg(not(target_arch = "wasm32"))]
-pub mod fastcgi;
+pub use rws_proxy::fastcgi;
 /// `rws ctl` / `rwsctl`: the admin API from the command line (18.20.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ctl;
 #[cfg(feature = "wasm-plugins")]
 pub use rws_wasm_plugin::wasm_plugin;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod ingress;
+pub use rws_proxy::ingress;
 #[cfg(feature = "tera")]
 pub mod template;
 pub use rws_server::validate;
