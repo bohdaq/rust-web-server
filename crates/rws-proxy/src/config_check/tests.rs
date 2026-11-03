@@ -85,6 +85,14 @@ fn runtime_is_shared_or_per_core() {
 }
 
 #[test]
+fn client_ip_is_forwarded_or_peer() {
+    assert!(check_str("client_ip = \"forwarded\"\n").errors.is_empty());
+    assert!(check_str("client_ip = \"peer\"\n").errors.is_empty());
+    let report = check_str("client_ip = \"xff\"\n");
+    assert!(has(&report.errors, "client_ip = \"xff\""), "{:?}", report.errors);
+}
+
+#[test]
 fn tls_files_must_come_in_pairs_and_exist() {
     let report = check_str("tls_cert_file = \"cert.pem\"\n");
     assert!(has(&report.errors, "tls_key_file is not"), "{:?}", report.errors);

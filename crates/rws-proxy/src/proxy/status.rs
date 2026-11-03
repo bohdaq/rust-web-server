@@ -104,8 +104,19 @@ pub fn received(response: &mut Response, next_hop: Option<&str>) {
     }
 }
 
-/// A hop that got no usable response: `error=…`.
+/// A hop that got no usable response: `error=…`. A `502` for a backend that
+/// didn't answer in time becomes `504 Gateway Timeout`, as nginx answers
+/// (since 18.27.0).
 pub fn failed(response: &mut Response, error: ProxyError, next_hop: Option<&str>, details: Option<&str>) {
+    if response.status_code == 502 && matches!(error, ProxyError::ConnectionTimeout | ProxyError::HttpResponseTimeout) {
+        let mut timeout = crate::error::problem(crate::response::STATUS_CODE_REASON_PHRASE.n504_gateway_timeout, "");
+        for header in response.headers.drain(..) {
+            if !timeout.headers.iter().any(|h| h.name.eq_ignore_ascii_case(&header.name)) {
+                timeout.headers.push(header);
+            }
+        }
+        *response = timeout;
+    }
     if mode().1 {
         add(response, &format!("error={}", error.as_str()), next_hop, details);
     }

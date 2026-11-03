@@ -248,7 +248,7 @@ fn apply(headers: &mut Vec<Header>, edits: &[Edit]) {
 }
 
 fn request_input(request: &Request, connection: &ConnectionInfo) -> Vec<u8> {
-    let mut out = format!("{} {} {}\n{}\n", request.method, request.request_uri, request.http_version, connection.client.ip).into_bytes();
+    let mut out = format!("{} {} {}\n{}\n", request.method, request.request_uri, request.http_version, crate::ip_filter::client_ip(request, &connection.client.ip)).into_bytes();
     for h in &request.headers {
         out.extend_from_slice(h.name.to_ascii_lowercase().as_bytes());
         out.extend_from_slice(b": ");

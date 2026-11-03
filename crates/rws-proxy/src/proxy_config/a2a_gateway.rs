@@ -202,7 +202,7 @@ impl A2aGateway {
         };
         if self.config.audit_log {
             let method = std::str::from_utf8(&request.body).ok().and_then(|b| json_lite::parse(b).ok()).and_then(|v| v.get("method").and_then(JsonValue::as_str).map(str::to_string)).unwrap_or_default();
-            let line = audit_line(&connection.client.ip, &method, &self.config.upstream, response.status_code, started.elapsed());
+            let line = audit_line(&crate::ip_filter::client_ip(request, &connection.client.ip), &method, &self.config.upstream, response.status_code, started.elapsed());
             crate::log::access_sink::write_line(|out| out.extend_from_slice(line.as_bytes()));
         }
         response

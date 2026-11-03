@@ -186,7 +186,7 @@ impl Middleware for LogLayer {
             Err(_) => 500,
         };
         let path = request.request_uri.split('?').next().unwrap_or(&request.request_uri);
-        global().record(now_secs(), &request.method, path, status, &connection.client.ip, latency_ms);
+        global().record(now_secs(), &request.method, path, status, &crate::ip_filter::client_ip(request, &connection.client.ip), latency_ms);
 
         result
     }

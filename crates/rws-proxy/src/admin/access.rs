@@ -294,7 +294,7 @@ impl crate::middleware::Middleware for McpAuditLayer {
         let response = next.execute(request, connection)?;
         if let Some((tool, arguments)) = call {
             let principal = Principal { user: "mcp".to_string(), role: Role::Admin, via: "mcp" };
-            record_change(&principal, &connection.client.ip, "TOOL", &tool, arguments.as_bytes(), response.status_code as u16);
+            record_change(&principal, &crate::ip_filter::client_ip(request, &connection.client.ip), "TOOL", &tool, arguments.as_bytes(), response.status_code as u16);
         }
         Ok(response)
     }

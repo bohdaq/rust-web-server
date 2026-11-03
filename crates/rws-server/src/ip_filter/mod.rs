@@ -124,7 +124,7 @@ impl Middleware for IpFilter {
         next: &dyn Application,
     ) -> Result<Response, String> {
         use crate::error::{AppError, IntoResponse};
-        let matched = self.matches(&connection.client.ip);
+        let matched = self.matches(&client_ip(request, &connection.client.ip));
         match self.mode {
             FilterMode::Allow if !matched => Ok(AppError::Forbidden.into_response()),
             FilterMode::Deny if matched => Ok(AppError::Forbidden.into_response()),

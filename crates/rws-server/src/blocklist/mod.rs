@@ -112,7 +112,7 @@ impl Middleware for BlocklistLayer {
         connection: &ConnectionInfo,
         next: &dyn Application,
     ) -> Result<Response, String> {
-        if global().is_blocked(&connection.client.ip) {
+        if global().is_blocked(&crate::ip_filter::client_ip(request, &connection.client.ip)) {
             return Ok(AppError::Forbidden.into_response());
         }
         next.execute(request, connection)
@@ -126,7 +126,7 @@ impl Middleware for BlocklistLayer {
     /// Clients that aren't blocked pass straight through, so config proxy
     /// routes keep the non-blocking forwarder (since 18.20.1, when the
     /// binary added this layer to proxy mode); an empty list is one atomic load.
-    fn is_passthrough(&self, _request: &Request, connection: &ConnectionInfo) -> bool {
-        !global().is_blocked(&connection.client.ip)
+    fn is_passthrough(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        !global().is_blocked(&crate::ip_filter::client_ip(request, &connection.client.ip))
     }
 }

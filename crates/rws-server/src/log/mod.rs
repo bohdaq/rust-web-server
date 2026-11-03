@@ -201,6 +201,17 @@ impl Log {
     /// 100 ms (and when a thread's buffer passes 32 KiB, when the thread
     /// exits, and at process exit); [`Log::flush_access_log`] writes them now.
     pub fn log_access(request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        // The client behind a trusted proxy (`ip_filter::client_ip`), not the
+        // proxy; only looked up when the request says it was forwarded.
+        let client;
+        let peer_addr = if request.header("x-forwarded-for").is_some() || request.header("forwarded").is_some() {
+            client = crate::ip_filter::client_ip(request, &peer_addr.ip().to_string())
+                .parse::<std::net::IpAddr>()
+                .map_or(*peer_addr, |ip| SocketAddr::new(ip, peer_addr.port()));
+            &client
+        } else {
+            peer_addr
+        };
         // Traffic insights count every request, whether lines are written.
         if let Some(observe) = ACCESS_OBSERVER.get() {
             observe(request, response, peer_addr.ip());

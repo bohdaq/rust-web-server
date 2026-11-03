@@ -1949,7 +1949,7 @@ impl DynamicProxy {
     /// when the circuit breaker took them out, `502` otherwise — or an
     /// unparsable backend address).
     fn prepare<'a>(&self, request: &'a Request, conn: &ConnectionInfo, tried: &[String]) -> Result<Prepared<'a>, Response> {
-        let backend = self.next_backend(request, &conn.client.ip, tried).map_err(|ejected| {
+        let backend = self.next_backend(request, &crate::ip_filter::client_ip(request, &conn.client.ip), tried).map_err(|ejected| {
             let mut response = if ejected { service_unavailable() } else { bad_gateway() };
             crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::DestinationUnavailable, None, None);
             response
@@ -2451,11 +2451,12 @@ impl crate::middleware::Middleware for PerRouteRateLimit {
         next: &dyn Application,
     ) -> Result<Response, String> {
         use crate::error::{AppError, IntoResponse};
-        if self.0.check(&conn.client.ip) {
+        let ip = crate::ip_filter::client_ip(request, &conn.client.ip);
+        if self.0.check(&ip) {
             next.execute(request, conn)
         } else {
             let mut response = AppError::TooManyRequests.into_response();
-            let retry_after = self.0.retry_after(&conn.client.ip);
+            let retry_after = self.0.retry_after(&ip);
             response.headers.push(Header {
                 name: Header::_RETRY_AFTER.into(),
                 value: retry_after.to_string().into(),

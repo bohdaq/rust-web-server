@@ -14,7 +14,7 @@ extern crate self as rust_web_server;
 // public (hidden) so doctests can name them as `rust_web_server::…`.
 #[allow(unused_imports)]
 #[doc(hidden)]
-pub use rws_server::{app, application, error, header, metrics, middleware, range, request, response, server, test_client};
+pub use rws_server::{app, application, error, header, ip_filter, metrics, middleware, range, request, response, server, test_client};
 
 pub mod wasm_plugin;
 

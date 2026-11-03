@@ -76,3 +76,18 @@ fn the_header_by_mode_name_and_next_hop() {
     assert_eq!(None, header(&r));
     set(None, None, false);
 }
+
+#[test]
+fn a_backend_that_times_out_is_a_504() {
+    for (failure, status) in [
+        ("backend response timed out", 504),
+        ("connect to 10.0.0.5:8080 (10.0.0.5:8080) timed out", 504),
+        ("connect to 10.0.0.5:8080 (10.0.0.5:8080) failed: Connection refused (os error 111)", 502),
+    ] {
+        let mut response = crate::proxy::bad_gateway();
+        failed_with(&mut response, failure, None);
+        assert_eq!(response.status_code, status, "{failure}");
+        let body = String::from_utf8(response.content_range_list[0].body.clone()).unwrap();
+        assert!(body.contains(&format!("\"status\":{status}")), "{body}");
+    }
+}

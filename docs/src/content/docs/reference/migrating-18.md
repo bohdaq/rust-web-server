@@ -168,6 +168,15 @@ If you skipped those releases, these refuse or change what you may rely on:
 
 The full list is in [`CHANGELOG.md`](https://github.com/bohdaq/rust-web-server/blob/main/CHANGELOG.md).
 
+## 18.27: the client behind a trusted proxy
+
+Behind a `trusted_proxies` load balancer, the rate limit, `allow_ips` /
+`deny_ips`, blocklist, WAF IP rules, `ip_hash` and the logs now see the
+client from `X-Forwarded-For` instead of the balancer. An allowlist written
+against the balancer's address (e.g. `allow_ips = ["10.0.0.5"]`) now meets the
+real clients: list them, or set `client_ip = "peer"` (`RWS_CONFIG_CLIENT_IP`)
+for the old behaviour. See [The client address](/proxy/reverse-proxy/#the-client-address).
+
 ## 18.24: trusted proxies
 
 Not a breaking release, but one default changed: an incoming

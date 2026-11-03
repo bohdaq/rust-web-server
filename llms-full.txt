@@ -1675,6 +1675,7 @@ order.
 | `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` | `false` | boolean | Add the backend address (`next-hop`) and the failure's text (`details`) to `Proxy-Status`; they reveal internal addresses. |
 | `RWS_CONFIG_CACHE_STATUS` | `true` | boolean | `Cache-Status` (RFC 9211) on responses that pass through a response cache: `hit; ttl=…`, `fwd=uri-miss; stored`, … (since 18.17.0). See [Caching](/features/caching/#cache-status-header). |
 | `RWS_CONFIG_TRUSTED_PROXIES` | loopback + private ranges | list of addresses / CIDR | Peers whose `X-Forwarded-*` and `Forwarded` headers are passed on; from others they're replaced (since 18.24.0). `*` trusts everyone, `none` no one. See [Reverse proxy](/proxy/reverse-proxy/). |
+| `RWS_CONFIG_CLIENT_IP` | `forwarded` | `forwarded` / `peer` | Which address is the client: behind a `trusted_proxies` peer, the first untrusted address from the right of `X-Forwarded-For` (or `Forwarded: for=`); `peer` keeps the TCP peer. Rate limits, IP filters, the blocklist, WAF, `ip_hash` and logs use it (since 18.27.0). See [The client address](/proxy/reverse-proxy/#the-client-address). |
 | `RWS_CONFIG_FORWARDED_HEADER` | `add` | string | Proxied requests carry RFC 7239 `Forwarded` beside `X-Forwarded-*` (since 18.20.0); `off` leaves it out and passes the client's through. |
 | `RWS_CONFIG_TLS_CLIENT_CRL_FILE` | (empty) | paths | Certificate revocation lists for client certificates (mTLS), PEM or DER, comma-separated; revoked certificates fail the handshake (since 18.20.0). See [mTLS](/features/mtls/#revoked-certificates-crls). |
 | `RWS_CONFIG_TLS_CLIENT_CRL_STRICT` | `false` | boolean | Refuse a CRL past its `nextUpdate` and certificates no CRL covers. |
@@ -2184,6 +2185,7 @@ proxy_status_next_hop   = false      # RWS_CONFIG_PROXY_STATUS_NEXT_HOP: add the
 cache_status            = true       # RWS_CONFIG_CACHE_STATUS: Cache-Status on responses through a response cache
 forwarded_header        = "add"      # RWS_CONFIG_FORWARDED_HEADER: RFC 7239 Forwarded on proxied requests; "off" leaves it out
 trusted_proxies         = ["10.0.0.0/8"]  # RWS_CONFIG_TRUSTED_PROXIES: whose X-Forwarded-*/Forwarded to believe (default: loopback + private ranges)
+client_ip               = "forwarded"     # RWS_CONFIG_CLIENT_IP: the client behind a trusted proxy (default) or "peer"
 tls_client_crl_file     = "/etc/rws/clients.crl.pem"  # RWS_CONFIG_TLS_CLIENT_CRL_FILE: revoked client certificates (PEM or DER, comma-separated)
 tls_client_crl_strict   = false      # RWS_CONFIG_TLS_CLIENT_CRL_STRICT: refuse stale CRLs and certificates no CRL covers
 compression_dictionaries = ["/js/app.*.js"]  # RWS_CONFIG_COMPRESSION_DICTIONARIES: later versions as dcz/dcb deltas
@@ -2341,7 +2343,7 @@ type = "proxy"
 [route.action.proxy]
 upstream            = "api"          # Must match a [[upstream]] name
 connect_timeout_ms  = 5000           # (default: 5000)
-read_timeout_ms     = 30000          # (default: 30000)
+read_timeout_ms     = 30000          # (default: 30000); 504 past it (502 before 18.27.0)
 strip_path_prefix   = "/api"         # Strip this prefix before forwarding (optional)
 add_path_prefix     = "/v2"          # Add this prefix after stripping (optional)
 preserve_host       = true           # Send the client's Host upstream (default: false)
@@ -3460,7 +3462,16 @@ fn process(_request: &Request, response: Response, connection: &ConnectionInfo) 
 }
 ```
 
-This is the TCP peer. Behind a load balancer it is the balancer's address; `X-Forwarded-For` is not consulted.
+This is the TCP peer. Behind a load balancer it is the balancer's address. For the
+client behind it, ask `client_ip`: when the peer is one of your
+[`trusted_proxies`](/proxy/reverse-proxy/#the-client-address), it reads the
+client from `X-Forwarded-For` (or `Forwarded`); otherwise it returns the peer
+(since 18.27.0). The rate limit, IP filter, blocklist, WAF and access log use
+the same address.
+
+```rust
+let client = rust_web_server::ip_filter::client_ip(&request, &connection.client.ip);
+```
 
 ## Response
 
@@ -14348,6 +14359,26 @@ behaviour before 18.24), `"none"` no one:
 ```toml
 trusted_proxies = ["10.0.0.0/8", "173.245.48.0/20", "2400:cb00::/32"]   # RWS_CONFIG_TRUSTED_PROXIES
 ```
+
+### The client address
+
+Behind a load balancer every connection comes from the balancer. Since
+18.27.0, when the peer is a `trusted_proxies` address, rws takes the client
+from its `X-Forwarded-For` the way nginx's `real_ip_recursive` does: it walks
+the list from the right, skips addresses that are themselves trusted, and
+uses the first one that isn't (a client can prepend anything, so the left end
+is never believed). With no `X-Forwarded-For` it reads `Forwarded: for=`.
+From an untrusted peer both are ignored and the peer is the client.
+
+That address is what the rate limit, `allow_ips` / `deny_ips`, the
+blocklist, WAF IP rules, `ip_hash` load balancing, the access and request
+logs, FastCGI `REMOTE_ADDR`, admin audit lines and Wasm plugins see. The
+`X-Forwarded-For` rws sends upstream still appends the peer, so the chain
+stays intact. To key everything on the TCP peer again:
+
+```toml
+client_ip = "peer"   # RWS_CONFIG_CLIENT_IP: "forwarded" (default) or "peer"
+```
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
 | `Content-Length` | Length of the forwarded body (exactly one) |
 
@@ -15938,7 +15969,7 @@ let app = App::new()
         .read_timeout_ms(60_000));
 ```
 
-`.read_timeout_ms()` (default 30 s) bounds each wait for the upstream — the TLS and HTTP/2 handshakes, the response head and every body frame — so a backend that goes silent gets a `502`, while a slow response that keeps sending isn't cut off.
+`.read_timeout_ms()` (default 30 s) bounds each wait for the upstream — the TLS and HTTP/2 handshakes, the response head and every body frame — so a backend that goes silent gets a `504` (`502` before 18.27.0), while a slow response that keeps sending isn't cut off.
 
 Supported backend URL schemes for `H2ReverseProxy`:
 
@@ -23021,6 +23052,15 @@ If you skipped those releases, these refuse or change what you may rely on:
 - Inline tables in settings: `rate_limit = { max_requests = 100 }`.
 
 The full list is in [`CHANGELOG.md`](https://github.com/bohdaq/rust-web-server/blob/main/CHANGELOG.md).
+
+## 18.27: the client behind a trusted proxy
+
+Behind a `trusted_proxies` load balancer, the rate limit, `allow_ips` /
+`deny_ips`, blocklist, WAF IP rules, `ip_hash` and the logs now see the
+client from `X-Forwarded-For` instead of the balancer. An allowlist written
+against the balancer's address (e.g. `allow_ips = ["10.0.0.5"]`) now meets the
+real clients: list them, or set `client_ip = "peer"` (`RWS_CONFIG_CLIENT_IP`)
+for the old behaviour. See [The client address](/proxy/reverse-proxy/#the-client-address).
 
 ## 18.24: trusted proxies
 

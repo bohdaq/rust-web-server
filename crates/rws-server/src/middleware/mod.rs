@@ -84,11 +84,12 @@ impl Middleware for RateLimitLayer {
         next: &dyn Application,
     ) -> Result<Response, String> {
         use crate::error::{AppError, IntoResponse};
-        if crate::rate_limit::global().check(&connection.client.ip) {
+        let ip = crate::ip_filter::client_ip(request, &connection.client.ip);
+        if crate::rate_limit::global().check(&ip) {
             next.execute(request, connection)
         } else {
             let mut response = AppError::TooManyRequests.into_response();
-            let retry_after = crate::rate_limit::global().retry_after(&connection.client.ip);
+            let retry_after = crate::rate_limit::global().retry_after(&ip);
             response.headers.push(Header {
                 name: Header::_RETRY_AFTER.into(),
                 value: retry_after.to_string().into(),

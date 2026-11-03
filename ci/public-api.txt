@@ -7573,6 +7573,7 @@ pub fn rust_web_server::ip_filter::TrustedProxies::eq(&self, &Self) -> bool
 pub fn rust_web_server::ip_filter::TrustedProxies::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::ip_filter::TrustedProxies::parse(&str) -> core::result::Result<rust_web_server::ip_filter::TrustedProxies, alloc::string::String>
 pub fn rust_web_server::ip_filter::TrustedProxies::trusts(&self, &str) -> bool
+pub fn rust_web_server::ip_filter::client_ip<'a>(&rust_web_server::request::Request, &'a str) -> alloc::borrow::Cow<'a, str>
 pub fn rust_web_server::ip_filter::is_valid_entry(&str) -> bool
 pub fn rust_web_server::json::Json<T>::deref(&self) -> &T
 pub fn rust_web_server::json::Json<T>::deref_mut(&mut self) -> &mut T
@@ -10247,6 +10248,7 @@ pub rust_web_server::server::proxy_protocol::Parsed::Invalid(&'static str)
 pub rust_web_server::server::proxy_protocol::Parsed::Need(usize)
 pub rust_web_server::server_config::ServerConfig::cache_status: bool
 pub rust_web_server::server_config::ServerConfig::client_hints: bool
+pub rust_web_server::server_config::ServerConfig::client_ip_forwarded: bool
 pub rust_web_server::server_config::ServerConfig::compression_dictionaries: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::server_config::ServerConfig::cors_allow_all: bool
 pub rust_web_server::server_config::ServerConfig::cors_allow_credentials: alloc::string::String

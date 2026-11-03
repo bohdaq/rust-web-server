@@ -347,7 +347,7 @@ impl Application for AdminApi {
         if route == Some("/auth") && request.method == "GET" {
             return Ok(ok(format!(r#"{{"token":true,"oidc":{}}}"#, self.oidc_enabled())));
         }
-        let address = connection.client.ip.clone();
+        let address = crate::ip_filter::client_ip(request, &connection.client.ip).into_owned();
         let principal = match self.authenticate(request) {
             Authenticated::Yes(p) => p,
             Authenticated::NoRole(name) => {

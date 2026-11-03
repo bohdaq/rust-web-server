@@ -13,6 +13,25 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   a ConfigMap with `RWS_CONFIG_FILE` set (until now the chart had no way to
   give rws routes, upstreams or middleware); `extraVolumes` /
   `extraVolumeMounts`. Found by the stage end-to-end suite.
+- `ip_filter::client_ip(request, peer)` — the client address an app should
+  use (below).
+
+### Changed
+
+- **The client behind a trusted proxy.** When the peer is in
+  `trusted_proxies`, the client address is the first untrusted one from the
+  right of `X-Forwarded-For` (else `Forwarded: for=`), as nginx's
+  `real_ip_recursive`. The rate limits, `allow_ips` / `deny_ips`, blocklist,
+  WAF IP rules, `ip_hash`, access and request logs, FastCGI `REMOTE_ADDR`,
+  admin audit and Wasm plugin input use it; until now behind a load balancer
+  they all saw the balancer (every client shared one rate-limit bucket).
+  Breaking for an IP allowlist written against the balancer's address:
+  `client_ip = "peer"` (`RWS_CONFIG_CLIENT_IP`) restores it. Found by the
+  stage end-to-end suite.
+- A backend that doesn't answer within `read_timeout_ms` (or connect in
+  time) gets `504 Gateway Timeout` instead of `502 Bad Gateway`, as nginx
+  answers; `Proxy-Status` already said `http_response_timeout`. Found by the
+  stage end-to-end suite.
 
 ## 18.26.0 — 2026-11-03
 

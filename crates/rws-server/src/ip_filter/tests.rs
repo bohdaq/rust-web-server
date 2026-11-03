@@ -219,3 +219,30 @@ fn is_valid_entry_accepts_both_families_and_rejects_junk() {
         assert!(!super::is_valid_entry(bad), "{bad}");
     }
 }
+
+// ── the client behind a trusted proxy (18.27.0) ──────────────────────────────
+
+fn forwarded_for(xff: &str) -> Request {
+    let mut r = get("/");
+    r.headers.push(crate::header::Header::new("X-Forwarded-For".to_string(), xff.to_string()));
+    r
+}
+
+#[test]
+fn behind_a_trusted_proxy_the_filter_sees_the_client() {
+    // The default trusted_proxies has 10/8: the gateway at 10.0.0.1 forwards
+    // the client 203.0.113.9 (the client's own "1.1.1.1" doesn't count).
+    let deny = IpFilter::deny(["203.0.113.9"]);
+    let r = forwarded_for("1.1.1.1, 203.0.113.9");
+    assert_eq!(deny.handle(&r, &conn("10.0.0.1"), &OkApp).unwrap().status_code, 403);
+    let allow = IpFilter::allow(["203.0.113.0/24"]);
+    assert_eq!(allow.handle(&r, &conn("10.0.0.1"), &OkApp).unwrap().status_code, 200);
+}
+
+#[test]
+fn an_untrusted_peer_cant_claim_another_address() {
+    // Straight from the internet: X-Forwarded-For is ignored.
+    let allow = IpFilter::allow(["10.0.0.0/8"]);
+    let r = forwarded_for("10.0.0.7");
+    assert_eq!(allow.handle(&r, &conn("203.0.113.9"), &OkApp).unwrap().status_code, 403);
+}

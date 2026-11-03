@@ -297,6 +297,12 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.warn(format!("{key} = \"*\": every client can set X-Forwarded-Proto/Host and Forwarded (claim https, another host); list your load balancers instead"));
                 }
             }
+            "RWS_CONFIG_CLIENT_IP" => {
+                let v = value.trim();
+                if !v.is_empty() && !v.eq_ignore_ascii_case("forwarded") && !v.eq_ignore_ascii_case("peer") {
+                    report.error(format!("{key} = {value:?}: expected \"forwarded\" (the client from a trusted proxy's X-Forwarded-For) or \"peer\""));
+                }
+            }
             "RWS_CONFIG_TLS" => {
                 if !value.is_empty() && !value.eq_ignore_ascii_case("internal") {
                     report.error(format!("{key} = {value:?}: expected \"internal\" (or leave it out)"));

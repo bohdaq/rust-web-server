@@ -86,7 +86,16 @@ fn process(_request: &Request, response: Response, connection: &ConnectionInfo) 
 }
 ```
 
-This is the TCP peer. Behind a load balancer it is the balancer's address; `X-Forwarded-For` is not consulted.
+This is the TCP peer. Behind a load balancer it is the balancer's address. For the
+client behind it, ask `client_ip`: when the peer is one of your
+[`trusted_proxies`](/proxy/reverse-proxy/#the-client-address), it reads the
+client from `X-Forwarded-For` (or `Forwarded`); otherwise it returns the peer
+(since 18.27.0). The rate limit, IP filter, blocklist, WAF and access log use
+the same address.
+
+```rust
+let client = rust_web_server::ip_filter::client_ip(&request, &connection.client.ip);
+```
 
 ## Response
 

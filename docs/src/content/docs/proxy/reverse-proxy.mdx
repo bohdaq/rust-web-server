@@ -102,6 +102,26 @@ behaviour before 18.24), `"none"` no one:
 ```toml
 trusted_proxies = ["10.0.0.0/8", "173.245.48.0/20", "2400:cb00::/32"]   # RWS_CONFIG_TRUSTED_PROXIES
 ```
+
+### The client address
+
+Behind a load balancer every connection comes from the balancer. Since
+18.27.0, when the peer is a `trusted_proxies` address, rws takes the client
+from its `X-Forwarded-For` the way nginx's `real_ip_recursive` does: it walks
+the list from the right, skips addresses that are themselves trusted, and
+uses the first one that isn't (a client can prepend anything, so the left end
+is never believed). With no `X-Forwarded-For` it reads `Forwarded: for=`.
+From an untrusted peer both are ignored and the peer is the client.
+
+That address is what the rate limit, `allow_ips` / `deny_ips`, the
+blocklist, WAF IP rules, `ip_hash` load balancing, the access and request
+logs, FastCGI `REMOTE_ADDR`, admin audit lines and Wasm plugins see. The
+`X-Forwarded-For` rws sends upstream still appends the peer, so the chain
+stays intact. To key everything on the TCP peer again:
+
+```toml
+client_ip = "peer"   # RWS_CONFIG_CLIENT_IP: "forwarded" (default) or "peer"
+```
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
 | `Content-Length` | Length of the forwarded body (exactly one) |
 

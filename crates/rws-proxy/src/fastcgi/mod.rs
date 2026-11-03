@@ -463,7 +463,7 @@ impl FastCgi {
             ("DOCUMENT_ROOT".into(), root.clone()),
             ("DOCUMENT_URI".into(), format!("{script_name}{path_info}")),
             ("PATH_INFO".into(), path_info.to_string()),
-            ("REMOTE_ADDR".into(), connection.client.ip.clone()),
+            ("REMOTE_ADDR".into(), crate::ip_filter::client_ip(request, &connection.client.ip).into_owned()),
             ("REMOTE_PORT".into(), connection.client.port.to_string()),
             ("SERVER_ADDR".into(), connection.server.ip.clone()),
             ("SERVER_PORT".into(), connection.server.port.to_string()),

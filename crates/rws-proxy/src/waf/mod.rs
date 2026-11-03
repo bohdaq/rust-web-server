@@ -314,7 +314,8 @@ impl Waf {
         }
 
         // Custom rules first: deny / allow decide on their own.
-        let ip = connection.client.ip.as_str();
+        let client = crate::ip_filter::client_ip(request, &connection.client.ip);
+        let ip = client.as_ref();
         for rule in &self.config.rules {
             if self.custom_matches(rule, request, &path, query, &args, body, ip) {
                 match rule.action {
@@ -498,7 +499,7 @@ impl Middleware for WafLayer {
         eprintln!(
             "[waf] {} {} {} {} score={} {}",
             if block { "blocked" } else { "detected" },
-            connection.client.ip,
+            crate::ip_filter::client_ip(request, &connection.client.ip),
             request.method,
             truncate(&request.request_uri, 200),
             verdict.score,
