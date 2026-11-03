@@ -895,14 +895,34 @@ fn pipe_stream_conflicting_content_lengths_go_chunked() {
 }
 
 #[test]
-fn pipe_stream_passes_upstream_chunked_frames_through() {
-    let framed = b"5\r\nhello\r\n0\r\n\r\n";
+fn pipe_stream_reframes_an_upstream_chunked_body() {
+    let framed = b"5\r\nhello\r\n7\r\n, world\r\n0\r\n\r\n";
     let response = piped_response(&[("Transfer-Encoding", "chunked")]);
     let mut out = vec![];
     Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(framed, 3, false)).unwrap();
     let (head, rest) = split_head(&out);
     assert_eq!(head.matches("Transfer-Encoding").count(), 1, "{head}");
-    assert_eq!(rest, framed);
+    assert_eq!(decode_chunked_strict(rest).0, b"hello, world");
+}
+
+#[test]
+fn pipe_stream_chunked_body_ends_at_the_last_chunk() {
+    // After its last chunk the upstream's keep-alive connection has nothing
+    // more; reading on would wait for the read timeout (an error here).
+    let framed = b"5\r\nhello\r\n0\r\n\r\n";
+    let response = piped_response(&[("Transfer-Encoding", "chunked")]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(framed, 64, true)).unwrap();
+    let (_, rest) = split_head(&out);
+    assert_eq!(decode_chunked_strict(rest).0, b"hello");
+}
+
+#[test]
+fn pipe_stream_content_length_body_ends_without_reading_past_it() {
+    let response = piped_response(&[("Content-Length", "5")]);
+    let mut out = vec![];
+    Server::pipe_stream(&mut out, response, piped_request(METHOD.get), step_reader(b"hello", 64, true)).unwrap();
+    assert_eq!(split_head(&out).1, b"hello");
 }
 
 #[test]

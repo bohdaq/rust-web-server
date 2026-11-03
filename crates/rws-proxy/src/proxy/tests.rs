@@ -1497,3 +1497,48 @@ fn forwarded_carries_a_trusted_proxys_x_forwarded_hops() {
         crate::proxy::forwarded_value(&req, crate::proxy::Peer::plain("203.0.113.9"))
     );
 }
+
+#[test]
+fn length_limited_reader_ends_at_the_length_and_fails_short() {
+    use super::LengthLimitedReader;
+    use std::io::Read;
+    // Reading past the length would hit this error: it must not happen.
+    struct ThenFail(std::io::Cursor<Vec<u8>>);
+    impl Read for ThenFail {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            match self.0.read(buf)? {
+                0 => Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "read past the body")),
+                n => Ok(n),
+            }
+        }
+    }
+    let mut out = Vec::new();
+    LengthLimitedReader::new(Box::new(ThenFail(std::io::Cursor::new(b"hello".to_vec()))), 5).read_to_end(&mut out).unwrap();
+    assert_eq!(out, b"hello");
+
+    let mut out = Vec::new();
+    LengthLimitedReader::new(Box::new(std::io::Cursor::new(b"hello world".to_vec())), 5).read_to_end(&mut out).unwrap();
+    assert_eq!(out, b"hello", "bytes past the length are not part of the body");
+
+    let err = LengthLimitedReader::new(Box::new(std::io::Cursor::new(b"hel".to_vec())), 5)
+        .read_to_end(&mut Vec::new())
+        .unwrap_err();
+    assert!(err.to_string().contains("3 of 5"), "{err}");
+}
+
+#[test]
+fn proxy_streamed_body_ends_at_its_content_length_on_a_kept_alive_connection() {
+    let len = 2 * 1024 * 1024;
+    let mut response = format!("HTTP/1.1 200 OK\r\nContent-Length: {len}\r\nConnection: keep-alive\r\n\r\n");
+    response.push_str(&"x".repeat(len));
+    let response: &'static str = Box::leak(response.into_boxed_str());
+    let (port, _) = keepalive_backend(response, 1);
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let mut resp = proxy.handle(&get("/big"), &conn(), &App::new()).unwrap();
+    let mut pipe = resp.stream_pipe.take().expect("streamed");
+    let started = std::time::Instant::now();
+    let mut out = Vec::new();
+    pipe.read_to_end(&mut out).expect("the body ends cleanly");
+    assert_eq!(out.len(), len);
+    assert!(started.elapsed() < Duration::from_secs(5), "waited for the read timeout: {:?}", started.elapsed());
+}

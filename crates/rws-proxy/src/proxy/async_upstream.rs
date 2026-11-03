@@ -359,7 +359,7 @@ async fn exchange<S: UpstreamConn>(
         // body; the connection isn't reused.
         let body_prefix = buf.split_off(header_end);
         let body_reader = match stream.into_body_reader(body_prefix, read_timeout) {
-            Ok(reader) => reader,
+            Ok(reader) => super::bounded_body(reader, facts.chunked, facts.content_length),
             Err(e) => return Exchange::Failed(e),
         };
         return match parse_status_and_headers(&buf) {

@@ -736,6 +736,55 @@ impl<R: Read + Send> Read for ConcatReader<R> {
     }
 }
 
+/// A streamed upstream body with a `Content-Length`: ends after exactly that
+/// many bytes, and fails if the upstream ends sooner.
+///
+/// Without it the reader went on reading the backend's keep-alive connection
+/// after the last byte and only stopped at the read timeout: HTTP/2 clients
+/// got the whole body and then `RST_STREAM(INTERNAL_ERROR)` 30 s later (Git
+/// LFS downloads behind rws), HTTP/1.1 clients waited 30 s for the end.
+#[doc(hidden)]
+pub struct LengthLimitedReader {
+    inner: Box<dyn Read + Send>,
+    remaining: u64,
+    declared: u64,
+}
+
+impl LengthLimitedReader {
+    #[doc(hidden)]
+    pub fn new(inner: Box<dyn Read + Send>, length: u64) -> Self {
+        LengthLimitedReader { inner, remaining: length, declared: length }
+    }
+}
+
+impl Read for LengthLimitedReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.remaining == 0 || buf.is_empty() {
+            return Ok(0);
+        }
+        let want = buf.len().min(self.remaining.min(usize::MAX as u64) as usize);
+        let n = self.inner.read(&mut buf[..want])?;
+        if n == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                format!("upstream body ended after {} of {} bytes", self.declared - self.remaining, self.declared),
+            ));
+        }
+        self.remaining -= n as u64;
+        Ok(n)
+    }
+}
+
+/// The streamed body reader for an upstream response: bounded by its
+/// `Content-Length` unless it is chunked (the chunked framing ends it).
+#[doc(hidden)]
+pub fn bounded_body(reader: Box<dyn Read + Send>, chunked: bool, content_length: Option<usize>) -> Box<dyn Read + Send> {
+    match content_length {
+        Some(len) if !chunked => Box::new(LengthLimitedReader::new(reader, len as u64)),
+        _ => reader,
+    }
+}
+
 
 /// Idle backend connections kept per `host:port`. 64 matches common nginx
 /// `keepalive` settings and the benchmark's concurrency; fewer meant most
@@ -1207,7 +1256,9 @@ fn exchange<S: UpstreamIo>(
         // can't be reused while the body is in flight.
         return match parse_status_and_headers(&header_bytes) {
             Ok(mut response) => {
-                response.stream_pipe = Some(Box::new(ConcatReader::new(body_prefix, stream)));
+                let facts = HeadFacts::scan(&header_bytes);
+                let body: Box<dyn Read + Send> = Box::new(ConcatReader::new(body_prefix, stream));
+                response.stream_pipe = Some(bounded_body(body, facts.chunked, facts.content_length));
                 Exchange::Done(response)
             }
             Err(e) => Exchange::Failed(e),

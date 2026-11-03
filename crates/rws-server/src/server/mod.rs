@@ -49,6 +49,7 @@ mod example;
 #[cfg(feature = "http2")]
 #[doc(hidden)]
 pub mod http1_async;
+mod chunked_decoder;
 #[cfg(feature = "http2")]
 #[doc(hidden)]
 pub mod body_stream;
@@ -634,7 +635,8 @@ impl Server {
     ///
     /// Called when `response.stream_pipe` is set (proxy passthrough for SSE, AI token
     /// streams, and large downloads). The framing follows the response's headers:
-    /// - `Transfer-Encoding: chunked` (a chunked upstream): its frames are passed through;
+    /// - `Transfer-Encoding: chunked` (a chunked upstream): decoded and framed again, so
+    ///   the body ends at the upstream's last chunk, not when its connection closes;
     /// - one valid `Content-Length` (a large upstream download): kept, and exactly that
     ///   many bytes are copied, so the client can tell a complete body from a cut one;
     /// - neither (SSE, a pipe of unknown length): wrapped in chunked framing here.
@@ -689,17 +691,13 @@ impl Server {
             let mut buf = vec![0u8; FRAME_ROOM + PIPE_CHUNK + 2];
             let read_failed = |e: std::io::Error| format!("upstream body read failed: {}", e);
             if backend_is_chunked {
-                // Passthrough: forward raw chunk frames as-is; the client
-                // decodes them itself (avoids double-chunking).
-                loop {
-                    let n = reader.read(&mut buf[..PIPE_CHUNK]).map_err(read_failed)?;
-                    if n == 0 {
-                        break;
-                    }
-                    stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-                    stream.flush().map_err(|e| e.to_string())?;
-                }
-            } else if let Some(len) = declared_length {
+                // Copying the raw frames read past the last chunk into the
+                // upstream's idle keep-alive connection, until its read
+                // timeout: decode (which stops at the last chunk), frame again
+                // below. Upstream trailers are not forwarded over HTTP/1.1.
+                reader = Box::new(chunked_decoder::ChunkedDecoder::new(reader));
+            }
+            if let Some(len) = declared_length {
                 // Known length: copy exactly that many bytes, unframed.
                 let mut remaining = len;
                 while remaining > 0 {

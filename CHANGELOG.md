@@ -5,6 +5,22 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Fixed
+
+- **Streamed proxy bodies ended only at the backend's read timeout.** A
+  large (> 1 MB) upstream response with a `Content-Length` was read past its
+  last byte on the backend's keep-alive connection until the read timeout:
+  HTTP/2 and HTTP/3 clients got the whole body, then `RST_STREAM`
+  (`INTERNAL_ERROR`) 30 s later — Git LFS retried for ever — and HTTP/1.1
+  clients waited 30 s (18.27.1 hid it there). The body now ends at its
+  length (a shorter one is an error), in both forwarders. A chunked upstream
+  body over HTTP/1.1 is decoded and framed again, so it ends at the last
+  chunk instead of the same timeout; its trailers are no longer passed on.
+- An HTTPS backend that stalled or failed mid-body ended a streamed body as
+  if complete; with a `Content-Length` that is now an error.
+
 ## 18.27.1 — 2026-11-03
 
 ### Fixed

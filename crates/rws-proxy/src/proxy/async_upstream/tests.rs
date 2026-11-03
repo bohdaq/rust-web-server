@@ -257,3 +257,47 @@ tls_ca_file = "{}"
     let response = app.execute_async(&request, &connection).expect("async path").await.unwrap();
     assert_eq!(b"hello".to_vec(), body(&response));
 }
+
+/// A streamed (> 1 MB) response with a `Content-Length` from a backend that
+/// keeps the connection open: the body must end at the length, not at the
+/// read timeout. It used to read on until the timeout, which HTTP/2 clients
+/// saw as `RST_STREAM(INTERNAL_ERROR)` after the whole body (Git LFS).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_streamed_body_ends_at_its_content_length_on_a_kept_alive_connection() {
+    let len = 2 * 1024 * 1024;
+    let mut response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {len}\r\nConnection: keep-alive\r\n\r\n").into_bytes();
+    response.extend((0..len).map(|i| (i % 251) as u8));
+    let response: &'static [u8] = Box::leak(response.into_boxed_slice());
+    let (port, _) = backend(response, 2);
+    let mut resp = fwd(port, &get("/big")).await.unwrap();
+    let mut pipe = resp.stream_pipe.take().expect("streamed");
+    let started = std::time::Instant::now();
+    let read = tokio::task::spawn_blocking(move || {
+        let mut out = Vec::new();
+        pipe.read_to_end(&mut out).map(|_| out)
+    })
+    .await
+    .unwrap()
+    .expect("the body ends cleanly");
+    assert_eq!(read.len(), len);
+    assert!(started.elapsed() < Duration::from_millis(1500), "waited for the read timeout: {:?}", started.elapsed());
+}
+
+/// The same backend cutting the body short: an error, not a clean end.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_streamed_body_shorter_than_its_content_length_is_an_error() {
+    let mut response = b"HTTP/1.1 200 OK\r\nContent-Length: 3000000\r\nConnection: close\r\n\r\n".to_vec();
+    response.extend(std::iter::repeat_n(7u8, 2_000_000));
+    let response: &'static [u8] = Box::leak(response.into_boxed_slice());
+    let (port, _) = backend(response, 1);
+    let mut resp = fwd(port, &get("/short")).await.unwrap();
+    let mut pipe = resp.stream_pipe.take().expect("streamed");
+    let err = tokio::task::spawn_blocking(move || {
+        let mut out = Vec::new();
+        pipe.read_to_end(&mut out)
+    })
+    .await
+    .unwrap()
+    .unwrap_err();
+    assert!(err.to_string().contains("2000000 of 3000000"), "{err}");
+}
