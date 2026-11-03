@@ -1,0 +1,253 @@
+# rws config for the stage suites (mounted by the chart's configFile).
+# Bucket A: kube-dc terminates TLS and forwards plain HTTP/1.1 to rws; the
+# static tree is /srv (the image's working directory, the rws-e2e-www
+# ConfigMap). Secrets come from the environment run.sh sets per run.
+watch = true
+
+[cors]
+allow_origins     = "https://e2e.rws8.tech"
+allow_methods     = "GET,POST,OPTIONS"
+allow_headers     = "content-type,authorization"
+allow_credentials = "false"
+max_age           = 600
+
+# ── upstreams (manifests/backends.yaml) ──────────────────────────────────────
+[[upstream]]
+name     = "whoami"
+backends = ["whoami-a:8080", "whoami-b:8080", "whoami-c:8080"]
+[upstream.health_check]
+path                = "/health"
+interval_secs       = 2
+timeout_ms          = 1000
+healthy_threshold   = 1
+unhealthy_threshold = 2
+[upstream.retry]
+attempts = 2
+
+[[upstream]]
+name     = "canary"
+backends = ["whoami-a:8080", "whoami-b:8080"]
+weights  = [9, 1]
+
+[[upstream]]
+name     = "sticky"
+backends = ["whoami-a:8080", "whoami-b:8080", "whoami-c:8080"]
+[upstream.sticky]
+cookie = "rws_e2e_backend"
+
+[[upstream]]
+name     = "dead"
+backends = ["127.0.0.1:1"]
+
+# Which edit of this file a pod runs: lib.sh's config_edit bumps it, and the
+# suites wait until every pod answers with the new one.
+[[route]]
+name = "config-version"
+[route.match]
+path = "/e2e/config-version"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "e2e-config-0"
+
+# ── S1 core ──────────────────────────────────────────────────────────────────
+[[route]]
+name = "respond"
+[route.match]
+path = "/e2e/respond"
+[route.action]
+type = "respond"
+[route.action.respond]
+status       = 200
+body         = "respond-ok"
+content_type = "text/plain"
+
+[[route]]
+name = "redirect"
+[route.match]
+path = "/e2e/old/*"
+[route.action]
+type = "redirect"
+[route.action.redirect]
+location = "/e2e/respond"
+status   = 308
+
+[[route]]
+name = "cache"
+[route.match]
+path = "/e2e/cache/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream = "whoami"
+[route.middleware.cache]
+ttl_secs = 120
+
+[[route]]
+name = "rewrite"
+[route.match]
+path = "/e2e/rw/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream          = "whoami"
+strip_path_prefix = "/e2e/rw"
+add_path_prefix   = "/rewritten"
+[[route.middleware.rewrite.request]]
+type  = "header_set"
+name  = "X-E2e-Injected"
+value = "yes"
+[[route.middleware.rewrite.response]]
+type  = "header_set"
+name  = "X-E2e-Rewrite"
+value = "yes"
+
+# ── S2 proxy ─────────────────────────────────────────────────────────────────
+[[route]]
+name = "proxy"
+[route.match]
+path = "/e2e/proxy/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream = "whoami"
+
+[[route]]
+name = "canary"
+[route.match]
+path = "/e2e/canary/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream = "canary"
+
+[[route]]
+name = "sticky"
+[route.match]
+path = "/e2e/sticky/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream = "sticky"
+
+[[route]]
+name = "slow"
+[route.match]
+path = "/e2e/slow/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream        = "whoami"
+read_timeout_ms = 1000
+
+[[route]]
+name = "dead"
+[route.match]
+path = "/e2e/dead/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream           = "dead"
+connect_timeout_ms = 1000
+
+# ── S3 security ──────────────────────────────────────────────────────────────
+[[route]]
+name = "bearer"
+[route.match]
+path = "/e2e/auth/bearer"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "bearer-ok"
+[route.middleware.auth]
+type      = "bearer"
+token_env = "E2E_BEARER"
+
+[[route]]
+name = "jwt"
+[route.match]
+path = "/e2e/auth/jwt"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "jwt-ok"
+[route.middleware.auth]
+type       = "jwt"
+secret_env = "E2E_JWT_SECRET"
+
+[[route]]
+name = "basic"
+[route.match]
+path = "/e2e/auth/basic"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "basic-ok"
+[route.middleware.auth]
+type          = "basic"
+htpasswd_file = "/etc/rws-e2e/htpasswd"
+
+# The client's own address is put in by the S3 suite (a ConfigMap edit,
+# hot-reloaded): 192.0.2.1 (TEST-NET-1) is nobody's.
+[[route]]
+name = "ip-allow-me"
+[route.match]
+path = "/e2e/ip/allow-me"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "allowed"
+[route.middleware.ip_filter]
+allow = ["192.0.2.1"]
+
+[[route]]
+name = "ip-deny-me"
+[route.match]
+path = "/e2e/ip/deny-me"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "not-denied"
+[route.middleware.ip_filter]
+deny = ["192.0.2.1"]
+
+# A client claiming to be 203.0.113.9 in its own X-Forwarded-For.
+[[route]]
+name = "ip-deny-spoof"
+[route.match]
+path = "/e2e/ip/deny-spoof"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "not-spoofed"
+[route.middleware.ip_filter]
+deny = ["203.0.113.9"]
+
+[[route]]
+name = "limited"
+[route.match]
+path = "/e2e/limited"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "limited-ok"
+[route.middleware.rate_limit]
+max_requests = 5
+window_secs  = 60
+
+[[route]]
+name = "waf"
+[route.match]
+path = "/e2e/waf/*"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "waf-ok"
+[route.middleware]
+max_body_size = 65536
+[route.middleware.waf]
+mode = "block"
+[[route.middleware.waf.rule]]
+id     = 1001
+field  = "path"
+prefix = ["/e2e/waf/wp-login.php"]
