@@ -69,14 +69,14 @@ passing there.
 `aws-lc-rs` — one rustls provider, as everywhere in rws; 4.0 is the last line
 on MSRV 1.88, 4.2 needs 1.89) and `k8s-openapi` `0.28` (Service, EndpointSlice,
 Secret, Deployment, ConfigMap). Gateway API objects are **our own typed serde
-structs** for v1.6 (`src/gateway_api/types/`), read through
+structs** for v1.6 (`crates/rws-gateway-api/src/gateway_api/types/`), read through
 `kube::core::Object<Spec, Status>` with an `ApiResource` per kind — not the
 `gateway-api` crate (its newest release needs Rust 1.92 and is days old).
 Only the fields rws acts on are modeled; unknown fields are kept untouched
 when status is patched (server-side apply on `/status` with our field
 manager, `rws-gateway`).
 
-### Control plane (`src/gateway_api/controller/`)
+### Control plane (`crates/rws-gateway-api/src/gateway_api/controller/`)
 
 - Watches (kube-runtime reflectors): GatewayClass (ours: `controllerName:
   rws8.tech/gateway-controller`), Gateway, HTTPRoute, GRPCRoute, TLSRoute,
@@ -200,7 +200,7 @@ controller pod writes status.
   state the expected conditions and reasons: `Accepted`, `ResolvedRefs`,
   `NotAllowedByListeners`, `NoMatchingListenerHostname`, `RefNotPermitted`,
   `BackendNotFound`, …); the YAML they apply is vendored under
-  `src/gateway_api/testdata/` with its Apache-2.0 header.
+  `crates/rws-gateway-api/src/gateway_api/testdata/` with its Apache-2.0 header.
 
 ## Phases and status
 
