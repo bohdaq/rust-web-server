@@ -192,8 +192,24 @@ jobs:
             order="rws-macros $(grep -m1 '^version' rws-macros/Cargo.toml | cut -d '"' -f2)
           rust-web-server $TAG"
           fi
+          # crates.io limits new crate names to a burst, then about one per 10
+          # minutes (429, "try again after <date>"): wait until then and retry.
+          publish() {
+            for _ in 1 2 3 4 5 6; do
+              rc=0; cargo publish -p "$1" $locked >publish.log 2>&1 || rc=$?
+              cat publish.log
+              [ "$rc" = 0 ] && return 0
+              grep -q "429 Too Many Requests" publish.log || return 1
+              after=$(grep -oE "try again after [A-Za-z]{3}, [0-9]+ [A-Za-z]{3} [0-9]{4} [0-9:]+ GMT" publish.log | tail -1 | sed 's/try again after //')
+              wait=$(( $(date -u -d "${after:-now}" +%s) - $(date -u +%s) + 30 ))
+              [ "$wait" -lt 30 ] && wait=30
+              echo "rate limited: retrying $1 in ${wait}s"
+              sleep "$wait"
+            done
+            return 1
+          }
           echo "$order" | while read -r name version; do
-            if published "$name" "$version"; then echo "$name $version is already on crates.io"; else cargo publish -p "$name" $locked; fi
+            if published "$name" "$version"; then echo "$name $version is already on crates.io"; else publish "$name" || exit 1; fi
           done
 
   binaries:
