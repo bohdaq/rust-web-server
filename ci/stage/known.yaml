@@ -1,12 +1,2 @@
 # Expected failures: `<case id>: <where it is tracked>`, one per line.
 # A case listed here reports KNOWN instead of FAIL.
-S1.6: spec/STAGE_E2E_FINDINGS.md (ETag per replica), fixed after 18.26.0
-S1.18: spec/STAGE_E2E_FINDINGS.md (CORS on routes), fixed after 18.26.0
-S2.3: spec/STAGE_E2E_FINDINGS.md (Forwarded proto=http behind TLS gateway), fixed after 18.26.0
-S2.8: spec/STAGE_E2E_FINDINGS.md (504 on backend timeout), fixed after 18.26.0
-S3.5: spec/STAGE_E2E_FINDINGS.md (client address behind a trusted proxy), fixed after 18.26.0
-S3.6: spec/STAGE_E2E_FINDINGS.md (client address behind a trusted proxy), fixed after 18.26.0
-S3.3: spec/STAGE_E2E_FINDINGS.md (basic challenge on wrong credentials), fixed after 18.26.0
-S8.6: spec/STAGE_E2E_FINDINGS.md (client address behind a trusted proxy), fixed after 18.26.0
-S8.4: spec/STAGE_E2E_FINDINGS.md (public metrics), fixed after 18.26.0
-S8.9: spec/STAGE_E2E_FINDINGS.md (drain), fixed after 18.26.0
