@@ -236,6 +236,14 @@ Plan: [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) (2026-11-01).
 - **#79** **TLS keys in an HSM** — PKCS#11 URIs for `tls_key_file`.
 - **#80** **Fleet config pull** — instances pull signed config from HTTPS, S3 or git and report back.
 
+## 18.26.0 — Workspace split (released 2026-11-03)
+
+The crate split into layered crates with an unchanged public API. Plan and measurements: [WORKSPACE_SPLIT.md](WORKSPACE_SPLIT.md).
+
+- **rws-base, rws-http, rws-server** — the base, HTTP and server layers.
+- **rws-proxy** — the proxy and operations layer.
+- **rws-acme, rws-storage, rws-tower, rws-wasm-plugin, rws-gateway-api** — feature crates, built only when enabled.
+
 ## 18.25.0 — Follow-ups (released 2026-11-02)
 
 The items 18.24.0 deferred ([CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md)), except the workspace split.

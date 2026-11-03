@@ -5,29 +5,29 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
+## 18.26.0 — 2026-11-03
 
 ### Changed
 
-- The crate is being split into a workspace (`spec/WORKSPACE_SPLIT.md`):
-  the base layer — `core`, `ext`, `http`, `mime_type`, `null`, `symbol`,
-  `url` — now lives in the new crate `rws-base`, and the HTTP layer —
-  `request`, `response`, `header`, `range`, `body`, `json`, `extract`,
-  `compression`, `cors`, `client_hint`, `error`, `entry_point`,
-  `server_config`, `virtual_host` — in `rws-http`, and the server core —
-  the servers, TLS, `App`, routing, middleware, MCP, OpenAPI, SSO, sessions,
-  metrics, OpenTelemetry, the HTTP client, the model layer — in
-  `rws-server`; ACME, the storage backends, the Tower adapters and WASM
-  plugins in `rws-acme`, `rws-storage`, `rws-tower` and `rws-wasm-plugin`
-  (built only with the feature that enables each), and the proxy and
-  operations layer (proxy, config routes, admin API, cluster, fleet, WAF,
-  LLM and A2A gateways, FastCGI, traffic insights) in `rws-proxy`, and the
-  Kubernetes Gateway API controller in `rws-gateway-api`; all
-  published with rust-web-server at the same version.
-  ACME, the proxy, the WAF, the LLM gateway, traffic insights and templates
+- rust-web-server is now a workspace of crates published together at one
+  version (`spec/WORKSPACE_SPLIT.md`). Every `rust_web_server::…` path is
+  unchanged and the public API is identical — keep depending on
+  `rust-web-server`; the other crates are internal:
+  - `rws-base` — `core`, `ext`, `http`, `mime_type`, `null`, `symbol`, `url`;
+  - `rws-http` — requests, responses, headers, ranges, bodies, JSON,
+    extractors, compression, CORS, errors, settings;
+  - `rws-server` — the servers, TLS, `App`, routing, middleware, MCP,
+    OpenAPI, SSO, sessions, metrics, OpenTelemetry, the HTTP client, the
+    model layer;
+  - `rws-proxy` — proxy, config routes, admin API, cluster, fleet, WAF, LLM
+    and A2A gateways, FastCGI, traffic insights;
+  - `rws-acme`, `rws-storage`, `rws-tower`, `rws-wasm-plugin`,
+    `rws-gateway-api` — built only with the feature that enables each.
+- ACME, the proxy, the WAF, the LLM gateway, traffic insights and templates
   plug into the server through registration hooks instead of being called
-  from it. Every `rust_web_server::…` path is
-  unchanged; depend on `rust-web-server` as before.
+  from it.
+- Contributors: a change in one layer rebuilds and retests that layer only
+  (an `mcp` change: 3 s to rebuild its tests, 21 s before).
 
 ## 18.25.0 — 2026-11-02
 
