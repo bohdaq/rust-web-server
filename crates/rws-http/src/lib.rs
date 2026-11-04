@@ -6,6 +6,7 @@
 //! these through the `rust_web_server` paths (`rust_web_server::request`,
 //! `rust_web_server::response`, …), which stay stable; this crate's own
 //! layout may change in any release. See `spec/WORKSPACE_SPLIT.md`.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // The base layer, under the paths the moved code uses (`crate::core`, …).
 pub(crate) use rws_base::{core, ext, http, mime_type, null, symbol, url};

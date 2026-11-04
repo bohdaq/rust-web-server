@@ -9,6 +9,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **Feature presets** (#96): `web` (templates, cookies and CSRF, password
+  hashing, SQLite ORM, jobs, mail), `api` (serde, macros, OpenAPI, JWT auth,
+  SQLite ORM, jobs), `proxy` (HTTP/3, ACME, compression, route auth, regex
+  rewrites, secret references) and `full` (every feature but `fips`,
+  `pkcs11`, `http1` and `mimalloc`). They only turn on other features;
+  contents and clean build times on
+  [Installation](https://rws8.tech/getting-started/installation/#presets).
+- **docs.rs shows every feature's items** (#96), each labelled with the
+  features it needs (`[package.metadata.docs.rs]` with `--cfg docsrs` and
+  `doc_cfg`, in the facade and every crate under `crates/`).
+
 - Database TLS: `RWS_DB_SSL_MODE` (`disable`, `prefer`, `require`,
   `verify-ca`, `verify-full`), `RWS_DB_SSL_ROOT_CERT` and
   `RWS_DB_SSL_CLIENT_CERT`/`_KEY`, read by `DbPool::from_env()` (and the SQL
