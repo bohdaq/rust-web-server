@@ -6241,6 +6241,8 @@ pub const rust_web_server::entry_point::Config::RWS_CONFIG_SPA_FALLBACK: &'stati
 pub const rust_web_server::entry_point::Config::RWS_CONFIG_SPA_FALLBACK_DEFAULT_VALUE: &'static str
 pub const rust_web_server::entry_point::Config::RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES: &'static str
 pub const rust_web_server::entry_point::Config::RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES_DEFAULT_VALUE: &'static str
+pub const rust_web_server::entry_point::Config::RWS_CONFIG_SPA_FALLBACK_ROUTES: &'static str
+pub const rust_web_server::entry_point::Config::RWS_CONFIG_SPA_FALLBACK_ROUTES_DEFAULT_VALUE: &'static str
 pub const rust_web_server::entry_point::Config::RWS_CONFIG_TEMPLATE_DIR: &'static str
 pub const rust_web_server::entry_point::Config::RWS_CONFIG_TEMPLATE_DIR_DEFAULT_VALUE: &'static str
 pub const rust_web_server::entry_point::Config::RWS_CONFIG_THREAD_COUNT: &'static str
@@ -7726,6 +7728,7 @@ pub fn rust_web_server::entry_point::get_max_body_size() -> u64
 pub fn rust_web_server::entry_point::get_request_allocation_size() -> i64
 pub fn rust_web_server::entry_point::get_spa_fallback() -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::entry_point::get_spa_fallback_exclude_prefixes() -> alloc::vec::Vec<alloc::string::String>
+pub fn rust_web_server::entry_point::get_spa_fallback_routes() -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub fn rust_web_server::entry_point::get_virtual_hosts() -> alloc::vec::Vec<rust_web_server::virtual_host::VirtualHostConfig>
 pub fn rust_web_server::entry_point::set_default_values()
 pub fn rust_web_server::entry_point::shown<'a>(&str, &'a str) -> alloc::borrow::Cow<'a, str>
