@@ -32,7 +32,9 @@ impl S3Config {
     /// | `RWS_S3_REGION` | `us-east-1` |
     /// | `RWS_S3_ACCESS_KEY` | optional — falls back to workload identity (IRSA/ECS/IMDS) when unset |
     /// | `RWS_S3_SECRET_KEY` | optional — falls back to workload identity (IRSA/ECS/IMDS) when unset |
-    /// | `RWS_S3_ENDPOINT` | `https://s3.{region}.amazonaws.com` |
+    /// | `RWS_S3_ENDPOINT` | `https://s3.{region}.amazonaws.com` (`http://` works too) |
+    ///
+    /// [`S3Storage::from_env`] also reads `RWS_S3_CA_FILE`.
     pub fn from_env() -> Result<Self, StorageError> {
         let bucket = env::var("RWS_S3_BUCKET")
             .map_err(|_| StorageError::new("RWS_S3_BUCKET environment variable is required"))?;
@@ -71,29 +73,38 @@ impl S3Storage {
         S3Storage { config, client: Client::new(), credentials }
     }
 
-    /// Shortcut for `S3Storage::new(S3Config::from_env()?)`.
-    pub fn from_env() -> Result<Self, StorageError> {
-        Ok(S3Storage::new(S3Config::from_env()?))
+    /// Trust the CA certificates in the PEM file at `path` for an
+    /// `https://` endpoint signed by a private CA, instead of the public
+    /// roots.
+    pub fn with_ca_file(mut self, path: &str) -> Result<Self, StorageError> {
+        self.client = Client::new().ca_file(path).map_err(|e| StorageError::new(e.to_string()))?;
+        Ok(self)
     }
 
-    /// Hostname only (no scheme, no port) — `http_client::Client` writes the
-    /// wire `Host:` header from just the hostname, so the signature must be
-    /// computed against exactly that value to validate on the S3 side.
+    /// `S3Storage::new(S3Config::from_env()?)`, with
+    /// [`with_ca_file`](Self::with_ca_file) when `RWS_S3_CA_FILE` is set.
+    pub fn from_env() -> Result<Self, StorageError> {
+        let storage = S3Storage::new(S3Config::from_env()?);
+        match env::var("RWS_S3_CA_FILE").ok().filter(|v| !v.trim().is_empty()) {
+            Some(path) => storage.with_ca_file(path.trim()),
+            None => Ok(storage),
+        }
+    }
+
+    /// The `Host` the request goes out with — the endpoint's host, with its
+    /// port unless it's the scheme's default, as `http_client::Client`
+    /// writes it (since 18.21.0) — so the SigV4 signature covers exactly
+    /// that value. Before, the port was left out, and every request to an
+    /// endpoint on another port (MinIO's `:9000`) failed the signature check.
     fn host(&self) -> String {
-        let without_scheme = self
-            .config
-            .endpoint
-            .strip_prefix("https://")
-            .or_else(|| self.config.endpoint.strip_prefix("http://"))
-            .unwrap_or(&self.config.endpoint);
-        without_scheme
-            .split('/')
-            .next()
-            .unwrap_or(without_scheme)
-            .split(':')
-            .next()
-            .unwrap_or(without_scheme)
-            .to_string()
+        let endpoint = &self.config.endpoint;
+        let (default_port, rest) = match (endpoint.strip_prefix("https://"), endpoint.strip_prefix("http://")) {
+            (Some(rest), _) => (":443", rest),
+            (None, Some(rest)) => (":80", rest),
+            (None, None) => (":443", endpoint.as_str()),
+        };
+        let authority = rest.split('/').next().unwrap_or(rest);
+        authority.strip_suffix(default_port).unwrap_or(authority).to_string()
     }
 
     /// Percent-encoded `/{bucket}/{key}` — used both as the request path and

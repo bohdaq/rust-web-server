@@ -391,3 +391,34 @@ fn part_reading_and_xml_helpers() {
     assert_eq!(None, super::xml_element(xml, "Missing"));
     assert_eq!("&quot;e&amp;t&quot;", super::xml_escape("\"e&t\""));
 }
+
+#[test]
+fn the_signed_host_is_the_host_header_sent() {
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
+    let (port, captured) = spawn_mock_s3("HTTP/1.1 200 OK", b"");
+    let store = S3Storage::new(test_config(port));
+    store.put("a.txt", b"x", "text/plain").unwrap();
+    let req = captured.lock().unwrap().take().unwrap();
+    assert_eq!(Some(store.host().as_str()), header(&req, "host"));
+    assert_eq!(format!("127.0.0.1:{port}"), store.host());
+    for (endpoint, host) in [
+        ("https://s3.eu-west-1.amazonaws.com", "s3.eu-west-1.amazonaws.com"),
+        ("https://s3.example:443/", "s3.example"),
+        ("http://rook-ceph-rgw.rook-ceph.svc:80", "rook-ceph-rgw.rook-ceph.svc"),
+        ("http://minio:9000", "minio:9000"),
+        ("https://minio:9000", "minio:9000"),
+    ] {
+        let store = S3Storage::new(S3Config { endpoint: endpoint.to_string(), ..test_config(1) });
+        assert_eq!(host, store.host(), "{endpoint}");
+    }
+}
+
+#[test]
+fn a_ca_file_is_read_or_refused() {
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
+    let store = S3Storage::new(test_config(1));
+    assert!(store.with_ca_file("/nonexistent/ca.pem").is_err());
+    let empty = crate::test_env::TempPath::new("s3-empty-ca.pem");
+    std::fs::write(&*empty, "not a certificate").unwrap();
+    assert!(S3Storage::new(test_config(1)).with_ca_file(&empty.to_string_lossy()).is_err());
+}

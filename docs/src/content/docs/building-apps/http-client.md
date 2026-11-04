@@ -42,7 +42,7 @@ fn fetch_user(id: u64) -> Result<String, HttpClientError> {
 }
 ```
 
-`Client::new()` uses a 30-second timeout and follows up to 10 redirects; change them with `Client::new().timeout_ms(ms)` and `.max_redirects(n)`, or per request with `RequestBuilder::timeout_ms`. `send()` blocks the calling thread — in the async servers a synchronous handler already runs on the blocking pool, so that is fine; inside an `async` handler use `AsyncClient` instead.
+`Client::new()` uses a 30-second timeout and follows up to 10 redirects; change them with `Client::new().timeout_ms(ms)` and `.max_redirects(n)`, or per request with `RequestBuilder::timeout_ms`. `https://` URLs are checked against the public roots; for a server whose certificate a private CA signed, `Client::new().ca_file("/etc/internal-ca.pem")?` trusts that CA instead (the sync `Client`, 18.28.0). `send()` blocks the calling thread — in the async servers a synchronous handler already runs on the blocking pool, so that is fine; inside an `async` handler use `AsyncClient` instead.
 
 ## Request bodies
 
