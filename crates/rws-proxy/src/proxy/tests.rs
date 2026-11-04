@@ -896,16 +896,65 @@ fn forward_pooled_retries_a_stale_connection_for_get() {
 }
 
 #[test]
-fn forward_pooled_does_not_replay_a_post_on_a_stale_connection() {
+fn forward_pooled_sends_a_post_on_a_fresh_connection_when_the_pooled_one_closed() {
     let (port, accepted) = closes_after_each_response_backend(4);
     let pool = ConnPool::new(8, Duration::from_secs(60));
     let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
     assert_eq!(200, fwd(&get("/")).unwrap().status_code);
-    thread::sleep(Duration::from_millis(50));
-    // The backend might have received it: a non-idempotent request fails
-    // rather than being sent twice.
+    thread::sleep(Duration::from_millis(50)); // let the close land
+    // The backend closed the idle connection: seen before reuse, so the POST
+    // is sent once, on a new connection (a pooled copy used to give a 502).
+    assert_eq!(200, fwd(&post("/")).unwrap().status_code);
+    assert_eq!(2, accepted.load(AtOrd::Relaxed));
+}
+
+/// Answers the first request on its one connection, then reads the next
+/// request and closes without answering it. Returns (port, connections).
+fn drops_the_second_request_backend() -> (u16, Arc<AtomicU32>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let accepted = Arc::new(AtomicU32::new(0));
+    let accepted2 = Arc::clone(&accepted);
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            accepted2.fetch_add(1, AtOrd::Relaxed);
+            let mut stream = stream;
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\nok");
+            let _ = stream.read(&mut buf); // the next request, never answered
+        }
+    });
+    (port, accepted)
+}
+
+#[test]
+fn forward_pooled_does_not_replay_a_post_the_backend_dropped() {
+    let (port, accepted) = drops_the_second_request_backend();
+    let pool = ConnPool::new(8, Duration::from_secs(60));
+    let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
+    assert_eq!(200, fwd(&get("/")).unwrap().status_code);
+    // The connection is open when reused; the backend reads the POST and
+    // drops it. It may have acted on it: the POST fails rather than being
+    // sent twice.
     assert!(fwd(&post("/")).is_err());
     assert_eq!(1, accepted.load(AtOrd::Relaxed), "no second connection for the POST");
+}
+
+#[test]
+fn a_closed_idle_socket_is_detected_without_blocking() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let (server, _) = listener.accept().unwrap();
+    assert!(!crate::proxy::UpstreamIo::peer_closed(&client), "open and idle");
+    drop(server);
+    thread::sleep(Duration::from_millis(50));
+    let started = std::time::Instant::now();
+    assert!(crate::proxy::UpstreamIo::peer_closed(&client), "the peer closed it");
+    assert!(started.elapsed() < Duration::from_millis(100));
+    // Still a blocking socket afterwards (the check restores the mode).
+    let mut byte = [0u8; 1];
+    assert_eq!(0, (&client).read(&mut byte).unwrap());
 }
 
 // ── HTTPS backends: pooled TLS connections ────────────────────────────────────
@@ -999,7 +1048,7 @@ fn https_backend_connections_are_pooled() {
 
 #[cfg(feature = "http2")]
 #[test]
-fn https_backend_stale_connection_is_retried_for_get_only() {
+fn https_backend_connection_closed_by_the_backend_is_not_reused() {
     let (port, config, accepted) = tls_backend(KEEPALIVE_RESPONSE.as_bytes(), 1);
     let pool = crate::proxy::Pool::new(8, Duration::from_secs(60));
     assert_eq!(200, forward_tls(&pool, &config, port, &get("/")).unwrap().status_code);
@@ -1007,8 +1056,10 @@ fn https_backend_stale_connection_is_retried_for_get_only() {
     assert_eq!(200, forward_tls(&pool, &config, port, &get("/")).unwrap().status_code);
     assert_eq!(2, accepted.load(AtOrd::Relaxed));
     thread::sleep(Duration::from_millis(50));
-    assert!(forward_tls(&pool, &config, port, &post("/")).is_err());
-    assert_eq!(2, accepted.load(AtOrd::Relaxed), "no new connection for the POST");
+    // The close (close_notify / FIN) is seen before reuse: the POST goes out
+    // once, on a new connection.
+    assert_eq!(200, forward_tls(&pool, &config, port, &post("/")).unwrap().status_code);
+    assert_eq!(3, accepted.load(AtOrd::Relaxed));
 }
 
 #[cfg(feature = "http2")]

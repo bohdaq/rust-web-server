@@ -132,7 +132,7 @@ impl ReverseProxy {
             connect_timeout: Duration::from_secs(5),
             read_timeout: Duration::from_secs(30),
             counter: AtomicUsize::new(0),
-            pool: Arc::new(ConnPool::new(POOL_MAX_IDLE, Duration::from_secs(60))),
+            pool: Arc::new(ConnPool::new(POOL_MAX_IDLE, pool::IDLE_TIMEOUT)),
             breaker: None,
             trust: None,
             tls_ca: None,
@@ -224,7 +224,7 @@ impl ReverseProxy {
 
     /// Set the maximum number of idle connections per backend (default: 64).
     pub fn max_idle_conns(mut self, n: usize) -> Self {
-        self.pool = Arc::new(ConnPool::new(n, Duration::from_secs(60)));
+        self.pool = Arc::new(ConnPool::new(n, pool::IDLE_TIMEOUT));
         self
     }
 
@@ -797,7 +797,7 @@ pub const POOL_MAX_IDLE: usize = 64;
 #[doc(hidden)]
 pub fn shared_pool() -> &'static ConnPool {
     static POOL: std::sync::OnceLock<ConnPool> = std::sync::OnceLock::new();
-    POOL.get_or_init(|| ConnPool::new(POOL_MAX_IDLE, Duration::from_secs(60)))
+    POOL.get_or_init(|| ConnPool::new(POOL_MAX_IDLE, pool::IDLE_TIMEOUT))
 }
 
 /// A backend connection the pooled forwarder drives: plain TCP, or TLS
@@ -805,6 +805,13 @@ pub fn shared_pool() -> &'static ConnPool {
 #[doc(hidden)]
 pub trait UpstreamIo: Read + Write + Send + 'static {
     fn set_io_timeouts(&self, read: Duration, write: Duration) -> std::io::Result<()>;
+
+    /// An idle pooled connection the backend has closed (or sent anything
+    /// on, which an idle HTTP/1.1 backend only does to close it): not to be
+    /// reused. Checked without blocking or consuming data.
+    fn peer_closed(&self) -> bool {
+        false
+    }
 }
 
 impl UpstreamIo for TcpStream {
@@ -812,6 +819,27 @@ impl UpstreamIo for TcpStream {
         self.set_read_timeout(Some(read))?;
         self.set_write_timeout(Some(write))
     }
+
+    fn peer_closed(&self) -> bool {
+        socket_closed(self)
+    }
+}
+
+/// Whether a blocking idle socket is unusable: EOF, unexpected bytes or an
+/// error on a non-blocking peek (only "would block" means still open).
+fn socket_closed(stream: &TcpStream) -> bool {
+    if stream.set_nonblocking(true).is_err() {
+        return true;
+    }
+    let peeked = stream.peek(&mut [0u8; 1]);
+    let restored = stream.set_nonblocking(false).is_ok();
+    !restored || !matches!(peeked, Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock)
+}
+
+/// An idle connection from `pool` that is still open, closing the ones the
+/// backend has closed (a POST on one would fail and can't be retried).
+pub(crate) fn acquire_open<S: UpstreamIo>(pool: &Pool<S>, key: &str) -> Option<S> {
+    std::iter::from_fn(|| pool.acquire(key)).find(|s| !s.peer_closed())
 }
 
 #[cfg(any(feature = "http-client", feature = "http2"))]
@@ -822,6 +850,11 @@ pub type TlsStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
 impl UpstreamIo for TlsStream {
     fn set_io_timeouts(&self, read: Duration, write: Duration) -> std::io::Result<()> {
         self.sock.set_io_timeouts(read, write)
+    }
+
+    fn peer_closed(&self) -> bool {
+        // A close_notify or a FIN both show up on the socket.
+        socket_closed(&self.sock)
     }
 }
 
@@ -1071,7 +1104,7 @@ fn async_tls_pool_for_ca(path: &str) -> &'static Pool<async_upstream::AsyncTlsSt
     let mut pools = POOLS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
     pools
         .entry(path.to_string())
-        .or_insert_with(|| Box::leak(Box::new(Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))))
+        .or_insert_with(|| Box::leak(Box::new(Pool::new(POOL_MAX_IDLE, pool::IDLE_TIMEOUT))))
 }
 
 /// One pool per CA file, for the life of the process.
@@ -1082,7 +1115,7 @@ fn tls_pool_for_ca(path: &str) -> &'static Pool<TlsStream> {
     let mut pools = POOLS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
     pools
         .entry(path.to_string())
-        .or_insert_with(|| Box::leak(Box::new(Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))))
+        .or_insert_with(|| Box::leak(Box::new(Pool::new(POOL_MAX_IDLE, pool::IDLE_TIMEOUT))))
 }
 
 /// Forward `request` to `host:port` over plain HTTP/1.1, reusing an idle
@@ -1137,7 +1170,7 @@ fn forward_via<S: UpstreamIo>(
     connect: impl Fn() -> Result<S, String>,
 ) -> Result<Response, String> {
     let key = format!("{}:{}", host, port);
-    if let Some(stream) = pool.acquire(&key) {
+    if let Some(stream) = acquire_open(pool, &key) {
         match exchange(pool, &key, stream, request, host_header, client, read_timeout) {
             Exchange::Done(response) => return Ok(response),
             Exchange::NoResponse(_) if is_idempotent(&request.method) => {} // stale: retry fresh
@@ -1177,7 +1210,7 @@ fn connect_tcp(host: &str, port: u16, connect_timeout: Duration) -> Result<TcpSt
 #[cfg(any(feature = "http-client", feature = "http2"))]
 fn shared_tls_pool() -> &'static Pool<TlsStream> {
     static POOL: std::sync::OnceLock<Pool<TlsStream>> = std::sync::OnceLock::new();
-    POOL.get_or_init(|| Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))
+    POOL.get_or_init(|| Pool::new(POOL_MAX_IDLE, pool::IDLE_TIMEOUT))
 }
 
 /// TLS client settings for backends: the Mozilla root store, no client

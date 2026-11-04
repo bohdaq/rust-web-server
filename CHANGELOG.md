@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Fixed
+
+- **Proxy: no 502 for a POST after a backend closed an idle connection.** The
+  upstream pools kept idle connections for 60 s, while an rws backend closes
+  them after 30 s; a non-idempotent request on such a connection could not be
+  retried and got a 502 (seen with Stripe webhooks behind a config-file
+  route). A pooled connection is now checked before reuse (a non-blocking
+  peek, plain and TLS, sync and async forwarders) and skipped when the backend
+  has closed it, and the pools keep idle connections 25 s. A request that the
+  backend drops after receiving it is still not replayed unless idempotent.
+
 ## 18.28.0 — 2026-11-04
 
 ### Added

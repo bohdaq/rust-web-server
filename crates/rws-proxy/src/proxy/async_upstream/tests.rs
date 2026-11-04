@@ -74,15 +74,38 @@ async fn keep_alive_connections_are_reused() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_stale_connection_is_retried_for_get_but_not_post() {
+async fn a_connection_the_backend_closed_is_not_reused_for_any_method() {
     let (port, accepted) = backend(OK, 1);
     assert_eq!(200, fwd(port, &get("/")).await.unwrap().status_code);
     tokio::time::sleep(Duration::from_millis(50)).await;
-    assert_eq!(200, fwd(port, &get("/")).await.unwrap().status_code, "stale pooled connection retried");
+    assert_eq!(200, fwd(port, &get("/")).await.unwrap().status_code, "closed pooled connection skipped");
     assert_eq!(2, accepted.load(Ordering::SeqCst));
     tokio::time::sleep(Duration::from_millis(50)).await;
+    // Seen closed before reuse, so a POST goes out once on a new connection
+    // (it used to get a 502).
+    assert_eq!(200, fwd(port, &with_method("POST")).await.unwrap().status_code);
+    assert_eq!(3, accepted.load(Ordering::SeqCst));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_post_the_backend_dropped_is_not_replayed() {
+    // One answer, then the next request is read and dropped unanswered.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let accepted = Arc::new(AtomicU32::new(0));
+    let counter = Arc::clone(&accepted);
+    thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            counter.fetch_add(1, Ordering::SeqCst);
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            let _ = stream.write_all(OK);
+            let _ = stream.read(&mut buf);
+        }
+    });
+    assert_eq!(200, fwd(port, &get("/")).await.unwrap().status_code);
     assert!(fwd(port, &with_method("POST")).await.is_err(), "a POST may have been processed: no replay");
-    assert_eq!(2, accepted.load(Ordering::SeqCst));
+    assert_eq!(1, accepted.load(Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

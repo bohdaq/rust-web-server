@@ -4,7 +4,11 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const DEFAULT_MAX_IDLE: usize = 8;
-const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+/// How long the proxy's own pools keep an idle backend connection: shorter
+/// than the 30 s after which an rws backend closes an idle keep-alive
+/// connection, so a pooled one is normally still open. Backends that close
+/// sooner are caught by the liveness check before reuse (`UpstreamIo::peer_closed`).
+pub(crate) const IDLE_TIMEOUT: Duration = Duration::from_secs(25);
 
 /// Per-backend HTTP/1.1 connection pool of plain TCP connections — the pool
 /// `ReverseProxy::with_pool` takes. (HTTPS backends use an internal
@@ -58,9 +62,9 @@ impl<S> Pool<S> {
         }
     }
 
-    /// Create a pool with defaults: 8 idle connections per backend, 60-second timeout.
+    /// Create a pool with defaults: 8 idle connections per backend, 25-second timeout.
     pub fn new_default() -> Self {
-        Self::new(DEFAULT_MAX_IDLE, DEFAULT_IDLE_TIMEOUT)
+        Self::new(DEFAULT_MAX_IDLE, IDLE_TIMEOUT)
     }
 
     /// Try to acquire an idle connection for `key = "host:port"`.

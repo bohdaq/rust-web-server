@@ -78,7 +78,12 @@ answer `304` to revalidation.
 
 ## Reverse proxy
 
-Upstream HTTP/1.1 connections are pooled per backend (64 idle, 60 s). A
+Upstream HTTP/1.1 connections are pooled per backend (64 idle, 25 s — under
+the 30 s after which an rws backend closes an idle keep-alive connection).
+Before a pooled connection is reused it is checked without blocking; one the
+backend has closed is dropped and the request goes out on a new connection,
+whatever its method. A request whose connection fails before any response
+byte is retried only when it is idempotent (it may have reached the backend). A
 config-file route without middleware is forwarded entirely on the event loop;
 others go through the blocking path with the same pool. Responses over 1 MB,
 chunked or SSE are streamed through instead of buffered. Health checks,

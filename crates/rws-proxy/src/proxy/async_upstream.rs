@@ -37,14 +37,14 @@ pub type AsyncTlsStream = tokio_rustls::client::TlsStream<TcpStream>;
 /// Idle async plain-HTTP backend connections, per `host:port`.
 fn pool() -> &'static Pool<TcpStream> {
     static POOL: std::sync::OnceLock<Pool<TcpStream>> = std::sync::OnceLock::new();
-    POOL.get_or_init(|| Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))
+    POOL.get_or_init(|| Pool::new(POOL_MAX_IDLE, super::pool::IDLE_TIMEOUT))
 }
 
 /// Idle async TLS backend connections verified against the WebPKI roots.
 #[doc(hidden)]
 pub fn default_tls_pool() -> &'static Pool<AsyncTlsStream> {
     static POOL: std::sync::OnceLock<Pool<AsyncTlsStream>> = std::sync::OnceLock::new();
-    POOL.get_or_init(|| Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))
+    POOL.get_or_init(|| Pool::new(POOL_MAX_IDLE, super::pool::IDLE_TIMEOUT))
 }
 
 /// How to reach a TLS backend: the client configuration (roots) and the
@@ -62,9 +62,32 @@ trait UpstreamConn: AsyncRead + AsyncWrite + Unpin + Send + 'static {
     /// The rest of a streamed response body as a blocking reader, after
     /// `prefix` (body bytes already read with the head).
     fn into_body_reader(self, prefix: Vec<u8>, read_timeout: Duration) -> Result<Box<dyn Read + Send>, String>;
+
+    /// An idle pooled connection the backend has closed (or sent anything
+    /// on): not to be reused. Checked without waiting or consuming data.
+    fn peer_closed(&self) -> bool;
+}
+
+/// Whether an idle tokio socket is unusable: EOF, unexpected bytes or an
+/// error on a peek that must not wait (only "pending" means still open).
+fn tcp_closed(stream: &TcpStream) -> bool {
+    let mut byte = [0u8; 1];
+    let mut buf = tokio::io::ReadBuf::new(&mut byte);
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    !matches!(stream.poll_peek(&mut cx, &mut buf), std::task::Poll::Pending)
+}
+
+/// An idle connection from `pool` that is still open, closing the ones the
+/// backend has closed (a POST on one would fail and can't be retried).
+fn acquire_open<S: UpstreamConn>(pool: &Pool<S>, key: &str) -> Option<S> {
+    std::iter::from_fn(|| pool.acquire(key)).find(|s| !s.peer_closed())
 }
 
 impl UpstreamConn for TcpStream {
+    fn peer_closed(&self) -> bool {
+        tcp_closed(self)
+    }
+
     fn into_body_reader(self, prefix: Vec<u8>, read_timeout: Duration) -> Result<Box<dyn Read + Send>, String> {
         let std_stream = self.into_std().map_err(|e| e.to_string())?;
         std_stream.set_nonblocking(false).map_err(|e| e.to_string())?;
@@ -74,6 +97,11 @@ impl UpstreamConn for TcpStream {
 }
 
 impl UpstreamConn for AsyncTlsStream {
+    fn peer_closed(&self) -> bool {
+        // A close_notify or a FIN both show up on the socket.
+        tcp_closed(self.get_ref().0)
+    }
+
     fn into_body_reader(mut self, prefix: Vec<u8>, read_timeout: Duration) -> Result<Box<dyn Read + Send>, String> {
         // A TLS stream can't become a blocking socket: a task copies it into
         // a bounded channel that the (blocking) streaming writer reads.
@@ -197,7 +225,7 @@ const GATEWAY_POOL_MAX_IDLE: usize = 1024;
 #[cfg(feature = "gateway-api")]
 fn gateway_pool() -> &'static Pool<TcpStream> {
     static POOL: std::sync::OnceLock<Pool<TcpStream>> = std::sync::OnceLock::new();
-    POOL.get_or_init(|| Pool::new(GATEWAY_POOL_MAX_IDLE, Duration::from_secs(60)))
+    POOL.get_or_init(|| Pool::new(GATEWAY_POOL_MAX_IDLE, super::pool::IDLE_TIMEOUT))
 }
 
 /// The Gateway router's TLS pool for one BackendTLSPolicy configuration
@@ -207,7 +235,7 @@ fn gateway_pool() -> &'static Pool<TcpStream> {
 pub fn gateway_tls_pool(label: &str) -> &'static Pool<AsyncTlsStream> {
     static POOLS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, &'static Pool<AsyncTlsStream>>>> = std::sync::OnceLock::new();
     let mut pools = POOLS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
-    pools.entry(label.to_string()).or_insert_with(|| Box::leak(Box::new(Pool::new(GATEWAY_POOL_MAX_IDLE, Duration::from_secs(60)))))
+    pools.entry(label.to_string()).or_insert_with(|| Box::leak(Box::new(Pool::new(GATEWAY_POOL_MAX_IDLE, super::pool::IDLE_TIMEOUT))))
 }
 
 /// Forward to an endpoint `ip:port` for the Gateway API router: `host_header`
@@ -263,7 +291,7 @@ where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<S, String>>,
 {
-    if let Some(stream) = pool.acquire(key) {
+    if let Some(stream) = acquire_open(pool, key) {
         match exchange(pool, key, stream, request, host, client, read_timeout).await {
             Exchange::Done(response) => return Ok(response),
             Exchange::NoResponse(_) if is_idempotent(&request.method) => {} // stale: retry fresh
