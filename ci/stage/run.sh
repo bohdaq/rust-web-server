@@ -34,6 +34,7 @@ while [ $# -gt 0 ]; do
 done
 
 RUN_ID=$(date -u +%Y%m%d%H%M%S)
+export RUN_ID
 CREATED=0
 if [ -z "$PROJECT" ]; then PROJECT="rws-e2e-$RUN_ID"; CREATED=1; fi
 export NS="$ORG-$PROJECT"
@@ -43,6 +44,10 @@ mkdir -p "$REPORT"
 : >"$REPORT/results.tsv"
 log() { printf '== %s\n' "$*"; }
 . "$STAGE_DIR/lib.sh"
+
+# The test app image builds while the project comes up (a few minutes cold).
+"$STAGE_DIR/deploy_app.sh" build >"$REPORT/app-build.log" 2>&1 &
+APP_BUILD_PID=$!
 
 cleanup() {
   local rc=$?
@@ -118,10 +123,16 @@ YAML
   fi
 fi
 
+# The managed PostgreSQL takes minutes: order it now (deploy_app.sh waits).
+"$STAGE_DIR/deploy_app.sh" db || log "WARNING: ordering the managed PostgreSQL failed"
+
 # ── deploy ────────────────────────────────────────────────────────────────────
 # Per-run secrets for the auth routes (the suites read them from the env).
 rand() { head -c 24 /dev/urandom | base64 | tr -d '/+='; }
 export E2E_BEARER=$(rand) E2E_JWT_SECRET=$(rand) E2E_BASIC_PASS=$(rand) E2E_ADMIN_TOKEN=$(rand)
+# S7: the test app's MCP token (rws's gateway route sends it upstream), the
+# gateway's caller token, the LLM proxy's virtual key.
+export E2E_APP_MCP_TOKEN=$(rand) E2E_MCP_CALLER=$(rand) E2E_LLM_KEY=$(rand)
 # The rws-alt Service's gateway hostname, for the host route (checked below).
 export ALT_HOST="rws-alt-$NS.stage.kube-dc.com"
 sed "s|@ALT_HOST@|$ALT_HOST|" "$STAGE_DIR/config/rws.config.toml" >"$REPORT/rws.config.toml"
@@ -151,6 +162,8 @@ helm_args=(--namespace "$NS" --set replicaCount=3 --set tls.enabled=false --set 
   --set 'extraVolumeMounts[3].name=php' --set 'extraVolumeMounts[3].mountPath=/var/www/e2e/php'
   --set 'extraVolumeMounts[3].readOnly=true'
   --set-string env.RWS_ADMIN_TOKEN="$E2E_ADMIN_TOKEN"
+  --set-string env.E2E_APP_MCP_AUTH="Bearer $E2E_APP_MCP_TOKEN" --set-string env.E2E_MCP_CALLER="$E2E_MCP_CALLER"
+  --set-string env.E2E_LLM_KEY="$E2E_LLM_KEY"
   --set-string env.E2E_BEARER="$E2E_BEARER" --set-string env.E2E_JWT_SECRET="$E2E_JWT_SECRET")
 [ -n "$IMAGE_TAG" ] && helm_args+=(--set image.tag="$IMAGE_TAG")
 helm upgrade --install rws "$ROOT/helm/rws" "${helm_args[@]}" >/dev/null
@@ -182,6 +195,16 @@ if eventually 300 sh -c "kubectl -n $NS get svc rws-alt rws-admin -o jsonpath='{
   eventually 300 sh -c "curl -fsS --max-time 10 $ALT_URL/healthz >/dev/null && curl -sS --max-time 10 -o /dev/null $ADMIN_URL/" || log "WARNING: rws-alt or rws-admin not reachable yet"
 else
   log "WARNING: rws-alt / rws-admin got no hostname"; export ALT_URL="" ADMIN_URL=""
+fi
+
+# The test app (S3 rest, S4, S5, S6 SSE, S7).
+export APP_URL="https://app-$NS.stage.kube-dc.com" IDP_URL="https://idp-$NS.stage.kube-dc.com" SP_URL="https://sp-$NS.stage.kube-dc.com"
+wait "$APP_BUILD_PID" || { log "WARNING: the app image didn't build (see app-build.log)"; }
+log "test app"
+if "$STAGE_DIR/deploy_app.sh" >"$REPORT/app-deploy.log" 2>&1; then
+  export APP_READY=1; pass S0.3 "test app, IdP, SP, managed PostgreSQL and bucket ready ($(cat "$REPORT/app/image" | sed 's/.*@//' | cut -c1-19))"
+else
+  export APP_READY=0; blocked S0.3 "test app not ready: $(grep -v '^+' "$REPORT/app-deploy.log" | tail -1)"
 fi
 
 # ── suites ────────────────────────────────────────────────────────────────────

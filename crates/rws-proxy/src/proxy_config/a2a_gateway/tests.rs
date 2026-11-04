@@ -86,6 +86,11 @@ fn the_card_points_here_and_calls_reach_the_agent() {
     assert_eq!(1, interfaces.len(), "only the JSON-RPC interface, through here");
     assert_eq!(Some("http://gw.example/agents/billing"), interfaces[0].get("url").and_then(JsonValue::as_str));
     assert_eq!(Some("Billing agent"), card.get("name").and_then(JsonValue::as_str));
+    // Behind a load balancer that terminated TLS (a trusted peer): https.
+    let behind = ConnectionInfo { client: crate::server::Address { ip: "10.0.0.3".into(), port: 0 }, ..ConnectionInfo::default() };
+    let card = gateway.execute(&request("GET /agents/billing/.well-known/agent-card.json HTTP/1.1\r\nHost: gw.example\r\nX-Forwarded-Proto: https\r\n\r\n"), &behind).unwrap();
+    let card = json_lite::parse(std::str::from_utf8(&card.content_range_list[0].body).unwrap()).unwrap();
+    assert_eq!(Some("https://gw.example/agents/billing"), card.get("supportedInterfaces").unwrap().as_array().unwrap()[0].get("url").and_then(JsonValue::as_str));
     assert!(seen.lock().unwrap()[0].contains("Authorization: Bearer agent-secret"), "the card is fetched with the configured header");
 
     let body = r#"{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{}}"#;

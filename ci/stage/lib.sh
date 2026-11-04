@@ -142,3 +142,13 @@ admin() {
 }
 # A JSON field: json_get <python expression on d> (stdin: the document)
 json_get() { python3 -I -c "import json, sys; d = json.load(sys.stdin); print($1)"; }
+
+# Cases that need the test app (deploy_app.sh) report BLOCKED without it:
+# app_check <id> <description> <command…>
+app_check() {
+  if [ "${APP_READY:-0}" = 1 ]; then check "$@"; else blocked "$1" "$2 (no test app)"; fi
+}
+# The per-run app secrets (deploy_app.sh writes them).
+app_secret() { cat "$REPORT/app/$1"; }
+# In-cluster GET from the runner pod: incluster <curl args…>
+incluster() { k exec deploy/runner -- curl -sS --max-time 20 "$@"; }

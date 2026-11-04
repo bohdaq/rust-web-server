@@ -97,9 +97,11 @@ impl Db {
 
 async fn connect_and_migrate(dir: &str) -> Result<DbPool, String> {
     let config = DbConfig::from_env().map_err(|e| e.to_string())?;
+    // RWS_DB_SSL_*: a managed PostgreSQL requires TLS from its own CA.
+    let tls = rust_web_server::model::DbTls::from_env().map_err(|e| e.to_string())?;
     let deadline = Instant::now() + Duration::from_secs(60);
     let pool = loop {
-        match DbPool::new(config.clone()).await {
+        match DbPool::new_with_tls(config.clone(), tls.clone()).await {
             Ok(pool) => break pool,
             Err(e) if Instant::now() < deadline => {
                 eprintln!("[e2e] database connect failed, retrying: {e}");

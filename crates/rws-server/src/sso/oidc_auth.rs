@@ -344,7 +344,9 @@ impl OidcAuth {
             return self.config.redirect_uri.clone();
         }
         let host = request.header("Host").map(|h| h.value.to_string()).unwrap_or_else(|| "localhost".into());
-        format!("{}://{}{}", if connection.tls { "https" } else { "http" }, host, self.callback_path)
+        // Behind a TLS-terminating load balancer the connection is plain
+        // HTTP: the scheme from a trusted proxy's X-Forwarded-Proto.
+        format!("{}://{}{}", crate::ip_filter::request_scheme(request, &connection.client.ip, connection.tls), host, self.callback_path)
     }
 
     fn client_for(&self, redirect_uri: &str) -> OidcClient {
@@ -356,8 +358,9 @@ impl OidcAuth {
         OidcClient::new(config)
     }
 
-    fn cookie(&self, name: &str, value: &str, max_age: u64, connection: &ConnectionInfo) -> Header {
-        let secure = if connection.tls { "; Secure" } else { "" };
+    fn cookie(&self, name: &str, value: &str, max_age: u64, request: &Request, connection: &ConnectionInfo) -> Header {
+        // Secure when the client is on HTTPS, a TLS-terminating proxy's too.
+        let secure = if crate::ip_filter::request_scheme(request, &connection.client.ip, connection.tls) == "https" { "; Secure" } else { "" };
         Header { name: "Set-Cookie".into(), value: format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}").into() }
     }
 
@@ -431,7 +434,7 @@ impl OidcAuth {
             });
             let url = self.client_for(&redirect_uri).authorization_url(&verifier, &state, &nonce);
             let mut response = Self::redirect(&url);
-            response.headers.push(self.cookie(PRE_AUTH_COOKIE, &self.sign(&pre.to_string()), PRE_AUTH_TTL, connection));
+            response.headers.push(self.cookie(PRE_AUTH_COOKIE, &self.sign(&pre.to_string()), PRE_AUTH_TTL, request, connection));
             response.headers.push(Header { name: "Cache-Control".into(), value: "no-store".into() });
             return response;
         }
@@ -547,8 +550,8 @@ impl OidcAuth {
             stored.groups.truncate(32);
             let payload = serde_json::json!({ "id": stored, "exp": unix_now() + self.ttl });
             let mut response = Self::redirect(&return_to);
-            response.headers.push(self.cookie(SIGNED_COOKIE, &self.sign(&payload.to_string()), self.ttl, connection));
-            response.headers.push(self.cookie(PRE_AUTH_COOKIE, "", 0, connection));
+            response.headers.push(self.cookie(SIGNED_COOKIE, &self.sign(&payload.to_string()), self.ttl, request, connection));
+            response.headers.push(self.cookie(PRE_AUTH_COOKIE, "", 0, request, connection));
             return response;
         };
 
@@ -574,7 +577,7 @@ impl OidcAuth {
     fn handle_logout(&self, request: &Request, connection: &ConnectionInfo) -> Response {
         if self.signed.is_some() {
             let mut response = Self::redirect(&self.config.post_login_redirect);
-            response.headers.push(self.cookie(SIGNED_COOKIE, "", 0, connection));
+            response.headers.push(self.cookie(SIGNED_COOKIE, "", 0, request, connection));
             return response;
         }
         if let Some(sid) = session_id_from_request(request, SESSION_COOKIE) {

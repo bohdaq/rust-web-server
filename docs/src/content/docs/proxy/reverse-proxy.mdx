@@ -122,6 +122,14 @@ stays intact. To key everything on the TCP peer again:
 ```toml
 client_ip = "peer"   # RWS_CONFIG_CLIENT_IP: "forwarded" (default) or "peer"
 ```
+
+The same trusted peer's `X-Forwarded-Proto` (else `Forwarded: proto=`)
+says whether the client used HTTPS, for the URLs rws hands back to it: the
+A2A agent card's interface, the OIDC client's redirect URI (when none is
+configured), its cookies' `Secure` flag, and the `X-Forwarded-Proto` and
+`X-Forwarded-For` forward-auth sends. Before 18.28.0 a TLS-terminating load
+balancer made them all `http`. In code: `ip_filter::request_scheme(request,
+peer, tls)`.
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
 | `Content-Length` | Length of the forwarded body (exactly one) |
 

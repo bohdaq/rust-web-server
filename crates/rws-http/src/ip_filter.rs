@@ -114,6 +114,41 @@ pub fn client_ip<'a>(request: &crate::request::Request, peer: &'a str) -> std::b
 }
 
 /// [`client_ip`] with the trust list and mode given (no config read).
+/// The scheme the client used: `https` on a TLS connection; behind a
+/// trusted proxy that terminates TLS (`trusted_proxies`, unless
+/// `client_ip = "peer"`), what it says in `X-Forwarded-Proto` (its first
+/// value) or else `Forwarded: proto=`; `http` otherwise. For URLs rws hands
+/// back to the client (an agent card, an OAuth redirect URI) and the
+/// `Secure` cookie flag: behind a TLS-terminating load balancer the
+/// connection itself is plain HTTP.
+pub fn request_scheme(request: &crate::request::Request, peer: &str, tls: bool) -> &'static str {
+    let config = crate::server_config::ServerConfig::current();
+    request_scheme_with(request, peer, tls, &config.trusted_proxies, config.client_ip_forwarded)
+}
+
+/// [`request_scheme`] with the trust list given (no config read).
+#[doc(hidden)]
+pub fn request_scheme_with(request: &crate::request::Request, peer: &str, tls: bool, trusted: &TrustedProxies, forwarded: bool) -> &'static str {
+    if tls {
+        return "https";
+    }
+    if !forwarded || !trusted.trusts(peer) {
+        return "http";
+    }
+    let first = |name: &str| request.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name)).map(|h| h.value.split(',').next().unwrap_or("").trim().to_string());
+    let proto = first("x-forwarded-proto").or_else(|| {
+        let element = first("forwarded")?;
+        element.split(';').find_map(|pair| {
+            let (k, v) = pair.split_once('=')?;
+            k.trim().eq_ignore_ascii_case("proto").then(|| v.trim().trim_matches('"').to_string())
+        })
+    });
+    match proto {
+        Some(p) if p.eq_ignore_ascii_case("https") => "https",
+        _ => "http",
+    }
+}
+
 #[doc(hidden)]
 pub fn client_ip_with<'a>(request: &crate::request::Request, peer: &'a str, trusted: &TrustedProxies, forwarded: bool) -> std::borrow::Cow<'a, str> {
     use std::borrow::Cow;

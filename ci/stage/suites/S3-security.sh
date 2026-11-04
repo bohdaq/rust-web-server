@@ -100,3 +100,43 @@ authz_deny_ok() {
     [ "$(status_of S3.11 /e2e/docs/42)" = 401 ]
 }
 check S3.11 "authz: a stranger 403 problem+json, viewer can't write, owner can, no token 401" authz_deny_ok
+
+# ── the test app (library features the release image lacks) ──────────────────
+session_ok() { # a session made on one replica is seen by every one (valkey)
+  local jar="$REPORT/S3.12.jar" i me
+  rm -f "$jar"
+  [ "$(curl -sS --max-time 20 -c "$jar" -X POST "$APP_URL/app/session/login?user=olga")" = olga ] || return 1
+  [ "$(curl -sS --max-time 20 "$APP_URL/app/session/store")" = redis ] || return 1
+  for i in $(seq 9); do me=$(curl -sS --max-time 20 -b "$jar" "$APP_URL/app/session/me"); [ "$me" = olga ] || { echo "    request $i: $me" >&2; return 1; }; done
+  [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$APP_URL/app/session/me")" = 401 ]
+}
+app_check S3.12 "sessions in valkey: one login holds on all 3 replicas; none 401" session_ok
+csrf_ok() {
+  local jar="$REPORT/S3.13.jar" token
+  rm -f "$jar"
+  curl -sS --max-time 20 -c "$jar" "$APP_URL/app/csrf/form" >/dev/null
+  token=$(awk '$6 == "_csrf" {print $7}' "$jar")
+  [ -n "$token" ] || return 1
+  [ "$(curl -sS --max-time 20 -b "$jar" -d "_csrf=$token" "$APP_URL/app/csrf/submit")" = csrf-ok ] &&
+    [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -b "$jar" -d "_csrf=wrong" "$APP_URL/app/csrf/submit")" = 403 ] &&
+    [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -d "_csrf=$token" "$APP_URL/app/csrf/submit")" = 403 ]
+}
+app_check S3.13 "CSRF: the form's token posts; a wrong one or none 403" csrf_ok
+jwt_asym_ok() { # <alg> <path>
+  local now key; now=$(date +%s); key="$REPORT/app/$(tr 'A-Z' 'a-z' <<<"$1").key"
+  [ "$(curl -sS --max-time 20 -H "Authorization: Bearer $(node "$STAGE_DIR/jwt.mjs" "$1" "$key" olga $((now + 300)))" "$APP_URL$2")" = olga ] || return 1
+  [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(node "$STAGE_DIR/jwt.mjs" "$1" "$key" olga $((now - 600)))" "$APP_URL$2")" = 401 ] || return 1
+  # A key of the same kind that isn't the configured one.
+  local other="$REPORT/app/other-$1.key"
+  if [ "$1" = RS256 ]; then openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$other" 2>/dev/null; else openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$other" 2>/dev/null; fi
+  [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(node "$STAGE_DIR/jwt.mjs" "$1" "$other" olga $((now + 300)))" "$APP_URL$2")" = 401 ]
+}
+app_check S3.14 "JWT RS256: valid 200; expired and another key 401" jwt_asym_ok RS256 /app/jwt/rs256
+app_check S3.15 "JWT ES256: valid 200; expired and another key 401" jwt_asym_ok ES256 /app/jwt/es256
+webhook_ok() {
+  local body='{"action":"opened"}' sig
+  sig=$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$(app_secret webhook-secret)" | awk '{print $NF}')
+  [ "$(curl -sS --max-time 20 -H "X-Hub-Signature-256: sha256=$sig" --data-binary "$body" "$APP_URL/app/webhook/github")" = webhook-ok ] &&
+    [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H "X-Hub-Signature-256: sha256=$sig" --data-binary '{"action":"closed"}' "$APP_URL/app/webhook/github")" = 401 ]
+}
+app_check S3.16 "incoming webhook: GitHub signature checked (tampered body 401)" webhook_ok

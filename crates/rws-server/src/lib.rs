@@ -7,6 +7,7 @@
 //! these through the `rust_web_server` paths, which stay stable; this
 //! crate's own layout may change in any release. See
 //! `spec/WORKSPACE_SPLIT.md`.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Derive output (rws-macros) names `::rust_web_server::…`; in this crate's
 // tests that is this crate.

@@ -5,5 +5,6 @@
 #[cfg(feature = "wasm-plugins")]
 mod wasm_plugin;
 mod config_check;
+mod presets;
 #[cfg(not(target_arch = "wasm32"))]
 mod admin;
