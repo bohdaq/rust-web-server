@@ -252,6 +252,12 @@ proxy_protocol          = true       # RWS_CONFIG_PROXY_PROTOCOL: connections st
 access_log              = "/var/log/rws/access.log"  # RWS_CONFIG_ACCESS_LOG: write the access log here instead of stdout
 access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size (default 100M since 18.15.0); 0 = never (use logrotate + SIGUSR1)
 access_log_keep         = 5          # RWS_CONFIG_ACCESS_LOG_KEEP: rotated files kept (access.log.1 … .5)
+access_log_anonymize_ip = "truncate" # RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP: "off" (default) | "truncate" (IPv4 /24, IPv6 /48) | "hash"
+access_log_ip_hash_secret = "…"      # RWS_CONFIG_ACCESS_LOG_IP_HASH_SECRET: the key for "hash"
+log_redact_query        = ["token", "api_key"]  # RWS_CONFIG_LOG_REDACT_QUERY: these query values logged as REDACTED
+log_redact_headers      = ["x-api-key"]         # RWS_CONFIG_LOG_REDACT_HEADERS: these header values logged as REDACTED
+access_log_syslog       = "udp://127.0.0.1:514" # RWS_CONFIG_ACCESS_LOG_SYSLOG: also to syslog (udp://, tcp://, unix:///dev/log)
+access_log_syslog_facility = "local0"           # RWS_CONFIG_ACCESS_LOG_SYSLOG_FACILITY: default local0
 min_free_disk           = "2G"       # RWS_CONFIG_MIN_FREE_DISK: stop writing the access log / disk cache below this free (or "5%"); default max(1%, 1G); "0" = off
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off

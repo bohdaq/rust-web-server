@@ -13,6 +13,9 @@
 //! (`access.log` → `access.log.1` …, keeping `RWS_CONFIG_ACCESS_LOG_KEEP`),
 //! and `SIGUSR1` reopens it — what logrotate's `postrotate` sends. Read once,
 //! at the first line.
+//!
+//! With `RWS_CONFIG_ACCESS_LOG_SYSLOG` (18.33.0) every batch written out is
+//! also queued for [`super::syslog`], whose own thread sends it.
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -174,6 +177,7 @@ fn registry() -> &'static Mutex<Vec<Arc<Shard>>> {
         {
             extern "C" fn flush_at_exit() {
                 flush();
+                super::syslog::flush_now();
             }
             // SAFETY: registers a plain `extern "C"` function with no
             // arguments, as atexit requires; it only takes our locks.
@@ -247,6 +251,10 @@ fn write_out(bytes: &[u8]) {
         return;
     }
     super::tail::record(bytes);
+    // Syslog (18.33.0) as well: queued here, sent by its own thread.
+    if let Some(syslog) = super::syslog::sender() {
+        syslog.enqueue(bytes);
+    }
     match destination() {
         Destination::Stdout => write_stdout(bytes),
         Destination::File(file) => {

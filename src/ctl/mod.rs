@@ -13,6 +13,7 @@
 //! rws ctl traffic [--week | --month | --hours N] [--host example.com]
 //! rws ctl whoami                         # the token's user and role (18.22.0)
 //! rws ctl audit [-n 50]                  # recent changes: who, what, when (18.22.0)
+//! rws ctl audit --verify [FILE]          # the audit log's hash chain; exit 1 if broken (18.33.0)
 //! ```
 //!
 //! The binary run as `rwsctl` (the packages install that symlink) acts as
@@ -58,6 +59,7 @@ Commands:
   traffic [--week|--month|--hours N] [--host H]  who visited
   whoami                               the token's user and role
   audit [-n N]                         recent changes: who did what, when
+  audit --verify [FILE]                check the audit log's hash chain (the server's, or a copy)
 
 The admin address comes from --admin, else [admin] listen in RWS_CONFIG_FILE or
 rws.config.toml, else 127.0.0.1:9901. The token from --token-file, else the
@@ -118,6 +120,7 @@ struct Command {
     json: bool,
     words: Vec<String>,
     undo: bool,
+    verify: bool,
     follow: bool,
     lines: Option<usize>,
     path: Option<String>,
@@ -140,6 +143,7 @@ fn parse(args: &[String]) -> Result<Command, Failure> {
             "--token-file" => cmd.token_file = Some(value("--token-file")?),
             "--json" => cmd.json = true,
             "--undo" => cmd.undo = true,
+            "--verify" => cmd.verify = true,
             "-f" | "--follow" => cmd.follow = true,
             "-n" | "--lines" => cmd.lines = Some(value("-n")?.parse().map_err(|_| usage("-n takes a number"))?),
             "--path" => cmd.path = Some(value("--path")?),
@@ -433,8 +437,17 @@ fn execute(cmd: &Command, out: &mut dyn Write) -> Result<(), Failure> {
         let _ = write!(out, "{USAGE}");
         return if words.is_empty() { Err(Failure { code: EXIT_UNUSABLE, message: String::new() }) } else { Ok(()) };
     }
-    let api = Api { base: admin_base(cmd), token: token(cmd)? };
     let io = |e: std::io::Error| failed(e.to_string());
+    // A copy of the audit log on this machine: checked here, no API.
+    if let (["audit", file], true) = (words.as_slice(), cmd.verify) {
+        let text = std::fs::read(file).map_err(|e| failed(format!("can't read {file}: {e}")))?;
+        let report = crate::admin::access::verify_chain(&String::from_utf8_lossy(&text));
+        if cmd.json {
+            writeln!(out, "{}", report.to_json()).map_err(io)?;
+        }
+        return audit_verdict(out, cmd.json, file, report.ok(), &report.to_json()).map_err(io)?;
+    }
+    let api = Api { base: admin_base(cmd), token: token(cmd)? };
     let json_out = |out: &mut dyn Write, reply: &Reply| writeln!(out, "{}", reply.body.trim()).map_err(io);
     match words.as_slice() {
         ["status"] => {
@@ -600,6 +613,13 @@ fn execute(cmd: &Command, out: &mut dyn Write) -> Result<(), Failure> {
             }
             writeln!(out, "{} ({}, via {})", field(&r.body, "user"), field(&r.body, "role"), field(&r.body, "via")).map_err(io)
         }
+        ["audit"] if cmd.verify => {
+            let r = api.call("GET", "/audit/verify", None)?;
+            if cmd.json {
+                json_out(out, &r)?;
+            }
+            audit_verdict(out, cmd.json, &field(&r.body, "file"), field(&r.body, "ok") == "true", &r.body).map_err(io)?
+        }
         ["audit"] => {
             let r = api.call("GET", &format!("/audit?n={}", cmd.lines.unwrap_or(50)), None)?;
             if cmd.json {
@@ -616,6 +636,26 @@ fn execute(cmd: &Command, out: &mut dyn Write) -> Result<(), Failure> {
         }
         _ => Err(usage(format!("unknown command: {}", words.join(" ")))),
     }
+}
+
+/// What `audit --verify` found, from a [`crate::admin::access::ChainReport`]
+/// as JSON: a line for people (unless `--json`), and exit 1 when broken.
+fn audit_verdict(out: &mut dyn Write, json: bool, file: &str, ok: bool, report: &str) -> std::io::Result<Result<(), Failure>> {
+    let n = |key: &str| field(report, key);
+    if !json {
+        if ok {
+            let before = match n("unchained").as_str() {
+                "0" => String::new(),
+                k => format!(", {k} from before the chain"),
+            };
+            let continues = if n("continues_from").is_empty() || n("continues_from") == "null" { "" } else { "; continues an earlier file" };
+            writeln!(out, "{file}: intact — {} entries, {} chained{before}{continues}", n("entries"), n("chained"))?;
+        } else {
+            let broken = member(report, "broken");
+            writeln!(out, "{file}: BROKEN at line {}: {}", field(&broken, "line"), field(&broken, "reason"))?;
+        }
+    }
+    Ok(if ok { Ok(()) } else { Err(failed("the audit log's hash chain is broken")) })
 }
 
 fn print_status(out: &mut dyn Write, body: &str) -> std::io::Result<()> {

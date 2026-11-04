@@ -76,6 +76,17 @@ allow_all = "yes"
     }
 }
 
+/// 18.33.0: the security-logging settings.
+#[test]
+fn log_privacy_and_syslog_settings_are_checked() {
+    let good = check_str("access_log_anonymize_ip = \"truncate\"\naccess_log_syslog = \"udp://127.0.0.1:514\"\naccess_log_syslog_facility = \"local3\"\nlog_redact_query = [\"token\", \"api_key\"]\nlog_redact_headers = [\"x-api-key\"]\n");
+    assert!(good.is_ok(), "{:?}", good);
+    let bad = check_str("access_log_anonymize_ip = \"mask\"\naccess_log_syslog = \"syslog.example:514\"\naccess_log_syslog_facility = \"local9\"\n");
+    for needle in ["access_log_anonymize_ip", "expected udp://", "unknown syslog facility"] {
+        assert!(has(&bad.errors, needle), "missing {needle}: {:?}", bad.errors);
+    }
+}
+
 #[test]
 fn runtime_is_shared_or_per_core() {
     assert!(check_str("runtime = \"per-core\"\n").errors.is_empty());

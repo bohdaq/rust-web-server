@@ -190,7 +190,7 @@ async fn handle_stream(
     rws_response.drop_content_for_status();
     rws_response.headers.push(Header::get_hsts_header());
 
-    Log::log_access(&rws_request, &rws_response, &peer_addr);
+    Log::log_served(&rws_request, &mut rws_response, &peer_addr);
 
     let is_head = rws_request.method == crate::request::METHOD.head;
     send_h3_response(stream, rws_response, is_head).await;

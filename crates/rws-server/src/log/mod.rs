@@ -3,11 +3,13 @@ use std::thread;
 use crate::entry_point::command_line_args::CommandLineArgument;
 use crate::request::Request;
 use crate::response::Response;
+use crate::server_config::log_privacy::{self, LogPrivacy};
 
 #[cfg(test)]
 mod tests;
 #[doc(hidden)]
 pub mod access_sink;
+pub mod syslog;
 pub mod tail;
 
 /// Logging helpers for access logs and server info.
@@ -28,7 +30,19 @@ pub fn set_access_observer(observe: fn(&Request, &Response, std::net::IpAddr)) {
 }
 
 impl Log {
+    /// A multi-line debugging dump of a request and its response, headers
+    /// included — the values of `Authorization`, `Proxy-Authorization`,
+    /// `Cookie`, `Set-Cookie` and of `RWS_CONFIG_LOG_REDACT_HEADERS` shown as
+    /// `REDACTED` (since 18.33.0).
     pub fn request_response(request: &Request, response: &Response, peer_addr: &SocketAddr) -> String {
+        let config = crate::server_config::ServerConfig::current();
+        let shown = |header: &crate::header::Header| -> String {
+            if config.log_privacy.redacts_header(&header.name) {
+                log_privacy::REDACTED.to_string()
+            } else {
+                header.value.to_string()
+            }
+        };
         let mut request_headers = "".to_string();
         for header in &request.headers {
             if &header.name.chars().count() > &0 {
@@ -37,7 +51,7 @@ impl Log {
                     "\n  ".to_string(),
                     header.name.to_string(),
                     ": ".to_string(),
-                    header.value.to_string()
+                    shown(header)
                 ].join("");
             }
         }
@@ -50,7 +64,7 @@ impl Log {
                     "\n  ".to_string(),
                     header.name.to_string(),
                     ": ".to_string(),
-                    header.value.to_string()
+                    shown(header)
                 ].join("");
             }
         }
@@ -166,16 +180,32 @@ impl Log {
 
     /// [`Log::json`] appended to `out`, without intermediate strings.
     fn write_json(out: &mut Vec<u8>, request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        let config = crate::server_config::ServerConfig::current();
+        Log::write_json_with(out, request, response, peer_addr, &config.log_privacy)
+    }
+
+    /// [`Log::write_json`] with the privacy settings at hand: with
+    /// everything off, exactly the line of 18.32.
+    fn write_json_with(out: &mut Vec<u8>, request: &Request, response: &Response, peer_addr: &SocketAddr, privacy: &LogPrivacy) {
         use std::io::Write;
         let body_size: usize = response.content_range_list.iter().map(|cr| cr.body.len()).sum();
+        let plain = privacy.is_off();
         out.extend_from_slice(b"{\"time\":\"");
         with_timestamps(|iso, _| out.extend_from_slice(iso.as_bytes()));
         out.extend_from_slice(b"\",\"remote_addr\":\"");
-        let _ = write!(out, "{}", peer_addr.ip());
+        if plain {
+            let _ = write!(out, "{}", peer_addr.ip());
+        } else {
+            privacy.write_ip(out, peer_addr.ip());
+        }
         out.extend_from_slice(b"\",\"method\":\"");
         push_json_escaped(out, &request.method);
         out.extend_from_slice(b"\",\"path\":\"");
-        push_json_escaped(out, &request.request_uri);
+        if plain {
+            push_json_escaped(out, &request.request_uri);
+        } else {
+            privacy.redact_target(&request.request_uri, |piece| push_json_escaped(out, piece));
+        }
         out.extend_from_slice(b"\",\"protocol\":\"");
         push_json_escaped(out, &request.http_version);
         out.extend_from_slice(b"\",\"status\":");
@@ -186,7 +216,15 @@ impl Log {
         for (key, name) in [(&b",\"host\":\""[..], "host"), (&b",\"user_agent\":\""[..], "user-agent"), (&b",\"referer\":\""[..], "referer")] {
             if let Some(header) = request.header(name).filter(|h| !h.value.is_empty()) {
                 out.extend_from_slice(key);
-                push_json_escaped(out, &header.value);
+                if plain {
+                    push_json_escaped(out, &header.value);
+                } else if privacy.redacts_header(name) {
+                    out.extend_from_slice(log_privacy::REDACTED.as_bytes());
+                } else if name == "referer" {
+                    privacy.redact_target(&header.value, |piece| push_json_escaped(out, piece));
+                } else {
+                    push_json_escaped(out, &header.value);
+                }
                 out.push(b'"');
             }
         }
@@ -201,6 +239,20 @@ impl Log {
     /// 100 ms (and when a thread's buffer passes 32 KiB, when the thread
     /// exits, and at process exit); [`Log::flush_access_log`] writes them now.
     pub fn log_access(request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        Log::log_access_traced(request, response, peer_addr, None)
+    }
+
+    /// [`Log::log_access`] for the server's own connection loops: takes the
+    /// request's trace context off the response first (`OtelLayer` puts it
+    /// there only while OTLP log export is on), so it reaches the OTLP log
+    /// record but not the client.
+    #[doc(hidden)]
+    pub fn log_served(request: &Request, response: &mut Response, peer_addr: &SocketAddr) {
+        let trace = crate::otel::logs::take_trace(response);
+        Log::log_access_traced(request, response, peer_addr, trace)
+    }
+
+    fn log_access_traced(request: &Request, response: &Response, peer_addr: &SocketAddr, trace: Option<crate::otel::logs::TraceIds>) {
         // The client behind a trusted proxy (`ip_filter::client_ip`), not the
         // proxy; only looked up when the request says it was forwarded.
         let client;
@@ -218,17 +270,33 @@ impl Log {
         }
         let config = crate::server_config::ServerConfig::current();
         let format = &config.log_format;
-        if format.eq_ignore_ascii_case("off") || format.eq_ignore_ascii_case("none") {
+        let off = format.eq_ignore_ascii_case("off") || format.eq_ignore_ascii_case("none");
+        let otlp = crate::otel::logs::enabled();
+        if off && !otlp {
             return;
         }
         let json = format == "json";
-        access_sink::write_line(|out| {
-            if json {
-                Log::write_json(out, request, response, peer_addr)
-            } else {
-                Log::write_combined(out, request, response, peer_addr)
-            }
-        });
+        let privacy = &config.log_privacy;
+        if !off {
+            access_sink::write_line(|out| {
+                if json {
+                    Log::write_json_with(out, request, response, peer_addr, privacy)
+                } else {
+                    Log::write_combined_with(out, request, response, peer_addr, privacy)
+                }
+            });
+        }
+        if otlp {
+            // The same line as the record's body (JSON while the access log
+            // itself is off), beside semantic-convention attributes.
+            crate::otel::logs::record(request, response, peer_addr.ip(), privacy, trace, |out| {
+                if json || off {
+                    Log::write_json_with(out, request, response, peer_addr, privacy)
+                } else {
+                    Log::write_combined_with(out, request, response, peer_addr, privacy)
+                }
+            });
+        }
     }
 
     /// Have `SIGUSR1` reopen the access-log file (`RWS_CONFIG_ACCESS_LOG`)
@@ -287,15 +355,28 @@ impl Log {
 
     /// [`Log::combined`] appended to `out`, without intermediate strings.
     fn write_combined(out: &mut Vec<u8>, request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        let config = crate::server_config::ServerConfig::current();
+        Log::write_combined_with(out, request, response, peer_addr, &config.log_privacy)
+    }
+
+    fn write_combined_with(out: &mut Vec<u8>, request: &Request, response: &Response, peer_addr: &SocketAddr, privacy: &LogPrivacy) {
         use std::io::Write;
         let body_size: usize = response.content_range_list.iter().map(|cr| cr.body.len()).sum();
-        let _ = write!(out, "{}", peer_addr.ip());
+        if privacy.is_off() {
+            let _ = write!(out, "{}", peer_addr.ip());
+        } else {
+            privacy.write_ip(out, peer_addr.ip());
+        }
         out.extend_from_slice(b" - - [");
         with_timestamps(|_, clf| out.extend_from_slice(clf.as_bytes()));
         out.extend_from_slice(b"] \"");
         out.extend_from_slice(request.method.as_bytes());
         out.push(b' ');
-        out.extend_from_slice(request.request_uri.as_bytes());
+        if privacy.redact_query.is_empty() {
+            out.extend_from_slice(request.request_uri.as_bytes());
+        } else {
+            privacy.redact_target(&request.request_uri, |piece| out.extend_from_slice(piece.as_bytes()));
+        }
         out.push(b' ');
         out.extend_from_slice(request.http_version.as_bytes());
         out.extend_from_slice(b"\" ");

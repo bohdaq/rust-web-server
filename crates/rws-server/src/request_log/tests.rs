@@ -102,3 +102,25 @@ fn full_shard_reuses_the_oldest_entry() {
     assert_eq!(("POST", 207, 7, 7), (recent[0].method.as_str(), recent[0].status, recent[0].timestamp, recent[0].latency_ms));
     assert_eq!("GET", recent[1].method);
 }
+
+/// 18.33.0: `recent_requests` keeps the address the access log would write.
+#[test]
+fn log_layer_anonymises_client_addresses_when_the_access_log_does() {
+    let _g = crate::test_env::lock();
+    use crate::app::App;
+    use crate::core::New;
+    let key = crate::server_config::log_privacy::RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP;
+    let client = crate::test_client::TestClient::new(App::new().wrap(LogLayer));
+    let find = |path: &str| global().recent(1000).into_iter().rev().find(|e| e.path == path).map(|e| e.client_ip);
+
+    std::env::set_var(key, "truncate");
+    crate::server_config::invalidate();
+    client.get("/request-log-anonymised?token=1").send();
+    std::env::remove_var(key);
+    crate::server_config::invalidate();
+    let _ = crate::server_config::ServerConfig::current(); // clears the hint
+    client.get("/request-log-as-is").send();
+
+    assert_eq!(Some("127.0.0.0".to_string()), find("/request-log-anonymised"));
+    assert_eq!(Some("127.0.0.1".to_string()), find("/request-log-as-is"));
+}

@@ -203,3 +203,48 @@ fn whoami_and_audit() {
     assert_eq!(code, EXIT_OK, "{err}");
     assert!(out.starts_with("TIME") && out.contains("admin (admin)") && out.contains("PUT /maintenance"), "{out}");
 }
+
+/// 18.33.0: `audit --verify FILE` checks a copy of the audit log offline.
+#[test]
+fn audit_verify_checks_a_file_without_the_api() {
+    use crate::admin::access::{chain_line, line_hash, AuditEntry, CHAIN_START};
+    let entry = |n: u64| AuditEntry { at: n, user: "ann".into(), role: "admin".into(), via: "token".into(), address: "::1".into(), method: "POST".into(), path: "/admin/api/v1/reload".into(), detail: String::new(), status: 200, node: "n".into() }.to_json();
+    let first = chain_line(&entry(1), CHAIN_START);
+    let second = chain_line(&entry(2), &line_hash(&first));
+    let file = TempPath::new("ctl-audit-verify.log");
+    std::fs::write(&*file, format!("{first}\n{second}\n")).unwrap();
+    // No --admin, no token: never contacts a server.
+    let (code, out, err) = run_args(&strings(&["audit", "--verify", file.as_str()]));
+    assert_eq!(code, EXIT_OK, "{err}");
+    assert_eq!(out, format!("{}: intact — 2 entries, 2 chained\n", file.as_str()));
+    let (code, out, _) = run_args(&strings(&["--json", "audit", "--verify", file.as_str()]));
+    assert_eq!(code, EXIT_OK);
+    assert!(out.starts_with(r#"{"ok":true,"entries":2,"#), "{out}");
+
+    std::fs::write(&*file, format!("{first}\n{}\n", second.replace("ann", "bob"))).unwrap();
+    let (code, out, err) = run_args(&strings(&["audit", "--verify", file.as_str()]));
+    assert_eq!(code, EXIT_FAILED);
+    assert!(out.contains("BROKEN at line 2: the entry doesn't match its hash"), "{out}");
+    assert!(err.contains("hash chain is broken"), "{err}");
+
+    let (code, _, err) = run_args(&strings(&["audit", "--verify", "/nonexistent/audit.log"]));
+    assert_eq!(code, EXIT_FAILED);
+    assert!(err.contains("can't read"), "{err}");
+}
+
+#[test]
+fn audit_verify_asks_the_server_for_its_file() {
+    let _g = crate::test_env::lock();
+    // This test server has no audit_log file.
+    crate::admin::access::set_audit_file("");
+    let (code, _, err) = ctl(&["audit", "--verify"]);
+    assert_eq!(code, EXIT_FAILED, "{err}");
+    assert!(err.contains("no [admin] audit_log"), "{err}");
+    let file = TempPath::new("ctl-audit-verify-server.log");
+    crate::admin::access::set_audit_file(file.as_str());
+    ctl(&["maintenance", "off"]);
+    let (code, out, err) = ctl(&["audit", "--verify"]);
+    crate::admin::access::set_audit_file("");
+    assert_eq!(code, EXIT_OK, "{err}");
+    assert!(out.starts_with(&format!("{}: intact — ", file.as_str())), "{out}");
+}

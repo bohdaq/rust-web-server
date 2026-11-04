@@ -2,7 +2,9 @@
 # OTLP export to a real OpenTelemetry Collector (contrib, file exporter):
 # http.server.request.duration arrives with the semantic-convention
 # attributes and counts that match the requests sent; server spans continue
-# an incoming traceparent; the last metrics go out on SIGTERM.
+# an incoming traceparent; access-log records arrive as OTLP logs carrying
+# that trace (OTEL_LOGS_EXPORTER=otlp, 18.33.0); the last metrics go out on
+# SIGTERM.
 #
 #   ci/e2e/otlp.sh <path-to-rws> <path-to-otelcol-contrib>
 set -euo pipefail
@@ -47,6 +49,9 @@ service:
     traces:
       receivers: [otlp]
       exporters: [file]
+    logs:
+      receivers: [otlp]
+      exporters: [file]
 YAML
 "$OTELCOL" --config=otelcol.yaml > otelcol.log 2>&1 &
 PIDS+=($!)
@@ -57,6 +62,7 @@ done
 
 start_rws() { # <service name> <export interval ms>
   OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4320 OTEL_SERVICE_NAME="$1" OTEL_METRIC_EXPORT_INTERVAL="$2" \
+    OTEL_LOGS_EXPORTER=otlp RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP=truncate RWS_CONFIG_LOG_REDACT_QUERY=token \
     "$RWS" --port=8496 > rws.log 2>&1 &
   RWS_PID=$!
   PIDS+=($RWS_PID)
@@ -125,7 +131,7 @@ echo "ok: http.server.request.duration exported every second, counts and attribu
 # ── traces ───────────────────────────────────────────────────────────────────
 TRACE=4bf92f3577b34da6a3ce929d0e0e4736
 PARENT=00f067aa0ba902b7
-curl -s -o /dev/null -H "traceparent: 00-$TRACE-$PARENT-01" http://127.0.0.1:8496/index.html
+curl -s -o /dev/null -H "traceparent: 00-$TRACE-$PARENT-01" "http://127.0.0.1:8496/index.html?token=s3cr3t"
 found=""
 for _ in $(seq 1 40); do
   found=$(python3 - "$TRACE" "$PARENT" <<'PY'
@@ -147,9 +153,47 @@ PY
   sleep 0.5 # a partial batch goes out after 5 s
 done
 [ -n "$found" ] || fail "no server span continuing trace $TRACE"
+echo "ok: server span continues the incoming traceparent ($found)"
+
+# ── logs ─────────────────────────────────────────────────────────────────────
+# The access-log record for that request: in the server span's trace, the
+# client address truncated, the token redacted, the response's internal
+# trace header not sent to the client.
+logged=""
+for _ in $(seq 1 40); do
+  logged=$(python3 - "$TRACE" <<'PY'
+import json, sys
+trace = sys.argv[1]
+exports = []
+for line in open("otlp.jsonl").read().splitlines():
+    try:
+        exports.append(json.loads(line))
+    except ValueError:
+        continue
+# The server span the record must point at.
+server_spans = {s["spanId"] for e in exports for rs in e.get("resourceSpans", []) for ss in rs["scopeSpans"] for s in ss["spans"]
+                if s["traceId"] == trace and s["kind"] in (2, "SPAN_KIND_SERVER")}
+for export in exports:
+    for rl in export.get("resourceLogs", []):
+        service = {a["key"]: a["value"] for a in rl["resource"]["attributes"]}.get("service.name", {}).get("stringValue")
+        for sl in rl["scopeLogs"]:
+            for r in sl["logRecords"]:
+                if r.get("traceId") != trace or r.get("spanId") not in server_spans:
+                    continue
+                attrs = {a["key"]: list(a["value"].values())[0] for a in r["attributes"]}
+                body = json.loads(r["body"]["stringValue"])
+                print(service, attrs["url.path"], attrs["http.response.status_code"], attrs["client.address"], body["path"], body["remote_addr"], r.get("severityText"))
+PY
+)
+  [ -n "$logged" ] && break
+  sleep 0.5
+done
+[ "$logged" = "rws-e2e /index.html 200 127.0.0.0 /index.html?token=REDACTED 127.0.0.0 INFO" ] || fail "access-log record for trace $TRACE: '$logged'"
+leaked=$(curl -s -D - -o /dev/null http://127.0.0.1:8496/index.html | grep -ci '^x-rws-log-trace' || true)
+[ "$leaked" = 0 ] || fail "the internal trace header reached the client"
 kill -TERM "$RWS_PID"
 wait "$RWS_PID" 2>/dev/null || true
-echo "ok: server span continues the incoming traceparent ($found)"
+echo "ok: access-log records arrive as OTLP logs in the request's trace ($logged)"
 
 # ── propagation through a proxied request ────────────────────────────────────
 # A backend that answers with the trace headers it received.

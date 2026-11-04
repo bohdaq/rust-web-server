@@ -57,6 +57,7 @@
 mod tests;
 
 pub mod baggage;
+pub mod logs;
 pub mod metrics;
 
 pub use baggage::Baggage;
@@ -1174,6 +1175,7 @@ pub fn parse_headers(value: &str) -> Vec<(String, String)> {
 /// Flush all buffered spans to the exporter. Call before the process exits
 /// to ensure no spans are lost.
 pub fn shutdown() {
+    logs::shutdown();
     metrics::shutdown();
     if let Some(t) = tracer() {
         t.shutdown_flag.store(true, Ordering::Relaxed);
@@ -1230,13 +1232,17 @@ impl Middleware for OtelLayer {
         let root = Span::start_root(&format!("{} {}", request.method, path), SpanKind::Server, incoming, baggage);
         root.set_http(&request.method, &request.request_uri);
 
-        let result = next.execute(request, connection);
+        let mut result = next.execute(request, connection);
 
         let status = match &result {
             Ok(r) => r.status_code,
             Err(_) => 500,
         };
         root.set_http_status(status);
+        // The access log's OTLP record carries this span (18.33.0).
+        if let Ok(response) = &mut result {
+            logs::put_trace(response, logs::TraceIds { trace_id: root.trace_id, span_id: root.span_id, sampled: root.sampled });
+        }
 
         result
         // `root` drops here: pops the thread-local stack and records the

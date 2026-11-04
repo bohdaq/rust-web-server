@@ -519,7 +519,7 @@ impl Server {
                     let _ = stream.flush();
                     return Err("WebSocket upgrade on a connection that can't be handed over".to_string());
                 };
-                Log::log_access(&request, &response, &client_addr);
+                Log::log_served(&request, &mut response, &client_addr);
                 stream.write_all(&crate::websocket::upgrade_head(&response)).and_then(|_| stream.flush()).map_err(|e| e.to_string())?;
                 let reader = std::io::Cursor::new(std::mem::take(&mut pending)).chain(reader);
                 std::thread::spawn(move || upgrade.run(Box::new(reader), writer));
@@ -533,7 +533,7 @@ impl Server {
                 value: if keep_alive { "keep-alive".into() } else { "close".into() },
             });
 
-            Log::log_access(&request, &response, &client_addr);
+            Log::log_served(&request, &mut response, &client_addr);
 
             if let Some(reader) = response.stream_pipe.take() {
                 if let Err(e) = Server::pipe_stream(&mut stream, response, request, reader) {
