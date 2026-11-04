@@ -124,12 +124,21 @@ all_pods_serve() { # <path> <text>
   for pod in $(rws_pods); do pod_get "$pod" "$1" 2>/dev/null | grep -q "$2" || return 1; done
 }
 
-# HS256 JWT: jwt_hs256 <secret> <exp unix time>
+# HS256 JWT: jwt_hs256 <secret> <exp unix time> [sub]
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 jwt_hs256() {
   local head body sig
   head=$(printf '{"alg":"HS256","typ":"JWT"}' | b64url)
-  body=$(printf '{"sub":"e2e","exp":%s}' "$2" | b64url)
+  body=$(printf '{"sub":"%s","exp":%s}' "${3:-e2e}" "$2" | b64url)
   sig=$(printf '%s.%s' "$head" "$body" | openssl dgst -sha256 -hmac "$1" -binary | b64url)
   printf '%s.%s.%s' "$head" "$body" "$sig"
 }
+
+# The admin API through the rws-admin Service: admin <method> <path> [curl args…]
+# — prints the body (headers in $LAST_HEADERS).
+admin() {
+  local method=$1 path=$2; shift 2
+  curl -sS --max-time 20 -D "$LAST_HEADERS" -X "$method" -H "Authorization: Bearer $E2E_ADMIN_TOKEN" "$@" "$ADMIN_URL/admin/api/v1$path"
+}
+# A JSON field: json_get <python expression on d> (stdin: the document)
+json_get() { python3 -I -c "import json, sys; d = json.load(sys.stdin); print($1)"; }

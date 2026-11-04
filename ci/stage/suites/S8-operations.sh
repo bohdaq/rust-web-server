@@ -1,7 +1,8 @@
 # S8 operations: health endpoints, Prometheus metrics per pod, the JSON
 # access log, hot reload from the ConfigMap (and a bad config kept out), a
-# rolling restart under traffic. Not here yet (phase 2): the admin API and
-# UI, OTLP traces, native histograms, cluster state across replicas.
+# rolling restart under traffic, the admin API through the gateway, cluster
+# state across replicas (valkey), OTLP traces and metrics to a collector.
+# Not here yet: the admin UI in a browser, native histograms.
 # Sourced by run.sh with lib.sh.
 
 health_ok() { [ "$(status_of S8.1 /healthz)" = 200 ] && [ "$(status_of S8.1 /readyz)" = 200 ]; }
@@ -99,3 +100,59 @@ restart_ok() {
   ! grep -vqx 200 "$out"
 }
 check S8.9 "rolling restart of rws under traffic: no failed requests" restart_ok
+
+# ── the admin API through the gateway (the rws-admin Service) ────────────────
+admin_ok() {
+  [ -n "$ADMIN_URL" ] || { echo "    no rws-admin hostname" >&2; return 1; }
+  admin GET /status | json_get 'd["version"]' | grep -q . || return 1
+  [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$ADMIN_URL/admin/api/v1/status")" = 401 ] &&
+    [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer wrong' "$ADMIN_URL/admin/api/v1/status")" = 401 ]
+}
+check S8.10 "admin API: status with the token; none or wrong 401" admin_ok
+
+# [cluster]: the replicas see each other through valkey.
+cluster_ok() {
+  local nodes
+  nodes=$(admin GET /status | json_get 'len((d.get("cluster") or {}).get("nodes", []))')
+  [ "$nodes" = 3 ] || echo "    cluster nodes: $nodes" >&2
+  [ "$nodes" = 3 ]
+}
+# A restarted pod stays listed for a minute after its last heartbeat.
+check S8.11 "cluster: the status lists 3 replicas" eventually 120 cluster_ok
+
+# A block taken by one replica (whichever the admin Service picks) refuses
+# the client on every pod; the unblock reaches them all too.
+statuses() { local i; for i in $(seq 9); do status_of S8.12 /e2e/respond; echo; done; }   # a connection each
+all_are() { local out; out=$(statuses | grep . | sort -u); [ "$out" = "$1" ]; }
+block_ok() {
+  local client; client=$(client_address)
+  [ -n "$client" ] || return 1
+  admin POST /blocklist -H 'Content-Type: application/json' -d "{\"ip\":\"$client\"}" >/dev/null
+  eventually 20 all_are 403; local blocked=$?
+  admin DELETE "/blocklist/$client" >/dev/null
+  eventually 20 all_are 200 || { echo "    the unblock didn't reach every pod" >&2; return 1; }
+  [ "$blocked" = 0 ] || { echo "    the block didn't reach every pod" >&2; return 1; }
+}
+check S8.12 "cluster: a block on one replica refuses the client on all, unblock too" block_ok
+
+admin_reload_ok() { admin POST /reload | json_get 'd["applied"]' | grep -qx True; }
+check S8.13 "admin API: POST /reload applies" admin_reload_ok
+
+# ── OTLP: tracing turned on (a rolling restart), spans reach the collector ───
+otlp_ok() {
+  local trace span
+  trace=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'); span=$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  k set env deploy/rws OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4318 OTEL_SERVICE_NAME=rws-e2e >/dev/null
+  k rollout status deploy/rws --timeout=240s >/dev/null || return 1
+  eventually 60 sh -c "curl -fsS --max-time 10 $RWS_URL/healthz >/dev/null" || return 1
+  local i
+  for i in 1 2 3; do curl -sS --max-time 20 -o /dev/null -H "traceparent: 00-$trace-$span-01" "$RWS_URL/e2e/proxy/otlp"; done
+  logged() { k logs deploy/otelcol --since=3m 2>/dev/null | grep -q "Trace ID *: $trace"; }
+  eventually 60 logged || { echo "    trace $trace not at the collector" >&2; return 1; }
+  k logs deploy/otelcol --since=3m | grep -A12 "Trace ID *: $trace" | grep -q "Parent ID *: $span"
+}
+check S8.14 "OTLP: a request's span reaches the collector, continuing its traceparent" otlp_ok
+otlp_metrics_ok() {
+  eventually 90 sh -c "kubectl -n $NS logs deploy/otelcol --since=5m 2>/dev/null | grep -q 'http.server.request.duration'"
+}
+check S8.15 "OTLP: http.server.request.duration metrics reach the collector" otlp_metrics_ok

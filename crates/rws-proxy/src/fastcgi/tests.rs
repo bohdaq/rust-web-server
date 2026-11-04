@@ -176,7 +176,6 @@ fn a_script_runs_with_cgi_variables_and_its_response_comes_back() {
     let res = app.execute(&req, &connection(true)).unwrap();
     assert_eq!(res.status_code, 200);
     let body = body_text(&res);
-    let real_root = root.canonicalize().unwrap();
     for line in [
         "REQUEST_METHOD=POST",
         "REQUEST_URI=/other.php/a/b?x=1&y=2",
@@ -196,7 +195,8 @@ fn a_script_runs_with_cgi_variables_and_its_response_comes_back() {
     ] {
         assert!(body.lines().any(|l| l == line), "missing {line:?} in\n{body}");
     }
-    assert!(body.contains(&format!("SCRIPT_FILENAME={}/other.php", real_root.display())), "{body}");
+    assert!(body.contains(&format!("SCRIPT_FILENAME={}/other.php", root.display())), "{body}");
+    assert!(body.contains(&format!("DOCUMENT_ROOT={}\n", root.display())), "{body}");
     assert!(!body.contains("HTTP_PROXY"), "httpoxy: {body}");
     assert_eq!(res.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("set-cookie")).count(), 2);
     assert!(res.content_range_list[0].content_type.starts_with("text/plain"));
@@ -248,4 +248,29 @@ fn an_unreachable_server_is_502_and_static_files_go_to_the_static_handler() {
     assert!(res.headers.iter().any(|h| h.name == "Location" && &*h.value == "/sub/?a=1"));
     assert!(FastCgi::new(FastCgiConfig::new("127.0.0.1:1", "/nonexistent/rws-root")).is_err());
     std::fs::remove_dir_all(&*root).ok();
+}
+
+/// php-fpm in another container sees the same paths but not the same
+/// symlink targets (a Kubernetes ConfigMap volume: `app.php` →
+/// `..data/app.php` → `..2026_11_04_…/app.php`, a directory named per pod),
+/// so it is told the path under the configured root, not the resolved one.
+#[cfg(unix)]
+#[test]
+fn script_filename_keeps_symlinks_in_the_path() {
+    let root = docroot("fcgi-symlinked");
+    std::fs::create_dir_all(root.join("..2026_11_04_05_58_48.1")).unwrap();
+    std::fs::write(root.join("..2026_11_04_05_58_48.1/app.php"), "<?php").unwrap();
+    std::os::unix::fs::symlink("..2026_11_04_05_58_48.1", root.join("..data")).unwrap();
+    std::os::unix::fs::symlink("..data/app.php", root.join("app.php")).unwrap();
+    let app = FastCgi::new(FastCgiConfig::new("127.0.0.1:1", &*root)).unwrap();
+    match app.resolve("/app.php") {
+        Target::Script { filename, .. } => assert_eq!(filename, root.join("app.php")),
+        other => panic!("{other:?}"),
+    }
+    // A link out of the root is still refused.
+    let outside = TempPath::new("fcgi-outside");
+    std::fs::create_dir_all(&*outside).unwrap();
+    std::fs::write(outside.join("x.php"), "<?php").unwrap();
+    std::os::unix::fs::symlink(outside.join("x.php"), root.join("out.php")).unwrap();
+    assert!(!matches!(app.resolve("/out.php"), Target::Script { ref script_name, .. } if script_name == "/out.php"));
 }
