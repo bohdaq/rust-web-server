@@ -89,7 +89,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 
 /// Run `work` on the dedicated runtime and wait for it — from any thread,
 /// inside a runtime or not.
-pub(super) fn run<F>(work: F) -> Result<String, String>
+pub(crate) fn run<F>(work: F) -> Result<String, String>
 where
     F: Future<Output = Result<String, DbError>> + Send + 'static,
 {
@@ -103,7 +103,7 @@ where
     }
 }
 
-async fn status_json(pool: &DbPool, dir: &str) -> Result<String, DbError> {
+pub(crate) async fn status_json(pool: &DbPool, dir: &str) -> Result<String, DbError> {
     let entries: Vec<String> = pool
         .migration_status(dir)
         .await?

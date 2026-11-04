@@ -3207,6 +3207,7 @@ migrations and tests into it:
 rws gen model Post title:String       # src/models/post.rs + migrations/0001_create_posts.sql
 rws gen route posts                   # src/routes/posts.rs, registered in app()
 rws gen test posts                    # tests/posts.rs
+rws db migrate                        # apply migrations/ (rws db status|rollback|seed)
 ```
 
 ```text
@@ -17045,7 +17046,7 @@ Marks the field as the primary key. Exactly one field must carry this attribute;
 pub id: i64,   // caller sets id before INSERT
 ```
 
-Use this variant when you manage the primary key yourself. Note that `Repository::save` treats any key other than `0`/`NULL` as an UPDATE (and `ModelRepository` is keyed by `i64`), so insert rows with a caller-assigned key through raw SQL (`pool.execute`).
+Use this variant when you manage the primary key yourself — an integer, a `String` or a `Uuid`. `Repository::save` then inserts the row when the key isn't in the table yet and updates it otherwise; a `Uuid::NIL` key gets a generated one. See [Keys, timestamps, soft delete and locking](/database/conventions/#primary-keys).
 
 ### `#[primary_key(auto_increment)]`
 
@@ -17088,6 +17089,14 @@ Excludes the field from all database operations. On `from_row` the field receive
 pub display_label: String,   // computed at runtime, not stored
 ```
 
+### `#[version]`
+
+An integer field the repository uses for optimistic locking: saving a copy whose version is no longer the row's fails with `DbErrorKind::StaleVersion`. See [Optimistic locking](/database/conventions/#optimistic-locking).
+
+## Conventions: `#[timestamps]`, `#[soft_delete]`
+
+Two more struct attributes hand columns to the repository: `#[timestamps]` (fields `created_at`, `updated_at`, set by `save`) and `#[soft_delete]` (field `deleted_at: Option<…>`, set by `delete`; queries skip such rows). See [Keys, timestamps, soft delete and locking](/database/conventions/).
+
 ## Supported field types
 
 | Rust type | `Value` variant |
@@ -17097,6 +17106,8 @@ pub display_label: String,   // computed at runtime, not stored
 | `f32`, `f64` | `Value::Float(f64)` |
 | `bool` | `Value::Bool(bool)` |
 | `String` | `Value::Text(String)` |
+| `model::Timestamp` | `Value::Text` (RFC 3339; see [timestamps](/database/conventions/#timestamps)) |
+| `model::Uuid` | `Value::Text` (hyphenated) |
 | `Option` | `Value::Null` or inner type |
 
 ## Complete example
@@ -17185,7 +17196,8 @@ In addition, two inherent methods are generated on the struct:
 
 ```rust
 impl User {
-    /// Returns a ModelRepository bound to this pool.
+    /// Returns a ModelRepository bound to this pool, keyed by i64 for an
+    /// integer primary key and by the key's type (String, Uuid) otherwise.
     pub fn repository(pool: &DbPool) -> ModelRepository;
 
     /// Returns a QueryBuilder bound to this pool.
@@ -17253,7 +17265,9 @@ pub trait Repository {
 }
 ```
 
-The `ID` type is always `i64` for the built-in `ModelRepository` implementation.
+`ModelRepository` implements it for `ID` = `i64`, `i32`, `String` and `Uuid` (the `PrimaryKey` types). `T::repository(&pool)` picks `i64` for an integer key and the key's own type otherwise — see [Keys, timestamps, soft delete and locking](/database/conventions/#primary-keys).
+
+Besides the trait, `ModelRepository` has `insert(&entity)` (always an `INSERT`), `query()` (a `QueryBuilder` on the same pool), and for soft-delete models `restore(id)`, `force_delete_by_id(id)` and `find_by_id_with_deleted(id)` ([soft delete](/database/conventions/#soft-delete)).
 
 ## Method reference
 
@@ -17280,10 +17294,12 @@ Use the [Query Builder](/database/query-builder/) when you need filtering, order
 
 ### `save`
 
-Inserts or updates a single entity.
+Inserts or updates a single entity. With an `auto_increment` key:
 
 - **INSERT** — when the primary key field is `0` (or `Value::Null`).
-- **UPDATE** — when the primary key is non-zero.
+- **UPDATE** — when the primary key is non-zero; a row that isn't there is a `DbErrorKind::NotFound` error.
+
+With any other key, `save` updates the row when the key is in the table and inserts it otherwise ([primary keys](/database/conventions/#primary-keys)). Models with `#[timestamps]`, `#[soft_delete]` or `#[version]` get those columns written by `save` and `delete_by_id` ([conventions](/database/conventions/)).
 
 `save` returns the persisted entity with the primary key filled in (important for auto-increment inserts).
 
@@ -17421,6 +17437,138 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ---
 
+# Keys, timestamps, soft delete and locking
+
+<https://rws8.tech/database/conventions/>
+
+Since 18.30.0 `#[derive(Model)]` and the repository handle four things apps otherwise write by hand: keys that aren't auto-increment integers, `created_at` / `updated_at`, soft delete, and optimistic locking. Each is opt-in per model, and none adds a callback or a lazy load: the repository writes the columns in the same statements it already runs.
+
+```rust
+use rust_web_server::model::{Timestamp, Uuid};
+use rust_web_server::Model;
+
+#[derive(Model, Debug, Clone)]
+#[table(name = "articles")]
+#[timestamps]   // created_at, updated_at
+#[soft_delete]  // deleted_at
+pub struct Article {
+    #[primary_key]
+    pub id: Uuid,                       // Uuid::NIL → save picks a fresh v7
+    pub title: String,
+    #[version]
+    pub lock_version: i64,              // optimistic locking
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub deleted_at: Option,
+}
+```
+
+```sql
+-- migrations/0001_create_articles.sql (PostgreSQL)
+CREATE TABLE articles (
+    id           TEXT PRIMARY KEY,
+    title        TEXT NOT NULL,
+    lock_version BIGINT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL,
+    updated_at   TIMESTAMPTZ NOT NULL,
+    deleted_at   TIMESTAMPTZ
+);
+```
+
+The fields keep their names; `#[column(name = "…")]` on them still renames the column. A missing field is a compile error (`#[timestamps] needs a mapped field named updated_at`), and so is a `deleted_at` that isn't an `Option`.
+
+## Primary keys
+
+`ModelRepository` implements `Repository` for `ID` = `i64`, `i32`, `String` and `Uuid`. `T::repository(&pool)` is keyed by `i64` for an integer key of any width (as before 18.30), and by the field's type otherwise; for an `i32` key, `ModelRepository::::new(&pool)` takes `i32` ids.
+
+What `save` does:
+
+| Key | `save` |
+|---|---|
+| `#[primary_key(auto_increment)]`, value `0` | `INSERT`; the database picks the key |
+| `#[primary_key(auto_increment)]`, any other value | `UPDATE` that row |
+| `#[primary_key]` (any type) | looks the key up (soft-deleted rows included): `UPDATE` if the row is there, `INSERT` otherwise |
+| `Uuid::NIL` (`Uuid::default()`) | `INSERT` with a new `Uuid::now_v7()` |
+| empty `String` | an error |
+
+The look-up and the write are two statements, so two processes saving the same new key at the same moment can both insert, and the second gets the database's unique-key error. `repo.insert(&entity)` always inserts.
+
+```rust
+let tags = Tag::repository(&pool);           // ModelRepositorytags.save(&Tag { slug: "rust".into(), label: "Rust".into() }).await?;      // INSERT
+tags.save(&Tag { slug: "rust".into(), label: "Rust lang".into() }).await?; // UPDATE
+let rust = tags.find_by_id("rust".to_string()).await?;
+```
+
+`Uuid` is rws's own 16-byte type (not the `uuid` crate): `Uuid::now_v7()` (time-ordered, so new rows go to the end of the index), `Uuid::new_v4()`, `Uuid::parse(text)`, `Display` as the hyphenated form, `serde` as a string. It is stored as text: use a `TEXT`, `CHAR(36)` or `VARCHAR(36)` column. PostgreSQL `UUID` columns are read, but rws binds text, which PostgreSQL won't compare with a `UUID` column without a cast.
+
+## Timestamps
+
+With `#[timestamps]`, `save` sets `created_at` and `updated_at` to the current UTC time on insert, and `updated_at` on every update; `created_at` is never written again, whatever the entity holds. `QueryBuilder::update` sets `updated_at` too. The fields are [`Timestamp`](/reference/api/) (microseconds since the Unix epoch; `Timestamp::now()`, `parse`, `to_rfc3339`, `serde` as RFC 3339) — or `String`, which gets the stored text.
+
+| Backend | Column type | What rws writes |
+|---|---|---|
+| SQLite | `TEXT` | `2026-11-04T12:34:56.123456Z` (RFC 3339, sorts as text) |
+| PostgreSQL | `TIMESTAMPTZ` (or `TIMESTAMP`) | the same text, `CAST(… AS TIMESTAMPTZ)` |
+| MySQL | `DATETIME(6)` | `2026-11-04 12:34:56.123456` (UTC, no zone) |
+
+Reading gives the same RFC 3339 text on every backend (rws decodes PostgreSQL `TIMESTAMPTZ`/`TIMESTAMP`/`DATE` and MySQL `DATETIME`/`TIMESTAMP`/`DATE` itself), so `Timestamp` fields round-trip. MySQL `TIMESTAMP` columns convert to the session time zone; use `DATETIME(6)`, which stores what it is given.
+
+In your own queries, bind a `Timestamp` with `ts.to_value(pool.backend())` — the MySQL form differs.
+
+## Soft delete
+
+With `#[soft_delete]` and a `deleted_at: Option` field:
+
+- `repo.delete_by_id(id)` and `QueryBuilder::delete()` set `deleted_at` instead of deleting (a row deleted already keeps its time);
+- `find_by_id`, `find_all`, `count`, `exists_by_id`, every `QueryBuilder` operation and `HasMany` / `HasOne` / `BelongsTo` leave out rows with `deleted_at` set;
+- `QueryBuilder::with_deleted()` includes them, `only_deleted()` lists only them;
+- `repo.restore(id)` (`true` when the row was deleted) and `QueryBuilder::restore()` clear `deleted_at`;
+- `repo.force_delete_by_id(id)` and `QueryBuilder::force_delete()` delete for real;
+- `repo.find_by_id_with_deleted(id)` reads a row either way.
+
+```rust
+let repo = Article::repository(&pool);
+repo.delete_by_id(article.id).await?;                     // soft
+assert!(repo.find_by_id(article.id).await?.is_none());
+let trash = Article::query(&pool).only_deleted().fetch_all().await?;
+repo.restore(article.id).await?;
+Article::query(&pool).only_deleted().force_delete().await?; // empty the trash
+```
+
+Raw SQL (`pool.query`, `pool.execute`) sees every row; add `WHERE deleted_at IS NULL` yourself.
+
+## Optimistic locking
+
+A `#[version]` integer field is `1` after the insert and one more after each update. `save` updates only while the row still has the version the entity was read with (`UPDATE … SET …, lock_version = lock_version + 1 WHERE id = ? AND lock_version = ?`); otherwise nothing is written and it fails with `DbErrorKind::StaleVersion`:
+
+```rust
+use rust_web_server::model::DbErrorKind;
+
+match repo.save(&edited).await {
+    Ok(saved) => saved,
+    Err(e) if e.kind() == DbErrorKind::StaleVersion => {
+        // Someone saved it since `edited` was read: reload and apply the change again,
+        // or answer 409 Conflict.
+        return conflict(&e.to_string());
+    }
+    Err(e) => return Err(e.into()),
+}
+```
+
+A row that is gone gives `DbErrorKind::NotFound` instead. `QueryBuilder::update` increments the version as well (it doesn't check it), so copies read before a bulk update are stale afterwards.
+
+## Tested on every backend
+
+The model tests run on SQLite, PostgreSQL 16 and MySQL 8.4 in CI (the `model-databases` job). To run them against your own servers, set `RWS_TEST_POSTGRES_URL` / `RWS_TEST_MYSQL_URL` — each test makes a schema (PostgreSQL) or database (MySQL) of its own and drops it, so the MySQL user needs `CREATE` and `DROP`:
+
+```bash
+RWS_TEST_POSTGRES_URL=postgres://rws:rws@127.0.0.1/rws_test \
+RWS_TEST_MYSQL_URL=mysql://root:rws@127.0.0.1/rws_test \
+cargo test -p rws-server --features "http2 test-support macros model-sqlite model-postgres model-mysql" --lib -- model
+```
+
+---
+
 # Query Builder
 
 <https://rws8.tech/database/query-builder/>
@@ -17539,13 +17687,19 @@ User::query(&pool)
 
 ### Update a single column
 
-`update(col, val).await` issues `UPDATE table SET col = ? WHERE …`. Combine with filters to scope the update.
+`update(col, val).await` issues `UPDATE table SET col = ? WHERE …`. Combine with filters to scope the update. On a model with `#[timestamps]` it also sets `updated_at`, with `#[version]` it increments the version.
 
 ```rust
 User::query(&pool)
     .where_eq("id", 42i64)
     .update("role", "moderator").await?;
 ```
+
+### Soft-deleted rows
+
+For a `#[soft_delete]` model every builder operation skips soft-deleted rows; `.with_deleted()` includes them and `.only_deleted()` keeps only them. `delete()` sets `deleted_at`, `force_delete()` removes rows (answering how many), `restore()` clears `deleted_at` on the matching deleted rows. See [soft delete](/database/conventions/#soft-delete).
+
+`count()` leaves the chain's `order_by` out (PostgreSQL refuses `ORDER BY` beside `COUNT(*)`).
 
 ## Placeholder rules
 
@@ -17992,7 +18146,7 @@ The migration runner reads `*.sql` files from a directory in lexicographic order
 
 ## How it works
 
-1. `pool.migrate("migrations/").await` creates `_schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)` if it does not already exist.
+1. `pool.migrate("migrations/").await` creates `_schema_migrations(version VARCHAR(255) PRIMARY KEY, applied_at VARCHAR(64) NOT NULL)` if it does not already exist (`VARCHAR` since 18.30: MySQL can't key a `TEXT` column; a table created as `TEXT` by an earlier release keeps working).
 2. It reads every `*.sql` file in the directory sorted lexicographically by filename.
 3. Files whose name is already in `_schema_migrations` are skipped.
 4. Each unapplied file is executed inside a `BEGIN` / `COMMIT` transaction, one statement at a time — the file is split on `;`, so a `;` inside a string literal or a trigger/function body breaks it. If the file fails, the transaction is rolled back and `migrate` returns `Err` immediately — subsequent files are not attempted.
@@ -18146,6 +18300,34 @@ Both methods return `Err` if the migration they're trying to undo has no compani
 :::caution[Down migrations are not automatically the inverse]
 `rust-web-server` does not generate down SQL for you — you write it, the same way you write the up file. Get it right by hand: `DROP TABLE` undoes `CREATE TABLE`, `DROP COLUMN` undoes `ADD COLUMN`, and so on. A down file that doesn't actually reverse its up file will leave the schema in an inconsistent state relative to `_schema_migrations`.
 :::
+
+## Seeds
+
+`pool.seed("seeds/").await` runs every `*.sql` file in the directory, in name order, each in its own transaction (split at `;`, like migrations), and answers the files it ran. Nothing records that a seed ran: it runs again every time, so write seeds that can — `INSERT … ON CONFLICT DO NOTHING` (PostgreSQL, SQLite), `INSERT OR IGNORE` (SQLite), `INSERT IGNORE` (MySQL). A failing file is rolled back and stops the run.
+
+```sql
+-- seeds/01_roles.sql
+INSERT INTO roles (name) VALUES ('admin') ON CONFLICT DO NOTHING;
+INSERT INTO roles (name) VALUES ('member') ON CONFLICT DO NOTHING;
+```
+
+The convention is a `seeds/` directory beside the migrations directory: `migrations/` → `seeds/`, `db/migrations/` → `db/seeds/`.
+
+## From the command line: `rws db`
+
+`rws db` runs the same operations on the project in the working directory (or `--dir`), with the migrations directory from its [`rws.app.toml`](/building-apps/project-layout/) and the seeds beside it:
+
+```bash
+rws db status                    # applied / pending, and which have a .down.sql
+rws db migrate                   # apply every pending migration
+rws db rollback                  # undo the last one; `rws db rollback 3` the last three
+rws db seed                      # run seeds/*.sql
+rws db migrate --database-url postgres://app:secret@db/app --json
+```
+
+The database is `--database-url`, else `DATABASE_URL`, else the `RWS_DB_*` variables (see [the overview](/database/overview/#environment-variables)); URLs are sqlx's — `sqlite:app.db` (`sqlite:app.db?mode=rwc` creates the file), `postgres://user:password@host:5432/db`, `mysql://user:password@host:3306/db`. `--migrations <dir>` and `--seeds <dir>` override the directories. `--json` prints the result for agents: `status` is the dev MCP server's `migrations` answer (`{"directory":…,"migrations":[{"version":…,"applied":…,"has_down":…}]}`), `migrate` adds `"applied"` (the versions this run applied), `rollback` answers `{"directory":…,"rolled_back":[…]}`, `seed` `{"directory":…,"seeded":[…]}`, and a failure `{"error":…}`. Exit codes: `0` done, `1` a database or migration error (including a missing `.down.sql`), `2` bad arguments.
+
+The command needs a `rws` built with a database driver — `cargo install rust-web-server --features model-sqlite,model-postgres,model-mysql`; the release binaries have none, and say so.
 
 ## Startup pattern
 
@@ -20528,7 +20710,7 @@ claude mcp add --transport http my-app http://localhost:7878/mcp
 | `db_schema` | With `DevTools::database(pool)`: every table and its columns (name, type, nullable, default, primary key) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
 | `migrations` | With `DevTools::migrations(dir)` too: each migration file, whether it is applied and whether it has a `.down.sql` |
 | `migrations_run` | Apply the pending migrations; answers the status afterwards |
-| `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none) |
+| `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none). The same operations from a shell: [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
 | `gen_model`, `gen_route`, `gen_migration`, `gen_test` | The [generators](#generators): write a model, routes, a migration or a test into the project, or with `dry_run` answer the plan |
 
 The middleware listed is the stack around the app's routes (each layer's
@@ -23621,6 +23803,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
 | `AppManifest` | `app_manifest` | `rws.app.toml`, parsed: `name`, `paths`, `file`, `warnings`; `load(dir)` (conventional when absent; name from `Cargo.toml`), `parse(text)` / `FromStr`, `conventional(name)`, `layout(dir)` (18.28.0). See [Project layout](/building-apps/project-layout/) |
 | `Generate` / `plan` / `Plan` | `generator` | `rws gen model|route|migration|test` as a library (18.29.0): `Generate::{Model, Route, Migration, Test}`, `plan(dir, &request)` reads the project and answers a `Plan` (`changes`, `notes`, `status()`, `has_conflicts()`, `render(diffs)`, `to_json(written)`), `Plan::apply(dir)` writes it — never overwriting a file; `run(args, out, err)` is the command line (`EXIT_OK`/`EXIT_CONFLICT`/`EXIT_USAGE`). See [Generators](/building-apps/generators/) |
+| `db_cli::run` / `requested` | `db_cli` | `rws db migrate|rollback [N]|status|seed` (18.30.0): `run(args, out, err)` answers the exit code (`EXIT_OK`, `EXIT_FAILED`, `EXIT_USAGE`); `--database-url` / `DATABASE_URL` / `RWS_DB_*`, `--dir`, `--migrations`, `--seeds`, `--json`. See [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
 | `FileChange` / `ChangeKind` / `GenError` | `generator` | One file of a plan (`path`, `kind` — `Create`, `Edit`, `Unchanged`, `Conflict` — `content`, `original`, `diff`); why a generator refused (`usage`, `message`, `to_json()`) |
 | `Field` / `FieldType` / `BaseType` / `Db` / `RouteAction` | `generator` | `name:type` (`Field::parse`, `parse_fields`; types `i64`, `i32`, `f64`, `bool`, `String`, `Option`); the database a migration is written for (`sqlite`, `postgres`, `mysql`); the routes `gen route` writes (`List`, `Show`, `Create`, `Update`, `Remove`; `parse_list("list,show")`) |
 | `AppPaths` / `LayoutEntry` / `EntryKind` / `ManifestError` | `app_manifest` | Where each part lives (`main`, `lib`, `routes`, `models`, `jobs`, `migrations`, `templates`, `tests`, `static_files`; `Default` = the conventional layout; `entries()`, `get(role)`); one role as found on disk (`role`, `path`, `kind` file/dir, `exists`); a parse error (`line`, `message`) |
@@ -23924,14 +24107,18 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `DbPool` | `model` | Async `sqlx` pool, one variant per compiled-in backend: `new(DbConfig)`, `from_env()`, `memory()` (SQLite `:memory:`); `execute`, `query`, `begin`, `transaction`, `migrate`. See [Database](/database/overview/) |
+| `DbPool` | `model` | Async `sqlx` pool, one variant per compiled-in backend: `new(DbConfig)`, `from_env()`, `memory()` (SQLite `:memory:`), `connect(url)` (sqlx URLs, 18.30.0); `execute`, `query`, `begin`, `transaction`, `migrate`, `seed(dir)` (18.30.0). See [Database](/database/overview/) |
 | `DbTls` / `DbSslMode` | `model` | TLS for PostgreSQL / MySQL pools: mode (`disable` … `verify-full`), CA file, client certificate; `DbTls::from_env()` reads `RWS_DB_SSL_*`; used by `DbPool::new_with_tls` and `DbPool::from_env`. See [Database TLS](/database/overview/#tls) |
 | `DbTransaction` | `model` | Open transaction from `DbPool::begin`; `commit` / `rollback` |
 | `DbConfig` | `model` | Connection settings; `from_env()` reads `RWS_DB_*` |
 | `Backend` | `model` | `Sqlite`, `Postgres`, `MySql` (compiled-in only); `Backend::parse`; pick it explicitly only with several backends compiled in |
 | `Repository` | `model` | Async CRUD trait (`find_by_id`, `find_all`, `save`, `delete_by_id`, `count`, …). See [Repository](/database/repository/) |
-| `ModelRepository` | `model` | `Repository` implementation from `T::repository(&pool)`; `save` inserts when the key is 0, else updates |
-| `QueryBuilder` | `model` | Fluent query builder: `where_eq`, `filter`, `order_by`, `limit`, `fetch_all`, `count`, `paginate`, `paginate_after`. See [Query builder](/database/query-builder/) |
+| `ModelRepository` | `model` | `Repository` implementation from `T::repository(&pool)`, for `ID` = `i64`, `i32`, `String`, `Uuid` (18.30.0); `save` inserts when an auto-increment key is 0 or another key isn't in the table, else updates; `insert`, `query()`, and for soft-delete models `restore`, `force_delete_by_id`, `find_by_id_with_deleted`. See [Keys, timestamps, soft delete, locking](/database/conventions/) |
+| `PrimaryKey` | `model` | The key types `ModelRepository` implements `Repository` for: `i64`, `i32`, `String`, `Uuid` (sealed, 18.30.0) |
+| `Timestamp` | `model` | A UTC instant in microseconds: `now()`, `parse`, `to_rfc3339`, `to_value(backend)`, `FromColumn`/`ToColumn`, `serde` as RFC 3339; the type of `#[timestamps]` / `#[soft_delete]` fields (18.30.0). See [Timestamps](/database/conventions/#timestamps) |
+| `Uuid` | `model` | 16-byte UUID for keys: `now_v7()`, `new_v4()`, `parse`, `NIL` (`save` replaces it with a v7), stored as text (18.30.0). See [Primary keys](/database/conventions/#primary-keys) |
+| `DbError` / `DbErrorKind` | `model` | The model layer's error (its message in `.0`); `kind()` — `StaleVersion` (a `#[version]`ed `save` of a stale copy), `NotFound`, `Other` — and `is_stale_version()` / `is_not_found()` (18.30.0). See [Optimistic locking](/database/conventions/#optimistic-locking) |
+| `QueryBuilder` | `model` | Fluent query builder: `where_eq`, `filter`, `order_by`, `limit`, `fetch_all`, `count`, `paginate`, `paginate_after`; `with_deleted`, `only_deleted`, `force_delete`, `restore` for soft-delete models (18.30.0). See [Query builder](/database/query-builder/) |
 | `HasMany` / `HasOne` / `BelongsTo` | `model` | Explicit-load relations with `.load(&pool).await` — no hidden N+1. See [Relations](/database/relations/) |
 | `MigrationStatus` | `model` | Applied/pending state from `DbPool::migration_status`. See [Migrations](/database/migrations/) |
 | `ModelInfo` | `model` | What a `Model` type maps to — `type_name`, `table`, `columns`, `primary_key`, `auto_increment`; `ModelInfo::of::()`, `short_name()` (18.28.0). What `DevTools::model::()` reports. See [dev tools](/mcp/dev-tools/) |

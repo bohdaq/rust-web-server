@@ -69,7 +69,7 @@ claude mcp add --transport http my-app http://localhost:7878/mcp
 | `db_schema` | With `DevTools::database(pool)`: every table and its columns (name, type, nullable, default, primary key) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
 | `migrations` | With `DevTools::migrations(dir)` too: each migration file, whether it is applied and whether it has a `.down.sql` |
 | `migrations_run` | Apply the pending migrations; answers the status afterwards |
-| `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none) |
+| `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none). The same operations from a shell: [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
 | `gen_model`, `gen_route`, `gen_migration`, `gen_test` | The [generators](#generators): write a model, routes, a migration or a test into the project, or with `dry_run` answer the plan |
 
 The middleware listed is the stack around the app's routes (each layer's

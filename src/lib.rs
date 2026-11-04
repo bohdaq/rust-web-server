@@ -178,6 +178,10 @@ pub use rws_proxy::dev_mcp;
 /// conventional layout (18.29.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub use rws_proxy::generator;
+/// `rws db migrate|rollback|status|seed`: the project's migrations and
+/// seeds from the command line (18.30.0).
+#[cfg(not(target_arch = "wasm32"))]
+pub use rws_proxy::db_cli;
 /// Fleet config pull: signed configs from HTTPS, S3 or git (18.23.0).
 #[cfg(all(feature = "http2", not(target_arch = "wasm32")))]
 pub use rws_proxy::fleet;

@@ -33,7 +33,9 @@ pub trait Repository<T: Model, ID> {
 }
 ```
 
-The `ID` type is always `i64` for the built-in `ModelRepository` implementation.
+`ModelRepository` implements it for `ID` = `i64`, `i32`, `String` and `Uuid` (the `PrimaryKey` types). `T::repository(&pool)` picks `i64` for an integer key and the key's own type otherwise — see [Keys, timestamps, soft delete and locking](/database/conventions/#primary-keys).
+
+Besides the trait, `ModelRepository` has `insert(&entity)` (always an `INSERT`), `query()` (a `QueryBuilder` on the same pool), and for soft-delete models `restore(id)`, `force_delete_by_id(id)` and `find_by_id_with_deleted(id)` ([soft delete](/database/conventions/#soft-delete)).
 
 ## Method reference
 
@@ -60,10 +62,12 @@ Use the [Query Builder](/database/query-builder/) when you need filtering, order
 
 ### `save`
 
-Inserts or updates a single entity.
+Inserts or updates a single entity. With an `auto_increment` key:
 
 - **INSERT** — when the primary key field is `0` (or `Value::Null`).
-- **UPDATE** — when the primary key is non-zero.
+- **UPDATE** — when the primary key is non-zero; a row that isn't there is a `DbErrorKind::NotFound` error.
+
+With any other key, `save` updates the row when the key is in the table and inserts it otherwise ([primary keys](/database/conventions/#primary-keys)). Models with `#[timestamps]`, `#[soft_delete]` or `#[version]` get those columns written by `save` and `delete_by_id` ([conventions](/database/conventions/)).
 
 `save` returns the persisted entity with the primary key filled in (important for auto-increment inserts).
 

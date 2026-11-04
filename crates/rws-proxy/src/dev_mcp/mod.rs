@@ -43,7 +43,7 @@ use crate::server::ConnectionInfo;
 pub use crate::entry_point::RwsEnv;
 
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
-mod db;
+pub(crate) mod db;
 mod generate;
 mod layout;
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]

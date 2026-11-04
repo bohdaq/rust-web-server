@@ -1,0 +1,5 @@
+error: #[soft_delete]: `deleted_at` must be an Option (NULL means not deleted), e.g. Option<Timestamp>
+ --> tests/ui/model_soft_delete_not_option.rs:9:17
+  |
+9 |     deleted_at: String,
+  |                 ^^^^^^

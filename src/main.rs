@@ -304,6 +304,11 @@ fn exit_if_informational_flag() {
     if let Some(gen_args) = rust_web_server::generator::requested(&args) {
         std::process::exit(rust_web_server::generator::run(gen_args, &mut std::io::stdout(), &mut std::io::stderr()));
     }
+    // `rws db migrate|rollback|status|seed`: the project's migrations and seeds.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(db_args) = rust_web_server::db_cli::requested(&args) {
+        std::process::exit(rust_web_server::db_cli::run(db_args, &mut std::io::stdout(), &mut std::io::stderr()));
+    }
     if let Some(output) = rust_web_server::entry_point::command_line_args::informational_flag_output(&args) {
         print!("{output}");
         std::process::exit(0);

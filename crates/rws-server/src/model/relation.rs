@@ -1,12 +1,13 @@
 //! Async relationship helpers: `HasMany`, `HasOne`, `BelongsTo`.
 //!
 //! These are explicit-load helpers — no hidden N+1 queries, no lazy loading.
-//! Call `.load(&pool)` when you want the related records.
+//! Call `.load(&pool)` when you want the related records. Soft-deleted
+//! related rows (`#[soft_delete]`) are left out.
 
 use std::marker::PhantomData;
 
 use super::pool::DbPool;
-use super::repository::placeholder;
+use super::repository::{live_condition, placeholder};
 use super::{DbError, Model, Value};
 
 // ── HasMany ───────────────────────────────────────────────────────────────────
@@ -34,8 +35,8 @@ impl<T: Model> HasMany<T> {
     /// Load all related records from the database.
     pub async fn load(&self, pool: &DbPool) -> Result<Vec<T>, DbError> {
         let sql = format!(
-            "SELECT * FROM {} WHERE {} = {}",
-            T::table_name(), self.fk_col, placeholder(pool.backend(), 1),
+            "SELECT * FROM {} WHERE {} = {}{}",
+            T::table_name(), self.fk_col, placeholder(pool.backend(), 1), and_live::<T>(),
         );
         let rows = pool.query_rows(&sql, &[self.owner_pk.clone()]).await?;
         rows.iter().map(|r| T::from_row(r)).collect()
@@ -62,8 +63,8 @@ impl<O: Model> HasOne<O> {
     /// Load the related record from the database.
     pub async fn load(&self, pool: &DbPool) -> Result<Option<O>, DbError> {
         let sql = format!(
-            "SELECT * FROM {} WHERE {} = {} LIMIT 1",
-            O::table_name(), self.fk_col, placeholder(pool.backend(), 1),
+            "SELECT * FROM {} WHERE {} = {}{} LIMIT 1",
+            O::table_name(), self.fk_col, placeholder(pool.backend(), 1), and_live::<O>(),
         );
         let rows = pool.query_rows(&sql, &[self.owner_pk.clone()]).await?;
         match rows.into_iter().next() {
@@ -92,8 +93,8 @@ impl<O: Model> BelongsTo<O> {
     /// Load the owner record from the database.
     pub async fn load(&self, pool: &DbPool) -> Result<Option<O>, DbError> {
         let sql = format!(
-            "SELECT * FROM {} WHERE {} = {} LIMIT 1",
-            O::table_name(), O::primary_key_name(), placeholder(pool.backend(), 1),
+            "SELECT * FROM {} WHERE {} = {}{} LIMIT 1",
+            O::table_name(), O::primary_key_name(), placeholder(pool.backend(), 1), and_live::<O>(),
         );
         let rows = pool.query_rows(&sql, &[self.fk_value.clone()]).await?;
         match rows.into_iter().next() {
@@ -101,4 +102,8 @@ impl<O: Model> BelongsTo<O> {
             None => Ok(None),
         }
     }
+}
+
+fn and_live<T: Model>() -> String {
+    live_condition::<T>().map(|c| format!(" AND {c}")).unwrap_or_default()
 }

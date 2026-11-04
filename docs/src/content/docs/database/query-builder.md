@@ -117,13 +117,19 @@ User::query(&pool)
 
 ### Update a single column
 
-`update(col, val).await` issues `UPDATE table SET col = ? WHERE …`. Combine with filters to scope the update.
+`update(col, val).await` issues `UPDATE table SET col = ? WHERE …`. Combine with filters to scope the update. On a model with `#[timestamps]` it also sets `updated_at`, with `#[version]` it increments the version.
 
 ```rust
 User::query(&pool)
     .where_eq("id", 42i64)
     .update("role", "moderator").await?;
 ```
+
+### Soft-deleted rows
+
+For a `#[soft_delete]` model every builder operation skips soft-deleted rows; `.with_deleted()` includes them and `.only_deleted()` keeps only them. `delete()` sets `deleted_at`, `force_delete()` removes rows (answering how many), `restore()` clears `deleted_at` on the matching deleted rows. See [soft delete](/database/conventions/#soft-delete).
+
+`count()` leaves the chain's `order_by` out (PostgreSQL refuses `ORDER BY` beside `COUNT(*)`).
 
 ## Placeholder rules
 

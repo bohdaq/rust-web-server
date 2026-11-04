@@ -7,6 +7,12 @@
 //! - `DbPool` for connection management (wraps `sqlx::Pool`)
 //! - Async migration runner
 //! - Relationship helpers (`HasMany`, `HasOne`, `BelongsTo`)
+//! - Primary keys of type `i64`, `i32`, `String` or [`Uuid`] (18.30.0)
+//! - Conventions `save` and `delete` maintain (18.30.0): `#[timestamps]`
+//!   (`created_at` / `updated_at`, [`Timestamp`]), `#[soft_delete]`
+//!   (`deleted_at`; deleted rows are left out of queries unless asked for)
+//!   and `#[version]` (optimistic locking: saving a stale copy fails with
+//!   [`DbErrorKind::StaleVersion`] instead of overwriting)
 //!
 //! Enable one or more backend features — `model-sqlite`, `model-postgres`,
 //! and `model-mysql` are not mutually exclusive, so a single binary can hold
@@ -30,8 +36,15 @@ pub mod pool;
 pub mod query;
 pub mod relation;
 pub mod repository;
+pub mod timestamp;
+mod decode;
+pub mod uuid;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod backends;
+#[cfg(test)]
+mod convention_tests;
 #[cfg(test)]
 mod tls_tests;
 
@@ -41,7 +54,9 @@ pub use migration::MigrationStatus;
 pub use pool::{DbPool, DbTransaction};
 pub use query::{Order, QueryBuilder};
 pub use relation::{BelongsTo, HasMany, HasOne};
-pub use repository::{ModelRepository, Repository};
+pub use repository::{ModelRepository, PrimaryKey, Repository};
+pub use timestamp::Timestamp;
+pub use uuid::Uuid;
 pub use crate::pagination::{CursorPage, Page};
 
 // ── Value ─────────────────────────────────────────────────────────────────────
@@ -60,6 +75,12 @@ pub enum Value {
 // ── DbError ───────────────────────────────────────────────────────────────────
 
 /// Error type returned by all model/DB operations.
+///
+/// The message says what failed. Errors a caller handles differently —
+/// a stale optimistic-locking version, a row that isn't there — have a
+/// [`kind`](DbError::kind) too (18.30.0); it is carried by a fixed message
+/// prefix (`stale version: `, `not found: `), since `DbError` stays a
+/// tuple struct of its message until a major release.
 #[derive(Debug)]
 pub struct DbError(pub String);
 
@@ -71,9 +92,68 @@ impl std::fmt::Display for DbError {
 
 impl std::error::Error for DbError {}
 
+/// What a [`DbError`] is about, for errors a caller handles differently
+/// from the rest (18.30.0).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DbErrorKind {
+    /// `save` of a `#[version]`ed model whose version no longer matches the
+    /// row's: someone saved it since this copy was read. Reload and retry,
+    /// or tell the user.
+    StaleVersion,
+    /// The row to update or restore doesn't exist.
+    NotFound,
+    /// Anything else: SQL errors, connection errors, conversions.
+    Other,
+}
+
+const STALE_VERSION: &str = "stale version: ";
+const NOT_FOUND: &str = "not found: ";
+
 impl DbError {
     pub fn new(msg: impl Into<String>) -> Self {
         DbError(msg.into())
+    }
+
+    /// A [`DbErrorKind::StaleVersion`] error; `detail` says which row and
+    /// versions.
+    pub fn stale_version(detail: impl std::fmt::Display) -> Self {
+        DbError(format!("{STALE_VERSION}{detail}"))
+    }
+
+    /// A [`DbErrorKind::NotFound`] error.
+    pub fn not_found(detail: impl std::fmt::Display) -> Self {
+        DbError(format!("{NOT_FOUND}{detail}"))
+    }
+
+    /// What this error is about.
+    ///
+    /// ```rust
+    /// # extern crate rws_server as rust_web_server;
+    /// use rust_web_server::model::{DbError, DbErrorKind};
+    ///
+    /// let e = DbError::stale_version("users id=1: the row is at version 3, this copy at 2");
+    /// assert_eq!(e.kind(), DbErrorKind::StaleVersion);
+    /// assert_eq!(DbError::new("syntax error").kind(), DbErrorKind::Other);
+    /// ```
+    pub fn kind(&self) -> DbErrorKind {
+        if self.0.starts_with(STALE_VERSION) {
+            DbErrorKind::StaleVersion
+        } else if self.0.starts_with(NOT_FOUND) {
+            DbErrorKind::NotFound
+        } else {
+            DbErrorKind::Other
+        }
+    }
+
+    /// `kind() == DbErrorKind::StaleVersion`.
+    pub fn is_stale_version(&self) -> bool {
+        self.kind() == DbErrorKind::StaleVersion
+    }
+
+    /// `kind() == DbErrorKind::NotFound`.
+    pub fn is_not_found(&self) -> bool {
+        self.kind() == DbErrorKind::NotFound
     }
 }
 
@@ -209,6 +289,13 @@ impl FromColumn for String {
     }
 }
 
+/// The value as the driver decoded it (18.30.0).
+impl FromColumn for Value {
+    fn from_column(v: Value) -> Result<Self, DbError> {
+        Ok(v)
+    }
+}
+
 impl<T: FromColumn> FromColumn for Option<T> {
     fn from_column(v: Value) -> Result<Self, DbError> {
         match v {
@@ -289,6 +376,32 @@ pub trait Model: Sized + Send + Sync {
     /// Serialise this instance's fields as (column, value) pairs.
     /// Excludes `#[ignore]` fields.
     fn to_values(&self) -> Vec<(&'static str, Value)>;
+
+    /// The column `save` sets to the time of the insert and never writes
+    /// again (`#[timestamps]`: `created_at`). `None`: no such column.
+    fn created_at_column() -> Option<&'static str> {
+        None
+    }
+
+    /// The column `save` sets to the time of every insert and update
+    /// (`#[timestamps]`: `updated_at`).
+    fn updated_at_column() -> Option<&'static str> {
+        None
+    }
+
+    /// The soft-delete column (`#[soft_delete]`: `deleted_at`): `delete`
+    /// sets it to the time instead of removing the row, and queries leave
+    /// out rows where it isn't `NULL` unless asked for them.
+    fn soft_delete_column() -> Option<&'static str> {
+        None
+    }
+
+    /// The optimistic-locking column (`#[version]`): `1` on insert, one
+    /// more on every update, which only succeeds while the row still has
+    /// the version this copy was read with.
+    fn version_column() -> Option<&'static str> {
+        None
+    }
 }
 
 /// What a [`Model`] type maps to, read from its trait implementation: the

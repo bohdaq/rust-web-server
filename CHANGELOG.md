@@ -5,6 +5,59 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- **ORM, part 1** (roadmap #90; rws-macros 17.31.0): see
+  [Keys, timestamps, soft delete and locking](https://rws8.tech/database/conventions/).
+  - Keys beyond `i64`: `ModelRepository<T, ID>` implements `Repository` for
+    `i32`, `String` and `model::Uuid` too (`PrimaryKey`). For a key that
+    isn't auto-increment, `save` inserts when the key isn't in the table
+    and updates otherwise; a `Uuid::NIL` key gets a fresh `Uuid::now_v7()`;
+    `repo.insert(&entity)` always inserts. `T::repository(&pool)` is keyed
+    by the key's type for `String`/`Uuid` keys (still `i64` for integers).
+    `Uuid` is rws's own (v4, v7, parse, `serde`), stored as text.
+  - `#[timestamps]`: `save` writes `created_at` (insert only) and
+    `updated_at` (`model::Timestamp`, UTC, microseconds) — `TEXT` on SQLite,
+    `TIMESTAMPTZ` on PostgreSQL, `DATETIME(6)` on MySQL.
+  - `#[soft_delete]` (`deleted_at: Option<Timestamp>`): `delete_by_id` and
+    `QueryBuilder::delete` set it; the repository, the query builder and
+    relations skip such rows unless `with_deleted()` / `only_deleted()`;
+    `restore`, `force_delete_by_id` / `force_delete`,
+    `find_by_id_with_deleted`.
+  - `#[version]`: optimistic locking — `save` of a stale copy changes
+    nothing and fails with `DbErrorKind::StaleVersion` (`DbError::kind()`,
+    `is_stale_version()`; also `NotFound`).
+  - `DbPool::seed(dir)` and `DbPool::connect(url)`; `FromColumn for Value`.
+  - PostgreSQL `TIMESTAMPTZ`/`TIMESTAMP`/`DATE`/`UUID` and MySQL
+    `DATETIME`/`TIMESTAMP`/`DATE` columns read as text (they were `NULL`).
+- **`rws db migrate|rollback [N]|status|seed`** (roadmap #91): the
+  project's migrations (`rws.app.toml`'s path) and seeds (`seeds/` beside
+  them) from the command line, on `--database-url`, `DATABASE_URL` or
+  `RWS_DB_*`; `--json` (the `status` JSON is the dev MCP server's
+  `migrations` answer), exit codes 0/1/2. Needs a `rws` built with a
+  `model-*` feature. See [`rws db`](https://rws8.tech/database/migrations/#from-the-command-line-rws-db).
+- **CI runs the model, `TestDb` and `rws db` tests on PostgreSQL 16 and
+  MySQL 8.4** (job `model-databases`), as well as SQLite.
+- **rws-macros 17.31.0** must be published before rust-web-server.
+
+### Fixed
+
+- **The model layer on PostgreSQL and MySQL**, found by running its tests
+  there for the first time: `INTEGER`/`SMALLINT`/`REAL` columns read as
+  `NULL` on PostgreSQL (only `BIGINT`/`DOUBLE PRECISION` decoded), and so
+  did an `INSERT … RETURNING` of a `SERIAL` key; `save` of a `None` field
+  failed on PostgreSQL ("column is of type integer but expression is of type
+  text" — NULLs are now written as literals); `QueryBuilder::count` (and so
+  `paginate`) after `order_by` failed on PostgreSQL (the `ORDER BY` is left
+  out); and migrations failed on MySQL, which can't key the
+  `_schema_migrations` table's `TEXT` column (now `VARCHAR(255)`; existing
+  tables keep working). On SQLite a column declared with a type sqlx
+  doesn't read as text (`DATETIME`, `DATE`) is read as it is stored rather
+  than as `NULL`. `save` of a missing row with a non-zero key is a
+  `DbErrorKind::NotFound` error instead of "updated row not found".
+
 ## 18.29.0 — 2026-11-04
 
 ### Added

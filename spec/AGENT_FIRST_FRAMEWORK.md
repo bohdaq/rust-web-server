@@ -188,8 +188,25 @@ in CI, for each starter.
 - **#90 ORM** — generic/UUID primary keys, `created_at`/`updated_at`, eager
   `with()`, many-to-many, scopes, soft delete, optimistic locking, seeds, read
   replicas, schema dump as JSON.
+  *Part 1 on main (unreleased):* `Repository` for `i64`/`i32`/`String`/
+  `model::Uuid` keys (own 16-byte type: `uuid` isn't in the tree; v7 for
+  generated keys) — a non-auto key `save`s as an insert when it isn't in the
+  table, else an update; `#[timestamps]` / `#[soft_delete]` / `#[version]`
+  on `#[derive(Model)]`, written by the repository in the statements it
+  already runs (no callbacks; `Model::created_at_column()` …
+  `version_column()` default to `None`, so hand-written impls compile);
+  `model::Timestamp` (UTC µs; TEXT / TIMESTAMPTZ via `CAST` / DATETIME(6));
+  PostgreSQL and MySQL temporal and UUID columns decoded from wire bytes
+  rather than sqlx's chrono/uuid features; `DbErrorKind::StaleVersion` by a
+  message prefix, since `DbError(pub String)` stays until 19.0. The model
+  tests run per backend (`model/backends.rs`: a schema or database per
+  test), which found four PostgreSQL/MySQL bugs (see CHANGELOG). Part 2:
+  eager `with()`, many-to-many, scopes, Rust-factory seeds, read replicas,
+  schema dump.
 - **#91 `rws db migrate|rollback|status|seed`** — the same operations as the
-  `dev_mcp` tools.
+  `dev_mcp` tools. *On main (unreleased):* `db_cli` in `rws-proxy` (beside
+  `generator`), on `dev_mcp::db`'s runtime and status JSON; seeds are
+  `seeds/` beside the migrations directory, plain SQL, run every time.
 
 Done when: SQLite, PostgreSQL and MySQL pass the new model tests in CI.
 

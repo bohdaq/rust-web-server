@@ -410,6 +410,10 @@
         "link": "/database/repository/"
       },
       {
+        "label": "Keys, timestamps, soft delete, locking",
+        "link": "/database/conventions/"
+      },
+      {
         "label": "Query Builder",
         "link": "/database/query-builder/"
       },

@@ -4,7 +4,8 @@ use std::marker::PhantomData;
 
 use super::backend::Backend;
 use super::pool::DbPool;
-use super::repository::{extract_count, placeholder};
+use super::repository::{extract_count, live_condition, placeholder, timestamp_placeholder};
+use super::timestamp::Timestamp;
 use super::{DbError, Model, ToColumn, Value};
 use crate::pagination::{CursorPage, Page};
 
@@ -26,9 +27,30 @@ impl Order {
     }
 }
 
+// ── Deleted ───────────────────────────────────────────────────────────────────
+
+/// Which rows of a soft-delete model a query sees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Deleted {
+    /// Not soft-deleted (the default).
+    Exclude,
+    /// All.
+    Include,
+    /// Soft-deleted only.
+    Only,
+}
+
 // ── QueryBuilder ──────────────────────────────────────────────────────────────
 
 /// Fluent async query builder for `SELECT`, `COUNT`, `DELETE`, and `UPDATE`.
+///
+/// For a model with a soft-delete column (`#[soft_delete]`) every operation
+/// sees only rows not deleted, unless the chain has
+/// [`with_deleted`](Self::with_deleted) or
+/// [`only_deleted`](Self::only_deleted); [`delete`](Self::delete) sets the
+/// column and [`force_delete`](Self::force_delete) removes rows. With
+/// `#[timestamps]` / `#[version]`, [`update`](Self::update) also sets
+/// `updated_at` and increments the version (18.30.0).
 ///
 /// ```rust,no_run
 /// # extern crate rws_server as rust_web_server;
@@ -56,6 +78,7 @@ pub struct QueryBuilder<'a, T: Model> {
     order: Option<(String, Order)>,
     limit: Option<u64>,
     offset: Option<u64>,
+    deleted: Deleted,
     _phantom: PhantomData<T>,
 }
 
@@ -71,6 +94,7 @@ impl<'a, T: Model> Clone for QueryBuilder<'a, T> {
             order: self.order.clone(),
             limit: self.limit,
             offset: self.offset,
+            deleted: self.deleted,
             _phantom: PhantomData,
         }
     }
@@ -84,8 +108,36 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
             order: None,
             limit: None,
             offset: None,
+            deleted: Deleted::Exclude,
             _phantom: PhantomData,
         }
+    }
+
+    /// Soft-deleted rows too (no effect on a model without `#[soft_delete]`).
+    pub fn with_deleted(mut self) -> Self {
+        self.deleted = Deleted::Include;
+        self
+    }
+
+    /// Soft-deleted rows only (none for a model without `#[soft_delete]`).
+    pub fn only_deleted(mut self) -> Self {
+        self.deleted = Deleted::Only;
+        self
+    }
+
+    /// The filters plus the soft-delete scope.
+    fn scoped_filters(&self) -> Vec<(String, Vec<Value>)> {
+        let mut filters = self.filters.clone();
+        if let Some(col) = T::soft_delete_column() {
+            match self.deleted {
+                Deleted::Exclude => filters.extend(live_condition::<T>().map(|c| (c, Vec::new()))),
+                Deleted::Include => {}
+                Deleted::Only => filters.push((format!("{col} IS NOT NULL"), Vec::new())),
+            }
+        } else if self.deleted == Deleted::Only {
+            filters.push(("1 = 0".to_string(), Vec::new()));
+        }
+        filters
     }
 
     /// Add a `col = ?` equality filter.
@@ -130,8 +182,9 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
     /// Execute `SELECT * FROM table WHERE … ORDER BY … LIMIT … OFFSET …`.
     pub async fn fetch_all(self) -> Result<Vec<T>, DbError> {
         let backend = self.pool.backend();
+        let filters = self.scoped_filters();
         let (sql, params) = build_select::<T>(
-            self.filters, self.order, self.limit, self.offset, "*", backend,
+            filters, self.order, self.limit, self.offset, "*", backend,
         );
         let rows = self.pool.query_rows(&sql, &params).await?;
         rows.iter().map(|r| T::from_row(r)).collect()
@@ -140,8 +193,9 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
     /// Execute `SELECT * … LIMIT 1` and return the first result.
     pub async fn fetch_one(self) -> Result<Option<T>, DbError> {
         let backend = self.pool.backend();
+        let filters = self.scoped_filters();
         let (sql, params) = build_select::<T>(
-            self.filters, self.order, Some(1), self.offset, "*", backend,
+            filters, self.order, Some(1), self.offset, "*", backend,
         );
         let rows = self.pool.query_rows(&sql, &params).await?;
         match rows.into_iter().next() {
@@ -150,37 +204,84 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
         }
     }
 
-    /// Execute `SELECT COUNT(*) FROM table WHERE …`.
+    /// Execute `SELECT COUNT(*) FROM table WHERE …` (without the chain's
+    /// `ORDER BY`, which PostgreSQL refuses next to an aggregate).
     pub async fn count(self) -> Result<i64, DbError> {
         let backend = self.pool.backend();
+        let filters = self.scoped_filters();
         let (sql, params) = build_select::<T>(
-            self.filters, self.order, self.limit, self.offset, "COUNT(*)", backend,
+            filters, None, self.limit, self.offset, "COUNT(*)", backend,
         );
         let rows = self.pool.query_rows(&sql, &params).await?;
         extract_count(rows)
     }
 
-    /// Execute `DELETE FROM table WHERE …`.
+    /// Execute `DELETE FROM table WHERE …` — for a soft-delete model,
+    /// `UPDATE table SET deleted_at = now WHERE … AND deleted_at IS NULL`
+    /// instead ([`force_delete`](Self::force_delete) removes the rows).
     pub async fn delete(self) -> Result<(), DbError> {
+        let Some(col) = T::soft_delete_column() else {
+            return self.force_delete().await.map(|_| ());
+        };
         let backend = self.pool.backend();
-        let (where_clause, params, _) = build_where(self.filters, 0, backend);
-        let sql = format!("DELETE FROM {}{}", T::table_name(), where_clause);
+        let mut filters = self.filters.clone();
+        filters.extend(live_condition::<T>().map(|c| (c, Vec::new())));
+        let (where_clause, where_params, _) = build_where(filters, 1, backend);
+        let mut params = vec![Timestamp::now().to_value(backend)];
+        params.extend(where_params);
+        let sql = format!("UPDATE {} SET {} = {}{}", T::table_name(), col, timestamp_placeholder(backend, 1), where_clause);
         self.pool.execute(&sql, &params).await?;
         Ok(())
     }
 
-    /// Execute `UPDATE table SET col = ? WHERE …`.
+    /// Execute `DELETE FROM table WHERE …`, removing the rows whatever the
+    /// soft-delete column says (within the query's scope: add
+    /// [`with_deleted`](Self::with_deleted) to include deleted rows).
+    /// Answers the number of rows removed.
+    pub async fn force_delete(self) -> Result<u64, DbError> {
+        let backend = self.pool.backend();
+        let (where_clause, params, _) = build_where(self.scoped_filters(), 0, backend);
+        let sql = format!("DELETE FROM {}{}", T::table_name(), where_clause);
+        self.pool.execute(&sql, &params).await
+    }
+
+    /// Clear the soft-delete column of the matching deleted rows; answers
+    /// how many. An error for a model without `#[soft_delete]`.
+    pub async fn restore(self) -> Result<u64, DbError> {
+        let Some(col) = T::soft_delete_column() else {
+            return Err(DbError::new(format!(
+                "restore: {} has no soft-delete column (add #[soft_delete] and a deleted_at field)",
+                T::table_name()
+            )));
+        };
+        let backend = self.pool.backend();
+        let mut filters = self.filters.clone();
+        filters.push((format!("{col} IS NOT NULL"), Vec::new()));
+        let (where_clause, params, _) = build_where(filters, 0, backend);
+        let sql = format!("UPDATE {} SET {} = NULL{}", T::table_name(), col, where_clause);
+        self.pool.execute(&sql, &params).await
+    }
+
+    /// Execute `UPDATE table SET col = ? WHERE …` (also `updated_at = now`
+    /// and `version = version + 1` when the model has them).
     pub async fn update(self, col: &str, val: impl ToColumn) -> Result<(), DbError> {
         let backend = self.pool.backend();
-        let set_ph = placeholder(backend, 1);
-        let set_val = val.to_column();
-        let (where_clause, mut where_params, _) = build_where(self.filters, 1, backend);
-        let mut params = vec![set_val];
-        params.append(&mut where_params);
-        let sql = format!(
-            "UPDATE {} SET {} = {}{}",
-            T::table_name(), col, set_ph, where_clause,
-        );
+        let (mut sets, mut params) = match val.to_column() {
+            // A literal NULL: PostgreSQL won't assign one bound as text to
+            // a column of another type.
+            Value::Null => (vec![format!("{col} = NULL")], Vec::new()),
+            value => (vec![format!("{} = {}", col, placeholder(backend, 1))], vec![value]),
+        };
+        if let Some(updated) = T::updated_at_column().filter(|c| *c != col) {
+            params.push(Timestamp::now().to_value(backend));
+            sets.push(format!("{} = {}", updated, timestamp_placeholder(backend, params.len())));
+        }
+        if let Some(version) = T::version_column().filter(|c| *c != col) {
+            sets.push(format!("{version} = {version} + 1"));
+        }
+        let (where_clause, where_params, _) = build_where(self.scoped_filters(), params.len(), backend);
+        params.extend(where_params);
+        let sql = format!("UPDATE {} SET {}{}", T::table_name(), sets.join(", "), where_clause);
         self.pool.execute(&sql, &params).await?;
         Ok(())
     }
