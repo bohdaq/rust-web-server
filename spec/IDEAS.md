@@ -20,11 +20,11 @@ Updated 2026-10-25.
 ## AI
 
 - **MCP Server Card**, behind a flag, once SEP-2127 settles the discovery path.
-- **MCP tools generated** from routes, ORM models or jobs.
+- **MCP tools generated** from routes, ORM models or jobs — moved to ROADMAP #85.
 
 ## Framework
 
-- **WebSocket testing in `TestClient`**; graceful shutdown that drains WebSocket / SSE tasks (open axum issues).
+- **WebSocket testing in `TestClient`** (moved to ROADMAP #89); graceful shutdown that drains WebSocket / SSE tasks (open axum issues).
 - **`Csv<T>`, content negotiation, NDJSON** responses.
 - **GraphQL adapter**, likely async-graphql through tower compatibility.
 - **Kafka** producer / consumer / outbox ([KAFKA_ROADMAP.md](KAFKA_ROADMAP.md)).
