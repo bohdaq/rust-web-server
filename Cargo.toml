@@ -47,7 +47,8 @@ exclude = ["fuzz", "ci/e2e/grpc", "starters", "site/mcp", "examples/wasm_plugin"
 
 [lints.rust]
 # `cargo fuzz` builds with --cfg fuzzing (see src/lib.rs fuzz_api).
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+# docs.rs builds with --cfg docsrs (see [package.metadata.docs.rs]).
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)', 'cfg(docsrs)'] }
 
 [lib]
 name = "rust_web_server"
@@ -138,6 +139,18 @@ pkg-fmt = "tgz"
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-fmt = "zip"
 
+# docs.rs shows every feature's items, each labelled with the features it
+# needs (`--cfg docsrs` turns on `doc_cfg` in src/lib.rs). `full` plus the
+# features it leaves out on purpose that still build there: `http1` (the
+# sync server mode; compiles beside http2) and `pkcs11` (cryptoki loads the
+# HSM module at run time, so it builds without one). Not here: `fips` (aws-lc's
+# FIPS module needs CMake and Go, and adds no items) and `mimalloc` (only the
+# `rws` binary's allocator; no library items). Not `all-features` for those.
+[package.metadata.docs.rs]
+features = ["full", "http1", "pkcs11"]
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
+
 [features]
 default = ["http3", "brotli", "zstd"]
 http1 = ["dep:ctrlc", "dep:libc", "rws-server/http1", "rws-proxy/http1"]
@@ -190,6 +203,30 @@ openapi = ["rws-server/openapi", "rws-proxy/openapi"]  # AppWithState::openapi()
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 rewrite-regex = ["dep:regex", "rws-server/rewrite-regex"]  # RewriteLayer::request_uri_regex_rewrite
 secrets = ["dep:hmac", "dep:sha2", "http-client", "rws-server/secrets"]  # secrets::resolve(): vault:// / aws-sm:// / azkv:// reference resolution (Vault, AWS Secrets Manager, Azure Key Vault); reuses storage-s3's SigV4 signer/credential chain and storage-azure's Managed Identity token fetch
+
+# Presets (18.32.0, #96): they only turn on other features, and each builds
+# with or without the default set (`default-features = false` gives HTTP/2 +
+# TLS without QUIC). Contents and build times:
+# docs/src/content/docs/getting-started/installation.md.
+# A server-rendered web app: templates, sessions with signed/encrypted cookies
+# and CSRF, password hashing, basic/JWT auth, an SQLite ORM, jobs, mail,
+# local file storage.
+web = ["http2", "serde", "macros", "tera", "auth", "crypto", "csrf", "model-sqlite", "jobs", "mailer", "storage-local"]
+# A JSON API: typed handlers and extractors, OpenAPI + Swagger UI, JWT auth
+# (HS256, RS256, ES256), an SQLite ORM, background jobs.
+api = ["http2", "serde", "macros", "openapi", "auth", "auth-asymmetric", "model-sqlite", "jobs"]
+# The reverse proxy / edge server: HTTP/3, automatic HTTPS, compression,
+# route auth (basic, JWT, OIDC), regex rewrites, secret references.
+proxy = ["http3", "brotli", "zstd", "acme", "auth", "auth-asymmetric", "sso", "rewrite-regex", "secrets"]
+# Every feature that builds with a Rust toolchain and a C compiler alone.
+# Left out: `fips` (needs CMake and Go), `pkcs11` (only useful with an HSM),
+# `http1` (the sync server mode, an alternative to http2 rather than an
+# addition) and `mimalloc` (the `rws` binary's allocator, nothing for a
+# library).
+full = ["http3", "brotli", "zstd", "http-client", "serde", "auth", "auth-asymmetric", "macros", "acme", "tera",
+        "model-sqlite", "model-postgres", "model-mysql", "crypto", "csrf", "mailer", "sso", "sso-server", "sso-saml",
+        "jobs", "storage-local", "storage-s3", "storage-azure", "storage-gcs", "tower", "gateway-api", "wasm-plugins",
+        "openapi", "webhook", "rewrite-regex", "secrets"]
 
 [dependencies]
 # The crates the facade is split into (spec/WORKSPACE_SPLIT.md).

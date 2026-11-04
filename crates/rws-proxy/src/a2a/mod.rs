@@ -437,7 +437,7 @@ impl A2aServer {
             return url.clone();
         }
         let host = request.header(crate::header::Header::_HOST).map(|h| h.value.to_string()).unwrap_or_else(|| format!("{}:{}", connection.server.ip, connection.server.port));
-        format!("{}://{host}{}", if connection.tls { "https" } else { "http" }, self.path)
+        format!("{}://{host}{}", crate::ip_filter::request_scheme(request, &connection.client.ip, connection.tls), self.path)
     }
 
     /// The card with `Cache-Control`, an `ETag` (its content's hash) and

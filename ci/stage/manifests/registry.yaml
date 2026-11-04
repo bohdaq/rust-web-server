@@ -1,0 +1,49 @@
+# A throwaway image registry in the run's project for the test app image
+# (ci/stage/app): pushed from the workstation through the gateway, pulled by
+# the kubelet with the same per-run credentials, gone with the project.
+# run.sh creates the Secret rws-e2e-registry (htpasswd) first.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: registry}
+  template:
+    metadata:
+      labels: {app: registry}
+    spec:
+      containers:
+        - name: registry
+          image: registry:2.8.3
+          env:
+            - {name: REGISTRY_AUTH, value: htpasswd}
+            - {name: REGISTRY_AUTH_HTPASSWD_REALM, value: rws-e2e}
+            - {name: REGISTRY_AUTH_HTPASSWD_PATH, value: /auth/htpasswd}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+          ports: [{containerPort: 5000, name: http}]
+          readinessProbe:
+            httpGet: {path: /, port: 5000}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: auth, mountPath: /auth, readOnly: true}
+            - {name: data, mountPath: /var/lib/registry}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        - name: auth
+          secret: {secretName: rws-e2e-registry}
+        - name: data
+          emptyDir: {sizeLimit: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  annotations:
+    service.nlb.kube-dc.com/expose-route: https
+spec:
+  selector: {app: registry}
+  ports: [{port: 5000, targetPort: 5000, name: http}]

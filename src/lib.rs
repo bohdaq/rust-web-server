@@ -11,7 +11,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! rust-web-server = "17"
+//! rust-web-server = "18"
 //! ```
 //!
 //! ## Quick start
@@ -32,6 +32,15 @@
 //!
 //! See [DEVELOPER.md](https://github.com/bohdaq/rust-web-server/blob/main/DEVELOPER.md)
 //! for the full building blocks reference and use case examples.
+//!
+//! ## Features
+//!
+//! On docs.rs every item is shown, labelled with the features it needs. The
+//! presets `web`, `api`, `proxy` and `full` turn on common sets; see
+//! [Feature flags](https://rws8.tech/getting-started/installation/#feature-flags).
+// docs.rs sets `--cfg docsrs` ([package.metadata.docs.rs]): nightly rustdoc
+// then labels each item with the `cfg` it is compiled under.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Allows `::rust_web_server::…` paths to resolve from within this crate's own
 // tests, which is required by proc-macro derive output that uses that prefix.

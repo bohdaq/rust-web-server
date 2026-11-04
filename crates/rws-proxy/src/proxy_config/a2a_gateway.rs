@@ -145,7 +145,7 @@ impl A2aGateway {
             Err(e) => return unavailable(&e),
         };
         let host = request.header(crate::header::Header::_HOST).map(|h| h.value.to_string()).unwrap_or_else(|| format!("{}:{}", connection.server.ip, connection.server.port));
-        let public = format!("{}://{host}{}", if connection.tls { "https" } else { "http" }, if self.prefix.is_empty() { "/" } else { &self.prefix });
+        let public = format!("{}://{host}{}", crate::ip_filter::request_scheme(request, &connection.client.ip, connection.tls), if self.prefix.is_empty() { "/" } else { &self.prefix });
         let JsonValue::Object(mut fields) = card else { return unavailable("the agent's card isn't an object") };
         for (key, value) in fields.iter_mut() {
             if key == "supportedInterfaces" {

@@ -112,8 +112,6 @@ Notes per feature:
 - **S3**: `S3Storage` (path-style `{endpoint}/{bucket}/{key}`; rws offers no
   virtual-hosted mode). The presigned URL is SigV4 query signing
   (`UNSIGNED-PAYLOAD`, only `host` signed) done by this app — rws has none.
-  **Use an endpoint on the scheme's default port** (`https://host`, not
-  `https://host:9000`): rws signs requests for the host without the port.
 - **MCP** with curl: `initialize` first, then send its `Mcp-Session-Id`:
 
   ```sh
@@ -229,7 +227,7 @@ curl -s -b sp.jar $SP/sp/me                                                    #
 | `SESSION_REDIS`, `SESSION_REDIS_PASSWORD` | app | Redis session store (`host:port`) |
 | `JWT_RS256_PUBLIC_KEY`, `JWT_ES256_PUBLIC_KEY` | app | PEM public keys |
 | `WEBHOOK_SECRET` | app | GitHub webhook HMAC secret |
-| `RWS_DB_*`, `MIGRATIONS_DIR` | app | Postgres, migrations directory |
+| `RWS_DB_*` (`RWS_DB_SSL_*` too), `MIGRATIONS_DIR` | app | Postgres (a managed one: `RWS_DB_SSL_MODE=verify-full`, `RWS_DB_SSL_ROOT_CERT`), migrations directory |
 | `SMTP_HOST`, `SMTP_PORT` (25) | app | plain SMTP, no TLS, no auth |
 | `S3_ENDPOINT`, `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_REGION` (`us-east-1`) | app | S3 |
 | `MCP_TOKEN` | app | bearer token for `/mcp` |
@@ -251,9 +249,8 @@ only: the IdP's certificate must chain to a public CA.
   / `SERIAL` columns can't be read: the migrations here use `BIGINT` only.
 - `DbPool::migrate` takes no lock: replicas starting together fail with
   `duplicate key value violates unique constraint "pg_type_typname_nsp_index"`.
-- `S3Storage` signs the host without its port while the client sends
-  `Host: host:port`: any endpoint on a non-default port gets
-  `SignatureDoesNotMatch`. No presigned URLs.
+- No presigned URLs in `S3Storage`. (Endpoints on a non-default port work
+  since 428482f0.)
 - `extract::Query` (`URL::parse_query`) decodes only some upper-case escapes,
   decodes `%25` first (`%2526` → `&`) and cuts values at a second `=`; this
   app decodes queries itself.

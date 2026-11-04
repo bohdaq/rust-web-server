@@ -496,6 +496,52 @@ cargo build --release --no-default-features --features http1
 
 ## Feature flags
 
+### Presets
+
+Since 18.32.0 four presets turn on common sets of the features below. They
+only enable other features, so they combine with each other and with single
+features:
+
+```toml
+[dependencies]
+rust-web-server = { version = "18.32", features = ["api"] }
+# HTTP/2 + TLS without QUIC: default-features = false, features = ["api"]
+```
+
+| Preset | For | Features |
+|---|---|---|
+| `web` | Server-rendered apps | `http2`, `serde`, `macros`, `tera`, `auth`, `crypto` (password hashing, signed and encrypted cookies), `csrf`, `model-sqlite`, `jobs`, `mailer`, `storage-local` |
+| `api` | JSON APIs | `http2`, `serde`, `macros`, `openapi`, `auth`, `auth-asymmetric`, `model-sqlite`, `jobs` |
+| `proxy` | The reverse proxy / edge server | `http3`, `brotli`, `zstd`, `acme`, `auth`, `auth-asymmetric`, `sso`, `rewrite-regex`, `secrets` |
+| `full` | Everything that builds with Rust and a C compiler alone | every feature except `fips` (needs CMake and Go), `pkcs11` (only useful with an HSM), `http1` (the synchronous server, an alternative to `http2`) and `mimalloc` (the `rws` binary's allocator) |
+
+Sessions, routing, middleware, MCP, WebSocket and SSE need no feature. Add
+`model-postgres` or `model-mysql` beside a preset for another database.
+
+**Build times.** A clean debug `cargo build --lib` of rust-web-server, each
+preset on top of the default features (`http3`, `brotli`, `zstd`), measured
+2026-11-04 on a 4-core Linux container (rustc 1.97) with other builds
+sharing the CPU — read them as relative:
+
+| Features | Clean build | `target/` size |
+|---|---|---|
+| default | 49 s | 1.1 GB |
+| `proxy` | 52 s | 1.4 GB |
+| `web` | 59 s | 1.8 GB |
+| `api` | 62 s | 1.6 GB |
+| `full` | 1 min 47 s | 3.9 GB |
+
+Rebuilds after a change to your own code only recompile your crate.
+
+### On docs.rs
+
+[docs.rs](https://docs.rs/rust-web-server) documents the crate with `full`,
+`http1` and `pkcs11` — every item, each labelled with the features it needs
+(for example *Available on crate feature `sso` only*). `fips` and `mimalloc`
+add no items.
+
+### All features
+
 `fips` (since 18.23.0) builds TLS on aws-lc's FIPS 140-3 validated module
 and needs CMake and Go; see [FIPS 140-3](/features/https-tls/#fips-140-3).
 `pkcs11` (since 18.23.0) lets `tls_key_file` name a key on an HSM or cloud
@@ -528,6 +574,14 @@ KMS; see [PKCS#11](/features/https-tls/#keys-in-an-hsm-or-cloud-kms-pkcs11).
 | `storage-local` | `LocalStorage` | — |
 | `storage-s3` | `S3Storage` (AWS SigV4, no SDK) | `hmac`, `sha2`, `http-client` |
 | `storage-azure` | `AzureBlobStorage` (Shared Key / Managed Identity, no SDK) | `hmac`, `sha2`, `http-client` |
+| `storage-gcs` | `GcsStorage` (service-account JWTs, metadata server, no SDK) | `http-client`, `aws-lc-rs` |
+| `brotli` *(default)* | `br` content coding | `brotli` |
+| `zstd` *(default)* | `zstd` content coding | `zstd` (C libzstd, built with the crate) |
+| `tower` | Tower layers as middleware, Tower services as apps, an app as a Tower service | `http2`, `tower-service`, `tower-layer`, `http-body` |
+| `gateway-api` | Kubernetes Gateway API controller | `http2`, `serde`, `kube`, `k8s-openapi` |
+| `wasm-plugins` | `WasmLayer`: middleware as WebAssembly modules | `wasmtime` |
+| `fips` | TLS on aws-lc's FIPS 140-3 module (needs CMake and Go) | `http2` |
+| `pkcs11` | TLS private keys on an HSM or cloud KMS | `http2`, `cryptoki` |
 | `openapi` | `GET /openapi.json` + `GET /docs` from registered routes | — |
 | `webhook` | `verify_webhook_signature` (GitHub, Shopify, Stripe) | `hmac`, `sha2` |
 | `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` | `regex` |
@@ -14538,6 +14592,14 @@ stays intact. To key everything on the TCP peer again:
 ```toml
 client_ip = "peer"   # RWS_CONFIG_CLIENT_IP: "forwarded" (default) or "peer"
 ```
+
+The same trusted peer's `X-Forwarded-Proto` (else `Forwarded: proto=`)
+says whether the client used HTTPS, for the URLs rws hands back to it: the
+A2A agent card's interface, the OIDC client's redirect URI (when none is
+configured), its cookies' `Secure` flag, and the `X-Forwarded-Proto` and
+`X-Forwarded-For` forward-auth sends. Before 18.28.0 a TLS-terminating load
+balancer made them all `http`. In code: `ip_filter::request_scheme(request,
+peer, tls)`.
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
 | `Content-Length` | Length of the forwarded body (exactly one) |
 
@@ -22618,7 +22680,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `SqlStore` | `authz::sql` (`model-*`) | Relationship tuples in SQLite / Postgres / MySQL (`rws_authz_tuples`), 1 s read cache, own runtime (18.14.0). See [Authorization](/features/authorization/#storing-tuples-in-a-database) |
 | `AuthzLayer` / `ObjectTemplate` | `authz` | Middleware: the caller needs a relation on an object named from the request (`doc:{path:2}`, `{query:k}`, `{header:H}`); 401 / 403 (18.14.0). See [Authorization](/features/authorization/#protecting-routes) |
 | `ForwardAuthLayer` | `auth::forward` (`auth`) | Delegates allow/deny to an external HTTP service; verbatim pass-through on non-2xx, 502 if unreachable |
-| `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry. See [IP filter](/features/ip-filter/) |
+| `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry; `ip_filter::client_ip` / `request_scheme` give the client's address and scheme behind a trusted proxy. See [IP filter](/features/ip-filter/) |
 | `Blocklist` | `blocklist` | Runtime IP blocklist: `blocklist::global().block(ip)` / `.unblock` / `.is_blocked` / `.list` / `.clear` |
 | `BlocklistLayer` | `blocklist` | Answers `403` for blocked client IPs |
 | `MaintenanceLayer` / `MAINTENANCE_MODE` | `maintenance` | While the `AtomicBool` is `true`, answers `503` for everything but `/healthz` and `/readyz` |

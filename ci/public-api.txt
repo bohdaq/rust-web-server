@@ -7809,6 +7809,7 @@ pub fn rust_web_server::ip_filter::TrustedProxies::parse(&str) -> core::result::
 pub fn rust_web_server::ip_filter::TrustedProxies::trusts(&self, &str) -> bool
 pub fn rust_web_server::ip_filter::client_ip<'a>(&rust_web_server::request::Request, &'a str) -> alloc::borrow::Cow<'a, str>
 pub fn rust_web_server::ip_filter::is_valid_entry(&str) -> bool
+pub fn rust_web_server::ip_filter::request_scheme(&rust_web_server::request::Request, &str, bool) -> &'static str
 pub fn rust_web_server::json::Json<T>::deref(&self) -> &T
 pub fn rust_web_server::json::Json<T>::deref_mut(&mut self) -> &mut T
 pub fn rust_web_server::json::Json<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
