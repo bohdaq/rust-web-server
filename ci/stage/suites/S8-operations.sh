@@ -145,11 +145,15 @@ otlp_ok() {
   k set env deploy/rws OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4318 OTEL_SERVICE_NAME=rws-e2e >/dev/null
   k rollout status deploy/rws --timeout=240s >/dev/null || return 1
   eventually 60 sh -c "curl -fsS --max-time 10 $RWS_URL/healthz >/dev/null" || return 1
-  local i
-  for i in 1 2 3; do curl -sS --max-time 20 -o /dev/null -H "traceparent: 00-$trace-$span-01" "$RWS_URL/e2e/proxy/otlp"; done
-  logged() { k logs deploy/otelcol --since=3m 2>/dev/null | grep -q "Trace ID *: $trace"; }
-  eventually 60 logged || { echo "    trace $trace not at the collector" >&2; return 1; }
-  k logs deploy/otelcol --since=3m | grep -A12 "Trace ID *: $trace" | grep -q "Parent ID *: $span"
+  # Old pods (no tracing) drain for shutdown_delay_secs after the rollout and
+  # the gateway may still pick them: send a traced request each try.
+  logged() {
+    curl -sS --max-time 20 -o /dev/null -H "traceparent: 00-$trace-$span-01" "$RWS_URL/e2e/proxy/otlp"
+    sleep 3
+    k logs deploy/otelcol --since=10m 2>/dev/null | grep -q "Trace ID *: $trace"
+  }
+  eventually 180 logged || { echo "    trace $trace not at the collector" >&2; return 1; }
+  k logs deploy/otelcol --since=10m | grep -A12 "Trace ID *: $trace" | grep -q "Parent ID *: $span"
 }
 check S8.14 "OTLP: a request's span reaches the collector, continuing its traceparent" otlp_ok
 otlp_metrics_ok() {

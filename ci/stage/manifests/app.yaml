@@ -1,0 +1,198 @@
+# The test app (ci/stage/app) and what it talks to, for S3 (rest), S4, S5,
+# S6 (SSE) and S7. run.sh fills in the @…@ placeholders: the image in the
+# run's registry, the managed PostgreSQL's credential Secret, the run's
+# namespace (hostnames). Bucket: an ObjectBucketClaim (Ceph RGW); its Secret
+# and ConfigMap are named after the claim.
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: e2e-bucket
+spec:
+  generateBucketName: e2e-bucket
+  storageClassName: ceph-bucket
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: mailpit}
+  template:
+    metadata:
+      labels: {app: mailpit}
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.21.8
+          ports:
+            - {containerPort: 1025, name: smtp}
+            - {containerPort: 8025, name: http}
+          readinessProbe:
+            tcpSocket: {port: 1025}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+spec:
+  selector: {app: mailpit}
+  ports:
+    - {port: 1025, targetPort: 1025, name: smtp}
+    - {port: 8025, targetPort: 8025, name: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: e2e-app}
+  template:
+    metadata:
+      labels: {app: e2e-app}
+    spec:
+      imagePullSecrets: [{name: rws-e2e-registry-pull}]
+      containers:
+        - name: app
+          image: "@APP_IMAGE@"
+          ports: [{containerPort: 8080, name: http}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 2
+          env:
+            - {name: ROLE, value: app}
+            - {name: SESSION_REDIS, value: "valkey:6379"}
+            - {name: SMTP_HOST, value: mailpit}
+            - {name: SMTP_PORT, value: "1025"}
+            - {name: RWS_DB_BACKEND, value: postgres}
+            - {name: RWS_DB_HOST, valueFrom: {secretKeyRef: {name: "@PG_SECRET@", key: host}}}
+            - {name: RWS_DB_PORT, valueFrom: {secretKeyRef: {name: "@PG_SECRET@", key: port}}}
+            - {name: RWS_DB_NAME, valueFrom: {secretKeyRef: {name: "@PG_SECRET@", key: dbname}}}
+            - {name: RWS_DB_USER, valueFrom: {secretKeyRef: {name: "@PG_SECRET@", key: username}}}
+            - {name: RWS_DB_PASSWORD, valueFrom: {secretKeyRef: {name: "@PG_SECRET@", key: password}}}
+            - {name: RWS_DB_POOL_SIZE, value: "4"}
+            - {name: RWS_DB_SSL_MODE, value: verify-full}
+            - {name: RWS_DB_SSL_ROOT_CERT, value: /etc/db/ca.crt}
+            - {name: S3_BUCKET, valueFrom: {configMapKeyRef: {name: e2e-bucket, key: BUCKET_NAME}}}
+            # The claim's BUCKET_HOST (rook-ceph-rgw-….rook-ceph.svc) isn't
+            # reachable from a project's pods; the public endpoint is.
+            - {name: S3_ENDPOINT, value: "https://s3.stage.kube-dc.com"}
+            - {name: AWS_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: e2e-bucket, key: AWS_ACCESS_KEY_ID}}}
+            - {name: AWS_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: e2e-bucket, key: AWS_SECRET_ACCESS_KEY}}}
+            - {name: MCP_TOKEN, valueFrom: {secretKeyRef: {name: rws-e2e-app, key: mcp-token}}}
+            - {name: WEBHOOK_SECRET, valueFrom: {secretKeyRef: {name: rws-e2e-app, key: webhook-secret}}}
+            - {name: JWT_RS256_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: rws-e2e-app, key: rs256.pub}}}
+            - {name: JWT_ES256_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: rws-e2e-app, key: es256.pub}}}
+            # The JSON-RPC address rws's A2A gateway route forwards to.
+            - {name: A2A_PUBLIC_URL, value: "http://app:8080/a2a"}
+          volumeMounts:
+            - {name: db-ca, mountPath: /etc/db, readOnly: true}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        - name: db-ca
+          secret:
+            secretName: "@PG_SECRET@"
+            items: [{key: ca.crt, path: ca.crt}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  annotations:
+    service.nlb.kube-dc.com/expose-route: https
+spec:
+  selector: {app: e2e-app}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+# rws as OAuth server: one replica (codes and refresh tokens are in memory).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idp
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: e2e-idp}
+  template:
+    metadata:
+      labels: {app: e2e-idp}
+    spec:
+      imagePullSecrets: [{name: rws-e2e-registry-pull}]
+      containers:
+        - name: idp
+          image: "@APP_IMAGE@"
+          ports: [{containerPort: 8080, name: http}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 2
+          env:
+            - {name: ROLE, value: idp}
+            - {name: ISSUER, value: "https://idp-@NS@.stage.kube-dc.com"}
+            - {name: OIDC_CLIENT_ID, value: e2e-sp}
+            - {name: OIDC_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: rws-e2e-app, key: oidc-secret}}}
+            - {name: OIDC_REDIRECT_URI, value: "https://sp-@NS@.stage.kube-dc.com/auth/callback"}
+            - {name: IDP_SIGNING_SECRET, valueFrom: {secretKeyRef: {name: rws-e2e-app, key: idp-signing}}}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: idp
+  annotations:
+    service.nlb.kube-dc.com/expose-route: https
+spec:
+  selector: {app: e2e-idp}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+# rws as OIDC client: two replicas (sessions in signed cookies).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sp
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: e2e-sp}
+  template:
+    metadata:
+      labels: {app: e2e-sp}
+    spec:
+      imagePullSecrets: [{name: rws-e2e-registry-pull}]
+      containers:
+        - name: sp
+          image: "@APP_IMAGE@"
+          ports: [{containerPort: 8080, name: http}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 2
+          env:
+            - {name: ROLE, value: sp}
+            - {name: ISSUER, value: "https://idp-@NS@.stage.kube-dc.com"}
+            - {name: OIDC_CLIENT_ID, value: e2e-sp}
+            - {name: OIDC_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: rws-e2e-app, key: oidc-secret}}}
+            - {name: OIDC_REDIRECT_URI, value: "https://sp-@NS@.stage.kube-dc.com/auth/callback"}
+            - {name: SP_VERIFY, value: userinfo}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sp
+  annotations:
+    service.nlb.kube-dc.com/expose-route: https
+spec:
+  selector: {app: e2e-sp}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
