@@ -103,6 +103,33 @@ mod tests {
   down file drops the table.
 - To list the model in the dev MCP endpoint's `models` tool, add
   `.model::<models::Post>()` to your `DevTools` (the plan's note says so).
+- `--timestamps` and `--soft-delete` (18.30.0) add the repository's
+  [conventions](/database/conventions/): `#[timestamps]` with
+  `created_at: Timestamp` and `updated_at: Timestamp` (columns `NOT NULL`),
+  `#[soft_delete]` with `deleted_at: Option<Timestamp>` (nullable). The
+  columns are `TEXT` on SQLite, `TIMESTAMPTZ` on PostgreSQL, `DATETIME(6)` on
+  MySQL; the `serde` feature is added for `Timestamp`'s `Serialize`. A field
+  of the same name is refused — `save` and `delete_by_id` write these columns.
+
+  ```sh
+  rws gen model Comment body:String post_id:i64 --timestamps --soft-delete
+  ```
+
+  ```rust
+  #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Model)]
+  #[table(name = "comments")]
+  #[timestamps]
+  #[soft_delete]
+  pub struct Comment {
+      #[primary_key(auto_increment)]
+      pub id: i64,
+      pub body: String,
+      pub post_id: i64,
+      pub created_at: Timestamp,
+      pub updated_at: Timestamp,
+      pub deleted_at: Option<Timestamp>,
+  }
+  ```
 
 ### Routes
 

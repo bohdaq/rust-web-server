@@ -290,7 +290,7 @@ Rws as a Rails/Spring-class framework built agent-first: the app explains itself
 - **#90** **ORM** — generic/UUID keys, timestamps, eager `with()`, many-to-many, scopes, soft delete, optimistic locking, seeds, read replicas, schema dump as JSON.
 - **#91** **`rws db migrate|rollback|status|seed`**.
 
-*Part 1 implemented 2026-11-04 (Unreleased in CHANGELOG): `i32`/`String`/`Uuid` keys, `#[timestamps]`, `#[soft_delete]`, `#[version]` (optimistic locking), SQL seeds (`DbPool::seed`), `rws db` (#91), and the CI job `model-databases` running the model, `TestDb` and `rws db` tests on SQLite, PostgreSQL 16 and MySQL 8.4. Left for part 2: eager `with()`, many-to-many, scopes, seeds from Rust factories, read replicas, schema dump as JSON, `rws gen model --timestamps/--soft-delete`.*
+*Part 1 implemented 2026-11-04 (Unreleased in CHANGELOG): `i32`/`String`/`Uuid` keys, `#[timestamps]`, `#[soft_delete]`, `#[version]` (optimistic locking), SQL seeds (`DbPool::seed`), `rws db` (#91), and the CI job `model-databases` running the model, `TestDb` and `rws db` tests on SQLite, PostgreSQL 16 and MySQL 8.4. Part 2 implemented 2026-11-04 (Unreleased): eager `with()` (`Relation`, `Loaded`), many-to-many (`BelongsToMany`), scopes (`QueryBuilder::scope`, `where_in`), Rust seeders (`Seeders`, `DbPool::seed_with`, `db_cli::run_with_seeders`), read replicas (`DbPool::with_replicas`, `RWS_DB_REPLICA_URLS`), the schema as JSON (`DbPool::schema`, `rws db schema --json`, the dev MCP `db_schema`), `rws gen model --timestamps --soft-delete`; their tests run in `model-databases` too. Not done: nested eager loading (`with` on a relation's relations).*
 
 **Done when:** SQLite, PostgreSQL and MySQL pass the new model tests in CI.
 

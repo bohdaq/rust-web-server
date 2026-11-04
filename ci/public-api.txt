@@ -1,4 +1,11 @@
 #[non_exhaustive] pub enum rust_web_server::model::DbErrorKind
+#[non_exhaustive] pub enum rust_web_server::model::RelationKind
+#[non_exhaustive] pub struct rust_web_server::model::ColumnSchema
+#[non_exhaustive] pub struct rust_web_server::model::DbSchema
+#[non_exhaustive] pub struct rust_web_server::model::ForeignKeySchema
+#[non_exhaustive] pub struct rust_web_server::model::IndexSchema
+#[non_exhaustive] pub struct rust_web_server::model::SyncChanges
+#[non_exhaustive] pub struct rust_web_server::model::TableSchema
 impl !core::marker::Freeze for rust_web_server::authz::rebac::MemoryStore
 impl !core::marker::Freeze for rust_web_server::authz::sql::SqlStore
 impl !core::marker::Freeze for rust_web_server::blocklist::Blocklist
@@ -9,6 +16,7 @@ impl !core::marker::Freeze for rust_web_server::cluster::RedisStore
 impl !core::marker::Freeze for rust_web_server::feature::FeatureStore
 impl !core::marker::Freeze for rust_web_server::fleet::Fleet
 impl !core::marker::Freeze for rust_web_server::log::syslog::Sender
+impl !core::marker::Freeze for rust_web_server::model::pool::Replicas
 impl !core::marker::Freeze for rust_web_server::otel::CapturingExporter
 impl !core::marker::Freeze for rust_web_server::otel::Span
 impl !core::marker::Freeze for rust_web_server::proxy::GrpcProxy
@@ -60,6 +68,8 @@ impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::gateway:
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::gateway::Upstream
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::pool::DbPool
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::pool::DbTransaction
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::pool::Replicas
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::seed::Seeders
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::Span
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::proxy::GrpcProxy
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::proxy::H2ReverseProxy
@@ -101,6 +111,8 @@ impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::gateway::Mc
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::gateway::Upstream
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::pool::DbPool
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::pool::DbTransaction
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::pool::Replicas
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::seed::Seeders
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::GrpcProxy
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::H2ReverseProxy
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::H3ReverseProxy
@@ -317,9 +329,16 @@ impl core::clone::Clone for rust_web_server::mcp::openapi_tools::Location
 impl core::clone::Clone for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::clone::Clone for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::clone::Clone for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::clone::Clone for rust_web_server::model::ColumnSchema
 impl core::clone::Clone for rust_web_server::model::DbErrorKind
+impl core::clone::Clone for rust_web_server::model::DbSchema
+impl core::clone::Clone for rust_web_server::model::ForeignKeySchema
+impl core::clone::Clone for rust_web_server::model::IndexSchema
 impl core::clone::Clone for rust_web_server::model::ModelInfo
 impl core::clone::Clone for rust_web_server::model::ModelRow
+impl core::clone::Clone for rust_web_server::model::RelationKind
+impl core::clone::Clone for rust_web_server::model::SyncChanges
+impl core::clone::Clone for rust_web_server::model::TableSchema
 impl core::clone::Clone for rust_web_server::model::Value
 impl core::clone::Clone for rust_web_server::model::backend::Backend
 impl core::clone::Clone for rust_web_server::model::connection::DbConfig
@@ -328,6 +347,7 @@ impl core::clone::Clone for rust_web_server::model::connection::DbTls
 impl core::clone::Clone for rust_web_server::model::migration::MigrationStatus
 impl core::clone::Clone for rust_web_server::model::pool::DbPool
 impl core::clone::Clone for rust_web_server::model::query::Order
+impl core::clone::Clone for rust_web_server::model::seed::Seeders
 impl core::clone::Clone for rust_web_server::model::timestamp::Timestamp
 impl core::clone::Clone for rust_web_server::model::uuid::Uuid
 impl core::clone::Clone for rust_web_server::null::Null
@@ -505,8 +525,13 @@ impl core::cmp::Eq for rust_web_server::mcp::McpIcon
 impl core::cmp::Eq for rust_web_server::mcp::TaskError
 impl core::cmp::Eq for rust_web_server::mcp::ToolCallOutcome
 impl core::cmp::Eq for rust_web_server::mcp::openapi_tools::Location
+impl core::cmp::Eq for rust_web_server::model::ColumnSchema
 impl core::cmp::Eq for rust_web_server::model::DbErrorKind
+impl core::cmp::Eq for rust_web_server::model::ForeignKeySchema
+impl core::cmp::Eq for rust_web_server::model::IndexSchema
 impl core::cmp::Eq for rust_web_server::model::ModelInfo
+impl core::cmp::Eq for rust_web_server::model::RelationKind
+impl core::cmp::Eq for rust_web_server::model::TableSchema
 impl core::cmp::Eq for rust_web_server::model::backend::Backend
 impl core::cmp::Eq for rust_web_server::model::connection::DbSslMode
 impl core::cmp::Eq for rust_web_server::model::query::Order
@@ -713,8 +738,15 @@ impl core::cmp::PartialEq for rust_web_server::mcp::TaskError
 impl core::cmp::PartialEq for rust_web_server::mcp::ToolCallOutcome
 impl core::cmp::PartialEq for rust_web_server::mcp::openapi_tools::Location
 impl core::cmp::PartialEq for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::cmp::PartialEq for rust_web_server::model::ColumnSchema
 impl core::cmp::PartialEq for rust_web_server::model::DbErrorKind
+impl core::cmp::PartialEq for rust_web_server::model::DbSchema
+impl core::cmp::PartialEq for rust_web_server::model::ForeignKeySchema
+impl core::cmp::PartialEq for rust_web_server::model::IndexSchema
 impl core::cmp::PartialEq for rust_web_server::model::ModelInfo
+impl core::cmp::PartialEq for rust_web_server::model::RelationKind
+impl core::cmp::PartialEq for rust_web_server::model::SyncChanges
+impl core::cmp::PartialEq for rust_web_server::model::TableSchema
 impl core::cmp::PartialEq for rust_web_server::model::Value
 impl core::cmp::PartialEq for rust_web_server::model::backend::Backend
 impl core::cmp::PartialEq for rust_web_server::model::connection::DbSslMode
@@ -918,8 +950,10 @@ impl core::default::Default for rust_web_server::mcp::InputRequired
 impl core::default::Default for rust_web_server::mcp::McpContext
 impl core::default::Default for rust_web_server::mcp::ToolAnnotations
 impl core::default::Default for rust_web_server::mcp::openapi_tools::ToolOptions
+impl core::default::Default for rust_web_server::model::SyncChanges
 impl core::default::Default for rust_web_server::model::connection::DbSslMode
 impl core::default::Default for rust_web_server::model::connection::DbTls
+impl core::default::Default for rust_web_server::model::seed::Seeders
 impl core::default::Default for rust_web_server::model::timestamp::Timestamp
 impl core::default::Default for rust_web_server::model::uuid::Uuid
 impl core::default::Default for rust_web_server::openapi::Operation
@@ -1176,10 +1210,17 @@ impl core::fmt::Debug for rust_web_server::mcp::openapi_tools::Location
 impl core::fmt::Debug for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::fmt::Debug for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::fmt::Debug for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::fmt::Debug for rust_web_server::model::ColumnSchema
 impl core::fmt::Debug for rust_web_server::model::DbError
 impl core::fmt::Debug for rust_web_server::model::DbErrorKind
+impl core::fmt::Debug for rust_web_server::model::DbSchema
+impl core::fmt::Debug for rust_web_server::model::ForeignKeySchema
+impl core::fmt::Debug for rust_web_server::model::IndexSchema
 impl core::fmt::Debug for rust_web_server::model::ModelInfo
 impl core::fmt::Debug for rust_web_server::model::ModelRow
+impl core::fmt::Debug for rust_web_server::model::RelationKind
+impl core::fmt::Debug for rust_web_server::model::SyncChanges
+impl core::fmt::Debug for rust_web_server::model::TableSchema
 impl core::fmt::Debug for rust_web_server::model::Value
 impl core::fmt::Debug for rust_web_server::model::backend::Backend
 impl core::fmt::Debug for rust_web_server::model::connection::DbConfig
@@ -1187,7 +1228,9 @@ impl core::fmt::Debug for rust_web_server::model::connection::DbSslMode
 impl core::fmt::Debug for rust_web_server::model::connection::DbTls
 impl core::fmt::Debug for rust_web_server::model::migration::MigrationStatus
 impl core::fmt::Debug for rust_web_server::model::pool::DbPool
+impl core::fmt::Debug for rust_web_server::model::pool::Replicas
 impl core::fmt::Debug for rust_web_server::model::query::Order
+impl core::fmt::Debug for rust_web_server::model::seed::Seeders
 impl core::fmt::Debug for rust_web_server::model::timestamp::Timestamp
 impl core::fmt::Debug for rust_web_server::model::uuid::Uuid
 impl core::fmt::Debug for rust_web_server::null::Null
@@ -1322,6 +1365,7 @@ impl core::hash::Hash for rust_web_server::authz::rebac::Subject
 impl core::hash::Hash for rust_web_server::authz::rebac::Tuple
 impl core::hash::Hash for rust_web_server::compression::Encoding
 impl core::hash::Hash for rust_web_server::compression::dictionary::DictionaryEncoding
+impl core::hash::Hash for rust_web_server::model::RelationKind
 impl core::hash::Hash for rust_web_server::model::timestamp::Timestamp
 impl core::hash::Hash for rust_web_server::model::uuid::Uuid
 impl core::hash::Hash for rust_web_server::traffic::Group
@@ -1350,6 +1394,7 @@ impl core::marker::Copy for rust_web_server::mcp::ToolAnnotations
 impl core::marker::Copy for rust_web_server::mcp::ToolCallOutcome
 impl core::marker::Copy for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::Copy for rust_web_server::model::DbErrorKind
+impl core::marker::Copy for rust_web_server::model::RelationKind
 impl core::marker::Copy for rust_web_server::model::backend::Backend
 impl core::marker::Copy for rust_web_server::model::connection::DbSslMode
 impl core::marker::Copy for rust_web_server::model::query::Order
@@ -1653,10 +1698,17 @@ impl core::marker::Freeze for rust_web_server::mcp::openapi_tools::ToolRequest
 impl core::marker::Freeze for rust_web_server::metrics::MetricsLayer
 impl core::marker::Freeze for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Freeze for rust_web_server::mime_type::MimeType
+impl core::marker::Freeze for rust_web_server::model::ColumnSchema
 impl core::marker::Freeze for rust_web_server::model::DbError
 impl core::marker::Freeze for rust_web_server::model::DbErrorKind
+impl core::marker::Freeze for rust_web_server::model::DbSchema
+impl core::marker::Freeze for rust_web_server::model::ForeignKeySchema
+impl core::marker::Freeze for rust_web_server::model::IndexSchema
 impl core::marker::Freeze for rust_web_server::model::ModelInfo
 impl core::marker::Freeze for rust_web_server::model::ModelRow
+impl core::marker::Freeze for rust_web_server::model::RelationKind
+impl core::marker::Freeze for rust_web_server::model::SyncChanges
+impl core::marker::Freeze for rust_web_server::model::TableSchema
 impl core::marker::Freeze for rust_web_server::model::Value
 impl core::marker::Freeze for rust_web_server::model::backend::Backend
 impl core::marker::Freeze for rust_web_server::model::connection::DbConfig
@@ -1666,6 +1718,7 @@ impl core::marker::Freeze for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Freeze for rust_web_server::model::pool::DbPool
 impl core::marker::Freeze for rust_web_server::model::pool::DbTransaction
 impl core::marker::Freeze for rust_web_server::model::query::Order
+impl core::marker::Freeze for rust_web_server::model::seed::Seeders
 impl core::marker::Freeze for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Freeze for rust_web_server::model::uuid::Uuid
 impl core::marker::Freeze for rust_web_server::null::Null
@@ -2127,10 +2180,17 @@ impl core::marker::Send for rust_web_server::mcp::openapi_tools::ToolRequest
 impl core::marker::Send for rust_web_server::metrics::MetricsLayer
 impl core::marker::Send for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Send for rust_web_server::mime_type::MimeType
+impl core::marker::Send for rust_web_server::model::ColumnSchema
 impl core::marker::Send for rust_web_server::model::DbError
 impl core::marker::Send for rust_web_server::model::DbErrorKind
+impl core::marker::Send for rust_web_server::model::DbSchema
+impl core::marker::Send for rust_web_server::model::ForeignKeySchema
+impl core::marker::Send for rust_web_server::model::IndexSchema
 impl core::marker::Send for rust_web_server::model::ModelInfo
 impl core::marker::Send for rust_web_server::model::ModelRow
+impl core::marker::Send for rust_web_server::model::RelationKind
+impl core::marker::Send for rust_web_server::model::SyncChanges
+impl core::marker::Send for rust_web_server::model::TableSchema
 impl core::marker::Send for rust_web_server::model::Value
 impl core::marker::Send for rust_web_server::model::backend::Backend
 impl core::marker::Send for rust_web_server::model::connection::DbConfig
@@ -2139,7 +2199,9 @@ impl core::marker::Send for rust_web_server::model::connection::DbTls
 impl core::marker::Send for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Send for rust_web_server::model::pool::DbPool
 impl core::marker::Send for rust_web_server::model::pool::DbTransaction
+impl core::marker::Send for rust_web_server::model::pool::Replicas
 impl core::marker::Send for rust_web_server::model::query::Order
+impl core::marker::Send for rust_web_server::model::seed::Seeders
 impl core::marker::Send for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Send for rust_web_server::model::uuid::Uuid
 impl core::marker::Send for rust_web_server::null::Null
@@ -2479,8 +2541,15 @@ impl core::marker::StructuralPartialEq for rust_web_server::mcp::TaskError
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::ToolCallOutcome
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::marker::StructuralPartialEq for rust_web_server::model::ColumnSchema
 impl core::marker::StructuralPartialEq for rust_web_server::model::DbErrorKind
+impl core::marker::StructuralPartialEq for rust_web_server::model::DbSchema
+impl core::marker::StructuralPartialEq for rust_web_server::model::ForeignKeySchema
+impl core::marker::StructuralPartialEq for rust_web_server::model::IndexSchema
 impl core::marker::StructuralPartialEq for rust_web_server::model::ModelInfo
+impl core::marker::StructuralPartialEq for rust_web_server::model::RelationKind
+impl core::marker::StructuralPartialEq for rust_web_server::model::SyncChanges
+impl core::marker::StructuralPartialEq for rust_web_server::model::TableSchema
 impl core::marker::StructuralPartialEq for rust_web_server::model::Value
 impl core::marker::StructuralPartialEq for rust_web_server::model::backend::Backend
 impl core::marker::StructuralPartialEq for rust_web_server::model::connection::DbSslMode
@@ -2840,10 +2909,17 @@ impl core::marker::Sync for rust_web_server::mcp::openapi_tools::ToolRequest
 impl core::marker::Sync for rust_web_server::metrics::MetricsLayer
 impl core::marker::Sync for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Sync for rust_web_server::mime_type::MimeType
+impl core::marker::Sync for rust_web_server::model::ColumnSchema
 impl core::marker::Sync for rust_web_server::model::DbError
 impl core::marker::Sync for rust_web_server::model::DbErrorKind
+impl core::marker::Sync for rust_web_server::model::DbSchema
+impl core::marker::Sync for rust_web_server::model::ForeignKeySchema
+impl core::marker::Sync for rust_web_server::model::IndexSchema
 impl core::marker::Sync for rust_web_server::model::ModelInfo
 impl core::marker::Sync for rust_web_server::model::ModelRow
+impl core::marker::Sync for rust_web_server::model::RelationKind
+impl core::marker::Sync for rust_web_server::model::SyncChanges
+impl core::marker::Sync for rust_web_server::model::TableSchema
 impl core::marker::Sync for rust_web_server::model::Value
 impl core::marker::Sync for rust_web_server::model::backend::Backend
 impl core::marker::Sync for rust_web_server::model::connection::DbConfig
@@ -2852,7 +2928,9 @@ impl core::marker::Sync for rust_web_server::model::connection::DbTls
 impl core::marker::Sync for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Sync for rust_web_server::model::pool::DbPool
 impl core::marker::Sync for rust_web_server::model::pool::DbTransaction
+impl core::marker::Sync for rust_web_server::model::pool::Replicas
 impl core::marker::Sync for rust_web_server::model::query::Order
+impl core::marker::Sync for rust_web_server::model::seed::Seeders
 impl core::marker::Sync for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Sync for rust_web_server::model::uuid::Uuid
 impl core::marker::Sync for rust_web_server::null::Null
@@ -3323,10 +3401,17 @@ impl core::marker::Unpin for rust_web_server::mcp::openapi_tools::ToolRequest
 impl core::marker::Unpin for rust_web_server::metrics::MetricsLayer
 impl core::marker::Unpin for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Unpin for rust_web_server::mime_type::MimeType
+impl core::marker::Unpin for rust_web_server::model::ColumnSchema
 impl core::marker::Unpin for rust_web_server::model::DbError
 impl core::marker::Unpin for rust_web_server::model::DbErrorKind
+impl core::marker::Unpin for rust_web_server::model::DbSchema
+impl core::marker::Unpin for rust_web_server::model::ForeignKeySchema
+impl core::marker::Unpin for rust_web_server::model::IndexSchema
 impl core::marker::Unpin for rust_web_server::model::ModelInfo
 impl core::marker::Unpin for rust_web_server::model::ModelRow
+impl core::marker::Unpin for rust_web_server::model::RelationKind
+impl core::marker::Unpin for rust_web_server::model::SyncChanges
+impl core::marker::Unpin for rust_web_server::model::TableSchema
 impl core::marker::Unpin for rust_web_server::model::Value
 impl core::marker::Unpin for rust_web_server::model::backend::Backend
 impl core::marker::Unpin for rust_web_server::model::connection::DbConfig
@@ -3335,7 +3420,9 @@ impl core::marker::Unpin for rust_web_server::model::connection::DbTls
 impl core::marker::Unpin for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Unpin for rust_web_server::model::pool::DbPool
 impl core::marker::Unpin for rust_web_server::model::pool::DbTransaction
+impl core::marker::Unpin for rust_web_server::model::pool::Replicas
 impl core::marker::Unpin for rust_web_server::model::query::Order
+impl core::marker::Unpin for rust_web_server::model::seed::Seeders
 impl core::marker::Unpin for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Unpin for rust_web_server::model::uuid::Uuid
 impl core::marker::Unpin for rust_web_server::null::Null
@@ -3812,10 +3899,17 @@ impl core::marker::UnsafeUnpin for rust_web_server::mcp::openapi_tools::ToolRequ
 impl core::marker::UnsafeUnpin for rust_web_server::metrics::MetricsLayer
 impl core::marker::UnsafeUnpin for rust_web_server::middleware::RateLimitLayer
 impl core::marker::UnsafeUnpin for rust_web_server::mime_type::MimeType
+impl core::marker::UnsafeUnpin for rust_web_server::model::ColumnSchema
 impl core::marker::UnsafeUnpin for rust_web_server::model::DbError
 impl core::marker::UnsafeUnpin for rust_web_server::model::DbErrorKind
+impl core::marker::UnsafeUnpin for rust_web_server::model::DbSchema
+impl core::marker::UnsafeUnpin for rust_web_server::model::ForeignKeySchema
+impl core::marker::UnsafeUnpin for rust_web_server::model::IndexSchema
 impl core::marker::UnsafeUnpin for rust_web_server::model::ModelInfo
 impl core::marker::UnsafeUnpin for rust_web_server::model::ModelRow
+impl core::marker::UnsafeUnpin for rust_web_server::model::RelationKind
+impl core::marker::UnsafeUnpin for rust_web_server::model::SyncChanges
+impl core::marker::UnsafeUnpin for rust_web_server::model::TableSchema
 impl core::marker::UnsafeUnpin for rust_web_server::model::Value
 impl core::marker::UnsafeUnpin for rust_web_server::model::backend::Backend
 impl core::marker::UnsafeUnpin for rust_web_server::model::connection::DbConfig
@@ -3824,7 +3918,9 @@ impl core::marker::UnsafeUnpin for rust_web_server::model::connection::DbTls
 impl core::marker::UnsafeUnpin for rust_web_server::model::migration::MigrationStatus
 impl core::marker::UnsafeUnpin for rust_web_server::model::pool::DbPool
 impl core::marker::UnsafeUnpin for rust_web_server::model::pool::DbTransaction
+impl core::marker::UnsafeUnpin for rust_web_server::model::pool::Replicas
 impl core::marker::UnsafeUnpin for rust_web_server::model::query::Order
+impl core::marker::UnsafeUnpin for rust_web_server::model::seed::Seeders
 impl core::marker::UnsafeUnpin for rust_web_server::model::timestamp::Timestamp
 impl core::marker::UnsafeUnpin for rust_web_server::model::uuid::Uuid
 impl core::marker::UnsafeUnpin for rust_web_server::null::Null
@@ -4281,10 +4377,17 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::openapi_t
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::metrics::MetricsLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::middleware::RateLimitLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mime_type::MimeType
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::ColumnSchema
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::DbError
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::DbErrorKind
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::DbSchema
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::ForeignKeySchema
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::IndexSchema
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::ModelInfo
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::ModelRow
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::RelationKind
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::SyncChanges
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::TableSchema
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::Value
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::backend::Backend
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::connection::DbConfig
@@ -4729,10 +4832,17 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::openapi_tool
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::metrics::MetricsLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::middleware::RateLimitLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mime_type::MimeType
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::ColumnSchema
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::DbError
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::DbErrorKind
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::DbSchema
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::ForeignKeySchema
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::IndexSchema
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::ModelInfo
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::ModelRow
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::RelationKind
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::SyncChanges
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::TableSchema
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::Value
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::backend::Backend
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::connection::DbConfig
@@ -5184,6 +5294,7 @@ impl rust_web_server::middleware::Middleware for rust_web_server::sso::server::A
 impl rust_web_server::middleware::Middleware for rust_web_server::waf::WafLayer
 impl rust_web_server::mime_type::MimeType
 impl rust_web_server::model::DbError
+impl rust_web_server::model::DbSchema
 impl rust_web_server::model::FromColumn for alloc::string::String
 impl rust_web_server::model::FromColumn for bool
 impl rust_web_server::model::FromColumn for f32
@@ -5198,6 +5309,7 @@ impl rust_web_server::model::FromColumn for u32
 impl rust_web_server::model::FromColumn for u64
 impl rust_web_server::model::ModelInfo
 impl rust_web_server::model::ModelRow
+impl rust_web_server::model::TableSchema
 impl rust_web_server::model::ToColumn for &str
 impl rust_web_server::model::ToColumn for alloc::string::String
 impl rust_web_server::model::ToColumn for bool
@@ -5217,10 +5329,12 @@ impl rust_web_server::model::connection::DbSslMode
 impl rust_web_server::model::connection::DbTls
 impl rust_web_server::model::pool::DbPool
 impl rust_web_server::model::pool::DbTransaction
+impl rust_web_server::model::pool::Replicas
 impl rust_web_server::model::repository::PrimaryKey for alloc::string::String
 impl rust_web_server::model::repository::PrimaryKey for i32
 impl rust_web_server::model::repository::PrimaryKey for i64
 impl rust_web_server::model::repository::PrimaryKey for rust_web_server::model::uuid::Uuid
+impl rust_web_server::model::seed::Seeders
 impl rust_web_server::model::timestamp::Timestamp
 impl rust_web_server::model::uuid::Uuid
 impl rust_web_server::openapi::OpenApiConfig
@@ -5467,6 +5581,7 @@ impl<'a, T, ID> core::marker::Send for rust_web_server::model::repository::Model
 impl<'a, T, ID> core::marker::Sync for rust_web_server::model::repository::ModelRepository<'a, T, ID> where core::marker::PhantomData<(T, ID)>: core::marker::Sync
 impl<'a, T, ID> core::marker::Unpin for rust_web_server::model::repository::ModelRepository<'a, T, ID> where core::marker::PhantomData<(T, ID)>: core::marker::Unpin
 impl<'a, T, ID> core::marker::UnsafeUnpin for rust_web_server::model::repository::ModelRepository<'a, T, ID> where core::marker::PhantomData<(T, ID)>: core::marker::UnsafeUnpin
+impl<'a, T: rust_web_server::model::Model + 'static> rust_web_server::model::eager::EagerQuery<'a, T>
 impl<'a, T: rust_web_server::model::Model, ID: rust_web_server::model::repository::PrimaryKey> rust_web_server::model::repository::ModelRepository<'a, T, ID>
 impl<'a, T: rust_web_server::model::Model, ID> rust_web_server::model::repository::ModelRepository<'a, T, ID>
 impl<'a, T: rust_web_server::model::Model> core::clone::Clone for rust_web_server::model::query::QueryBuilder<'a, T>
@@ -5475,12 +5590,19 @@ impl<'a, T: rust_web_server::model::Model> rust_web_server::model::repository::R
 impl<'a, T: rust_web_server::model::Model> rust_web_server::model::repository::Repository<T, i32> for rust_web_server::model::repository::ModelRepository<'a, T, i32>
 impl<'a, T: rust_web_server::model::Model> rust_web_server::model::repository::Repository<T, i64> for rust_web_server::model::repository::ModelRepository<'a, T, i64>
 impl<'a, T: rust_web_server::model::Model> rust_web_server::model::repository::Repository<T, rust_web_server::model::uuid::Uuid> for rust_web_server::model::repository::ModelRepository<'a, T, rust_web_server::model::uuid::Uuid>
+impl<'a, T> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::eager::EagerQuery<'a, T>
 impl<'a, T> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::query::QueryBuilder<'a, T>
+impl<'a, T> !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::eager::EagerQuery<'a, T>
 impl<'a, T> !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::query::QueryBuilder<'a, T>
+impl<'a, T> core::marker::Freeze for rust_web_server::model::eager::EagerQuery<'a, T> where rust_web_server::model::query::QueryBuilder<'a, T>: core::marker::Freeze, alloc::vec::Vec<alloc::boxed::Box<dyn Loader<T>>>: core::marker::Freeze
 impl<'a, T> core::marker::Freeze for rust_web_server::model::query::QueryBuilder<'a, T> where core::marker::PhantomData<T>: core::marker::Freeze
+impl<'a, T> core::marker::Send for rust_web_server::model::eager::EagerQuery<'a, T> where rust_web_server::model::query::QueryBuilder<'a, T>: core::marker::Send, alloc::vec::Vec<alloc::boxed::Box<dyn Loader<T>>>: core::marker::Send
 impl<'a, T> core::marker::Send for rust_web_server::model::query::QueryBuilder<'a, T> where core::marker::PhantomData<T>: core::marker::Send
+impl<'a, T> core::marker::Sync for rust_web_server::model::eager::EagerQuery<'a, T> where rust_web_server::model::query::QueryBuilder<'a, T>: core::marker::Sync, alloc::vec::Vec<alloc::boxed::Box<dyn Loader<T>>>: core::marker::Sync
 impl<'a, T> core::marker::Sync for rust_web_server::model::query::QueryBuilder<'a, T> where core::marker::PhantomData<T>: core::marker::Sync
+impl<'a, T> core::marker::Unpin for rust_web_server::model::eager::EagerQuery<'a, T> where rust_web_server::model::query::QueryBuilder<'a, T>: core::marker::Unpin, alloc::vec::Vec<alloc::boxed::Box<dyn Loader<T>>>: core::marker::Unpin
 impl<'a, T> core::marker::Unpin for rust_web_server::model::query::QueryBuilder<'a, T> where core::marker::PhantomData<T>: core::marker::Unpin
+impl<'a, T> core::marker::UnsafeUnpin for rust_web_server::model::eager::EagerQuery<'a, T> where rust_web_server::model::query::QueryBuilder<'a, T>: core::marker::UnsafeUnpin, alloc::vec::Vec<alloc::boxed::Box<dyn Loader<T>>>: core::marker::UnsafeUnpin
 impl<'a, T> core::marker::UnsafeUnpin for rust_web_server::model::query::QueryBuilder<'a, T> where core::marker::PhantomData<T>: core::marker::UnsafeUnpin
 impl<'a> !core::marker::Send for rust_web_server::tower::Next<'a>
 impl<'a> !core::marker::Sync for rust_web_server::tower::Next<'a>
@@ -5684,10 +5806,21 @@ impl<L> core::marker::UnsafeUnpin for rust_web_server::tower::TowerLayer<L> wher
 impl<L> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::tower::TowerLayer<L> where L: core::panic::unwind_safe::RefUnwindSafe
 impl<L> core::panic::unwind_safe::UnwindSafe for rust_web_server::tower::TowerLayer<L> where L: core::panic::unwind_safe::UnwindSafe
 impl<L> rust_web_server::tower::TowerLayer<L>
+impl<O, R> core::clone::Clone for rust_web_server::model::eager::Relation<O, R>
+impl<O, R> core::fmt::Debug for rust_web_server::model::eager::Relation<O, R>
+impl<O, R> core::marker::Copy for rust_web_server::model::eager::Relation<O, R>
+impl<O, R> core::marker::Freeze for rust_web_server::model::eager::Relation<O, R> where core::marker::PhantomData<fn() -> (O, R)>: core::marker::Freeze
+impl<O, R> core::marker::Send for rust_web_server::model::eager::Relation<O, R> where core::marker::PhantomData<fn() -> (O, R)>: core::marker::Send
+impl<O, R> core::marker::Sync for rust_web_server::model::eager::Relation<O, R> where core::marker::PhantomData<fn() -> (O, R)>: core::marker::Sync
+impl<O, R> core::marker::Unpin for rust_web_server::model::eager::Relation<O, R> where core::marker::PhantomData<fn() -> (O, R)>: core::marker::Unpin
+impl<O, R> core::marker::UnsafeUnpin for rust_web_server::model::eager::Relation<O, R> where core::marker::PhantomData<fn() -> (O, R)>: core::marker::UnsafeUnpin
+impl<O, R> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::eager::Relation<O, R> where core::marker::PhantomData<fn() -> (O, R)>: core::panic::unwind_safe::RefUnwindSafe
+impl<O, R> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::eager::Relation<O, R> where core::marker::PhantomData<fn() -> (O, R)>: core::panic::unwind_safe::UnwindSafe
 impl<O: core::clone::Clone + rust_web_server::model::Model> core::clone::Clone for rust_web_server::model::relation::BelongsTo<O>
 impl<O: core::clone::Clone + rust_web_server::model::Model> core::clone::Clone for rust_web_server::model::relation::HasOne<O>
 impl<O: core::fmt::Debug + rust_web_server::model::Model> core::fmt::Debug for rust_web_server::model::relation::BelongsTo<O>
 impl<O: core::fmt::Debug + rust_web_server::model::Model> core::fmt::Debug for rust_web_server::model::relation::HasOne<O>
+impl<O: rust_web_server::model::Model, R: rust_web_server::model::Model> rust_web_server::model::eager::Relation<O, R>
 impl<O: rust_web_server::model::Model> rust_web_server::model::relation::BelongsTo<O>
 impl<O: rust_web_server::model::Model> rust_web_server::model::relation::HasOne<O>
 impl<O> core::marker::Freeze for rust_web_server::model::relation::BelongsTo<O> where core::marker::PhantomData<O>: core::marker::Freeze
@@ -5704,6 +5837,16 @@ impl<O> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::rela
 impl<O> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::relation::HasOne<O> where core::marker::PhantomData<O>: core::panic::unwind_safe::RefUnwindSafe
 impl<O> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::relation::BelongsTo<O> where core::marker::PhantomData<O>: core::panic::unwind_safe::UnwindSafe
 impl<O> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::relation::HasOne<O> where core::marker::PhantomData<O>: core::panic::unwind_safe::UnwindSafe
+impl<R: rust_web_server::model::Model> core::clone::Clone for rust_web_server::model::relation::BelongsToMany<R>
+impl<R: rust_web_server::model::Model> core::fmt::Debug for rust_web_server::model::relation::BelongsToMany<R>
+impl<R: rust_web_server::model::Model> rust_web_server::model::relation::BelongsToMany<R>
+impl<R> core::marker::Freeze for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Freeze
+impl<R> core::marker::Send for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Send
+impl<R> core::marker::Sync for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Sync
+impl<R> core::marker::Unpin for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::UnsafeUnpin
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::panic::unwind_safe::RefUnwindSafe
+impl<R> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::panic::unwind_safe::UnwindSafe
 impl<S, A> core::marker::Freeze for rust_web_server::tower::Mount<S, A> where rust_web_server::tower::TowerApp<S>: core::marker::Freeze, A: core::marker::Freeze
 impl<S, A> core::marker::Send for rust_web_server::tower::Mount<S, A> where rust_web_server::tower::TowerApp<S>: core::marker::Send, A: core::marker::Send
 impl<S, A> core::marker::Sync for rust_web_server::tower::Mount<S, A> where rust_web_server::tower::TowerApp<S>: core::marker::Sync, A: core::marker::Sync
@@ -5789,6 +5932,7 @@ impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::handler::Form<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::handler::Path<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::handler::Query<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::json::Json<T>
+impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::model::eager::Loaded<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::pagination::CursorPage<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::pagination::Page<T>
 impl<T: rust_web_server::circuit_breaker::Breaker + ?core::marker::Sized> rust_web_server::circuit_breaker::Breaker for &T
@@ -5800,6 +5944,7 @@ impl<T: rust_web_server::extract::FromRequest + rust_web_server::validate::Valid
 impl<T: rust_web_server::json::object::FromJSON + rust_web_server::core::New> rust_web_server::json::array::object::JSONArrayOfObjects<T>
 impl<T: rust_web_server::json::object::ToJSON> rust_web_server::json::array::object::JSONArrayOfObjects<T>
 impl<T: rust_web_server::model::FromColumn> rust_web_server::model::FromColumn for core::option::Option<T>
+impl<T: rust_web_server::model::Model> rust_web_server::model::eager::Loaded<T>
 impl<T: rust_web_server::model::Model> rust_web_server::model::relation::HasMany<T>
 impl<T: rust_web_server::model::ToColumn> rust_web_server::model::ToColumn for core::option::Option<T>
 impl<T: rust_web_server::schema::JsonSchema + ?core::marker::Sized> rust_web_server::schema::JsonSchema for &T
@@ -5821,13 +5966,16 @@ impl<T: serde_core::de::DeserializeOwned> rust_web_server::extract::FromRequest 
 impl<T: serde_core::de::DeserializeOwned> rust_web_server::json::Json<T>
 impl<T: serde_core::ser::Serialize> rust_web_server::error::IntoResponse for rust_web_server::json::Json<T>
 impl<T: serde_core::ser::Serialize> rust_web_server::json::Json<T>
+impl<T> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::eager::Loaded<T>
 impl<T> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::test_client::factory::ModelFactory<T>
+impl<T> !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::eager::Loaded<T>
 impl<T> !core::panic::unwind_safe::UnwindSafe for rust_web_server::test_client::factory::ModelFactory<T>
 impl<T> core::marker::Freeze for rust_web_server::handler::Form<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::handler::Path<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::handler::Query<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::json::Json<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Freeze
+impl<T> core::marker::Freeze for rust_web_server::model::eager::Loaded<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Freeze
@@ -5838,6 +5986,7 @@ impl<T> core::marker::Send for rust_web_server::handler::Path<T> where T: core::
 impl<T> core::marker::Send for rust_web_server::handler::Query<T> where T: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::json::Json<T> where T: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Send
+impl<T> core::marker::Send for rust_web_server::model::eager::Loaded<T> where T: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Send
@@ -5848,6 +5997,7 @@ impl<T> core::marker::Sync for rust_web_server::handler::Path<T> where T: core::
 impl<T> core::marker::Sync for rust_web_server::handler::Query<T> where T: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::json::Json<T> where T: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Sync
+impl<T> core::marker::Sync for rust_web_server::model::eager::Loaded<T> where T: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Sync
@@ -5858,6 +6008,7 @@ impl<T> core::marker::Unpin for rust_web_server::handler::Path<T> where T: core:
 impl<T> core::marker::Unpin for rust_web_server::handler::Query<T> where T: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::json::Json<T> where T: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Unpin
+impl<T> core::marker::Unpin for rust_web_server::model::eager::Loaded<T> where T: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Unpin
@@ -5868,6 +6019,7 @@ impl<T> core::marker::UnsafeUnpin for rust_web_server::handler::Path<T> where T:
 impl<T> core::marker::UnsafeUnpin for rust_web_server::handler::Query<T> where T: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::json::Json<T> where T: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::UnsafeUnpin
+impl<T> core::marker::UnsafeUnpin for rust_web_server::model::eager::Loaded<T> where T: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::UnsafeUnpin
@@ -5877,6 +6029,7 @@ impl<T> core::ops::deref::Deref for rust_web_server::handler::Form<T>
 impl<T> core::ops::deref::Deref for rust_web_server::handler::Path<T>
 impl<T> core::ops::deref::Deref for rust_web_server::handler::Query<T>
 impl<T> core::ops::deref::Deref for rust_web_server::json::Json<T>
+impl<T> core::ops::deref::Deref for rust_web_server::model::eager::Loaded<T>
 impl<T> core::ops::deref::DerefMut for rust_web_server::json::Json<T>
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::handler::Form<T> where T: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::handler::Path<T> where T: core::panic::unwind_safe::RefUnwindSafe
@@ -5922,12 +6075,18 @@ pub async fn rust_web_server::model::Repository::find_all(&self) -> core::result
 pub async fn rust_web_server::model::Repository::find_by_id(&self, ID) -> core::result::Result<core::option::Option<T>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::Repository::save(&self, &T) -> core::result::Result<T, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::Repository::save_all(&self, &[T]) -> core::result::Result<alloc::vec::Vec<T>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::eager::EagerQuery<'a, T>::fetch_all(self) -> core::result::Result<alloc::vec::Vec<rust_web_server::model::eager::Loaded<T>>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::eager::EagerQuery<'a, T>::fetch_one(self) -> core::result::Result<core::option::Option<rust_web_server::model::eager::Loaded<T>>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::eager::EagerQuery<'a, T>::paginate(self, u64, u64) -> core::result::Result<rust_web_server::pagination::Page<rust_web_server::model::eager::Loaded<T>>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::eager::Relation<O, R>::load(&self, &rust_web_server::model::pool::DbPool, &O) -> core::result::Result<alloc::vec::Vec<R>, rust_web_server::model::DbError> where R: core::clone::Clone
+pub async fn rust_web_server::model::eager::Relation<O, R>::load_for(&self, &rust_web_server::model::pool::DbPool, &[O]) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<R>>, rust_web_server::model::DbError> where R: core::clone::Clone
 pub async fn rust_web_server::model::migration::migration_status(&rust_web_server::model::pool::DbPool, &str) -> core::result::Result<alloc::vec::Vec<rust_web_server::model::migration::MigrationStatus>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::migration::rollback(&rust_web_server::model::pool::DbPool, &str, usize) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::migration::rollback_last(&rust_web_server::model::pool::DbPool, &str) -> core::result::Result<core::option::Option<alloc::string::String>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::migration::run_migrations(&rust_web_server::model::pool::DbPool, &str) -> core::result::Result<(), rust_web_server::model::DbError>
 pub async fn rust_web_server::model::migration::run_seeds(&rust_web_server::model::pool::DbPool, &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::begin(&self) -> core::result::Result<rust_web_server::model::pool::DbTransaction, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::pool::DbPool::close(&self)
 pub async fn rust_web_server::model::pool::DbPool::connect(&str) -> core::result::Result<Self, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::execute(&self, &str, &[rust_web_server::model::Value]) -> core::result::Result<u64, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::from_env() -> core::result::Result<Self, rust_web_server::model::DbError>
@@ -5941,7 +6100,9 @@ pub async fn rust_web_server::model::pool::DbPool::query_raw(&self, &str, &[rust
 pub async fn rust_web_server::model::pool::DbPool::query_rows(&self, &str, &[rust_web_server::model::Value]) -> core::result::Result<alloc::vec::Vec<rust_web_server::model::ModelRow>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::rollback(&self, &str, usize) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::rollback_last(&self, &str) -> core::result::Result<core::option::Option<alloc::string::String>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::pool::DbPool::schema(&self) -> core::result::Result<rust_web_server::model::DbSchema, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::seed(&self, &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::pool::DbPool::seed_with(&self, &str, &rust_web_server::model::seed::Seeders) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::transaction<F, T, Fut>(&self, F) -> core::result::Result<T, rust_web_server::model::DbError> where F: core::ops::function::FnOnce(rust_web_server::model::pool::DbTransaction) -> Fut + core::marker::Send, Fut: core::future::future::Future<Output = core::result::Result<T, rust_web_server::model::DbError>> + core::marker::Send, T: core::marker::Send
 pub async fn rust_web_server::model::pool::DbTransaction::commit(self) -> core::result::Result<(), rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbTransaction::execute(&mut self, &str, &[rust_web_server::model::Value]) -> core::result::Result<u64, rust_web_server::model::DbError>
@@ -5958,6 +6119,12 @@ pub async fn rust_web_server::model::query::QueryBuilder<'a, T>::paginate_after(
 pub async fn rust_web_server::model::query::QueryBuilder<'a, T>::restore(self) -> core::result::Result<u64, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::query::QueryBuilder<'a, T>::update(self, &str, impl rust_web_server::model::ToColumn) -> core::result::Result<(), rust_web_server::model::DbError>
 pub async fn rust_web_server::model::relation::BelongsTo<O>::load(&self, &rust_web_server::model::pool::DbPool) -> core::result::Result<core::option::Option<O>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::relation::BelongsToMany<R>::attach<I>(&self, &rust_web_server::model::pool::DbPool, I) -> core::result::Result<u64, rust_web_server::model::DbError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: rust_web_server::model::ToColumn
+pub async fn rust_web_server::model::relation::BelongsToMany<R>::detach<I>(&self, &rust_web_server::model::pool::DbPool, I) -> core::result::Result<u64, rust_web_server::model::DbError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: rust_web_server::model::ToColumn
+pub async fn rust_web_server::model::relation::BelongsToMany<R>::detach_all(&self, &rust_web_server::model::pool::DbPool) -> core::result::Result<u64, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::relation::BelongsToMany<R>::ids(&self, &rust_web_server::model::pool::DbPool) -> core::result::Result<alloc::vec::Vec<rust_web_server::model::Value>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::relation::BelongsToMany<R>::load(&self, &rust_web_server::model::pool::DbPool) -> core::result::Result<alloc::vec::Vec<R>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::relation::BelongsToMany<R>::sync<I>(&self, &rust_web_server::model::pool::DbPool, I) -> core::result::Result<rust_web_server::model::SyncChanges, rust_web_server::model::DbError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: rust_web_server::model::ToColumn
 pub async fn rust_web_server::model::relation::HasMany<T>::load(&self, &rust_web_server::model::pool::DbPool) -> core::result::Result<alloc::vec::Vec<T>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::relation::HasOne<O>::load(&self, &rust_web_server::model::pool::DbPool) -> core::result::Result<core::option::Option<O>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::repository::ModelRepository<'a, T, ID>::find_by_id_with_deleted(&self, ID) -> core::result::Result<core::option::Option<T>, rust_web_server::model::DbError>
@@ -6004,6 +6171,7 @@ pub async fn rust_web_server::model::repository::Repository::find_all(&self) -> 
 pub async fn rust_web_server::model::repository::Repository::find_by_id(&self, ID) -> core::result::Result<core::option::Option<T>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::repository::Repository::save(&self, &T) -> core::result::Result<T, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::repository::Repository::save_all(&self, &[T]) -> core::result::Result<alloc::vec::Vec<T>, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::seed::Seeders::run(&self, &rust_web_server::model::pool::DbPool) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, rust_web_server::model::DbError>
 pub async fn rust_web_server::server::Server::run_plain(std::net::tcp::TcpListener, impl rust_web_server::application::Application + core::marker::Send + 'static + core::clone::Clone)
 pub async fn rust_web_server::server::Server::run_quic(impl rust_web_server::application::Application + core::marker::Send + 'static + core::clone::Clone)
 pub async fn rust_web_server::server::Server::run_redirect()
@@ -6839,6 +7007,7 @@ pub const rust_web_server::mime_type::MimeType::XLS_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::XML_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::XUL_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::ZIP_SUFFIX: &'static str
+pub const rust_web_server::model::eager::IN_BATCH: usize
 pub const rust_web_server::model::uuid::Uuid::NIL: rust_web_server::model::uuid::Uuid
 pub const rust_web_server::null::NULL: &'static rust_web_server::null::Null
 pub const rust_web_server::otel::baggage::MAX_BYTES: usize
@@ -7649,6 +7818,7 @@ pub fn rust_web_server::ctl::requested(&[alloc::string::String]) -> core::option
 pub fn rust_web_server::ctl::run(&[alloc::string::String], &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
 pub fn rust_web_server::db_cli::requested(&[alloc::string::String]) -> core::option::Option<&[alloc::string::String]>
 pub fn rust_web_server::db_cli::run(&[alloc::string::String], &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
+pub fn rust_web_server::db_cli::run_with_seeders(&[alloc::string::String], &rust_web_server::model::seed::Seeders, &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
 pub fn rust_web_server::dev_mcp::DevMcp<A>::clone(&self) -> Self
 pub fn rust_web_server::dev_mcp::DevMcp<A>::is_mounted(&self) -> bool
 pub fn rust_web_server::dev_mcp::DevMcpExt::dev_mcp(self) -> rust_web_server::dev_mcp::DevMcp<Self>
@@ -8823,6 +8993,9 @@ pub fn rust_web_server::middleware::WithMiddleware<A>::new(A) -> Self
 pub fn rust_web_server::middleware::WithMiddleware<A>::wrap(self, impl rust_web_server::middleware::Middleware + 'static) -> Self
 pub fn rust_web_server::mime_type::MimeType::detect_mime_type(&str) -> alloc::string::String
 pub fn rust_web_server::mime_type::MimeType::get_extension_from_filename(&str) -> core::option::Option<&str>
+pub fn rust_web_server::model::ColumnSchema::clone(&self) -> Self
+pub fn rust_web_server::model::ColumnSchema::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::ColumnSchema::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::DbError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::DbError::is_not_found(&self) -> bool
 pub fn rust_web_server::model::DbError::is_stale_version(&self) -> bool
@@ -8833,7 +9006,18 @@ pub fn rust_web_server::model::DbError::stale_version(impl core::fmt::Display) -
 pub fn rust_web_server::model::DbErrorKind::clone(&self) -> Self
 pub fn rust_web_server::model::DbErrorKind::eq(&self, &Self) -> bool
 pub fn rust_web_server::model::DbErrorKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::DbSchema::clone(&self) -> Self
+pub fn rust_web_server::model::DbSchema::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::DbSchema::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::DbSchema::table(&self, &str) -> core::option::Option<&rust_web_server::model::TableSchema>
+pub fn rust_web_server::model::DbSchema::to_json(&self) -> alloc::string::String
+pub fn rust_web_server::model::ForeignKeySchema::clone(&self) -> Self
+pub fn rust_web_server::model::ForeignKeySchema::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::ForeignKeySchema::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::FromColumn::from_column(rust_web_server::model::Value) -> core::result::Result<Self, rust_web_server::model::DbError>
+pub fn rust_web_server::model::IndexSchema::clone(&self) -> Self
+pub fn rust_web_server::model::IndexSchema::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::IndexSchema::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::Model::column_names() -> &'static [&'static str]
 pub fn rust_web_server::model::Model::created_at_column() -> core::option::Option<&'static str>
 pub fn rust_web_server::model::Model::from_row(&rust_web_server::model::ModelRow) -> core::result::Result<Self, rust_web_server::model::DbError>
@@ -8854,6 +9038,20 @@ pub fn rust_web_server::model::ModelRow::clone(&self) -> Self
 pub fn rust_web_server::model::ModelRow::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::ModelRow::get<T: rust_web_server::model::FromColumn>(&self, &str) -> core::result::Result<T, rust_web_server::model::DbError>
 pub fn rust_web_server::model::ModelRow::new(alloc::vec::Vec<(alloc::string::String, rust_web_server::model::Value)>) -> Self
+pub fn rust_web_server::model::RelationKind::clone(&self) -> Self
+pub fn rust_web_server::model::RelationKind::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::RelationKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::RelationKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn rust_web_server::model::Seeder::name(&self) -> &str
+pub fn rust_web_server::model::Seeder::run<'a>(&'a self, &'a rust_web_server::model::pool::DbPool) -> rust_web_server::model::seed::SeedFuture<'a>
+pub fn rust_web_server::model::SyncChanges::clone(&self) -> Self
+pub fn rust_web_server::model::SyncChanges::default() -> Self
+pub fn rust_web_server::model::SyncChanges::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::SyncChanges::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::TableSchema::clone(&self) -> Self
+pub fn rust_web_server::model::TableSchema::column(&self, &str) -> core::option::Option<&rust_web_server::model::ColumnSchema>
+pub fn rust_web_server::model::TableSchema::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::TableSchema::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::ToColumn::to_column(&self) -> rust_web_server::model::Value
 pub fn rust_web_server::model::Value::clone(&self) -> Self
 pub fn rust_web_server::model::Value::eq(&self, &Self) -> bool
@@ -8876,11 +9074,36 @@ pub fn rust_web_server::model::connection::DbTls::default() -> Self
 pub fn rust_web_server::model::connection::DbTls::eq(&self, &Self) -> bool
 pub fn rust_web_server::model::connection::DbTls::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::connection::DbTls::from_env() -> core::result::Result<rust_web_server::model::connection::DbTls, rust_web_server::model::DbError>
+pub fn rust_web_server::model::eager::EagerQuery<'a, T>::with<R: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<T, R>) -> Self
+pub fn rust_web_server::model::eager::Loaded<T>::deref(&self) -> &T
+pub fn rust_web_server::model::eager::Loaded<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::eager::Loaded<T>::into_inner(self) -> T
+pub fn rust_web_server::model::eager::Loaded<T>::is_loaded<R: rust_web_server::model::Model + 'static>(&self, &rust_web_server::model::eager::Relation<T, R>) -> bool
+pub fn rust_web_server::model::eager::Loaded<T>::model(&self) -> &T
+pub fn rust_web_server::model::eager::Loaded<T>::one<R: rust_web_server::model::Model + 'static>(&self, &rust_web_server::model::eager::Relation<T, R>) -> core::option::Option<&R>
+pub fn rust_web_server::model::eager::Loaded<T>::related<R: rust_web_server::model::Model + 'static>(&self, &rust_web_server::model::eager::Relation<T, R>) -> &[R]
+pub fn rust_web_server::model::eager::Loaded<T>::take<R: rust_web_server::model::Model + 'static>(&mut self, &rust_web_server::model::eager::Relation<T, R>) -> alloc::vec::Vec<R>
+pub fn rust_web_server::model::eager::Relation<O, R>::belongs_to(&'static str) -> Self
+pub fn rust_web_server::model::eager::Relation<O, R>::belongs_to_many(&'static str, &'static str, &'static str) -> Self
+pub fn rust_web_server::model::eager::Relation<O, R>::clone(&self) -> Self
+pub fn rust_web_server::model::eager::Relation<O, R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::eager::Relation<O, R>::foreign_key(&self) -> &'static str
+pub fn rust_web_server::model::eager::Relation<O, R>::has_many(&'static str) -> Self
+pub fn rust_web_server::model::eager::Relation<O, R>::has_one(&'static str) -> Self
+pub fn rust_web_server::model::eager::Relation<O, R>::join_table(&self) -> core::option::Option<(&'static str, &'static str)>
+pub fn rust_web_server::model::eager::Relation<O, R>::kind(&self) -> rust_web_server::model::RelationKind
 pub fn rust_web_server::model::migration::MigrationStatus::clone(&self) -> Self
 pub fn rust_web_server::model::migration::MigrationStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::pool::DbPool::backend(&self) -> rust_web_server::model::backend::Backend
 pub fn rust_web_server::model::pool::DbPool::clone(&self) -> Self
 pub fn rust_web_server::model::pool::DbPool::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::pool::DbPool::primary(&self) -> &rust_web_server::model::pool::DbPool
+pub fn rust_web_server::model::pool::DbPool::replica(&self) -> &rust_web_server::model::pool::DbPool
+pub fn rust_web_server::model::pool::DbPool::replicas(&self) -> &[rust_web_server::model::pool::DbPool]
+pub fn rust_web_server::model::pool::DbPool::with_replicas(rust_web_server::model::pool::DbPool, alloc::vec::Vec<rust_web_server::model::pool::DbPool>) -> core::result::Result<rust_web_server::model::pool::DbPool, rust_web_server::model::DbError>
+pub fn rust_web_server::model::pool::Replicas::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::pool::Replicas::primary(&self) -> &rust_web_server::model::pool::DbPool
+pub fn rust_web_server::model::pool::Replicas::replicas(&self) -> &[rust_web_server::model::pool::DbPool]
 pub fn rust_web_server::model::query::Order::clone(&self) -> Self
 pub fn rust_web_server::model::query::Order::eq(&self, &Self) -> bool
 pub fn rust_web_server::model::query::Order::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -8891,11 +9114,19 @@ pub fn rust_web_server::model::query::QueryBuilder<'a, T>::new(&'a rust_web_serv
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::offset(self, u64) -> Self
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::only_deleted(self) -> Self
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::order_by(self, &str, rust_web_server::model::query::Order) -> Self
+pub fn rust_web_server::model::query::QueryBuilder<'a, T>::scope(self, impl core::ops::function::FnOnce(Self) -> Self) -> Self
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::where_eq(self, &str, impl rust_web_server::model::ToColumn) -> Self
+pub fn rust_web_server::model::query::QueryBuilder<'a, T>::where_in<I>(self, &str, I) -> Self where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: rust_web_server::model::ToColumn
+pub fn rust_web_server::model::query::QueryBuilder<'a, T>::where_not_null(self, &str) -> Self
+pub fn rust_web_server::model::query::QueryBuilder<'a, T>::where_null(self, &str) -> Self
+pub fn rust_web_server::model::query::QueryBuilder<'a, T>::with<R: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<T, R>) -> rust_web_server::model::eager::EagerQuery<'a, T> where T: 'static
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::with_deleted(self) -> Self
 pub fn rust_web_server::model::relation::BelongsTo<O>::clone(&self) -> Self
 pub fn rust_web_server::model::relation::BelongsTo<O>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::relation::BelongsTo<O>::new(rust_web_server::model::Value) -> Self
+pub fn rust_web_server::model::relation::BelongsToMany<R>::clone(&self) -> Self
+pub fn rust_web_server::model::relation::BelongsToMany<R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::relation::BelongsToMany<R>::new(rust_web_server::model::Value, &'static str, &'static str, &'static str) -> Self
 pub fn rust_web_server::model::relation::HasMany<T>::clone(&self) -> Self
 pub fn rust_web_server::model::relation::HasMany<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::relation::HasMany<T>::new(rust_web_server::model::Value, &'static str) -> Self
@@ -8904,6 +9135,17 @@ pub fn rust_web_server::model::relation::HasOne<O>::fmt(&self, &mut core::fmt::F
 pub fn rust_web_server::model::relation::HasOne<O>::new(rust_web_server::model::Value, &'static str) -> Self
 pub fn rust_web_server::model::repository::ModelRepository<'a, T, ID>::new(&'a rust_web_server::model::pool::DbPool) -> Self
 pub fn rust_web_server::model::repository::ModelRepository<'a, T, ID>::query(&self) -> rust_web_server::model::query::QueryBuilder<'a, T>
+pub fn rust_web_server::model::seed::Seeder::name(&self) -> &str
+pub fn rust_web_server::model::seed::Seeder::run<'a>(&'a self, &'a rust_web_server::model::pool::DbPool) -> rust_web_server::model::seed::SeedFuture<'a>
+pub fn rust_web_server::model::seed::Seeders::add<F, Fut>(self, impl core::convert::Into<alloc::string::String>, F) -> Self where F: core::ops::function::Fn(rust_web_server::model::pool::DbPool) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = core::result::Result<(), rust_web_server::model::DbError>> + core::marker::Send + 'static
+pub fn rust_web_server::model::seed::Seeders::clone(&self) -> Self
+pub fn rust_web_server::model::seed::Seeders::default() -> Self
+pub fn rust_web_server::model::seed::Seeders::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::seed::Seeders::is_empty(&self) -> bool
+pub fn rust_web_server::model::seed::Seeders::len(&self) -> usize
+pub fn rust_web_server::model::seed::Seeders::names(&self) -> alloc::vec::Vec<&str>
+pub fn rust_web_server::model::seed::Seeders::new() -> Self
+pub fn rust_web_server::model::seed::Seeders::seeder(self, impl rust_web_server::model::seed::Seeder + 'static) -> Self
 pub fn rust_web_server::model::timestamp::Timestamp::clone(&self) -> Self
 pub fn rust_web_server::model::timestamp::Timestamp::cmp(&self, &Self) -> core::cmp::Ordering
 pub fn rust_web_server::model::timestamp::Timestamp::default() -> Self
@@ -10129,11 +10371,14 @@ pub mod rust_web_server::mime_type
 pub mod rust_web_server::model
 pub mod rust_web_server::model::backend
 pub mod rust_web_server::model::connection
+pub mod rust_web_server::model::db_schema
+pub mod rust_web_server::model::eager
 pub mod rust_web_server::model::migration
 pub mod rust_web_server::model::pool
 pub mod rust_web_server::model::query
 pub mod rust_web_server::model::relation
 pub mod rust_web_server::model::repository
+pub mod rust_web_server::model::seed
 pub mod rust_web_server::model::timestamp
 pub mod rust_web_server::model::uuid
 pub mod rust_web_server::null
@@ -10899,6 +11144,8 @@ pub rust_web_server::generator::Generate::Model
 pub rust_web_server::generator::Generate::Model::db: core::option::Option<rust_web_server::generator::Db>
 pub rust_web_server::generator::Generate::Model::fields: alloc::vec::Vec<rust_web_server::generator::Field>
 pub rust_web_server::generator::Generate::Model::name: alloc::string::String
+pub rust_web_server::generator::Generate::Model::soft_delete: bool
+pub rust_web_server::generator::Generate::Model::timestamps: bool
 pub rust_web_server::generator::Generate::Route
 pub rust_web_server::generator::Generate::Route::actions: alloc::vec::Vec<rust_web_server::generator::RouteAction>
 pub rust_web_server::generator::Generate::Route::fields: alloc::vec::Vec<rust_web_server::generator::Field>
@@ -11043,6 +11290,11 @@ pub rust_web_server::mcp::openapi_tools::ToolRequest::headers: alloc::vec::Vec<(
 pub rust_web_server::mcp::openapi_tools::ToolRequest::method: alloc::string::String
 pub rust_web_server::mcp::openapi_tools::ToolRequest::path_and_query: alloc::string::String
 pub rust_web_server::model::Backend::Sqlite
+pub rust_web_server::model::ColumnSchema::data_type: alloc::string::String
+pub rust_web_server::model::ColumnSchema::default: core::option::Option<alloc::string::String>
+pub rust_web_server::model::ColumnSchema::name: alloc::string::String
+pub rust_web_server::model::ColumnSchema::nullable: bool
+pub rust_web_server::model::ColumnSchema::primary_key: bool
 pub rust_web_server::model::DbConfig::backend: rust_web_server::model::backend::Backend
 pub rust_web_server::model::DbConfig::database: alloc::string::String
 pub rust_web_server::model::DbConfig::host: alloc::string::String
@@ -11053,7 +11305,10 @@ pub rust_web_server::model::DbConfig::user: alloc::string::String
 pub rust_web_server::model::DbErrorKind::NotFound
 pub rust_web_server::model::DbErrorKind::Other
 pub rust_web_server::model::DbErrorKind::StaleVersion
+pub rust_web_server::model::DbPool::Replicated(alloc::rcs::arc::Arc<rust_web_server::model::pool::Replicas>)
 pub rust_web_server::model::DbPool::Sqlite(sqlx_core::pool::Pool<sqlx_sqlite::database::Sqlite>)
+pub rust_web_server::model::DbSchema::backend: rust_web_server::model::backend::Backend
+pub rust_web_server::model::DbSchema::tables: alloc::vec::Vec<rust_web_server::model::TableSchema>
 pub rust_web_server::model::DbSslMode::Disable
 pub rust_web_server::model::DbSslMode::Prefer
 pub rust_web_server::model::DbSslMode::Require
@@ -11064,6 +11319,16 @@ pub rust_web_server::model::DbTls::client_key: core::option::Option<alloc::strin
 pub rust_web_server::model::DbTls::mode: rust_web_server::model::connection::DbSslMode
 pub rust_web_server::model::DbTls::root_cert: core::option::Option<alloc::string::String>
 pub rust_web_server::model::DbTransaction::Sqlite(sqlx_core::transaction::Transaction<'static, sqlx_sqlite::database::Sqlite>)
+pub rust_web_server::model::ForeignKeySchema::columns: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::model::ForeignKeySchema::name: core::option::Option<alloc::string::String>
+pub rust_web_server::model::ForeignKeySchema::on_delete: alloc::string::String
+pub rust_web_server::model::ForeignKeySchema::on_update: alloc::string::String
+pub rust_web_server::model::ForeignKeySchema::references_columns: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::model::ForeignKeySchema::references_table: alloc::string::String
+pub rust_web_server::model::IndexSchema::columns: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::model::IndexSchema::name: alloc::string::String
+pub rust_web_server::model::IndexSchema::primary: bool
+pub rust_web_server::model::IndexSchema::unique: bool
 pub rust_web_server::model::MigrationStatus::applied: bool
 pub rust_web_server::model::MigrationStatus::has_down: bool
 pub rust_web_server::model::MigrationStatus::version: alloc::string::String
@@ -11074,6 +11339,17 @@ pub rust_web_server::model::ModelInfo::table: &'static str
 pub rust_web_server::model::ModelInfo::type_name: &'static str
 pub rust_web_server::model::Order::Asc
 pub rust_web_server::model::Order::Desc
+pub rust_web_server::model::RelationKind::BelongsTo
+pub rust_web_server::model::RelationKind::BelongsToMany
+pub rust_web_server::model::RelationKind::HasMany
+pub rust_web_server::model::RelationKind::HasOne
+pub rust_web_server::model::SyncChanges::attached: alloc::vec::Vec<rust_web_server::model::Value>
+pub rust_web_server::model::SyncChanges::detached: alloc::vec::Vec<rust_web_server::model::Value>
+pub rust_web_server::model::TableSchema::columns: alloc::vec::Vec<rust_web_server::model::ColumnSchema>
+pub rust_web_server::model::TableSchema::foreign_keys: alloc::vec::Vec<rust_web_server::model::ForeignKeySchema>
+pub rust_web_server::model::TableSchema::indexes: alloc::vec::Vec<rust_web_server::model::IndexSchema>
+pub rust_web_server::model::TableSchema::name: alloc::string::String
+pub rust_web_server::model::TableSchema::primary_key: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::model::Value::Bool(bool)
 pub rust_web_server::model::Value::Bytes(alloc::vec::Vec<u8>)
 pub rust_web_server::model::Value::Float(f64)
@@ -11100,6 +11376,7 @@ pub rust_web_server::model::connection::DbTls::root_cert: core::option::Option<a
 pub rust_web_server::model::migration::MigrationStatus::applied: bool
 pub rust_web_server::model::migration::MigrationStatus::has_down: bool
 pub rust_web_server::model::migration::MigrationStatus::version: alloc::string::String
+pub rust_web_server::model::pool::DbPool::Replicated(alloc::rcs::arc::Arc<rust_web_server::model::pool::Replicas>)
 pub rust_web_server::model::pool::DbPool::Sqlite(sqlx_core::pool::Pool<sqlx_sqlite::database::Sqlite>)
 pub rust_web_server::model::pool::DbTransaction::Sqlite(sqlx_core::transaction::Transaction<'static, sqlx_sqlite::database::Sqlite>)
 pub rust_web_server::model::query::Order::Asc
@@ -12103,26 +12380,38 @@ pub struct rust_web_server::middleware::RateLimitLayer
 pub struct rust_web_server::middleware::WithMiddleware<A>
 pub struct rust_web_server::mime_type::MimeType
 pub struct rust_web_server::model::BelongsTo<O: rust_web_server::model::Model>
+pub struct rust_web_server::model::BelongsToMany<R: rust_web_server::model::Model>
 pub struct rust_web_server::model::DbConfig
 pub struct rust_web_server::model::DbError(pub alloc::string::String)
 pub struct rust_web_server::model::DbTls
+pub struct rust_web_server::model::EagerQuery<'a, T: rust_web_server::model::Model>
 pub struct rust_web_server::model::HasMany<T: rust_web_server::model::Model>
 pub struct rust_web_server::model::HasOne<O: rust_web_server::model::Model>
+pub struct rust_web_server::model::Loaded<T>
 pub struct rust_web_server::model::MigrationStatus
 pub struct rust_web_server::model::ModelInfo
 pub struct rust_web_server::model::ModelRepository<'a, T: rust_web_server::model::Model, ID>
 pub struct rust_web_server::model::ModelRow
 pub struct rust_web_server::model::QueryBuilder<'a, T: rust_web_server::model::Model>
+pub struct rust_web_server::model::Relation<O, R>
+pub struct rust_web_server::model::Replicas
+pub struct rust_web_server::model::Seeders
 pub struct rust_web_server::model::Timestamp(_)
 pub struct rust_web_server::model::Uuid(_)
 pub struct rust_web_server::model::connection::DbConfig
 pub struct rust_web_server::model::connection::DbTls
+pub struct rust_web_server::model::eager::EagerQuery<'a, T: rust_web_server::model::Model>
+pub struct rust_web_server::model::eager::Loaded<T>
+pub struct rust_web_server::model::eager::Relation<O, R>
 pub struct rust_web_server::model::migration::MigrationStatus
+pub struct rust_web_server::model::pool::Replicas
 pub struct rust_web_server::model::query::QueryBuilder<'a, T: rust_web_server::model::Model>
 pub struct rust_web_server::model::relation::BelongsTo<O: rust_web_server::model::Model>
+pub struct rust_web_server::model::relation::BelongsToMany<R: rust_web_server::model::Model>
 pub struct rust_web_server::model::relation::HasMany<T: rust_web_server::model::Model>
 pub struct rust_web_server::model::relation::HasOne<O: rust_web_server::model::Model>
 pub struct rust_web_server::model::repository::ModelRepository<'a, T: rust_web_server::model::Model, ID>
+pub struct rust_web_server::model::seed::Seeders
 pub struct rust_web_server::model::timestamp::Timestamp(_)
 pub struct rust_web_server::model::uuid::Uuid(_)
 pub struct rust_web_server::null::Null
@@ -12349,9 +12638,11 @@ pub trait rust_web_server::model::FromColumn: core::marker::Sized
 pub trait rust_web_server::model::Model: core::marker::Sized + core::marker::Send + core::marker::Sync
 pub trait rust_web_server::model::PrimaryKey: rust_web_server::model::ToColumn + core::marker::Send + core::marker::Sync + rust_web_server::model::repository::sealed::Sealed
 pub trait rust_web_server::model::Repository<T: rust_web_server::model::Model, ID>
+pub trait rust_web_server::model::Seeder: core::marker::Send + core::marker::Sync
 pub trait rust_web_server::model::ToColumn
 pub trait rust_web_server::model::repository::PrimaryKey: rust_web_server::model::ToColumn + core::marker::Send + core::marker::Sync + rust_web_server::model::repository::sealed::Sealed
 pub trait rust_web_server::model::repository::Repository<T: rust_web_server::model::Model, ID>
+pub trait rust_web_server::model::seed::Seeder: core::marker::Send + core::marker::Sync
 pub trait rust_web_server::otel::Exporter: core::marker::Send + core::marker::Sync
 pub trait rust_web_server::schema::JsonSchema
 pub trait rust_web_server::storage::Storage: core::marker::Send + core::marker::Sync
@@ -12381,6 +12672,8 @@ pub type rust_web_server::handler::Path<T>::Target = T
 pub type rust_web_server::handler::Query<T>::Target = T
 pub type rust_web_server::handler::State<S>::Target = S
 pub type rust_web_server::json::Json<T>::Target = T
+pub type rust_web_server::model::eager::Loaded<T>::Target = T
+pub type rust_web_server::model::seed::SeedFuture<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), rust_web_server::model::DbError>> + core::marker::Send + 'a)>>
 pub type rust_web_server::model::timestamp::Timestamp::Err = rust_web_server::model::DbError
 pub type rust_web_server::model::uuid::Uuid::Err = rust_web_server::model::DbError
 pub type rust_web_server::null::Null::Err = rust_web_server::null::ParseNullError

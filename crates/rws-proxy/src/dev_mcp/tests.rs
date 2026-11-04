@@ -373,6 +373,8 @@ fn generators_plan_write_and_refuse_to_overwrite() {
     assert!(body.contains("db `oracle`"), "{body}");
     let body = call(&client, "gen_model", r#"{"name":"Post","fields":["title:String","views:i64"],"dry_run":true}"#);
     assert!(body.contains(r#""path":"src/models/post.rs","action":"create""#) && body.contains("views"), "{body}");
+    let body = call(&client, "gen_model", r#"{"name":"Post","fields":["title:String"],"timestamps":true,"soft_delete":true,"dry_run":true}"#);
+    assert!(body.contains("--timestamps --soft-delete") && body.contains("#[soft_delete]") && body.contains("created_at"), "{body}");
 }
 
 // ── database (model-sqlite) ─────────────────────────────────────────────────
@@ -409,6 +411,8 @@ mod db {
         assert!(body.contains(r#"{"name":"id","type":"INTEGER","nullable":true,"default":null,"primary_key":true}"#), "{body}");
         assert!(body.contains(r#"{"name":"email","type":"TEXT","nullable":false,"default":null,"primary_key":false}"#), "{body}");
         assert!(body.contains(r#""name":"name","type":"TEXT","nullable":true,"default":"'anon'""#), "{body}");
+        // 18.30.0: keys, indexes and foreign keys too (DbPool::schema).
+        assert!(body.contains(r#""primary_key":["id"],"indexes":["#) && body.contains(r#""foreign_keys":[]"#), "{body}");
     }
 
     #[test]

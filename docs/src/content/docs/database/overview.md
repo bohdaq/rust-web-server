@@ -35,6 +35,7 @@ Unlike most feature pairs in this crate, `model-sqlite`, `model-postgres`, and `
 | `RWS_DB_PASSWORD` | — | Ignored for SQLite |
 | `RWS_DB_NAME` | **required** | File path for SQLite; use `:memory:` for in-memory |
 | `RWS_DB_POOL_SIZE` | `10` | Maximum number of connections in the pool |
+| `RWS_DB_REPLICA_URLS` | — | Read replicas, comma-separated database URLs (`DbPool::from_env` only; see [Read replicas](#read-replicas)) |
 
 ### TLS
 
@@ -164,7 +165,39 @@ When reading config from the environment instead, set `RWS_DB_BACKEND` before ea
 
 `DbPool::new(config).await` creates a `sqlx::Pool` with `max_connections = config.pool_size` for whichever backend `config.backend` names. sqlx manages the connection lifecycle internally — connections are acquired on demand and returned to the pool automatically after each `await` point. There is no `get()`/`PooledConnection` API; just `pool.execute(...)` and `pool.query_rows(...)` directly.
 
-Under the hood, `DbPool` is an enum with one variant per compiled-in backend (`Sqlite`/`Postgres`/`MySql`) — `execute`, `query_rows`, `begin`, and every other method dispatch to the matching variant internally, so calling code never needs to match on it itself unless it specifically wants to know which backend it's holding (`pool.backend()`).
+Under the hood, `DbPool` is an enum with one variant per compiled-in backend (`Sqlite`/`Postgres`/`MySql`), plus `Replicated` for a pool with [read replicas](#read-replicas) — `execute`, `query_rows`, `begin`, and every other method dispatch to the matching variant internally, so calling code never needs to match on it itself unless it specifically wants to know which backend it's holding (`pool.backend()`). Code that does match on the variants needs a `Replicated` arm since 18.30.0; `pool.close().await` closes any pool without matching.
+
+## Read replicas
+
+A pool can send reads to replicas and everything else to the primary (18.30.0):
+
+```rust
+use rust_web_server::model::DbPool;
+
+let pool = DbPool::with_replicas(
+    DbPool::connect("postgres://app:secret@db-primary/app").await?,
+    vec![
+        DbPool::connect("postgres://app:secret@db-replica-1/app").await?,
+        DbPool::connect("postgres://app:secret@db-replica-2/app").await?,
+    ],
+)?;
+```
+
+Or from the environment: `DbPool::from_env()` connects the `RWS_DB_*` database as the primary and, when `RWS_DB_REPLICA_URLS` is set, each of its comma-separated URLs as a replica (at most `RWS_DB_POOL_SIZE` connections each):
+
+```bash
+RWS_DB_BACKEND=postgres RWS_DB_HOST=db-primary RWS_DB_NAME=app RWS_DB_USER=app RWS_DB_PASSWORD=secret \
+RWS_DB_REPLICA_URLS=postgres://app:secret@db-replica-1/app,postgres://app:secret@db-replica-2/app
+```
+
+| Goes to a replica (round robin) | Goes to the primary |
+|---|---|
+| `query_rows`, `query`, `query_raw` | `execute`, `begin`, `transaction` (reads inside a transaction too) |
+| `QueryBuilder::fetch_all` / `fetch_one` / `count` / `paginate` / `paginate_after` | `QueryBuilder::update` / `delete` / `force_delete` / `restore` |
+| `Repository::find_by_id` / `find_all` / `count` / `exists_by_id` | `Repository::save` (it reads the saved row back from the primary), `delete_by_id`, factories' `create` |
+| relation loads and `with()` | `migrate`, `migration_status`, `rollback`, `seed`, `seed_with`, `schema` |
+
+A replica lags behind its primary, so a read right after a write may not see it. Where it must, read from the primary: `User::query(pool.primary())`, `pool.primary().query_rows(…)`. `pool.replica()` is the pool the next read goes to, `pool.replicas()` all of them. Replicas must use the primary's backend; with no replicas every statement goes to the primary.
 
 ## What's next
 
@@ -175,5 +208,5 @@ Under the hood, `DbPool` is an enum with one variant per compiled-in backend (`S
 - [Raw SQL](/database/raw-sql/) — full control
 - [Transactions](/database/transactions/) — atomic operations
 - [Migrations](/database/migrations/) — schema versioning
-- [Relations](/database/relations/) — HasMany, HasOne, BelongsTo
+- [Relations](/database/relations/) — HasMany, HasOne, BelongsTo, BelongsToMany, eager `with()`
 - [In-memory SQLite](/database/in-memory/) — isolated databases for tests

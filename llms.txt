@@ -139,7 +139,7 @@ Use it as:
 - [Raw SQL](https://rws8.tech/database/raw-sql/): Execute hand-written SQL queries and map results to typed structs or untyped rows.
 - [Transactions](https://rws8.tech/database/transactions/): Group multiple async database operations into an atomic unit that rolls back automatically on error.
 - [Migrations](https://rws8.tech/database/migrations/): Manage schema changes with versioned SQL files that run once, are tracked in the database, and can be rolled back.
-- [Relations](https://rws8.tech/database/relations/): Load related records with async HasMany, HasOne, and BelongsTo helpers that make queries explicit and prevent hidden N+1 problems.
+- [Relations](https://rws8.tech/database/relations/): Load related records with HasMany, HasOne, BelongsTo and BelongsToMany, eager-load them for a whole result set with with(), and manage many-to-many links.
 - [In-memory SQLite](https://rws8.tech/database/in-memory/): Use DbPool::memory() for zero-config isolated SQLite databases ideal for tests and prototyping.
 
 ## MCP Server

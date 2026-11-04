@@ -149,6 +149,86 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
         self
     }
 
+    /// Add a `col IN (?, ?, …)` filter (18.30.0); no values match no rows.
+    pub fn where_in<I>(mut self, col: &str, values: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: ToColumn,
+    {
+        let values: Vec<Value> = values.into_iter().map(|v| v.to_column()).collect();
+        if values.is_empty() {
+            self.filters.push(("1 = 0".to_string(), Vec::new()));
+        } else {
+            let marks = vec!["__placeholder__"; values.len()].join(", ");
+            self.filters.push((format!("{col} IN ({marks})"), values));
+        }
+        self
+    }
+
+    /// Add a `col IS NULL` filter (18.30.0).
+    pub fn where_null(mut self, col: &str) -> Self {
+        self.filters.push((format!("{col} IS NULL"), Vec::new()));
+        self
+    }
+
+    /// Add a `col IS NOT NULL` filter (18.30.0).
+    pub fn where_not_null(mut self, col: &str) -> Self {
+        self.filters.push((format!("{col} IS NOT NULL"), Vec::new()));
+        self
+    }
+
+    /// Apply a scope (18.30.0): a reusable function from a query to a
+    /// narrower one. Scopes are plain functions (or closures), so they
+    /// take arguments and compose:
+    ///
+    /// ```rust,ignore
+    /// fn published(q: QueryBuilder<'_, Post>) -> QueryBuilder<'_, Post> {
+    ///     q.where_eq("published", true).where_null("hidden_at")
+    /// }
+    /// fn by(author: i64) -> impl FnOnce(QueryBuilder<'_, Post>) -> QueryBuilder<'_, Post> {
+    ///     move |q| q.where_eq("author_id", author)
+    /// }
+    /// let mine = Post::query(&pool).scope(published).scope(by(7)).fetch_all().await?;
+    /// ```
+    ///
+    /// For `Post::query(&pool).published()`, put them in an extension
+    /// trait:
+    ///
+    /// ```rust,ignore
+    /// pub trait PostScopes {
+    ///     fn published(self) -> Self;
+    /// }
+    /// impl PostScopes for QueryBuilder<'_, Post> {
+    ///     fn published(self) -> Self {
+    ///         self.where_eq("published", true)
+    ///     }
+    /// }
+    /// ```
+    pub fn scope(self, scope: impl FnOnce(Self) -> Self) -> Self {
+        scope(self)
+    }
+
+    /// Load `relation` for every row the query answers (18.30.0): one more
+    /// query per relation, however many rows. The `fetch_*` of the
+    /// [`EagerQuery`](super::EagerQuery) it returns answer
+    /// [`Loaded`](super::Loaded) models.
+    ///
+    /// ```rust,ignore
+    /// let posts = Post::query(&pool).with(Post::comments()).fetch_all().await?;
+    /// let first_comments: &[Comment] = posts[0].related(&Post::comments());
+    /// ```
+    pub fn with<R: Model + Clone + 'static>(self, relation: super::Relation<T, R>) -> super::EagerQuery<'a, T>
+    where
+        T: 'static,
+    {
+        super::EagerQuery::new(self).with(relation)
+    }
+
+    /// The pool the query runs on.
+    pub(crate) fn pool(&self) -> &'a DbPool {
+        self.pool
+    }
+
     /// Add a raw SQL filter fragment with bind parameters.
     ///
     /// ```ignore

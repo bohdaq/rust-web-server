@@ -24,7 +24,7 @@ pub(super) fn install(mcp: McpServer, dir: PathBuf) -> McpServer {
         "gen_model",
         "Generate a #[derive(Model)] type in src/models/ (id auto-increment) and the migration creating its table, as `rws gen model` does: never overwrites; a conflict answers the diff",
         &format!(
-            r#"{{"type":"object","properties":{{"name":{{"type":"string","description":"The model, e.g. Post"}},{FIELDS},"db":{{"type":"string","enum":["sqlite","postgres","mysql"],"description":"Default: the model-* feature in Cargo.toml, else sqlite"}},{DRY_RUN}}},"required":["name","fields"]}}"#
+            r#"{{"type":"object","properties":{{"name":{{"type":"string","description":"The model, e.g. Post"}},{FIELDS},"db":{{"type":"string","enum":["sqlite","postgres","mysql"],"description":"Default: the model-* feature in Cargo.toml, else sqlite"}},"timestamps":{{"type":"boolean","description":"Add #[timestamps]: created_at and updated_at, set by save"}},"soft_delete":{{"type":"boolean","description":"Add #[soft_delete]: deleted_at, set by delete; queries skip deleted rows"}},{DRY_RUN}}},"required":["name","fields"]}}"#
         ),
         move |args| {
             let request = (|| {
@@ -32,7 +32,8 @@ pub(super) fn install(mcp: McpServer, dir: PathBuf) -> McpServer {
                     Some(v) => Some(Db::parse(&v).ok_or_else(|| usage(format!("db `{v}`: use sqlite, postgres or mysql")))?),
                     None => None,
                 };
-                Ok(Generate::Model { name: required(args, "name")?, fields: fields(args)?, db })
+                let flag = |name: &str| extract_arg(args, name).is_some_and(|v| v == "true");
+                Ok(Generate::Model { name: required(args, "name")?, fields: fields(args)?, db, timestamps: flag("timestamps"), soft_delete: flag("soft_delete") })
             })();
             answer(&model_dir, args, request)
         },

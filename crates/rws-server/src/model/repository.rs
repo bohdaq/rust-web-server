@@ -267,6 +267,9 @@ pub async fn select_by_pk<T: Model>(pool: &DbPool, pk: Value, live_only: bool) -
 /// `save`: insert or update, as the module docs describe.
 #[doc(hidden)]
 pub async fn save_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbError> {
+    // On the primary throughout: whether the row exists, and the row as
+    // saved, must not come from a replica that lags behind.
+    let pool = pool.primary();
     let pk = entity.primary_key_value();
     if T::primary_key_auto_increment() {
         return match pk {
@@ -299,6 +302,7 @@ pub async fn save_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbErr
 
 #[doc(hidden)]
 pub async fn insert_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbError> {
+    let pool = pool.primary();
     let backend = pool.backend();
     let now = Timestamp::now().to_value(backend);
     let pk_name = T::primary_key_name();
@@ -358,6 +362,7 @@ pub async fn insert_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbE
 
 #[doc(hidden)]
 pub async fn update_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbError> {
+    let pool = pool.primary();
     let backend = pool.backend();
     let pk = entity.primary_key_value();
     let pk_name = T::primary_key_name();

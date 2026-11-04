@@ -49,6 +49,57 @@ let adults = User::query(&pool)
     .fetch_all().await?;
 ```
 
+### `IN` and `NULL` filters
+
+`where_in(col, values)` adds `col IN (?, ?, …)` (no values match no rows); `where_null(col)` and `where_not_null(col)` add `IS NULL` / `IS NOT NULL` (18.30.0).
+
+```rust
+let staff = User::query(&pool)
+    .where_in("role", ["admin", "moderator"])
+    .where_null("banned_at")
+    .fetch_all().await?;
+```
+
+## Scopes
+
+A scope is a reusable piece of a query: a function from a `QueryBuilder` to a narrower one. `.scope(f)` applies it (18.30.0); scopes take arguments by being closures, and compose:
+
+```rust
+use rust_web_server::model::QueryBuilder;
+
+fn published(q: QueryBuilder<'_, Post>) -> QueryBuilder<'_, Post> {
+    q.where_eq("published", true).where_null("hidden_at")
+}
+
+fn by_author(id: i64) -> impl FnOnce(QueryBuilder<'_, Post>) -> QueryBuilder<'_, Post> {
+    move |q| q.where_eq("author_id", id)
+}
+
+let mine = Post::query(&pool).scope(published).scope(by_author(7)).count().await?;
+```
+
+To call them as methods — `Post::query(&pool).published()` — put them in an extension trait for that model's builder:
+
+```rust
+pub trait PostScopes {
+    fn published(self) -> Self;
+    fn recent(self, n: u64) -> Self;
+}
+
+impl PostScopes for QueryBuilder<'_, Post> {
+    fn published(self) -> Self {
+        self.where_eq("published", true)
+    }
+    fn recent(self, n: u64) -> Self {
+        self.order_by("created_at", Order::Desc).limit(n)
+    }
+}
+
+let front_page = Post::query(&pool).published().recent(10).with(Post::author()).fetch_all().await?;
+```
+
+Scopes run before the terminal call, so they work with `count`, `paginate`, `update`, `delete` and [`with()`](/database/relations/#eager-loading-with-with) alike.
+
 ## Ordering
 
 ```rust

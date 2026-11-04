@@ -13,6 +13,11 @@
 //!   (`deleted_at`; deleted rows are left out of queries unless asked for)
 //!   and `#[version]` (optimistic locking: saving a stale copy fails with
 //!   [`DbErrorKind::StaleVersion`] instead of overwriting)
+//! - Eager loading for a whole result set ([`QueryBuilder::with`],
+//!   [`Relation`]), many-to-many links ([`BelongsToMany`]), scopes
+//!   ([`QueryBuilder::scope`]), seeds written in Rust ([`Seeders`]), read
+//!   replicas ([`DbPool::with_replicas`]) and the schema as JSON
+//!   ([`DbPool::schema`]) (18.30.0)
 //!
 //! Enable one or more backend features — `model-sqlite`, `model-postgres`,
 //! and `model-mysql` are not mutually exclusive, so a single binary can hold
@@ -31,11 +36,14 @@
 
 pub mod backend;
 pub mod connection;
+pub mod db_schema;
+pub mod eager;
 pub mod migration;
 pub mod pool;
 pub mod query;
 pub mod relation;
 pub mod repository;
+pub mod seed;
 pub mod timestamp;
 mod decode;
 pub mod uuid;
@@ -46,14 +54,19 @@ mod backends;
 #[cfg(test)]
 mod convention_tests;
 #[cfg(test)]
+mod part2_tests;
+#[cfg(test)]
 mod tls_tests;
 
 pub use backend::Backend;
 pub use connection::{DbConfig, DbSslMode, DbTls};
 pub use migration::MigrationStatus;
-pub use pool::{DbPool, DbTransaction};
+pub use db_schema::{ColumnSchema, DbSchema, ForeignKeySchema, IndexSchema, TableSchema};
+pub use eager::{EagerQuery, Loaded, Relation, RelationKind};
+pub use pool::{DbPool, DbTransaction, Replicas};
 pub use query::{Order, QueryBuilder};
-pub use relation::{BelongsTo, HasMany, HasOne};
+pub use relation::{BelongsTo, BelongsToMany, HasMany, HasOne, SyncChanges};
+pub use seed::{Seeder, Seeders};
 pub use repository::{ModelRepository, PrimaryKey, Repository};
 pub use timestamp::Timestamp;
 pub use uuid::Uuid;

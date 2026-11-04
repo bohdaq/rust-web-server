@@ -54,6 +54,7 @@ test` after it; the generated test is the starting point.
 
 ```sh
 rws gen model Post title:String views:i64 'note:Option<String>'   # src/models/post.rs + migrations/NNNN_create_posts.sql
+rws gen model Comment body:String post_id:i64 --timestamps --soft-delete   # + created_at/updated_at, deleted_at
 rws gen route posts            # src/routes/posts.rs (list/show/create/update/remove), registered in app()
 rws gen test posts             # tests/posts.rs against app()
 rws gen migration add_index_to_posts
@@ -64,7 +65,7 @@ Field types: `i64`, `i32`, `f64`, `bool`, `String`, `Option<T>`. The generated
 routes keep items in memory in the module: swap the store for the app's state
 or `Post::repository(&pool)` when they must persist. Through the dev MCP
 endpoint the same are the `gen_model`, `gen_route`, `gen_migration`,
-`gen_test` tools. Apply migrations with `rws db migrate` (`status`, `rollback [N]`, `seed`; `--json`) (18.30).
+`gen_test` tools. Apply migrations with `rws db migrate` (`status`, `rollback [N]`, `seed`, `schema`; `--json`) (18.30).
 
 ## The shape of an app
 
@@ -149,7 +150,7 @@ async fn main() {
 | Let the agent inspect the app | `use rust_web_server::dev_mcp::DevMcpExt;` then `app.dev_mcp()` (18.28): `/mcp` with `routes` (+ middleware), `config` (secrets hidden), `layout` (`rws.app.toml`), `recent_errors`, and via `.dev_mcp_with(DevTools::new().model::<Post>().database(pool).migrations("migrations"))` `models`, `db_schema`, `migrations`; run with `RWS_ENV=dev` and `claude mcp add --transport http app http://localhost:7878/mcp` |
 | Streaming response | a reader in `response.stream_pipe`; SSE: `Sse::stream()` |
 | WebSocket | `.websocket("/chat/{room}", \|ws, params, state\| …)` |
-| Database | `DbPool`, `#[derive(Model)]`, `QueryBuilder` (`model-*` features, async handlers); keys `i64`/`i32`/`String`/`model::Uuid`; `#[timestamps]`, `#[soft_delete]`, `#[version]` (a stale `save` is `DbErrorKind::StaleVersion`) (18.30) |
+| Database | `DbPool`, `#[derive(Model)]`, `QueryBuilder` (`model-*` features, async handlers); keys `i64`/`i32`/`String`/`model::Uuid`; `#[timestamps]`, `#[soft_delete]`, `#[version]` (a stale `save` is `DbErrorKind::StaleVersion`) (18.30); never `.load()` in a loop — describe `fn comments() -> Relation<Post, Comment> { Relation::has_many("post_id") }` and `Post::query(&pool).with(Post::comments()).fetch_all()` (one query per relation; `post.related(&Post::comments())`), `BelongsToMany` for join tables, `.scope(f)` for reusable filters, `pool.schema()` / `rws db schema --json` for the real tables (18.30) |
 | gRPC service | `tower::mount("/pkg.Service/", tonic_service, app)` (`tower` feature) |
 | Proxy without code | `rws.config.toml` with `[[upstream]]` + `[[route]]`; check it with `rws --check` |
 
