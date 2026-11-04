@@ -290,6 +290,18 @@ fn app_manifest_with_thousands_of_lines() {
 }
 
 #[test]
+fn test_client_sse_parser_on_hundreds_of_thousands_of_lines() {
+    on_small_stack(|| {
+        let mut parser = crate::test_client::SseParser::new();
+        let events = parser.feed("data: x\n\n".repeat(200_000).as_bytes()).unwrap();
+        assert_eq!(200_000, events.len());
+        assert!(parser.feed(": ping\r\n".repeat(200_000).as_bytes()).unwrap().is_empty());
+        let joined = parser.feed(format!("{}\n", "data: y\n".repeat(100_000)).as_bytes()).unwrap();
+        assert_eq!(1, joined.len());
+    });
+}
+
+#[test]
 fn generator_scanners_on_deep_nesting_and_many_lines() {
     on_small_stack(|| {
         // `rws gen` reads lib.rs, mod.rs, Cargo.toml, routes and tests: loops

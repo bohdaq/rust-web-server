@@ -63,6 +63,8 @@ async fn test_example() {
 }
 ```
 
+For tests, `TestDb::sqlite().migrations("migrations").await` does this with the app's migrations applied (and a connection that never expires, so the database can't vanish mid-test); `TestDb` also gives PostgreSQL and MySQL tests a rolled-back transaction each, and `#[derive(Factory)]` fills tables with models — see [Test databases and factories](/testing/database/).
+
 ## Feature requirement
 
 `DbPool::memory()` requires the `model-sqlite` feature, which also implies `http2` (tokio runtime):

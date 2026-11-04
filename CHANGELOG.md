@@ -9,6 +9,36 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **Test helpers** (roadmap #89), all in `test_client` (nothing on the
+  request path changes):
+  - `client.websocket(path).connect()` → `TestWebSocket`: runs a route's
+    `WebSocket::upgrade` handler over an in-memory duplex — `send_text`,
+    `send_binary`, `recv`, `recv_text`, `close` (masking, pings, fragments
+    and the closing handshake handled); a refused upgrade is the `Err`
+    response. See [WebSocket and SSE in tests](https://rws8.tech/testing/websocket-sse/).
+  - `response.sse()` / `response.sse_events(n, timeout)` read a
+    `text/event-stream` body, streamed or buffered, into `SseFrame`s
+    (`event`, `data`, `id`, `retry`); `SseParser` is the bounded parser
+    underneath (fuzz target `sse_stream`). `TestResponse` keeps a streamed
+    body (`is_streamed`, `take_stream`) and is `Debug`.
+  - `assert_openapi_snapshot(&client, "tests/snapshots/openapi.json")` and
+    `assert_json_snapshot`: normalized JSON (sorted keys) compared with a
+    committed file, a line diff on a mismatch; `RWS_UPDATE_SNAPSHOTS=1`
+    writes it. See [OpenAPI snapshots](https://rws8.tech/testing/snapshots/).
+  - `TestDb` (`model-*` features): `TestDb::sqlite().migrations("migrations").await`
+    is a fresh in-memory database per test; `TestDb::postgres(url)` /
+    `mysql(url)` (and `_from_env`, reading `RWS_TEST_POSTGRES_URL` /
+    `RWS_TEST_MYSQL_URL` and skipping when unset) migrate once, then pin the
+    pool to one connection inside a transaction that is never committed.
+  - `#[derive(Factory)]` (rws-macros 17.30.0) beside `#[derive(Model)]`:
+    `User::factory().with(|u| …).build()` / `.create(&pool).await` /
+    `*_many(n)`, with per-type defaults (`name-3`, `email-3@example.com`,
+    `0`, `false`, `None`). See [Test databases and factories](https://rws8.tech/testing/database/).
+  - `TestRequest::send_async().await` for `App::with_async_state` apps:
+    awaits the handler on the test's runtime (`send` runs it on a
+    per-request runtime, where a `DbPool` loses the connection it used).
+- **rws-macros 17.30.0** must be published before rust-web-server.
+
 - **`rws gen model|route|migration|test`** (roadmap #88): code generators for
   a project in the conventional layout (`rws.app.toml`). `gen model Post
   title:String …` writes a `#[derive(Model)]` type (`id` auto-increment, a

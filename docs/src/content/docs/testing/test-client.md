@@ -97,7 +97,27 @@ resp.body_text()     // &str — panics if body is not valid UTF-8
 resp.body_bytes()    // &[u8] — raw body
 resp.header("content-type")   // Option<&str> — case-insensitive lookup
 resp.headers()       // &[Header] — all response headers
+resp.is_streamed()   // bool — the body is a stream (SSE, stream_pipe), not in body_bytes()
+resp.sse()           // TestSse — the body's Server-Sent Events
 ```
+
+## Async apps: `send_async`
+
+An `App::with_async_state` app can be driven from `#[tokio::test]` with `.send_async().await`, which awaits the handler on the test's runtime. Prefer it whenever the handler uses a `DbPool` or anything else that leaves tasks on its runtime — see [Test databases](/testing/database/#an-app-on-a-testdb) for why `.send()` loses pool connections there.
+
+```rust
+let resp = client.get("/notes").send_async().await;
+```
+
+## More helpers
+
+Beside `TestClient`, the `test_client` module has:
+
+- [WebSocket and SSE](/testing/websocket-sse/) — `client.websocket(path).connect()` runs a route's upgrade handler over an in-memory connection; `resp.sse_events(n, timeout)` reads an event stream.
+- [Test databases and factories](/testing/database/) — `TestDb::sqlite().migrations("migrations")`, a transaction per test on PostgreSQL/MySQL, and `#[derive(Factory)]`.
+- [OpenAPI snapshots](/testing/snapshots/) — `assert_openapi_snapshot(&client, "tests/snapshots/openapi.json")`, `RWS_UPDATE_SNAPSHOTS=1` to rewrite.
+
+Nothing in `test_client` is on the request path. It's compiled into every build so an app's own tests reach it without a feature (`TestDb` and factories need a `model-*` feature, `#[derive(Factory)]` also `macros`).
 
 ## Testing middleware
 

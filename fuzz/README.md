@@ -51,6 +51,7 @@ cargo install cargo-fuzz
 | `available_dictionary` | an `Available-Dictionary` value, and `dcz`/`dcb` bodies through both decoders (via `fuzz_api`) | request headers; dictionary-compressed bodies |
 | `cache_entry` | a disk-cache entry file read back: header line, key, stored response (via `fuzz_api`) | the cache directory |
 | `wasm_plugin_output` | what a WebAssembly plugin returns: request and response directives (via `fuzz_api`) | plugins (`[route.middleware.wasm]`) |
+| `sse_stream` | the test client's Server-Sent Events parser (`test_client::SseParser`), whole and in pieces | the app under test |
 
 ## Running
 

@@ -39,6 +39,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `#[derive(Validate)]` | crate root (`macros`) | Derives `Validate` from `#[validate(length, range, email, required, url)]` field annotations |
 | `#[derive(Config)]` | crate root (`macros`) | Typed env-var binding: generates `load() -> Result<Self, String>`; `#[config(env, default, prefix)]`. See [Config binding](/features/config-binding/) |
 | `#[derive(Model)]` | crate root (`macros` + a `model-*` feature) | Maps a struct to a table (`#[table]`, `#[primary_key(auto_increment)]`, `#[column]`, `#[ignore]`) and generates `T::repository(&pool)` / `T::query(&pool)` |
+| `#[derive(Factory)]` | crate root (`macros` + a `model-*` feature) | Beside `Model`: `test_client::factory::Factory` and `T::factory()` for tests (18.29.0, rws-macros 17.30). See [Factories](/testing/database/#factories) |
 
 ## HTTP primitives
 
@@ -371,7 +372,13 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `TestClient` | `test_client` | In-process test client — dispatches requests without a TCP socket. See [TestClient](/testing/test-client/) |
+| `TestClient` | `test_client` | In-process test client — dispatches requests without a TCP socket. `.send_async().await` for `AsyncAppWithState` (18.29.0). See [TestClient](/testing/test-client/) |
+| `TestRequest` / `TestResponse` | `test_client` | A request being built (`.header`, `.body_*`, `.send()`); its result (`status`, `header`, `body_text`, `is_streamed`, `take_stream`, `sse()`, `sse_events(n, timeout)` — 18.29.0) |
+| `TestWebSocketRequest` / `TestWebSocket` | `test_client` | `client.websocket(path).connect()`: the route's upgrade handler over an in-memory duplex; `send_text`, `send_binary`, `recv`, `recv_text`, `close` (18.29.0). See [WebSocket and SSE](/testing/websocket-sse/) |
+| `TestSse` / `SseFrame` / `SseParser` | `test_client` | An event stream read from a test response (`next_event`, `events(n, timeout)`); one event (`event`, `data`, `id`, `retry`); the bounded incremental parser (18.29.0) |
+| `assert_openapi_snapshot` / `assert_json_snapshot` / `OpenApiSource` | `test_client` | Compare a document with a committed file, normalized, failing with a diff; `RWS_UPDATE_SNAPSHOTS=1` rewrites it (18.29.0). See [OpenAPI snapshots](/testing/snapshots/) |
+| `TestDb` / `TestDbBuilder` | `test_client` (a `model-*` feature) | A database per test: in-memory SQLite with migrations, or a rolled-back transaction on PostgreSQL/MySQL (`postgres_from_env`, `mysql_from_env`) (18.29.0). See [Test databases](/testing/database/) |
+| `Factory` / `ModelFactory<T>` / `FactoryValue` | `test_client::factory` (a `model-*` feature) | `T::factory()` from `#[derive(Factory)]`: `.with(…)`, `.build()`, `.create(&pool)`, `*_many`; per-type defaults (18.29.0). See [Factories](/testing/database/#factories) |
 | `OpenApiConfig` / `build_spec` | `openapi` (`openapi`) | OpenAPI 3.1 from registered routes; `AppWithState::openapi(config)` adds `/openapi.json` and `/docs`; `.operation(method, pattern, Operation)` adds bodies, responses and parameters. See [OpenAPI](/features/openapi/) |
 | `tower::mount`, `TowerApp` | `tower` (`tower`) | A Tower service (tonic, tower-http, axum) as an rws `Application`, under a path prefix or alone. See [Tower interop](/features/tower/) |
 | `TowerLayer`, `tower::Next` | `tower` (`tower`) | A Tower layer as rws middleware; `Next` is the rest of the stack it wraps |

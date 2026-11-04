@@ -277,7 +277,7 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
         })
     }
 
-    async fn execute_async(
+    pub(crate) async fn execute_async(
         &self,
         request: &Request,
         connection: &ConnectionInfo,

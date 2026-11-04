@@ -158,6 +158,9 @@ Use it as:
 ## Testing
 
 - [Test Client](https://rws8.tech/testing/test-client/): Dispatch HTTP requests directly through your Application without opening a TCP socket.
+- [WebSocket and SSE in tests](https://rws8.tech/testing/websocket-sse/): Drive a WebSocket route's handler and read a Server-Sent Events stream from TestClient, with no socket.
+- [Test databases and factories](https://rws8.tech/testing/database/): TestDb gives each test a database that leaves nothing behind; #[derive(Factory)] builds models with default values.
+- [OpenAPI snapshots](https://rws8.tech/testing/snapshots/): Compare the generated OpenAPI document with a committed file; RWS_UPDATE_SNAPSHOTS=1 rewrites it.
 
 ## Deployment
 

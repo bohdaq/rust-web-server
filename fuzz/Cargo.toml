@@ -325,6 +325,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "sse_stream"
+path = "fuzz_targets/sse_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "generator"
 path = "fuzz_targets/generator.rs"
 test = false

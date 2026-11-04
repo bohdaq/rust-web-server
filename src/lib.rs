@@ -53,7 +53,7 @@ pub use rws_server::auth;
 #[cfg(feature = "macros")]
 pub use rws_macros::{delete, get, patch, post, put, route, Config, FromPath, FromRequest, JsonSchema, Validate};
 #[cfg(all(feature = "macros", any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
-pub use rws_macros::Model;
+pub use rws_macros::{Factory, Model};
 #[cfg(feature = "http2")]
 pub use rws_server::async_state;
 #[cfg(feature = "http2")]
@@ -72,6 +72,8 @@ pub use rws_http::extract;
 mod extract_derive_tests;
 #[cfg(test)]
 mod http_tests;
+#[cfg(all(test, feature = "macros", feature = "model-sqlite"))]
+mod test_helper_tests;
 #[cfg(test)]
 mod server_tests;
 #[cfg(test)]

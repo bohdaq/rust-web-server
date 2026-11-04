@@ -214,3 +214,7 @@ let admins: Vec<User> = User::query(&pool)
     .where_eq("active", true)
     .fetch_all().await?;
 ```
+
+## Factories for tests
+
+Add `#[derive(Factory)]` beside `Model` and `User::factory()` builds users with a default for every field — `User::factory().with(|u| u.active = true).create(&pool).await?` inserts one. See [Test databases and factories](/testing/database/#factories).
