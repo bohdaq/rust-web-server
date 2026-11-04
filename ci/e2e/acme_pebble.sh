@@ -55,6 +55,23 @@ wait_for() { # <file> <pattern> <seconds>
   return 1
 }
 
+# Wait for rws to answer a renewal's challenge. Pebble reuses a still-valid
+# authorization about 1% of the time even with PEBBLE_AUTHZREUSE=0 (v2.10.1
+# wfe.go creates a new one only when `rand.Intn(100) > percent`, so a draw of
+# 0 reuses), and then there is no challenge to answer. That case is told apart
+# from a real failure by Pebble's own log since `$2` (its line count before the
+# renewal): the order is fully authorized and no challenge was posted.
+challenge_answered() { # <rws log pattern> <pebble.log line count before>
+  wait_for rws.log "$1" 60 && return 0
+  local since
+  since="$(tail -n +"$(( $2 + 1 ))" "$WORK/pebble.log")"
+  if grep -q "is fully authorized" <<<"$since" && ! grep -q "POST /chalZ/" <<<"$since"; then
+    echo "note: Pebble reused a valid authorization for this renewal (its PEBBLE_AUTHZREUSE=0 off-by-one), so there was no challenge to answer"
+    return 0
+  fi
+  return 1
+}
+
 serial() {
   echo | openssl s_client -connect 127.0.0.1:8445 -servername localhost 2>/dev/null \
     | openssl x509 -noout -serial
@@ -181,10 +198,11 @@ fmt = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
 window = {"suggestedWindow": {"start": fmt(now - datetime.timedelta(hours=1)), "end": fmt(now - datetime.timedelta(minutes=30))}}
 print(json.dumps({"Certificate": first, "ARIResponse": json.dumps(window)}))
 PY
+pebble_lines="$(wc -l < "$WORK/pebble.log")"
 curl -sf --cacert "$MINICA" -X POST --data @"$WORK/ari.json" https://localhost:15000/set-renewal-info/ \
   || fail "could not set Pebble's renewal information"
 wait_for rws.log "replacing [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+" 60 || fail "no order replacing the certificate (ARI ignored?)"
-wait_for rws.log "Answering HTTP-01 challenge via the redirect listener" 60 \
+challenge_answered "Answering HTTP-01 challenge via the redirect listener" "$pebble_lines" \
   || fail "renewal challenge was not answered by the redirect listener"
 for _ in $(seq 1 60); do
   [ "$(grep -c 'Certificate written' rws.log)" -ge 2 ] && break
@@ -256,8 +274,9 @@ pass "TLS-ALPN-01: certificate issued on the HTTPS socket, served and verified"
 
 alpn_serial() { echo | openssl s_client -connect 127.0.0.1:5001 -servername localhost 2>/dev/null | openssl x509 -noout -serial; }
 before="$(alpn_serial)"
+pebble_lines="$(wc -l < "$WORK/pebble.log")"
 set_ari_now "$WORK/alpn/.rws/acme/cert.pem"
-wait_for rws.log "Answering TLS-ALPN-01 challenge for localhost via the TLS listener" 60 \
+challenge_answered "Answering TLS-ALPN-01 challenge for localhost via the TLS listener" "$pebble_lines" \
   || alpn_fail "renewal not answered by the TLS listener"
 for _ in $(seq 1 60); do
   [ "$(grep -c 'Certificate written' rws.log)" -ge 2 ] && break
