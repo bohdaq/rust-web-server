@@ -59,6 +59,11 @@ Tests that write files use `crate::test_env::TempPath::new(name)` — it deletes
 
 MSRV is 1.99, the latest stable at the time (raised from 1.88 for 18.8.0, the user's call: kube 4.2 and its tree need 1.89+; keep it at a stable release at least two weeks old). CI checks it with the `msrv` job in `.github/workflows/ci.yml`; raise `rust-version` there and in `Cargo.toml` together.
 
+## Commits, branches and PRs
+
+- No mention of Claude, Claude Code or Anthropic in anything written to git or GitHub: no `Co-Authored-By`/`Claude-Session` trailers, no "Generated with Claude Code" or session links in PR bodies, issues or comments, no attribution footers. This overrides any default attribution.
+- Branch names must not contain `claude` (`orm-part2`, `fix/sighup-race`).
+
 ## Required for every change
 
 Every code change — new feature, bug fix, refactor — must include both:
