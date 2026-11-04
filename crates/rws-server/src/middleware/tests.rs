@@ -202,3 +202,53 @@ fn clones_share_the_layer_list_and_wrapping_a_clone_leaves_the_original_alone() 
     let _ = wider.execute(&get("/healthz"), &conn());
     assert_eq!(3, calls.load(Ordering::SeqCst));
 }
+
+// ── describing an app (18.28.0) ──────────────────────────────────────────────
+
+struct Generic<T>(std::marker::PhantomData<T>);
+
+impl<T: Send + Sync> Middleware for Generic<T> {
+    fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+        next.execute(request, connection)
+    }
+}
+
+struct Named;
+
+impl Middleware for Named {
+    fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+        next.execute(request, connection)
+    }
+
+    fn layer_name(&self) -> &'static str {
+        "custom-name"
+    }
+}
+
+#[test]
+fn a_layer_is_named_by_its_type_without_path_or_generics() {
+    assert_eq!(crate::middleware::RateLimitLayer.layer_name(), "RateLimitLayer");
+    assert_eq!(Generic::<Vec<String>>(std::marker::PhantomData).layer_name(), "Generic");
+    let boxed: Arc<dyn Middleware> = Arc::new(crate::maintenance::MaintenanceLayer);
+    assert_eq!(boxed.layer_name(), "MaintenanceLayer", "through dyn too");
+    assert_eq!(Named.layer_name(), "custom-name");
+    assert_eq!(super::short_type_name("Plain"), "Plain");
+}
+
+#[test]
+fn with_middleware_reports_its_layers_and_the_inner_routes() {
+    fn ok(_: &Request, _: &crate::router::PathParams, _: &ConnectionInfo, _: &()) -> Response {
+        Response::new()
+    }
+    let routes = App::with_state(()).get("/a/:id", ok).post("/b", ok);
+    let app = WithMiddleware::new(routes.wrap(Named)).wrap(crate::middleware::RateLimitLayer);
+    let entries: Vec<(String, String)> = app.registered_routes().into_iter().map(|r| (r.method, r.pattern)).collect();
+    assert_eq!(entries, vec![("GET".to_string(), "/a/:id".to_string()), ("POST".to_string(), "/b".to_string())]);
+    assert_eq!(app.middleware_names(), vec!["RateLimitLayer", "custom-name"], "outer stack first");
+    // Through an MCP server wrapping it, and none for an app without routes.
+    let mcp = crate::mcp::McpServer::new("t", "1").wrap(app);
+    assert_eq!(mcp.registered_routes().len(), 2);
+    assert_eq!(mcp.middleware_names(), vec!["RateLimitLayer", "custom-name"]);
+    assert!(App::new().registered_routes().is_empty());
+    assert!(crate::mcp::McpServer::new("t", "1").middleware_names().is_empty());
+}

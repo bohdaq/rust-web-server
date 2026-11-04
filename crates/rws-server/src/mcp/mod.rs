@@ -3543,6 +3543,15 @@ impl Application for McpServer {
         }
         self.fallback.as_ref()?.execute_async(request, connection)
     }
+
+    /// The wrapped application's routes ([`Self::wrap`]).
+    fn registered_routes(&self) -> Vec<crate::router::RouteInfo> {
+        self.fallback.as_ref().map(|app| app.registered_routes()).unwrap_or_default()
+    }
+
+    fn middleware_names(&self) -> Vec<&'static str> {
+        self.fallback.as_ref().map(|app| app.middleware_names()).unwrap_or_default()
+    }
 }
 
 // ── public helper ─────────────────────────────────────────────────────────────

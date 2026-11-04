@@ -157,6 +157,9 @@ pub use rws_proxy::proxy_config;
 pub use rws_proxy::llm;
 #[cfg(not(target_arch = "wasm32"))]
 pub use rws_proxy::admin;
+/// `app.dev_mcp()`: an MCP endpoint for a coding agent working on the app (18.28.0).
+#[cfg(not(target_arch = "wasm32"))]
+pub use rws_proxy::dev_mcp;
 /// Fleet config pull: signed configs from HTTPS, S3 or git (18.23.0).
 #[cfg(all(feature = "http2", not(target_arch = "wasm32")))]
 pub use rws_proxy::fleet;

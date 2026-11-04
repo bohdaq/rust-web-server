@@ -464,6 +464,10 @@
         "link": "/mcp/agent-tools/"
       },
       {
+        "label": "Let a coding agent inspect your app",
+        "link": "/mcp/dev-tools/"
+      },
+      {
         "label": "Gateway",
         "link": "/mcp/gateway/"
       },

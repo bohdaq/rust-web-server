@@ -5,6 +5,31 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- **`app.dev_mcp()`** (roadmap #85): an MCP endpoint a coding agent can use
+  to inspect the app it is working on — `routes` (method, pattern and the
+  middleware stack around them), `config` (`RWS_ENV`, features and every
+  `RWS_*`/`OTEL_*`/`MCP_*` setting, secrets and URL passwords hidden),
+  `recent_requests`, `recent_errors`, and with a `model-*` feature
+  `db_schema` (SQLite, PostgreSQL, MySQL) and `migrations` /
+  `migrations_run` / `migrations_rollback_last`. On every `Application`
+  through `rust_web_server::dev_mcp::DevMcpExt`; `DevTools` chooses the
+  tools (`.database`, `.migrations`, `.with_ops`, `.read_only`, `.token`,
+  `.at`). Mounted only with `RWS_ENV=dev` (then without authentication) or a
+  bearer token (`MCP_TOKEN`); otherwise the app is served alone. See
+  [Let a coding agent inspect your app](https://rws8.tech/mcp/dev-tools/).
+- **`RWS_ENV`** (`dev`, `test`, `prod` — the default) and
+  `entry_point::RwsEnv`.
+- The `rws` binary's 25 MCP operations tools moved into the library as
+  `dev_mcp::ops_tools` (the binary uses it; names, order and behaviour
+  unchanged), with `dev_mcp::OPS_WRITE_TOOLS`.
+- `Application::registered_routes()` / `Application::middleware_names()` and
+  `Middleware::layer_name()`, default methods that let tools describe an app;
+  `WithMiddleware`, `McpServer` and `TimeoutLayer` forward them.
+
 ## 18.27.2 — 2026-11-03
 
 ### Fixed

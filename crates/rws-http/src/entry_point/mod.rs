@@ -3,6 +3,8 @@ mod tests;
 pub mod command_line_args;
 pub mod config_file;
 pub mod environment_variables;
+mod rws_env;
+pub use rws_env::RwsEnv;
 
 
 use std::{env};

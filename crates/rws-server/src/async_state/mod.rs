@@ -278,4 +278,8 @@ impl<S: Send + Sync + 'static> Application for AsyncAppWithState<S> {
         let connection = connection.clone();
         crate::async_bridge::block_on_isolated(|| self.execute_async(&request, &connection))
     }
+
+    fn registered_routes(&self) -> Vec<crate::router::RouteInfo> {
+        self.route_entries()
+    }
 }

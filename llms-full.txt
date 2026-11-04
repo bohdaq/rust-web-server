@@ -1872,6 +1872,16 @@ The `gateway-api` build feature's controller (in progress, 18.8.0). Read at star
 |----------|---------|-------------|
 | `RWS_CONFIG_TEMPLATE_DIR` | `templates` | Directory containing Tera HTML templates. Only relevant when the `tera` Cargo feature is enabled. |
 
+## Environment kind
+
+`RWS_ENV` says what kind of environment the process runs in. Like the
+`RWS_DB_*` variables it is outside the `RWS_CONFIG_*` namespace, and it has no
+config-file key or flag: set it where the process starts.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RWS_ENV` | `prod` | `dev` (or `development`), `test`, or `prod` (or `production`); anything else counts as `prod`. With `dev`, [`app.dev_mcp()`](/mcp/dev-tools/) mounts its MCP endpoint without a token; otherwise only when `MCP_TOKEN` is set (since 18.28.0). Read in code with `entry_point::RwsEnv::current()`. |
+
 ## Database
 
 Database variables are only used when the `model-sqlite`, `model-postgres`, or
@@ -4388,6 +4398,20 @@ fn is_passthrough(&self, _request: &Request, _connection: &ConnectionInfo) -> bo
 
 Default `false`: the request then takes the usual synchronous path through
 every layer.
+
+### Naming a layer (`layer_name`)
+
+Tools that describe an app — the [dev MCP server](/mcp/dev-tools/)'s `routes`
+tool — list the layers of a `WithMiddleware` stack by `Middleware::layer_name()`
+(through `Application::middleware_names()`, since 18.28.0). The default is
+the type's name without its module path or generic parameters
+(`CsrfLayer`); override it when that says too little:
+
+```rust
+fn layer_name(&self) -> &'static str {
+    "tenant-auth"
+}
+```
 
 ### Short-circuit example
 
@@ -19674,6 +19698,11 @@ The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer
 alike.
 
+An app built on the library gets the same tools from
+`rust_web_server::dev_mcp`: `ops_tools(server, routes, cache)` is what the
+binary mounts (since 18.28.0), and [`app.dev_mcp()`](/mcp/dev-tools/) adds
+them with `DevTools::with_ops()` next to tools for developing the app.
+
 A call with missing or mistyped arguments comes back as an error the model
 reads (`missing required property "ip"`), not a silent default.
 
@@ -19800,6 +19829,146 @@ assert!(client.get("/items/TEE-02").send().body_text().contains(r#""onHand":1"#)
 ```
 
 `cargo test --example mcp_inventory --features "macros serde sso openapi"` runs them.
+
+---
+
+# Let a coding agent inspect your app
+
+<https://rws8.tech/mcp/dev-tools/>
+
+A coding agent working on an rws app can read the code, but not what the
+running app actually registered, which settings it ended up with, or why the
+last request failed. `app.dev_mcp()` (since 18.28.0) puts an MCP endpoint in
+front of the app that answers those questions: its routes and the
+middleware around them, its effective configuration with secrets hidden, the
+last requests and errors, and — with a `model-*` feature — its database
+schema and migrations.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::dev_mcp::DevMcpExt;
+use rust_web_server::server::Server;
+
+let app = App::with_state(state)
+    .get("/api/items/:id", get_item)
+    .post("/api/items", create_item)
+    .wrap(CsrfLayer::new())
+    .dev_mcp(); // /mcp in development, nothing in production
+```
+
+`dev_mcp()` works on every application type (`AppWithState`, `App`,
+`WithMiddleware`, `AsyncAppWithState`, …) and returns one you serve as
+before. Every path but `/mcp` still reaches the app.
+
+## When it is mounted
+
+| `RWS_ENV` | token set | `/mcp` |
+|---|---|---|
+| `dev` | no | mounted, **no authentication** |
+| any | yes | mounted, requires `Authorization: Bearer <token>` |
+| `test`, `prod`, unset | no | not mounted (one line on stdout says so) |
+
+- `RWS_ENV` is `dev`, `test` or `prod` (the default; anything unrecognised
+  counts as `prod`). See [environment variables](/configuration/env-vars/#environment-kind).
+- The token is read from `MCP_TOKEN`, the variable the `rws` binary's
+  [`/mcp`](/mcp/operate/) uses. `DevTools::token(…)` sets it in code,
+  `DevTools::token_env("APP_DEV_TOKEN")` reads another variable.
+- In development without a token anyone who can reach the port can call the
+  tools, including the ones that change things: keep the port on
+  `127.0.0.1` (`RWS_CONFIG_IP`) or set a token.
+- Browser-based clients send an `Origin` header, which is refused unless it
+  is listed with `DevTools::allowed_origins([…])`. CLI and desktop clients
+  send none.
+- Calls to the changing tools are recorded in the admin
+  [audit log](/deployment/admin/#users-roles-and-the-audit-log), as for the binary.
+
+Connect the agent while the app runs:
+
+```bash
+RWS_ENV=dev RWS_CONFIG_IP=127.0.0.1 cargo run
+claude mcp add --transport http my-app http://localhost:7878/mcp
+```
+
+## The tools
+
+| Tool | Answers |
+|---|---|
+| `routes` | Each route's method and pattern, in registration order, and the middleware layers around them in the order a request passes them: `{"routes":[{"method":"GET","pattern":"/api/items/:id"}],"middleware":["CsrfLayer"]}` |
+| `config` | `RWS_ENV`, the compiled-in features and every `RWS_*`, `OTEL_*` and `MCP_*` setting in effect (config file and flags included). Values of settings named `*SECRET*`, `*PASSWORD*`, `*TOKEN*`, PKCS#11 PINs and passwords inside URLs (`postgres://app:(hidden)@db/app`) are hidden |
+| `recent_requests` `{"n": 50}` | The last requests (at most 100): method, path, status, client IP, latency |
+| `recent_errors` `{"n": 50}` | The last 4xx/5xx |
+| `db_schema` | With `DevTools::database(pool)`: every table and its columns (name, type, nullable, default, primary key) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
+| `migrations` | With `DevTools::migrations(dir)` too: each migration file, whether it is applied and whether it has a `.down.sql` |
+| `migrations_run` | Apply the pending migrations; answers the status afterwards |
+| `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none) |
+
+The middleware listed is the stack around the app's routes (each layer's
+`Middleware::layer_name()`, by default its type name); rws has no per-route
+middleware to report. Routes come from `Application::registered_routes()`: the
+built-in controllers behind an `AppWithState` (static files, `/healthz`, …)
+aren't listed.
+
+`dev_mcp()` records the app's requests for `recent_requests` itself. If the
+app already has a `LogLayer`, pass `.record_requests(false)` so each request
+is listed once.
+
+## Choosing what is mounted
+
+`dev_mcp_with(DevTools)` takes the options:
+
+```rust
+use rust_web_server::dev_mcp::{DevMcpExt, DevTools};
+use rust_web_server::model::DbPool;
+
+let pool = DbPool::from_env().await?;
+let app = routes
+    .dev_mcp_with(
+        DevTools::new()
+            .database(pool.clone())
+            .migrations("migrations")
+            .with_ops()      // also the rws binary's 25 operations tools
+            .read_only(),    // but none of the tools that change something
+    );
+```
+
+| Method | Does |
+|---|---|
+| `.database(pool)` / `.migrations(dir)` | The database tools (`model-sqlite`, `model-postgres` or `model-mysql`) |
+| `.with_ops()` | The [operations tools](/mcp/operate/#the-tools) as well: metrics, rate limits, maintenance mode, the IP blocklist, feature flags, authorization, traffic, config reload |
+| `.cache(layer)` | The `cache_stats` / `cache_clear` operations tools for this response cache (a clone of the layer the app wraps); implies `.with_ops()` |
+| `.read_only()` | Leaves out every tool that changes something (`migrations_run`, `migrations_rollback_last` and the operations tools in `dev_mcp::OPS_WRITE_TOOLS`) |
+| `.token(t)` / `.token_env(name)` | The bearer token, or the variable it is read from (default `MCP_TOKEN`) |
+| `.env(RwsEnv::Dev)` | Decide as if `RWS_ENV` were this (tests) |
+| `.at("/_dev/mcp")` | Another path, for an app that serves its own MCP server at `/mcp` |
+| `.server_info(name, version)` | What `initialize` reports (default `rws-dev`) |
+| `.record_requests(false)` | Don't record requests (the app has a `LogLayer`) |
+
+An app that builds its own `McpServer` and gates it itself can add the same
+tools with `DevTools::new().register(server)` — the routes are those of the
+app the server wraps. `dev_mcp::ops_tools(server, routes, cache)` adds only
+the operations tools; it is what the `rws` binary mounts.
+
+## Testing it
+
+The tools are ordinary MCP tools, so `TestClient` drives them:
+
+```rust
+use rust_web_server::dev_mcp::{DevMcpExt, DevTools, RwsEnv};
+use rust_web_server::test_client::TestClient;
+
+let client = TestClient::new(app().dev_mcp_with(DevTools::new().env(RwsEnv::Dev)));
+let res = client
+    .post("/mcp")
+    .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"routes","arguments":{}}}"#)
+    .send();
+assert!(res.body_text().contains("/api/items/:id"));
+```
+
+## Not yet
+
+Models (no registry of `#[derive(Model)]` types exists at run time), jobs,
+and the same data as MCP resources are planned with the conventional app
+layout (roadmap #87).
 
 ---
 
@@ -22337,13 +22506,13 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `Application` | `application` | Trait implemented by all app types: `execute(&Request, &ConnectionInfo) -> Result`. `runs_inline(request, connection)` (default `false`) lets the async servers run a request on the event loop instead of the blocking pool — only for work that never waits. See [Async handlers](/building-apps/async-handlers/) |
+| `Application` | `application` | Trait implemented by all app types: `execute(&Request, &ConnectionInfo) -> Result`. `runs_inline(request, connection)` (default `false`) lets the async servers run a request on the event loop instead of the blocking pool — only for work that never waits. `registered_routes()` / `middleware_names()` (default empty, 18.28.0) describe the app for tools; wrappers forward them. See [Async handlers](/building-apps/async-handlers/) |
 | `AsyncResponse` | `application` (`http2`) | Return type of the optional `Application::execute_async`, awaited on the connection's task instead of holding a blocking-pool thread |
 | `Controller` | `controller` | Trait with `is_matching(request, connection)` and `process(request, response, connection)`. See [Controllers](/building-apps/controllers/) |
 | `App` | `app` | Zero-config application with all built-in controllers. `App::with_config(ServerConfig)` pins it to a fixed config (no env reads per request — the lock-free pattern for parallel tests) |
 | `AppWithState` | `state` | State-aware app with `.get/.post/.put/.patch/.delete` route builders; state shared as `Arc`. Entry point `App::with_state(S)`; `.with_config(ServerConfig)` pins the fallback `App`. See [State](/building-apps/state/) |
 | `AsyncAppWithState` | `async_state` (`http2`) | Same with `async fn` handlers. Entry point `App::with_async_state(S)` |
-| `Middleware` | `middleware` | Layer trait: `handle(request, connection, next)`. `runs_inline` / `is_passthrough` (default `false`) declare a layer non-blocking or a no-op for a request. See [Middleware](/building-apps/middleware/) |
+| `Middleware` | `middleware` | Layer trait: `handle(request, connection, next)`. `runs_inline` / `is_passthrough` (default `false`) declare a layer non-blocking or a no-op for a request. `layer_name()` (default: the type's name, 18.28.0) is how tools list it. See [Middleware](/building-apps/middleware/) |
 | `WithMiddleware` | `middleware` | Wraps any `Application` with a layer stack; `app.wrap(layer)`, first-pushed is outermost |
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
 | `TeraEngine` | `template` (`tera`) | Jinja2-style templates: `from_dir`, `from_raw`; global `template::init(dir)` / `template::render(name, &ctx)` / `template::reload()` (also run on `SIGHUP`). See [Templates](/building-apps/templates/) |
@@ -22402,6 +22571,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `RequestHeaders` | `extract` | All request headers with case-insensitive `.get(name)` |
 | `RequestId` | `extract` / `request_id` | The ID `RequestIdLayer` put on the request; empty string without it (never fails) |
 | `openapi_tools::tools` | `mcp` | OpenAPI 3.0/3.1 operations as MCP tools (`OpenApiTool`: schemas, annotations, `request(arguments)` → `ToolRequest`); `ToolOptions` (prefix, include, exclude); `McpServer::openapi_tools(app, spec, options)` runs them in-process against an `Application`; `AppWithState::openapi_spec` (`openapi`) gives the document. See [Tools from OpenAPI](/mcp/openapi-tools/) |
+| `DevTools` / `DevMcp` / `DevMcpExt` | `dev_mcp` | `app.dev_mcp()` / `.dev_mcp_with(DevTools)`: an MCP endpoint for a coding agent — `routes` (with middleware), `config` (secrets hidden), `recent_requests` / `recent_errors`, `db_schema` and migrations (`model-*`); only with `RWS_ENV=dev` or a token. `ops_tools(server, routes, cache)`: the `rws` binary's 25 operations tools (18.28.0). See [Let a coding agent inspect your app](/mcp/dev-tools/) |
+| `RwsEnv` | `entry_point` (also `dev_mcp`) | `RWS_ENV`: `Dev`, `Test` or `Prod` (default); `RwsEnv::current()`, `parse`, `as_str` (18.28.0). See [environment variables](/configuration/env-vars/#environment-kind) |
 | `A2aServer` | `a2a` | A2A 1.0 agent (JSON-RPC): Agent Card, `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`; `on_message`, `at`, `wrap`. See [A2A agents](/mcp/a2a/) |
 | `AgentCard` / `Skill` | `a2a` | The agent's card at `/.well-known/agent-card.json` and the skills on it |
 | `A2aContext` / `A2aReply` | `a2a` | What a message handler gets (task, context, the continued task) and returns (a message or a task) |

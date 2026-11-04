@@ -82,6 +82,31 @@ pub trait Application {
     fn streams_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         false
     }
+
+    /// The routes this application registers, as `(method, pattern)` —
+    /// what [`AppWithState::route_entries`] returns; wrappers
+    /// ([`WithMiddleware`], [`McpServer`]) report the routes of the
+    /// application inside. For tools that describe an app (the dev MCP
+    /// server's `routes` tool), not for dispatch. Default: none. Since
+    /// 18.28.0.
+    ///
+    /// [`AppWithState::route_entries`]: crate::state::AppWithState::route_entries
+    /// [`WithMiddleware`]: crate::middleware::WithMiddleware
+    /// [`McpServer`]: crate::mcp::McpServer
+    fn registered_routes(&self) -> Vec<crate::router::RouteInfo> {
+        Vec::new()
+    }
+
+    /// The names of the middleware layers around this application's
+    /// routes, in the order a request passes them ([`Middleware::layer_name`]).
+    /// Default: none; [`WithMiddleware`] lists its layers, then the inner
+    /// application's. Since 18.28.0.
+    ///
+    /// [`Middleware::layer_name`]: crate::middleware::Middleware::layer_name
+    /// [`WithMiddleware`]: crate::middleware::WithMiddleware
+    fn middleware_names(&self) -> Vec<&'static str> {
+        Vec::new()
+    }
 }
 
 /// The future [`Application::execute_async`] returns.

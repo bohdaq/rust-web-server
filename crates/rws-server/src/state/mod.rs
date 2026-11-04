@@ -246,6 +246,7 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         self
     }
 
+    /// The registered routes as `(method, pattern)`, in registration order.
     pub fn route_entries(&self) -> Vec<crate::router::RouteInfo> {
         self.router.route_entries()
     }
@@ -372,5 +373,9 @@ impl<S: Send + Sync + 'static> Application for AppWithState<S> {
 
     fn streams_body(&self, request: &Request, connection: &ConnectionInfo) -> bool {
         self.streaming.matches(request, connection)
+    }
+
+    fn registered_routes(&self) -> Vec<crate::router::RouteInfo> {
+        self.router.route_entries()
     }
 }
