@@ -81,3 +81,22 @@ waf_ok() {
 check S3.8 "WAF: clean passes; SQLi/XSS in query, cookie, JSON body and an own rule → 403" waf_ok
 waf_metrics_ok() { [ "$(metric_sum 'rws_waf_rule_matches_total')" -gt 0 ]; }
 check S3.9 "rws_waf_rule_matches_total counts the matches" waf_metrics_ok
+
+# ReBAC ([authz] + [route.middleware.authz]) behind JWT: olga owns doc 42,
+# gina views it through group eng, mallory has nothing.
+as() { # <user> <method> <path> — the status
+  local now; now=$(date +%s)
+  curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -X "$2" -H "Authorization: Bearer $(jwt_hs256 "$E2E_JWT_SECRET" $((now + 300)) "$1")" "$RWS_URL$3"
+}
+authz_read_ok() {
+  [ "$(as olga GET /e2e/docs/42)" = 200 ] && [ "$(as gina GET /e2e/docs/42)" = 200 ] &&
+    [ "$(as olga GET /e2e/docs/43)" = 403 ]
+}
+check S3.10 "authz: owner and group member read doc 42; nobody has doc 43" authz_read_ok
+authz_deny_ok() {
+  local now; now=$(date +%s)
+  code_and_problem S3.11 403 /e2e/docs/42 -H "Authorization: Bearer $(jwt_hs256 "$E2E_JWT_SECRET" $((now + 300)) mallory)" &&
+    [ "$(as gina PUT /e2e/docs/42)" = 403 ] && [ "$(as olga PUT /e2e/docs/42)" = 200 ] &&
+    [ "$(status_of S3.11 /e2e/docs/42)" = 401 ]
+}
+check S3.11 "authz: a stranger 403 problem+json, viewer can't write, owner can, no token 401" authz_deny_ok
