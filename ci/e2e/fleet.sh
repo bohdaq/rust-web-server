@@ -103,6 +103,15 @@ def put(path, body):
 put("/rws-config/web-1.toml", open("s3.toml", "rb").read())
 put("/rws-config/web-1.toml.sig", open("s3.toml.sig", "rb").read())
 PY
+  # SeaweedFS accepts the PUTs before it can serve them: a GET right after
+  # can wait on volume placement for longer than the check below allows, and
+  # rws's first pull then hasn't returned when it gives up. Start rws once
+  # both objects read back.
+  for _ in $(seq 1 120); do
+    curl -sf -o /dev/null http://127.0.0.1:18589/rws-config/web-1.toml && curl -sf -o /dev/null http://127.0.0.1:18589/rws-config/web-1.toml.sig && break
+    sleep 0.5
+  done
+  curl -sf -o /dev/null http://127.0.0.1:18589/rws-config/web-1.toml.sig || fail "the uploaded config never read back from the S3 server"
   { printf 'port = 18582\n'; printf '[fleet]\nsource = "s3://rws-config/{node}.toml"\npublic_key = "%s"\ninterval_secs = 5\ns3_endpoint = "http://127.0.0.1:18589"\n' "$PUB"; printf '[[route]]\n[route.match]\npath = "/*"\n[route.action]\ntype = "respond"\nstatus = 200\nbody = "v0"\n'; } > rws.config.toml
   (cd www && exec env RWS_CONFIG_FILE=../rws.config.toml RWS_CONFIG_CLUSTER_NODE=web-1 "$RWS" >../rws-s3.log 2>&1) & PIDS+=($!)
   eventually 15 '[ "$(body)" = from-s3 ]' || { grep -h "fleet" rws-s3.log | tail -5; fail "the config from S3 wasn't applied"; }
