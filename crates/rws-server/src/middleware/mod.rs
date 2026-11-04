@@ -152,6 +152,20 @@ pub trait Middleware: Send + Sync {
     fn answers_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         false
     }
+
+    /// A short name for this layer, as tools that describe an app list it
+    /// ([`Application::middleware_names`]): by default the type's name
+    /// without its module path or generic parameters (`CacheLayer`). Since
+    /// 18.28.0.
+    fn layer_name(&self) -> &'static str {
+        short_type_name(std::any::type_name::<Self>())
+    }
+}
+
+/// `path::to::Type<Generic>` → `Type`.
+pub(crate) fn short_type_name(full: &'static str) -> &'static str {
+    let base = full.split('<').next().unwrap_or(full);
+    base.rsplit("::").next().unwrap_or(base)
 }
 
 /// An [`Application`] that applies a stack of [`Middleware`] layers before
@@ -222,6 +236,16 @@ impl<A: Application> Application for WithMiddleware<A> {
             }
         }
         self.inner.streams_body(request, connection)
+    }
+
+    fn registered_routes(&self) -> Vec<crate::router::RouteInfo> {
+        self.inner.registered_routes()
+    }
+
+    fn middleware_names(&self) -> Vec<&'static str> {
+        let mut names: Vec<&'static str> = self.layers.iter().map(|l| l.layer_name()).collect();
+        names.extend(self.inner.middleware_names());
+        names
     }
 }
 

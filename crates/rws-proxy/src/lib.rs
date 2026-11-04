@@ -37,6 +37,9 @@ pub use rws_server::redis_protocol;
 #[cfg(feature = "sso")]
 #[doc(hidden)]
 pub use rws_server::sso;
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+#[doc(hidden)]
+pub use rws_server::model;
 #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
 #[doc(hidden)]
 pub use rws_server::systemd;
@@ -68,6 +71,9 @@ pub mod proxy;
 pub mod proxy_config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod admin;
+/// `app.dev_mcp()`: an MCP endpoint for a coding agent (18.28.0).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod dev_mcp;
 /// Runtime state shared across replicas through Redis (18.22.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cluster;
