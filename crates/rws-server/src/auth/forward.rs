@@ -150,10 +150,10 @@ impl Middleware for ForwardAuthLayer {
         let host = request.header("Host").map(|h| h.value.to_string()).unwrap_or_default();
         builder = builder
             .header("X-Forwarded-Method", &request.method)
-            .header("X-Forwarded-Proto", if connection.tls { "https" } else { "http" })
+            .header("X-Forwarded-Proto", crate::ip_filter::request_scheme(request, &connection.client.ip, connection.tls))
             .header("X-Forwarded-Host", &host)
             .header("X-Forwarded-Uri", &request.request_uri)
-            .header("X-Forwarded-For", &connection.client.ip);
+            .header("X-Forwarded-For", &crate::ip_filter::client_ip(request, &connection.client.ip));
 
         let auth_response = match builder.send() {
             Ok(r) => r,

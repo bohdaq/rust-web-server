@@ -27,6 +27,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   TLS itself, as behind a load balancer; rws now installs its provider
   first. The user and password are passed to the driver as they are, not in
   a URL, so `@`, `:`, `/` and `#` in them work.
+- Behind a load balancer that terminates TLS, the URLs rws builds for the
+  client said `http://`: the A2A agent card's interface (gateway routes and
+  `A2aServer`), `OidcAuth`'s redirect URI when none is configured, and its
+  cookies had no `Secure`. They now take the scheme from a trusted proxy's
+  `X-Forwarded-Proto` (`ip_filter::request_scheme`). `ForwardAuthLayer`
+  sends that scheme and the client's address (not the load balancer's) as
+  `X-Forwarded-Proto` / `X-Forwarded-For`. Found by the stage suite (S7.5).
 - S3: an endpoint on a port other than the scheme's default (MinIO's
   `:9000`) got `SignatureDoesNotMatch` for every request: the signed `Host`
   left the port out, the one sent had it.
