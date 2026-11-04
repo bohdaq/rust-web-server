@@ -74,6 +74,10 @@ pub mod admin;
 /// `app.dev_mcp()`: an MCP endpoint for a coding agent (18.28.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod dev_mcp;
+/// `rws gen model|route|migration|test`: code generators for the
+/// conventional layout (18.29.0).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod generator;
 /// Runtime state shared across replicas through Redis (18.22.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cluster;

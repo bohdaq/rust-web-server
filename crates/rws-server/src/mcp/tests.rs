@@ -639,6 +639,20 @@ fn tools_call_echo_returns_content() {
     assert!(body.contains("\"isError\":false"), "should not be error: {body}");
 }
 
+/// A tool argument called `name`, sent before the tool's `name` (as a
+/// client serializing keys in order does), is not the tool's name.
+#[test]
+fn tools_call_takes_the_tool_name_from_params_not_from_arguments() {
+    let srv = make_server();
+    let req = r#"{"jsonrpc":"2.0","method":"tools/call","id":4,"params":{"arguments":{"name":"not-a-tool","text":"hi"},"name":"echo"}}"#;
+    let body = body_of(&srv.handle_request(req));
+    assert!(body.contains("\"isError\":false") && body.contains("hi"), "echo should run: {body}");
+    // No tool name of its own: the nested one is not taken.
+    let req = r#"{"jsonrpc":"2.0","method":"tools/call","id":5,"params":{"arguments":{"name":"echo"}}}"#;
+    let body = body_of(&srv.handle_request(req));
+    assert!(body.contains("Missing tool name"), "{body}");
+}
+
 #[test]
 fn tools_call_error_returns_is_error_true() {
     let srv = make_server();

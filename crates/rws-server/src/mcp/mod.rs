@@ -2870,7 +2870,7 @@ impl McpServer {
         if result.is_err() && outcome == ToolCallOutcome::Ok {
             outcome = ToolCallOutcome::Denied;
         }
-        let name = json_rpc::extract_raw(body, "params").and_then(|p| json_rpc::extract_str(&p, "name")).unwrap_or_default();
+        let name = json_rpc::extract_raw(body, "params").and_then(|p| param_str(&p, "name")).unwrap_or_default();
         let record = ToolCallRecord { tool: &name, outcome, duration: started.elapsed() };
         for observe in &self.after_call {
             observe(&observed_ctx, &record);
@@ -2881,9 +2881,11 @@ impl McpServer {
     fn call_tool_inner(&self, body: &str, ctx: McpContext, outcome: &mut ToolCallOutcome) -> Result<Result<McpContent, String>, (i32, String)> {
         let params = json_rpc::extract_raw(body, "params")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
-        let name = json_rpc::extract_str(&params, "name")
+        // `params`' own members: an argument called `name` (in `arguments`,
+        // which a client may send first) is not the tool's name.
+        let name = param_str(&params, "name")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing tool name".to_string()))?;
-        let args = json_rpc::extract_raw(&params, "arguments")
+        let args = param_member(&params, "arguments")
             .unwrap_or_else(|| "{}".to_string());
         if !self.tool_allowed(&ctx, &name) {
             return Err((json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")));
@@ -3583,6 +3585,22 @@ pub fn extract_arg(arguments: &str, name: &str) -> Option<String> {
 }
 
 // ── internal helpers ──────────────────────────────────────────────────────────
+
+/// The raw value of `params`' own member `key` — not a key of the same
+/// name nested deeper (`{"arguments":{"name":…},"name":…}`). Falls back to
+/// the first match anywhere when `params` isn't an object it can split.
+fn param_member(params: &str, key: &str) -> Option<String> {
+    match json_rpc::object_members(params) {
+        Some(members) => members.into_iter().find(|(k, _)| k == key).map(|(_, v)| v),
+        None => json_rpc::extract_raw(params, key),
+    }
+}
+
+/// [`param_member`] when it is a string, unescaped.
+fn param_str(params: &str, key: &str) -> Option<String> {
+    let raw = param_member(params, key)?;
+    raw.trim_start().starts_with('"').then(|| json_rpc::extract_str(&format!(r#"{{"v":{raw}}}"#), "v")).flatten()
+}
 
 fn json_response(body: &str) -> Response {
     let mut r = Response::new();

@@ -25,6 +25,7 @@ cargo install cargo-fuzz
 | `h2_connection` | rws's HTTP/2 server: frames, stream states, flow control (`h2_server::fuzz`) | HTTP/2 clients |
 | `config_file` | `rws.config.toml` settings loader | operator files |
 | `app_manifest` | `rws.app.toml` app manifest parser (`AppManifest::parse`) | project files |
+| `generator` | `rws gen`'s readers of lib.rs, mod.rs, Cargo.toml, route and test files, and its name and field parsers (`generator::fuzz`) | project files, `gen_*` MCP tool arguments |
 | `proxy_config` | proxy route parser | operator files |
 | `websocket_frame` | `WebSocket::read_frame_limited` | WebSocket clients |
 | `dns_srv_response` | the DNS SRV response parser (`service_discovery`) | DNS servers |

@@ -43,6 +43,26 @@ dev MCP `layout` tool reports it). Put new code where it says:
 | `migrations/` | `NNNN_name.sql` + `NNNN_name.down.sql` |
 | `tests/` | integration tests: `TestClient::new(my_app::app())` |
 
+For a new model, resource, migration or test use `rws gen` (18.29) instead of
+writing it from memory: its output matches the installed release's API, it
+puts each file where `rws.app.toml` says and registers it, and it never
+overwrites (a file in the way is a conflict with a diff, exit 1). Run `cargo
+test` after it; the generated test is the starting point.
+
+```sh
+rws gen model Post title:String views:i64 'note:Option<String>'   # src/models/post.rs + migrations/NNNN_create_posts.sql
+rws gen route posts            # src/routes/posts.rs (list/show/create/update/remove), registered in app()
+rws gen test posts             # tests/posts.rs against app()
+rws gen migration add_index_to_posts
+rws gen route posts --dry-run --json   # the plan and diffs, nothing written
+```
+
+Field types: `i64`, `i32`, `f64`, `bool`, `String`, `Option<T>`. The generated
+routes keep items in memory in the module: swap the store for the app's state
+or `Post::repository(&pool)` when they must persist. Through the dev MCP
+endpoint the same are the `gen_model`, `gen_route`, `gen_migration`,
+`gen_test` tools.
+
 ## The shape of an app
 
 ```rust

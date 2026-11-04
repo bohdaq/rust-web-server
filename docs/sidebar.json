@@ -108,6 +108,10 @@
         "link": "/building-apps/project-layout/"
       },
       {
+        "label": "Generators (rws gen)",
+        "link": "/building-apps/generators/"
+      },
+      {
         "label": "Controllers",
         "link": "/building-apps/controllers/"
       },

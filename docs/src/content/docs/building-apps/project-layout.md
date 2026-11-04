@@ -6,7 +6,15 @@ description: The conventional layout of an rws application — where routes, mod
 Since 18.28.0 an rws application has one conventional layout, so a person or
 a coding agent can find (and add) a route, a model or a migration without
 reading the project first. The [starters](/getting-started/ai-agents/#start-from-a-starter)
-use it; the [dev MCP endpoint](/mcp/dev-tools/)'s `layout` tool reports it.
+use it; the [dev MCP endpoint](/mcp/dev-tools/)'s `layout` tool reports it,
+and [`rws gen`](/building-apps/generators/) (18.29.0) writes models, routes,
+migrations and tests into it:
+
+```sh
+rws gen model Post title:String       # src/models/post.rs + migrations/0001_create_posts.sql
+rws gen route posts                   # src/routes/posts.rs, registered in app()
+rws gen test posts                    # tests/posts.rs
+```
 
 ```text
 my-app/
@@ -131,7 +139,7 @@ static = "frontend/dist"   # only what differs; the rest keep their defaults
 - Unknown keys and tables are warnings, not errors, so a manifest written
   for a newer release still loads.
 - The manifest describes the project; rws doesn't move files or change
-  routing because of it. The `mcp` starter, whose "routes" are MCP tools,
+  routing because of it. `rws gen` writes where it says. The `mcp` starter, whose "routes" are MCP tools,
   says `routes = "src/tools"`.
 
 Read it in code with `app_manifest::AppManifest`:
