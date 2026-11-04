@@ -83,6 +83,7 @@ let public_url = store.url(&key);
 | `RWS_S3_ACCESS_KEY` | optional — falls back to workload identity (below) when unset |
 | `RWS_S3_SECRET_KEY` | optional — falls back to workload identity (below) when unset |
 | `RWS_S3_ENDPOINT` | `https://s3.{region}.amazonaws.com` |
+| `RWS_S3_CA_FILE` | — (the public roots) |
 
 Point `RWS_S3_ENDPOINT` at a custom host to use a non-AWS provider:
 
@@ -92,7 +93,16 @@ RWS_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 
 # MinIO (local development)
 RWS_S3_ENDPOINT=http://localhost:9000
+
+# Ceph RGW inside a Kubernetes cluster (plain HTTP on the cluster network)
+RWS_S3_ENDPOINT=http://rook-ceph-rgw-my-store.rook-ceph.svc
 ```
+
+An endpoint whose certificate a private CA signed needs that CA:
+`RWS_S3_CA_FILE=/etc/s3/ca.pem` (PEM), or `S3Storage::new(config).with_ca_file(path)?`.
+Endpoints on a port other than the scheme's default (`:9000`) work since
+18.28.0; before, the signature left the port out and every request was
+refused.
 
 Or construct `S3Config` directly instead of reading the environment:
 

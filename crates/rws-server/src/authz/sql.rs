@@ -59,9 +59,13 @@ impl SqlStore {
         SqlStore::new(pool)
     }
 
-    /// [`open`](Self::open) with `RWS_DB_*` from the environment.
+    /// [`open`](Self::open) with `RWS_DB_*` from the environment, TLS
+    /// (`RWS_DB_SSL_*`) included.
     pub fn from_env() -> Result<SqlStore, AuthzError> {
-        SqlStore::open(DbConfig::from_env().map_err(store_error)?)
+        let config = DbConfig::from_env().map_err(store_error)?;
+        let tls = crate::model::DbTls::from_env().map_err(store_error)?;
+        let pool = run(async move { DbPool::new_with_tls(config, tls).await })?.map_err(store_error)?;
+        SqlStore::new(pool)
     }
 
     /// Use `pool` and create the table if it's missing. Queries run on the

@@ -1,0 +1,17 @@
+# Context for ci/stage/app/Dockerfile only (BuildKit reads
+# <Dockerfile>.dockerignore before the root .dockerignore). Allow-list: what
+# the rust-web-server workspace and this crate need to build.
+*
+!Cargo.toml
+!Cargo.lock
+!README.md
+!src
+!crates
+!rws-macros
+!rws-wasm-shim
+!examples
+!.github/workflows
+!ci/stage/app
+**/target
+**/node_modules
+ci/stage/app/Dockerfile*
