@@ -393,6 +393,7 @@ fn the_host_header_carries_a_non_default_port() {
 /// `Client::ca_file`: an HTTPS server whose certificate a private CA signed
 /// is trusted with that CA, and refused with the public roots.
 #[test]
+#[cfg(any(feature = "http-client", feature = "http2"))] // `ca_file` and TLS need one of them
 fn a_private_ca_is_trusted_with_ca_file() {
     use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
     use std::io::{Read, Write};
