@@ -19,5 +19,6 @@ a rerun shows what is fixed. Kinds: **bug** (wrong behaviour), **gap**
 | S1.18 CORS on routes | bug | `[cors]` ("applied to every response") is only applied to static files: `[[route]]` responses (respond, proxy) get no `Access-Control-*` headers and a preflight `OPTIONS` goes to the route. | fixed (18.27.0) |
 | S8.4 public metrics | gap | `/metrics` is served on the main listener to anyone: through the public gateway it shows upstream names, backend addresses and traffic counts. There's no setting to keep it to scrapers. | fixed (18.27.0) |
 | S8.9 drain | incomplete | One run of a rolling restart under traffic got one `503` from the gateway (699 × 200): on `SIGTERM` rws stops accepting at once, before the gateway has taken the pod's endpoint out. A second run was clean. | fixed (18.27.0) |
+| S9.4 FastCGI script path | bug | rws sends php-fpm `SCRIPT_FILENAME` (and `DOCUMENT_ROOT`) with symlinks resolved (`canonicalize`). php-fpm in another container sees the same files under the same path but not the same symlink targets (a ConfigMap volume's `..2026_…` directory differs per pod), so PHP answers `File not found.` for every script. nginx sends `$document_root$fastcgi_script_name` (lexical) by default. | open |
 
 Rerun on 18.27.0 (2026-11-03): 50 ok, nothing known or failing.

@@ -114,3 +114,12 @@ cors_route_ok() {
   [ "$(header_of access-control-allow-origin)" = https://e2e.rws8.tech ]
 }
 check S1.18 "[cors] on [[route]] responses (respond and proxy)" cors_route_ok
+
+# Host routing: the same pods under a second gateway hostname (rws-alt);
+# [route.match] host picks the route, any other host gets the default.
+vhost_ok() {
+  [ -n "$ALT_URL" ] || { echo "    no rws-alt hostname" >&2; return 1; }
+  [ "$(curl -sS --max-time 20 "$ALT_URL/e2e/vhost")" = vhost-alt ] &&
+    [ "$(curl -sS --max-time 20 "$RWS_URL/e2e/vhost")" = vhost-default ]
+}
+check S1.19 "[route.match] host: the second hostname gets its own route" vhost_ok

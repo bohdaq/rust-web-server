@@ -4,6 +4,29 @@
 # ConfigMap). Secrets come from the environment run.sh sets per run.
 watch = true
 
+# The admin API on its own listener (the rws-admin Service, through the
+# gateway); the token is per run. [cluster] shares its runtime changes
+# (blocklist, maintenance, flags) between the replicas through valkey.
+[admin]
+listen    = "0.0.0.0:9901"
+token_env = "RWS_ADMIN_TOKEN"
+
+[cluster]
+redis = "valkey:6379"
+
+# ReBAC for the /e2e/docs/* routes (S3).
+[authz]
+tuples = [
+  "doc:42#owner@user:olga",
+  "group:eng#member@user:gina",
+  "doc:42#viewer@group:eng#member",
+]
+[authz.type.group]
+member = "user"
+[authz.type.doc]
+owner  = "user"
+viewer = "user | group#member | owner"
+
 [cors]
 allow_origins     = "https://e2e.rws8.tech"
 allow_methods     = "GET,POST,OPTIONS"
@@ -34,6 +57,10 @@ name     = "sticky"
 backends = ["whoami-a:8080", "whoami-b:8080", "whoami-c:8080"]
 [upstream.sticky]
 cookie = "rws_e2e_backend"
+
+[[upstream]]
+name     = "echo"
+backends = ["echo:8080"]
 
 [[upstream]]
 name     = "dead"
@@ -251,3 +278,93 @@ mode = "block"
 id     = 1001
 field  = "path"
 prefix = ["/e2e/waf/wp-login.php"]
+
+[[route]]
+name = "authz-read"
+[route.match]
+path   = "/e2e/docs/*"
+method = "GET"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "the document"
+[route.middleware.auth]
+type       = "jwt"
+secret_env = "E2E_JWT_SECRET"
+[route.middleware.authz]
+relation = "viewer"
+object   = "doc:{path:3}"
+
+[[route]]
+name = "authz-write"
+[route.match]
+path   = "/e2e/docs/*"
+method = "PUT"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "saved"
+[route.middleware.auth]
+type       = "jwt"
+secret_env = "E2E_JWT_SECRET"
+[route.middleware.authz]
+relation = "owner"
+object   = "doc:{path:3}"
+
+# ── S1 host routing: the rws-alt Service's hostname (run.sh fills it in) ─────
+[[route]]
+name = "vhost-alt"
+[route.match]
+host = "@ALT_HOST@"
+path = "/e2e/vhost"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "vhost-alt"
+
+[[route]]
+name = "vhost-default"
+[route.match]
+path = "/e2e/vhost"
+[route.action]
+type = "respond"
+[route.action.respond]
+body = "vhost-default"
+
+# ── S6 realtime: WebSocket upgrades relayed by a proxy route ─────────────────
+[[route]]
+name = "ws"
+[route.match]
+path = "/e2e/ws/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream = "echo"
+
+# ── S9 extensibility ─────────────────────────────────────────────────────────
+# examples/wasm_plugin: tags requests (x-plugin), answers x-block: yes itself
+# (403), stamps responses with its config.
+[[route]]
+name = "wasm"
+[route.match]
+path = "/e2e/wasm/*"
+[route.action]
+type = "proxy"
+[route.action.proxy]
+upstream = "whoami"
+[route.middleware.wasm]
+module    = "/etc/rws-wasm/tag.wasm"
+fuel      = 5000000
+memory_mb = 8
+config    = "from-stage"
+
+[[route]]
+name = "php"
+[route.match]
+path = "/e2e/php/*"
+[route.action]
+type    = "fastcgi"
+address = "php:9000"
+root    = "/var/www"
+[route.action.params]
+APP_ENV = "e2e"
