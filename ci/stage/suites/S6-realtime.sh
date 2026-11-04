@@ -26,12 +26,21 @@ sse_ok() {
   [ $((last - first)) -ge 3000 ]
 }
 app_check S6.4 "SSE through the gateway: 5 events, 1 s apart, not buffered" sse_ok
-# The kube-dc gateway ends a stream that has sent nothing for ~15 s (found
-# 2026-11-04: 16 s through it, the full 40 s straight to the app): an event
-# every 10 s, for 2 minutes.
+# The kube-dc gateway (Envoy) ends every response after 15 s, events or
+# not (found 2026-11-04: 3 events 5 s apart, 2 events 10 s apart, both cut
+# at 15 s; WebSockets aren't affected). So: 2 minutes, an event every 10 s,
+# through the gateway; if that's cut, the same stream in the cluster tells
+# rws apart from the gateway.
+SSE_LONG="/app/sse?count=12&every_ms=10000"
 sse_long_ok() {
-  local n; n=$(curl -sS -N --max-time 150 "$APP_URL/app/sse?count=12&every_ms=10000" | grep -c '^data: ')
-  echo "    $n of 12 events over 2 min" >&2
+  local n; n=$(curl -sS -N --max-time 150 "$APP_URL$SSE_LONG" 2>/dev/null | grep -c '^data: ')
+  echo "    through the gateway: $n of 12 events" >&2
   [ "$n" = 12 ]
 }
-app_check S6.5 "an SSE stream with an event every 10 s lasts 2 min" sse_long_ok
+sse_long_incluster() { [ "$(incluster -N --max-time 150 "http://app:8080$SSE_LONG" | grep -c '^data: ')" = 12 ]; }
+if [ "${APP_READY:-0}" = 1 ] && ! sse_long_ok; then
+  if sse_long_incluster; then blocked S6.5 "the kube-dc gateway ends responses at 15 s (12 of 12 events in the cluster)"
+  else fail S6.5 "an SSE stream with an event every 10 s lasts 2 min (cut in the cluster too)"; fi
+else
+  app_check S6.5 "an SSE stream with an event every 10 s lasts 2 min" true
+fi
