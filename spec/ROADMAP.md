@@ -316,7 +316,7 @@ Plan and gap review for developers and enterprises: [ADOPTION.md](ADOPTION.md) (
 
 ## 18.33.0 — Enterprise readiness
 
-- **#102** **Logs for security monitoring** — OTLP logs, syslog/CEF, IP anonymisation and header redaction in access logs, a hash-chained audit log.
+- **#102** **Logs for security monitoring** — OTLP logs, syslog/CEF, IP anonymisation and header redaction in access logs, a hash-chained audit log. *Implemented 2026-11-04 (Unreleased in CHANGELOG): OTLP logs with trace ids (`ci/e2e/otlp.sh` checks them), RFC 5424 syslog over UDP/TCP/Unix, `truncate`/`hash` IP anonymisation, query and header redaction, the audit log's hash chain with `rws ctl audit --verify`. Left: a CEF line format, syslog over TLS (RFC 5425).*
 - **#103** **Supply chain** — OpenSSF Scorecard, reproducible builds, a SLSA statement, a signed Helm chart.
 - **#104** **HA/DR and upgrade runbook** — with an N-1 → N compatibility e2e.
 - **#105** **SCIM and LDAP for admin users**, admin roles scoped per host.

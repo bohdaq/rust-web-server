@@ -139,6 +139,9 @@ fn telemetry() {
     if rust_web_server::otel::metrics::start_from_env() {
         println!("OTLP metrics export on.");
     }
+    if rust_web_server::otel::logs::start_from_env() {
+        println!("OTLP log export on (access-log records).");
+    }
     let tracing = rust_web_server::otel::traces_configured();
     if tracing {
         rust_web_server::otel::setup_from_env();

@@ -30,6 +30,34 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `Middleware::layer_name()`, default methods that let tools describe an app;
   `WithMiddleware`, `McpServer` and `TimeoutLayer` forward them.
 
+- **Logs for security monitoring** (#102). All opt-in; with none of it set
+  the access log is byte for byte what it was.
+  - **IP anonymisation**: `access_log_anonymize_ip = "truncate"` writes
+    client addresses as their IPv4 /24 or IPv6 /48, `"hash"` as a keyed
+    HMAC-SHA256 pseudonym (`access_log_ip_hash_secret`) — in JSON and
+    combined lines (also for addresses from `X-Forwarded-For`), OTLP log
+    records and `recent_requests`.
+  - **Redaction**: `log_redact_query = ["token", "api_key"]` logs those
+    query values as `REDACTED` in paths and `Referer`s; `log_redact_headers`
+    does the same for header values. `Authorization`, `Proxy-Authorization`,
+    `Cookie` and `Set-Cookie` are never logged (the access log writes only
+    `Host`, `User-Agent` and `Referer`; `Log::request_response` now shows
+    them as `REDACTED`).
+  - **Syslog**: `access_log_syslog = "udp://host:514"`, `tcp://…` (RFC 6587
+    octet counting) or `unix:///dev/log` sends every line as an RFC 5424
+    message (facility `access_log_syslog_facility`, default `local0`), from
+    a background thread.
+  - **OTLP logs**: with `OTEL_LOGS_EXPORTER=otlp` access-log records go to
+    the collector's `/v1/logs` (OTLP/HTTP JSON), carrying the request's
+    trace and span ids when it was traced; batched per thread and sent off
+    the request path (`otel::logs`). `ci/e2e/otlp.sh` checks them.
+  - **Tamper-evident audit log**: lines appended to `[admin] audit_log`
+    carry `prev` (SHA-256 of the line before) and `hash`;
+    `GET /admin/api/v1/audit/verify` and `rws ctl audit --verify [FILE]`
+    report the first edited, removed or inserted entry. Files from before
+    keep working (their lines start the chain).
+  - `rws --check` validates the new settings.
+
 - **Compile-checked routes (#86).** `#[get("/posts/{id}")]` & co. on a
   function whose arguments are extractors — `Path<T>`, `Query<T>`,
   `Form<T>` (`serde`), `Json<T>`, `State<S>` or `&S`, `Body`, `BodyText`,

@@ -1446,7 +1446,7 @@ fn finish(request: Request, result: Result<Result<Response, String>, String>, pe
     if https {
         response.headers.push(Header::get_hsts_header());
     }
-    Log::log_access(&request, &response, &peer);
+    Log::log_served(&request, &mut response, &peer);
     let is_head = request.method == crate::request::METHOD.head;
     Some((response, is_head))
 }

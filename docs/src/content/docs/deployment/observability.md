@@ -249,6 +249,102 @@ kubectl logs -f deployment/my-rws-app
 # Ship to Loki via Promtail — no application config required; just label the pod
 ```
 
+### Anonymised addresses and redaction
+
+Since 18.33.0 the access log can leave out what it doesn't need to keep
+about people. All of it is off by default, and then every line is byte for
+byte what it was; the settings are hot-reloadable.
+
+```toml
+access_log_anonymize_ip     = "truncate"            # or "hash"; default "off"
+# access_log_ip_hash_secret = "…"                   # the key for "hash"
+log_redact_query            = ["token", "api_key"]  # query parameter values → REDACTED
+log_redact_headers          = ["x-api-key"]         # header values → REDACTED
+```
+
+- **`access_log_anonymize_ip`**: `truncate` writes an IPv4 address as its
+  /24 and an IPv6 address as its /48 (`203.0.113.0`, `2001:db8:1::`), as
+  Google Analytics and nginx `map` recipes do. `hash` writes 16 hex digits
+  of HMAC-SHA256(`access_log_ip_hash_secret`, address) instead: one client
+  keeps one pseudonym, so you can still count and follow a client, but the
+  address can't be recovered without the key (and an IPv4 address space is
+  too small to hash without one — with no secret `hash` truncates). It
+  applies to the client address in JSON and combined lines, including the
+  one taken from a trusted proxy's `X-Forwarded-For`, to
+  [OTLP log records](#otlp-logs) and to the `recent_requests` list.
+  [Traffic insights](/deployment/traffic/) keep no addresses either way; the
+  [IP blocklist](/features/ip-filter/) and rate limits still see real ones.
+- **`log_redact_query`**: the values of these query parameters (any case)
+  are written as `REDACTED` in the logged path and `Referer`:
+  `/login?user=ann&token=REDACTED`.
+- **Headers.** An access-log line carries three request headers: `Host`,
+  `User-Agent` and `Referer` (JSON only). `Authorization`,
+  `Proxy-Authorization`, `Cookie` and `Set-Cookie` are never written —
+  not in the access log, not in `recent_requests`, and shown as `REDACTED`
+  in `Log::request_response`'s debugging dump. `log_redact_headers` adds
+  names whose values are written as `REDACTED` wherever a header is logged
+  (`user-agent`, `referer`, or your own in the dump).
+
+### Syslog
+
+`access_log_syslog` (since 18.33.0) sends every access-log line to a syslog
+server too, besides stdout or the [file](#writing-to-a-file):
+
+```toml
+log_format                 = "json"                 # what SIEMs parse best
+access_log_syslog          = "tcp://siem.internal:6514"   # or udp://host:514, unix:///dev/log
+access_log_syslog_facility = "local0"               # default; any facility name or 0–23
+```
+
+Each line is one RFC 5424 message, severity `info`, APP-NAME `rws`, MSGID
+`access`, the host name from `HOSTNAME` (else `/etc/hostname`):
+
+```
+<134>1 2026-11-04T12:00:00Z web-1 rws 4242 access - {"time":"2026-11-04T12:00:00Z","remote_addr":"203.0.113.0",…}
+```
+
+Over TCP messages are framed by octet counting (RFC 6587: `LEN SP MSG`),
+which rsyslog, syslog-ng, Splunk and Graylog accept; over UDP and Unix
+sockets each is one datagram. Nothing is sent on the request path: the
+background thread that flushes the access log every 100 ms hands each
+batch to the thread `rws-syslog`. While the server is unreachable up to
+8 MiB of lines wait, then lines are dropped; a TCP connection is re-made
+on the next batch. Read at startup; plain TCP only (put a local relay in
+front for TLS).
+
+### OTLP logs
+
+With `OTEL_LOGS_EXPORTER=otlp` (since 18.33.0) every access-log record also
+goes to an OpenTelemetry collector as an OTLP/HTTP JSON log record
+(`/v1/logs`), next to [metrics](#otlp-metrics-export) and
+[traces](#tracing):
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # logs go to /v1/logs
+export OTEL_LOGS_EXPORTER=otlp
+rws
+```
+
+| Variable | Meaning |
+|---|---|
+| `OTEL_LOGS_EXPORTER` | `otlp` turns log export on (off by default) |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Full logs URL, used as is; else the base URL + `/v1/logs`, else `http://localhost:4318/v1/logs` |
+| `OTEL_BLRP_SCHEDULE_DELAY` | Milliseconds between exports (default `1000`) |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | Request headers, `key=value,…` |
+
+A record's body is the access-log line (in `log_format`; JSON when that is
+`off`, so you can ship only OTLP), with the settings above applied. Its
+attributes are `http.request.method`, `url.path`,
+`http.response.status_code`, `client.address` and
+`network.protocol.version`; its severity INFO, WARN for 4xx and ERROR for
+5xx. When the request was traced (the binary traces when an OTLP endpoint
+is set), the record carries the server span's `traceId` and `spanId`, so a
+backend links each log line to its trace. Records are formatted into a
+buffer per thread and sent by the thread `rws-otlp-logs`; a thread with more
+than 1 MiB unsent drops records while the collector is down. The rest goes
+out on SIGTERM. From Rust: `otel::logs::start(LogsExportConfig { .. })` or
+`otel::logs::start_from_env()`.
+
 
 ## Tracing
 

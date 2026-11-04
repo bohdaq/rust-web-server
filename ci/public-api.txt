@@ -7,6 +7,7 @@ impl !core::marker::Freeze for rust_web_server::cluster::MemoryStore
 impl !core::marker::Freeze for rust_web_server::cluster::RedisStore
 impl !core::marker::Freeze for rust_web_server::feature::FeatureStore
 impl !core::marker::Freeze for rust_web_server::fleet::Fleet
+impl !core::marker::Freeze for rust_web_server::log::syslog::Sender
 impl !core::marker::Freeze for rust_web_server::otel::CapturingExporter
 impl !core::marker::Freeze for rust_web_server::otel::Span
 impl !core::marker::Freeze for rust_web_server::proxy::GrpcProxy
@@ -132,6 +133,7 @@ impl core::clone::Clone for rust_web_server::admin::AdminApi
 impl core::clone::Clone for rust_web_server::admin::AdminConfig
 impl core::clone::Clone for rust_web_server::admin::AdminOidcConfig
 impl core::clone::Clone for rust_web_server::admin::access::AuditEntry
+impl core::clone::Clone for rust_web_server::admin::access::ChainReport
 impl core::clone::Clone for rust_web_server::admin::access::Principal
 impl core::clone::Clone for rust_web_server::admin::access::Role
 impl core::clone::Clone for rust_web_server::admin::access::TokenUser
@@ -275,6 +277,7 @@ impl core::clone::Clone for rust_web_server::llm::Api
 impl core::clone::Clone for rust_web_server::llm::LlmProxy
 impl core::clone::Clone for rust_web_server::llm::Provider
 impl core::clone::Clone for rust_web_server::llm::usage::Usage
+impl core::clone::Clone for rust_web_server::log::syslog::Target
 impl core::clone::Clone for rust_web_server::mcp::InputRequired
 impl core::clone::Clone for rust_web_server::mcp::LogLevel
 impl core::clone::Clone for rust_web_server::mcp::McpContent
@@ -314,6 +317,8 @@ impl core::clone::Clone for rust_web_server::otel::SpanKind
 impl core::clone::Clone for rust_web_server::otel::TraceContext
 impl core::clone::Clone for rust_web_server::otel::TracingConfig
 impl core::clone::Clone for rust_web_server::otel::baggage::Baggage
+impl core::clone::Clone for rust_web_server::otel::logs::LogsExportConfig
+impl core::clone::Clone for rust_web_server::otel::logs::TraceIds
 impl core::clone::Clone for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::clone::Clone for rust_web_server::proxy::mirror::Mirror
 impl core::clone::Clone for rust_web_server::proxy::mirror::MirrorLayer
@@ -376,6 +381,8 @@ impl core::clone::Clone for rust_web_server::scheduler::cron::CronSchedule
 impl core::clone::Clone for rust_web_server::server::Address
 impl core::clone::Clone for rust_web_server::server::ConnectionInfo
 impl core::clone::Clone for rust_web_server::server_config::ServerConfig
+impl core::clone::Clone for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::clone::Clone for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::clone::Clone for rust_web_server::service_discovery::BackendPool
 impl core::clone::Clone for rust_web_server::session::DbSessionStore
 impl core::clone::Clone for rust_web_server::session::RedisSessionStore
@@ -452,6 +459,7 @@ impl core::cmp::Eq for rust_web_server::i18n::AcceptLanguage
 impl core::cmp::Eq for rust_web_server::ingress::PathType
 impl core::cmp::Eq for rust_web_server::llm::Api
 impl core::cmp::Eq for rust_web_server::llm::usage::Usage
+impl core::cmp::Eq for rust_web_server::log::syslog::Target
 impl core::cmp::Eq for rust_web_server::mcp::LogLevel
 impl core::cmp::Eq for rust_web_server::mcp::McpIcon
 impl core::cmp::Eq for rust_web_server::mcp::TaskError
@@ -463,6 +471,7 @@ impl core::cmp::Eq for rust_web_server::model::query::Order
 impl core::cmp::Eq for rust_web_server::otel::SpanKind
 impl core::cmp::Eq for rust_web_server::otel::TraceContext
 impl core::cmp::Eq for rust_web_server::otel::baggage::Baggage
+impl core::cmp::Eq for rust_web_server::otel::logs::TraceIds
 impl core::cmp::Eq for rust_web_server::proxy::status::ProxyError
 impl core::cmp::Eq for rust_web_server::proxy_config::UpstreamHost
 impl core::cmp::Eq for rust_web_server::range::ContentRange
@@ -478,6 +487,7 @@ impl core::cmp::Eq for rust_web_server::router::RouteConflict
 impl core::cmp::Eq for rust_web_server::router::RouteConflictKind
 impl core::cmp::Eq for rust_web_server::rsa_key::RsaPublicKey
 impl core::cmp::Eq for rust_web_server::server::proxy_protocol::Parsed
+impl core::cmp::Eq for rust_web_server::server_config::log_privacy::AnonymizeIp
 impl core::cmp::Eq for rust_web_server::sse::SseClosed
 impl core::cmp::Eq for rust_web_server::sso::client_store::GrantType
 impl core::cmp::Eq for rust_web_server::traffic::Class
@@ -509,6 +519,7 @@ impl core::cmp::PartialEq for rust_web_server::acme::ChallengeType
 impl core::cmp::PartialEq for rust_web_server::admin::AdminConfig
 impl core::cmp::PartialEq for rust_web_server::admin::AdminOidcConfig
 impl core::cmp::PartialEq for rust_web_server::admin::access::AuditEntry
+impl core::cmp::PartialEq for rust_web_server::admin::access::ChainReport
 impl core::cmp::PartialEq for rust_web_server::admin::access::Principal
 impl core::cmp::PartialEq for rust_web_server::admin::access::Role
 impl core::cmp::PartialEq for rust_web_server::admin::access::TokenUser
@@ -633,6 +644,7 @@ impl core::cmp::PartialEq for rust_web_server::ip_filter::IpRangeEntry
 impl core::cmp::PartialEq for rust_web_server::ip_filter::TrustedProxies
 impl core::cmp::PartialEq for rust_web_server::llm::Api
 impl core::cmp::PartialEq for rust_web_server::llm::usage::Usage
+impl core::cmp::PartialEq for rust_web_server::log::syslog::Target
 impl core::cmp::PartialEq for rust_web_server::mcp::LogLevel
 impl core::cmp::PartialEq for rust_web_server::mcp::McpIcon
 impl core::cmp::PartialEq for rust_web_server::mcp::TaskError
@@ -649,6 +661,7 @@ impl core::cmp::PartialEq for rust_web_server::otel::AttributeValue
 impl core::cmp::PartialEq for rust_web_server::otel::SpanKind
 impl core::cmp::PartialEq for rust_web_server::otel::TraceContext
 impl core::cmp::PartialEq for rust_web_server::otel::baggage::Baggage
+impl core::cmp::PartialEq for rust_web_server::otel::logs::TraceIds
 impl core::cmp::PartialEq for rust_web_server::proxy::status::ProxyError
 impl core::cmp::PartialEq for rust_web_server::proxy_config::AuthConfig
 impl core::cmp::PartialEq for rust_web_server::proxy_config::BreakerConfig
@@ -684,6 +697,8 @@ impl core::cmp::PartialEq for rust_web_server::router::RouteConflictKind
 impl core::cmp::PartialEq for rust_web_server::rsa_key::RsaPublicKey
 impl core::cmp::PartialEq for rust_web_server::server::proxy_protocol::Parsed
 impl core::cmp::PartialEq for rust_web_server::server_config::ServerConfig
+impl core::cmp::PartialEq for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::cmp::PartialEq for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::cmp::PartialEq for rust_web_server::sse::SseClosed
 impl core::cmp::PartialEq for rust_web_server::sso::client_store::GrantType
 impl core::cmp::PartialEq for rust_web_server::sso::oidc_auth::SignedIn
@@ -736,6 +751,7 @@ impl core::convert::From<rust_web_server::core::base64::DecodeError> for alloc::
 impl core::convert::From<u32> for rust_web_server::otel::AttributeValue
 impl core::default::Default for rust_web_server::admin::AdminConfig
 impl core::default::Default for rust_web_server::admin::AdminOidcConfig
+impl core::default::Default for rust_web_server::admin::access::ChainReport
 impl core::default::Default for rust_web_server::authz::rebac::MemoryStore
 impl core::default::Default for rust_web_server::authz::rebac::Schema
 impl core::default::Default for rust_web_server::authz::rebac::TupleFilter
@@ -867,6 +883,8 @@ impl core::default::Default for rust_web_server::response::Trailers
 impl core::default::Default for rust_web_server::scheduler::Scheduler
 impl core::default::Default for rust_web_server::server::ConnectionInfo
 impl core::default::Default for rust_web_server::server_config::ServerConfig
+impl core::default::Default for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::default::Default for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::default::Default for rust_web_server::sse::SseStream
 impl core::default::Default for rust_web_server::sso::client_store::ClientStore
 impl core::default::Default for rust_web_server::sso::pkce::PkceVerifier
@@ -904,6 +922,7 @@ impl core::fmt::Debug for rust_web_server::acme::dns_api::Secret
 impl core::fmt::Debug for rust_web_server::admin::AdminConfig
 impl core::fmt::Debug for rust_web_server::admin::AdminOidcConfig
 impl core::fmt::Debug for rust_web_server::admin::access::AuditEntry
+impl core::fmt::Debug for rust_web_server::admin::access::ChainReport
 impl core::fmt::Debug for rust_web_server::admin::access::Principal
 impl core::fmt::Debug for rust_web_server::admin::access::Role
 impl core::fmt::Debug for rust_web_server::admin::access::TokenUser
@@ -1049,6 +1068,7 @@ impl core::fmt::Debug for rust_web_server::llm::Api
 impl core::fmt::Debug for rust_web_server::llm::Provider
 impl core::fmt::Debug for rust_web_server::llm::usage::Usage
 impl core::fmt::Debug for rust_web_server::llm::usage::UsageParser
+impl core::fmt::Debug for rust_web_server::log::syslog::Target
 impl core::fmt::Debug for rust_web_server::mcp::InputRequired
 impl core::fmt::Debug for rust_web_server::mcp::LogLevel
 impl core::fmt::Debug for rust_web_server::mcp::McpContent
@@ -1086,6 +1106,8 @@ impl core::fmt::Debug for rust_web_server::otel::SpanKind
 impl core::fmt::Debug for rust_web_server::otel::TraceContext
 impl core::fmt::Debug for rust_web_server::otel::TracingConfig
 impl core::fmt::Debug for rust_web_server::otel::baggage::Baggage
+impl core::fmt::Debug for rust_web_server::otel::logs::LogsExportConfig
+impl core::fmt::Debug for rust_web_server::otel::logs::TraceIds
 impl core::fmt::Debug for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::fmt::Debug for rust_web_server::proxy::mirror::Mirror
 impl core::fmt::Debug for rust_web_server::proxy::mirror::MirrorLayer
@@ -1141,6 +1163,8 @@ impl core::fmt::Debug for rust_web_server::rsa_key::RsaPublicKey
 impl core::fmt::Debug for rust_web_server::scheduler::cron::CronSchedule
 impl core::fmt::Debug for rust_web_server::server::proxy_protocol::Parsed
 impl core::fmt::Debug for rust_web_server::server_config::ServerConfig
+impl core::fmt::Debug for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::fmt::Debug for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::fmt::Debug for rust_web_server::sse::SseClosed
 impl core::fmt::Debug for rust_web_server::sso::SsoError
 impl core::fmt::Debug for rust_web_server::sso::client_store::ClientStore
@@ -1218,8 +1242,10 @@ impl core::marker::Copy for rust_web_server::model::connection::DbSslMode
 impl core::marker::Copy for rust_web_server::model::query::Order
 impl core::marker::Copy for rust_web_server::otel::SpanKind
 impl core::marker::Copy for rust_web_server::otel::TraceContext
+impl core::marker::Copy for rust_web_server::otel::logs::TraceIds
 impl core::marker::Copy for rust_web_server::proxy::status::ProxyError
 impl core::marker::Copy for rust_web_server::router::RouteConflictKind
+impl core::marker::Copy for rust_web_server::server_config::log_privacy::AnonymizeIp
 impl core::marker::Copy for rust_web_server::sse::SseClosed
 impl core::marker::Copy for rust_web_server::sso::client_store::GrantType
 impl core::marker::Copy for rust_web_server::traffic::Group
@@ -1253,6 +1279,7 @@ impl core::marker::Freeze for rust_web_server::admin::AdminApi
 impl core::marker::Freeze for rust_web_server::admin::AdminConfig
 impl core::marker::Freeze for rust_web_server::admin::AdminOidcConfig
 impl core::marker::Freeze for rust_web_server::admin::access::AuditEntry
+impl core::marker::Freeze for rust_web_server::admin::access::ChainReport
 impl core::marker::Freeze for rust_web_server::admin::access::McpAuditLayer
 impl core::marker::Freeze for rust_web_server::admin::access::Principal
 impl core::marker::Freeze for rust_web_server::admin::access::Role
@@ -1468,6 +1495,7 @@ impl core::marker::Freeze for rust_web_server::llm::Provider
 impl core::marker::Freeze for rust_web_server::llm::usage::Usage
 impl core::marker::Freeze for rust_web_server::llm::usage::UsageParser
 impl core::marker::Freeze for rust_web_server::log::Log
+impl core::marker::Freeze for rust_web_server::log::syslog::Target
 impl core::marker::Freeze for rust_web_server::maintenance::MaintenanceLayer
 impl core::marker::Freeze for rust_web_server::mcp::InputRequired
 impl core::marker::Freeze for rust_web_server::mcp::LogLevel
@@ -1523,6 +1551,8 @@ impl core::marker::Freeze for rust_web_server::otel::StdoutExporter
 impl core::marker::Freeze for rust_web_server::otel::TraceContext
 impl core::marker::Freeze for rust_web_server::otel::TracingConfig
 impl core::marker::Freeze for rust_web_server::otel::baggage::Baggage
+impl core::marker::Freeze for rust_web_server::otel::logs::LogsExportConfig
+impl core::marker::Freeze for rust_web_server::otel::logs::TraceIds
 impl core::marker::Freeze for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::marker::Freeze for rust_web_server::proxy::LoadBalancing
 impl core::marker::Freeze for rust_web_server::proxy::UpstreamTls
@@ -1594,6 +1624,8 @@ impl core::marker::Freeze for rust_web_server::server::ConnectionInfo
 impl core::marker::Freeze for rust_web_server::server::Server
 impl core::marker::Freeze for rust_web_server::server::proxy_protocol::Parsed
 impl core::marker::Freeze for rust_web_server::server_config::ServerConfig
+impl core::marker::Freeze for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::marker::Freeze for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::marker::Freeze for rust_web_server::service_discovery::BackendPool
 impl core::marker::Freeze for rust_web_server::service_discovery::DiscoverySource
 impl core::marker::Freeze for rust_web_server::session::DbSessionStore
@@ -1686,6 +1718,7 @@ impl core::marker::Send for rust_web_server::admin::AdminApi
 impl core::marker::Send for rust_web_server::admin::AdminConfig
 impl core::marker::Send for rust_web_server::admin::AdminOidcConfig
 impl core::marker::Send for rust_web_server::admin::access::AuditEntry
+impl core::marker::Send for rust_web_server::admin::access::ChainReport
 impl core::marker::Send for rust_web_server::admin::access::McpAuditLayer
 impl core::marker::Send for rust_web_server::admin::access::Principal
 impl core::marker::Send for rust_web_server::admin::access::Role
@@ -1910,6 +1943,8 @@ impl core::marker::Send for rust_web_server::llm::Provider
 impl core::marker::Send for rust_web_server::llm::usage::Usage
 impl core::marker::Send for rust_web_server::llm::usage::UsageParser
 impl core::marker::Send for rust_web_server::log::Log
+impl core::marker::Send for rust_web_server::log::syslog::Sender
+impl core::marker::Send for rust_web_server::log::syslog::Target
 impl core::marker::Send for rust_web_server::maintenance::MaintenanceLayer
 impl core::marker::Send for rust_web_server::mcp::InputRequired
 impl core::marker::Send for rust_web_server::mcp::LogLevel
@@ -1965,6 +2000,8 @@ impl core::marker::Send for rust_web_server::otel::StdoutExporter
 impl core::marker::Send for rust_web_server::otel::TraceContext
 impl core::marker::Send for rust_web_server::otel::TracingConfig
 impl core::marker::Send for rust_web_server::otel::baggage::Baggage
+impl core::marker::Send for rust_web_server::otel::logs::LogsExportConfig
+impl core::marker::Send for rust_web_server::otel::logs::TraceIds
 impl core::marker::Send for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::marker::Send for rust_web_server::proxy::GrpcProxy
 impl core::marker::Send for rust_web_server::proxy::H2ReverseProxy
@@ -2043,6 +2080,8 @@ impl core::marker::Send for rust_web_server::server::ConnectionInfo
 impl core::marker::Send for rust_web_server::server::Server
 impl core::marker::Send for rust_web_server::server::proxy_protocol::Parsed
 impl core::marker::Send for rust_web_server::server_config::ServerConfig
+impl core::marker::Send for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::marker::Send for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::marker::Send for rust_web_server::service_discovery::BackendPool
 impl core::marker::Send for rust_web_server::service_discovery::DiscoverySource
 impl core::marker::Send for rust_web_server::session::DbSessionStore
@@ -2129,6 +2168,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::acme::ChallengeType
 impl core::marker::StructuralPartialEq for rust_web_server::admin::AdminConfig
 impl core::marker::StructuralPartialEq for rust_web_server::admin::AdminOidcConfig
 impl core::marker::StructuralPartialEq for rust_web_server::admin::access::AuditEntry
+impl core::marker::StructuralPartialEq for rust_web_server::admin::access::ChainReport
 impl core::marker::StructuralPartialEq for rust_web_server::admin::access::Principal
 impl core::marker::StructuralPartialEq for rust_web_server::admin::access::Role
 impl core::marker::StructuralPartialEq for rust_web_server::admin::access::TokenUser
@@ -2252,6 +2292,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::ip_filter::IpRangeEn
 impl core::marker::StructuralPartialEq for rust_web_server::ip_filter::TrustedProxies
 impl core::marker::StructuralPartialEq for rust_web_server::llm::Api
 impl core::marker::StructuralPartialEq for rust_web_server::llm::usage::Usage
+impl core::marker::StructuralPartialEq for rust_web_server::log::syslog::Target
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::LogLevel
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::McpIcon
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::TaskError
@@ -2267,6 +2308,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::otel::AttributeValue
 impl core::marker::StructuralPartialEq for rust_web_server::otel::SpanKind
 impl core::marker::StructuralPartialEq for rust_web_server::otel::TraceContext
 impl core::marker::StructuralPartialEq for rust_web_server::otel::baggage::Baggage
+impl core::marker::StructuralPartialEq for rust_web_server::otel::logs::TraceIds
 impl core::marker::StructuralPartialEq for rust_web_server::proxy::status::ProxyError
 impl core::marker::StructuralPartialEq for rust_web_server::proxy_config::AuthConfig
 impl core::marker::StructuralPartialEq for rust_web_server::proxy_config::BreakerConfig
@@ -2299,6 +2341,8 @@ impl core::marker::StructuralPartialEq for rust_web_server::router::RouteConflic
 impl core::marker::StructuralPartialEq for rust_web_server::router::RouteConflictKind
 impl core::marker::StructuralPartialEq for rust_web_server::server::proxy_protocol::Parsed
 impl core::marker::StructuralPartialEq for rust_web_server::server_config::ServerConfig
+impl core::marker::StructuralPartialEq for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::marker::StructuralPartialEq for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::marker::StructuralPartialEq for rust_web_server::sse::SseClosed
 impl core::marker::StructuralPartialEq for rust_web_server::sso::client_store::GrantType
 impl core::marker::StructuralPartialEq for rust_web_server::sso::oidc_auth::SignedIn
@@ -2342,6 +2386,7 @@ impl core::marker::Sync for rust_web_server::admin::AdminApi
 impl core::marker::Sync for rust_web_server::admin::AdminConfig
 impl core::marker::Sync for rust_web_server::admin::AdminOidcConfig
 impl core::marker::Sync for rust_web_server::admin::access::AuditEntry
+impl core::marker::Sync for rust_web_server::admin::access::ChainReport
 impl core::marker::Sync for rust_web_server::admin::access::McpAuditLayer
 impl core::marker::Sync for rust_web_server::admin::access::Principal
 impl core::marker::Sync for rust_web_server::admin::access::Role
@@ -2566,6 +2611,8 @@ impl core::marker::Sync for rust_web_server::llm::Provider
 impl core::marker::Sync for rust_web_server::llm::usage::Usage
 impl core::marker::Sync for rust_web_server::llm::usage::UsageParser
 impl core::marker::Sync for rust_web_server::log::Log
+impl core::marker::Sync for rust_web_server::log::syslog::Sender
+impl core::marker::Sync for rust_web_server::log::syslog::Target
 impl core::marker::Sync for rust_web_server::maintenance::MaintenanceLayer
 impl core::marker::Sync for rust_web_server::mcp::InputRequired
 impl core::marker::Sync for rust_web_server::mcp::LogLevel
@@ -2621,6 +2668,8 @@ impl core::marker::Sync for rust_web_server::otel::StdoutExporter
 impl core::marker::Sync for rust_web_server::otel::TraceContext
 impl core::marker::Sync for rust_web_server::otel::TracingConfig
 impl core::marker::Sync for rust_web_server::otel::baggage::Baggage
+impl core::marker::Sync for rust_web_server::otel::logs::LogsExportConfig
+impl core::marker::Sync for rust_web_server::otel::logs::TraceIds
 impl core::marker::Sync for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::marker::Sync for rust_web_server::proxy::GrpcProxy
 impl core::marker::Sync for rust_web_server::proxy::H2ReverseProxy
@@ -2698,6 +2747,8 @@ impl core::marker::Sync for rust_web_server::server::ConnectionInfo
 impl core::marker::Sync for rust_web_server::server::Server
 impl core::marker::Sync for rust_web_server::server::proxy_protocol::Parsed
 impl core::marker::Sync for rust_web_server::server_config::ServerConfig
+impl core::marker::Sync for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::marker::Sync for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::marker::Sync for rust_web_server::service_discovery::BackendPool
 impl core::marker::Sync for rust_web_server::service_discovery::DiscoverySource
 impl core::marker::Sync for rust_web_server::session::DbSessionStore
@@ -2795,6 +2846,7 @@ impl core::marker::Unpin for rust_web_server::admin::AdminApi
 impl core::marker::Unpin for rust_web_server::admin::AdminConfig
 impl core::marker::Unpin for rust_web_server::admin::AdminOidcConfig
 impl core::marker::Unpin for rust_web_server::admin::access::AuditEntry
+impl core::marker::Unpin for rust_web_server::admin::access::ChainReport
 impl core::marker::Unpin for rust_web_server::admin::access::McpAuditLayer
 impl core::marker::Unpin for rust_web_server::admin::access::Principal
 impl core::marker::Unpin for rust_web_server::admin::access::Role
@@ -3019,6 +3071,8 @@ impl core::marker::Unpin for rust_web_server::llm::Provider
 impl core::marker::Unpin for rust_web_server::llm::usage::Usage
 impl core::marker::Unpin for rust_web_server::llm::usage::UsageParser
 impl core::marker::Unpin for rust_web_server::log::Log
+impl core::marker::Unpin for rust_web_server::log::syslog::Sender
+impl core::marker::Unpin for rust_web_server::log::syslog::Target
 impl core::marker::Unpin for rust_web_server::maintenance::MaintenanceLayer
 impl core::marker::Unpin for rust_web_server::mcp::InputRequired
 impl core::marker::Unpin for rust_web_server::mcp::LogLevel
@@ -3076,6 +3130,8 @@ impl core::marker::Unpin for rust_web_server::otel::StdoutExporter
 impl core::marker::Unpin for rust_web_server::otel::TraceContext
 impl core::marker::Unpin for rust_web_server::otel::TracingConfig
 impl core::marker::Unpin for rust_web_server::otel::baggage::Baggage
+impl core::marker::Unpin for rust_web_server::otel::logs::LogsExportConfig
+impl core::marker::Unpin for rust_web_server::otel::logs::TraceIds
 impl core::marker::Unpin for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::marker::Unpin for rust_web_server::proxy::GrpcProxy
 impl core::marker::Unpin for rust_web_server::proxy::H2ReverseProxy
@@ -3154,6 +3210,8 @@ impl core::marker::Unpin for rust_web_server::server::ConnectionInfo
 impl core::marker::Unpin for rust_web_server::server::Server
 impl core::marker::Unpin for rust_web_server::server::proxy_protocol::Parsed
 impl core::marker::Unpin for rust_web_server::server_config::ServerConfig
+impl core::marker::Unpin for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::marker::Unpin for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::marker::Unpin for rust_web_server::service_discovery::BackendPool
 impl core::marker::Unpin for rust_web_server::service_discovery::DiscoverySource
 impl core::marker::Unpin for rust_web_server::session::DbSessionStore
@@ -3252,6 +3310,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::admin::AdminApi
 impl core::marker::UnsafeUnpin for rust_web_server::admin::AdminConfig
 impl core::marker::UnsafeUnpin for rust_web_server::admin::AdminOidcConfig
 impl core::marker::UnsafeUnpin for rust_web_server::admin::access::AuditEntry
+impl core::marker::UnsafeUnpin for rust_web_server::admin::access::ChainReport
 impl core::marker::UnsafeUnpin for rust_web_server::admin::access::McpAuditLayer
 impl core::marker::UnsafeUnpin for rust_web_server::admin::access::Principal
 impl core::marker::UnsafeUnpin for rust_web_server::admin::access::Role
@@ -3476,6 +3535,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::llm::Provider
 impl core::marker::UnsafeUnpin for rust_web_server::llm::usage::Usage
 impl core::marker::UnsafeUnpin for rust_web_server::llm::usage::UsageParser
 impl core::marker::UnsafeUnpin for rust_web_server::log::Log
+impl core::marker::UnsafeUnpin for rust_web_server::log::syslog::Sender
+impl core::marker::UnsafeUnpin for rust_web_server::log::syslog::Target
 impl core::marker::UnsafeUnpin for rust_web_server::maintenance::MaintenanceLayer
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::InputRequired
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::LogLevel
@@ -3533,6 +3594,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::otel::StdoutExporter
 impl core::marker::UnsafeUnpin for rust_web_server::otel::TraceContext
 impl core::marker::UnsafeUnpin for rust_web_server::otel::TracingConfig
 impl core::marker::UnsafeUnpin for rust_web_server::otel::baggage::Baggage
+impl core::marker::UnsafeUnpin for rust_web_server::otel::logs::LogsExportConfig
+impl core::marker::UnsafeUnpin for rust_web_server::otel::logs::TraceIds
 impl core::marker::UnsafeUnpin for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::marker::UnsafeUnpin for rust_web_server::proxy::GrpcProxy
 impl core::marker::UnsafeUnpin for rust_web_server::proxy::H2ReverseProxy
@@ -3611,6 +3674,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::server::ConnectionInfo
 impl core::marker::UnsafeUnpin for rust_web_server::server::Server
 impl core::marker::UnsafeUnpin for rust_web_server::server::proxy_protocol::Parsed
 impl core::marker::UnsafeUnpin for rust_web_server::server_config::ServerConfig
+impl core::marker::UnsafeUnpin for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::marker::UnsafeUnpin for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::marker::UnsafeUnpin for rust_web_server::service_discovery::BackendPool
 impl core::marker::UnsafeUnpin for rust_web_server::service_discovery::DiscoverySource
 impl core::marker::UnsafeUnpin for rust_web_server::session::DbSessionStore
@@ -3711,6 +3776,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::acme::dns_api:
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::admin::AdminConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::admin::AdminOidcConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::admin::access::AuditEntry
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::admin::access::ChainReport
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::admin::access::McpAuditLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::admin::access::Principal
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::admin::access::Role
@@ -3916,6 +3982,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::llm::Provider
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::llm::usage::Usage
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::llm::usage::UsageParser
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::log::Log
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::log::syslog::Sender
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::log::syslog::Target
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::maintenance::MaintenanceLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::InputRequired
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::LogLevel
@@ -3965,6 +4033,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::StdoutEx
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::TraceContext
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::TracingConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::baggage::Baggage
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::logs::LogsExportConfig
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::logs::TraceIds
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::proxy::LoadBalancing
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::proxy::grpc_web::GrpcWebLayer
@@ -4035,6 +4105,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::server::Connec
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::server::Server
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::server::proxy_protocol::Parsed
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::server_config::ServerConfig
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::service_discovery::BackendPool
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::service_discovery::DiscoverySource
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::session::RedisSessionStore
@@ -4128,6 +4200,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::acme::dns_api::Se
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::admin::AdminConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::admin::AdminOidcConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::admin::access::AuditEntry
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::admin::access::ChainReport
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::admin::access::McpAuditLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::admin::access::Principal
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::admin::access::Role
@@ -4333,6 +4406,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::llm::Provider
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::llm::usage::Usage
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::llm::usage::UsageParser
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::log::Log
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::log::syslog::Sender
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::log::syslog::Target
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::maintenance::MaintenanceLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::InputRequired
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::LogLevel
@@ -4383,6 +4458,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::otel::StdoutExpor
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::otel::TraceContext
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::otel::TracingConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::otel::baggage::Baggage
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::otel::logs::LogsExportConfig
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::otel::logs::TraceIds
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::otel::metrics::MetricsExportConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::LoadBalancing
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::grpc_web::GrpcWebLayer
@@ -4453,6 +4530,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::server::Connectio
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::server::Server
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::server::proxy_protocol::Parsed
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::server_config::ServerConfig
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::server_config::log_privacy::AnonymizeIp
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::server_config::log_privacy::LogPrivacy
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::service_discovery::BackendPool
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::service_discovery::DiscoverySource
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::session::RedisSessionStore
@@ -4542,6 +4621,7 @@ impl rust_web_server::admin::AdminApi
 impl rust_web_server::admin::AdminConfig
 impl rust_web_server::admin::AdminOidcConfig
 impl rust_web_server::admin::access::AuditEntry
+impl rust_web_server::admin::access::ChainReport
 impl rust_web_server::admin::access::McpAuditLayer
 impl rust_web_server::admin::access::Role
 impl rust_web_server::app::App
@@ -4737,6 +4817,8 @@ impl rust_web_server::llm::Provider
 impl rust_web_server::llm::usage::Usage
 impl rust_web_server::llm::usage::UsageParser
 impl rust_web_server::log::Log
+impl rust_web_server::log::syslog::Sender
+impl rust_web_server::log::syslog::Target
 impl rust_web_server::mcp::InputRequired
 impl rust_web_server::mcp::LogLevel
 impl rust_web_server::mcp::McpContent
@@ -4871,6 +4953,8 @@ impl rust_web_server::server::Address
 impl rust_web_server::server::ConnectionInfo
 impl rust_web_server::server::Server
 impl rust_web_server::server_config::ServerConfig
+impl rust_web_server::server_config::log_privacy::AnonymizeIp
+impl rust_web_server::server_config::log_privacy::LogPrivacy
 impl rust_web_server::service_discovery::BackendPool
 impl rust_web_server::session::DbSessionStore
 impl rust_web_server::session::RedisSessionStore
@@ -5589,6 +5673,7 @@ pub const rust_web_server::admin::RWS_CONFIG_ADMIN_OIDC_ROLE_CLAIM: &str
 pub const rust_web_server::admin::RWS_CONFIG_ADMIN_OIDC_TENANT: &str
 pub const rust_web_server::admin::RWS_CONFIG_ADMIN_USERS: &str
 pub const rust_web_server::admin::access::AUDIT_CAPACITY: usize
+pub const rust_web_server::admin::access::CHAIN_START: &str
 pub const rust_web_server::app::controller::directory_listing::DirectoryListingAssetsController::CSS_FILEPATH: &'static str
 pub const rust_web_server::app::controller::directory_listing::DirectoryListingAssetsController::JS_FILEPATH: &'static str
 pub const rust_web_server::app::controller::favicon::FaviconController::FAVICON_FILEPATH: &'static str
@@ -6129,6 +6214,9 @@ pub const rust_web_server::language::Language::XHOSA: rust_web_server::language:
 pub const rust_web_server::language::Language::XHOSA_SOUTH_AFRICA: rust_web_server::language::Lang
 pub const rust_web_server::language::Language::ZULU: rust_web_server::language::Lang
 pub const rust_web_server::language::Language::ZULU_SOUTH_AFRICA: rust_web_server::language::Lang
+pub const rust_web_server::log::syslog::MAX_QUEUED: usize
+pub const rust_web_server::log::syslog::RWS_CONFIG_ACCESS_LOG_SYSLOG: &str
+pub const rust_web_server::log::syslog::RWS_CONFIG_ACCESS_LOG_SYSLOG_FACILITY: &str
 pub const rust_web_server::log::tail::CAPACITY: usize
 pub const rust_web_server::log::tail::MAX_FOLLOWERS: usize
 pub const rust_web_server::log::tail::MAX_LINE: usize
@@ -6313,6 +6401,8 @@ pub const rust_web_server::mime_type::MimeType::ZIP_SUFFIX: &'static str
 pub const rust_web_server::null::NULL: &'static rust_web_server::null::Null
 pub const rust_web_server::otel::baggage::MAX_BYTES: usize
 pub const rust_web_server::otel::baggage::MAX_MEMBERS: usize
+pub const rust_web_server::otel::logs::MAX_BATCH: usize
+pub const rust_web_server::otel::logs::MAX_PENDING: usize
 pub const rust_web_server::proxy::mirror::MAX_MIRRORED_BODY: usize
 pub const rust_web_server::proxy::mirror::QUEUE: usize
 pub const rust_web_server::proxy::mirror::WORKERS: usize
@@ -6344,6 +6434,12 @@ pub const rust_web_server::server::per_core::RWS_CONFIG_RUNTIME: &str
 pub const rust_web_server::server::proxy_protocol::V1_MAX: usize
 pub const rust_web_server::server::proxy_protocol::V2_MAX: usize
 pub const rust_web_server::server::proxy_protocol::V2_SIGNATURE: [u8; 12]
+pub const rust_web_server::server_config::log_privacy::ALWAYS_REDACTED_HEADERS: [&str; 4]
+pub const rust_web_server::server_config::log_privacy::REDACTED: &str
+pub const rust_web_server::server_config::log_privacy::RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP: &str
+pub const rust_web_server::server_config::log_privacy::RWS_CONFIG_ACCESS_LOG_IP_HASH_SECRET: &str
+pub const rust_web_server::server_config::log_privacy::RWS_CONFIG_LOG_REDACT_HEADERS: &str
+pub const rust_web_server::server_config::log_privacy::RWS_CONFIG_LOG_REDACT_QUERY: &str
 pub const rust_web_server::sso::oidc_auth::CLAIMS_HEADER: &str
 pub const rust_web_server::sso::saml::CLAIMS_HEADER: &str
 pub const rust_web_server::symbol::SYMBOL: rust_web_server::symbol::Symbol
@@ -6405,6 +6501,7 @@ pub enum rust_web_server::gateway_api::lease::Decision
 pub enum rust_web_server::ingress::PathType
 pub enum rust_web_server::ip_filter::TrustedProxies
 pub enum rust_web_server::llm::Api
+pub enum rust_web_server::log::syslog::Target
 pub enum rust_web_server::mcp::LogLevel
 pub enum rust_web_server::mcp::PromptReply
 pub enum rust_web_server::mcp::TaskError
@@ -6433,6 +6530,7 @@ pub enum rust_web_server::proxy_config::UpstreamHost
 pub enum rust_web_server::request::Body
 pub enum rust_web_server::router::RouteConflictKind
 pub enum rust_web_server::server::proxy_protocol::Parsed
+pub enum rust_web_server::server_config::log_privacy::AnonymizeIp
 pub enum rust_web_server::service_discovery::DiscoverySource
 pub enum rust_web_server::sso::GrantType
 pub enum rust_web_server::sso::client_store::GrantType
@@ -6602,6 +6700,12 @@ pub fn rust_web_server::admin::access::AuditEntry::clone(&self) -> Self
 pub fn rust_web_server::admin::access::AuditEntry::eq(&self, &Self) -> bool
 pub fn rust_web_server::admin::access::AuditEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::admin::access::AuditEntry::to_json(&self) -> alloc::string::String
+pub fn rust_web_server::admin::access::ChainReport::clone(&self) -> Self
+pub fn rust_web_server::admin::access::ChainReport::default() -> Self
+pub fn rust_web_server::admin::access::ChainReport::eq(&self, &Self) -> bool
+pub fn rust_web_server::admin::access::ChainReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::admin::access::ChainReport::ok(&self) -> bool
+pub fn rust_web_server::admin::access::ChainReport::to_json(&self) -> alloc::string::String
 pub fn rust_web_server::admin::access::McpAuditLayer::new(impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> rust_web_server::admin::access::McpAuditLayer
 pub fn rust_web_server::admin::access::Principal::clone(&self) -> Self
 pub fn rust_web_server::admin::access::Principal::eq(&self, &Self) -> bool
@@ -6616,6 +6720,8 @@ pub fn rust_web_server::admin::access::Role::partial_cmp(&self, &Self) -> core::
 pub fn rust_web_server::admin::access::TokenUser::clone(&self) -> Self
 pub fn rust_web_server::admin::access::TokenUser::eq(&self, &Self) -> bool
 pub fn rust_web_server::admin::access::TokenUser::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::admin::access::chain_line(&str, &str) -> alloc::string::String
+pub fn rust_web_server::admin::access::line_hash(&str) -> alloc::string::String
 pub fn rust_web_server::admin::access::node_name() -> alloc::string::String
 pub fn rust_web_server::admin::access::parse_role_map(&str) -> core::result::Result<alloc::vec::Vec<(alloc::string::String, rust_web_server::admin::access::Role)>, alloc::string::String>
 pub fn rust_web_server::admin::access::parse_users(&str, &dyn core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<alloc::vec::Vec<rust_web_server::admin::access::TokenUser>, alloc::string::String>
@@ -6626,6 +6732,8 @@ pub fn rust_web_server::admin::access::redact(&[u8]) -> alloc::string::String
 pub fn rust_web_server::admin::access::required_role(&str, &str) -> rust_web_server::admin::access::Role
 pub fn rust_web_server::admin::access::role_for(&[(alloc::string::String, rust_web_server::admin::access::Role)], core::option::Option<&str>, &[alloc::string::String]) -> core::option::Option<rust_web_server::admin::access::Role>
 pub fn rust_web_server::admin::access::set_audit_file(&str)
+pub fn rust_web_server::admin::access::verify_audit_file() -> core::result::Result<(alloc::string::String, rust_web_server::admin::access::ChainReport), alloc::string::String>
+pub fn rust_web_server::admin::access::verify_chain(&str) -> rust_web_server::admin::access::ChainReport
 pub fn rust_web_server::admin::features() -> alloc::vec::Vec<&'static str>
 pub fn rust_web_server::admin::ops::authorizer() -> core::result::Result<rust_web_server::authz::rebac::Authorizer, alloc::string::String>
 pub fn rust_web_server::admin::ops::authz_check(&str, &str, &str) -> core::result::Result<alloc::string::String, alloc::string::String>
@@ -7977,6 +8085,18 @@ pub fn rust_web_server::log::Log::reopen_access_log_on_sigusr1()
 pub fn rust_web_server::log::Log::request_response(&rust_web_server::request::Request, &rust_web_server::response::Response, &core::net::socket_addr::SocketAddr) -> alloc::string::String
 pub fn rust_web_server::log::Log::server_url_thread_count(&str, &alloc::string::String, i32) -> alloc::string::String
 pub fn rust_web_server::log::Log::usage_information() -> alloc::string::String
+pub fn rust_web_server::log::syslog::Sender::enqueue(&self, &[u8])
+pub fn rust_web_server::log::syslog::Sender::new(rust_web_server::log::syslog::Target, u8) -> rust_web_server::log::syslog::Sender
+pub fn rust_web_server::log::syslog::Sender::send_pending(&self)
+pub fn rust_web_server::log::syslog::Target::clone(&self) -> Self
+pub fn rust_web_server::log::syslog::Target::eq(&self, &Self) -> bool
+pub fn rust_web_server::log::syslog::Target::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::log::syslog::Target::parse(&str) -> core::result::Result<rust_web_server::log::syslog::Target, alloc::string::String>
+pub fn rust_web_server::log::syslog::dropped_lines() -> u64
+pub fn rust_web_server::log::syslog::flush_now()
+pub fn rust_web_server::log::syslog::message(&mut alloc::vec::Vec<u8>, u8, &str, &str, u32, &[u8])
+pub fn rust_web_server::log::syslog::parse_facility(&str) -> core::result::Result<u8, alloc::string::String>
+pub fn rust_web_server::log::syslog::sender() -> core::option::Option<&'static rust_web_server::log::syslog::Sender>
 pub fn rust_web_server::log::tail::enable()
 pub fn rust_web_server::log::tail::follow(rust_web_server::sse::SseSender) -> bool
 pub fn rust_web_server::log::tail::recent(usize) -> alloc::vec::Vec<alloc::string::String>
@@ -8332,6 +8452,18 @@ pub fn rust_web_server::otel::current_traceparent() -> core::option::Option<allo
 pub fn rust_web_server::otel::detached_span(&str, rust_web_server::otel::SpanKind) -> core::option::Option<rust_web_server::otel::DetachedSpan>
 pub fn rust_web_server::otel::flush()
 pub fn rust_web_server::otel::is_tracing() -> bool
+pub fn rust_web_server::otel::logs::LogsExportConfig::clone(&self) -> Self
+pub fn rust_web_server::otel::logs::LogsExportConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::otel::logs::TraceIds::clone(&self) -> Self
+pub fn rust_web_server::otel::logs::TraceIds::eq(&self, &Self) -> bool
+pub fn rust_web_server::otel::logs::TraceIds::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::otel::logs::body(&[u8], &str, &str) -> alloc::vec::Vec<u8>
+pub fn rust_web_server::otel::logs::dropped() -> u64
+pub fn rust_web_server::otel::logs::enabled() -> bool
+pub fn rust_web_server::otel::logs::record(&rust_web_server::request::Request, &rust_web_server::response::Response, core::net::ip_addr::IpAddr, &rust_web_server::server_config::log_privacy::LogPrivacy, core::option::Option<rust_web_server::otel::logs::TraceIds>, impl core::ops::function::FnOnce(&mut alloc::vec::Vec<u8>))
+pub fn rust_web_server::otel::logs::start(rust_web_server::otel::logs::LogsExportConfig)
+pub fn rust_web_server::otel::logs::start_from_env() -> bool
+pub fn rust_web_server::otel::logs::take_trace(&mut rust_web_server::response::Response) -> core::option::Option<rust_web_server::otel::logs::TraceIds>
 pub fn rust_web_server::otel::metrics::MetricsExportConfig::clone(&self) -> Self
 pub fn rust_web_server::otel::metrics::MetricsExportConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::otel::metrics::body(&str, &str, u64, u64) -> alloc::string::String
@@ -8783,6 +8915,23 @@ pub fn rust_web_server::server_config::ServerConfig::eq(&self, &Self) -> bool
 pub fn rust_web_server::server_config::ServerConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::server_config::ServerConfig::from_env() -> Self
 pub fn rust_web_server::server_config::invalidate()
+pub fn rust_web_server::server_config::log_privacy::AnonymizeIp::clone(&self) -> Self
+pub fn rust_web_server::server_config::log_privacy::AnonymizeIp::default() -> Self
+pub fn rust_web_server::server_config::log_privacy::AnonymizeIp::eq(&self, &Self) -> bool
+pub fn rust_web_server::server_config::log_privacy::AnonymizeIp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::server_config::log_privacy::AnonymizeIp::parse(&str) -> core::option::Option<rust_web_server::server_config::log_privacy::AnonymizeIp>
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::clone(&self) -> Self
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::default() -> Self
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::eq(&self, &Self) -> bool
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::from_env() -> rust_web_server::server_config::log_privacy::LogPrivacy
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::ip_string(&self, core::net::ip_addr::IpAddr) -> alloc::string::String
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::is_off(&self) -> bool
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::redact_target<'a>(&self, &'a str, impl core::ops::function::FnMut(&'a str))
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::redacted_target(&self, &str) -> alloc::string::String
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::redacts_header(&self, &str) -> bool
+pub fn rust_web_server::server_config::log_privacy::LogPrivacy::write_ip(&self, &mut alloc::vec::Vec<u8>, core::net::ip_addr::IpAddr)
+pub fn rust_web_server::server_config::log_privacy::truncate_ip(core::net::ip_addr::IpAddr) -> core::net::ip_addr::IpAddr
 pub fn rust_web_server::service_discovery::BackendPool::backends(&self) -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::service_discovery::BackendPool::clone(&self) -> Self
 pub fn rust_web_server::service_discovery::BackendPool::consul(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
@@ -9315,6 +9464,7 @@ pub mod rust_web_server::language
 pub mod rust_web_server::llm
 pub mod rust_web_server::llm::usage
 pub mod rust_web_server::log
+pub mod rust_web_server::log::syslog
 pub mod rust_web_server::log::tail
 pub mod rust_web_server::macros
 pub mod rust_web_server::maintenance
@@ -9340,6 +9490,7 @@ pub mod rust_web_server::null
 pub mod rust_web_server::openapi
 pub mod rust_web_server::otel
 pub mod rust_web_server::otel::baggage
+pub mod rust_web_server::otel::logs
 pub mod rust_web_server::otel::metrics
 pub mod rust_web_server::pagination
 pub mod rust_web_server::prelude
@@ -9372,6 +9523,7 @@ pub mod rust_web_server::server
 pub mod rust_web_server::server::per_core
 pub mod rust_web_server::server::proxy_protocol
 pub mod rust_web_server::server_config
+pub mod rust_web_server::server_config::log_privacy
 pub mod rust_web_server::service_discovery
 pub mod rust_web_server::session
 pub mod rust_web_server::sse
@@ -9536,6 +9688,11 @@ pub rust_web_server::admin::access::AuditEntry::role: alloc::string::String
 pub rust_web_server::admin::access::AuditEntry::status: u16
 pub rust_web_server::admin::access::AuditEntry::user: alloc::string::String
 pub rust_web_server::admin::access::AuditEntry::via: alloc::string::String
+pub rust_web_server::admin::access::ChainReport::broken: core::option::Option<(usize, alloc::string::String)>
+pub rust_web_server::admin::access::ChainReport::chained: usize
+pub rust_web_server::admin::access::ChainReport::continues_from: core::option::Option<alloc::string::String>
+pub rust_web_server::admin::access::ChainReport::entries: usize
+pub rust_web_server::admin::access::ChainReport::unchained: usize
 pub rust_web_server::admin::access::Principal::role: rust_web_server::admin::access::Role
 pub rust_web_server::admin::access::Principal::user: alloc::string::String
 pub rust_web_server::admin::access::Principal::via: &'static str
@@ -10090,6 +10247,9 @@ pub rust_web_server::llm::Usage::input_tokens: u64
 pub rust_web_server::llm::Usage::output_tokens: u64
 pub rust_web_server::llm::usage::Usage::input_tokens: u64
 pub rust_web_server::llm::usage::Usage::output_tokens: u64
+pub rust_web_server::log::syslog::Target::Tcp(alloc::string::String)
+pub rust_web_server::log::syslog::Target::Udp(alloc::string::String)
+pub rust_web_server::log::syslog::Target::Unix(std::path::PathBuf)
 pub rust_web_server::mcp::LogLevel::Alert
 pub rust_web_server::mcp::LogLevel::Critical
 pub rust_web_server::mcp::LogLevel::Debug
@@ -10252,6 +10412,14 @@ pub rust_web_server::otel::TracingConfig::exporter: rust_web_server::otel::Expor
 pub rust_web_server::otel::TracingConfig::sample_rate: f64
 pub rust_web_server::otel::TracingConfig::service_name: alloc::string::String
 pub rust_web_server::otel::TracingConfig::service_version: alloc::string::String
+pub rust_web_server::otel::logs::LogsExportConfig::endpoint: alloc::string::String
+pub rust_web_server::otel::logs::LogsExportConfig::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub rust_web_server::otel::logs::LogsExportConfig::interval: core::time::Duration
+pub rust_web_server::otel::logs::LogsExportConfig::service_name: alloc::string::String
+pub rust_web_server::otel::logs::LogsExportConfig::service_version: alloc::string::String
+pub rust_web_server::otel::logs::TraceIds::sampled: bool
+pub rust_web_server::otel::logs::TraceIds::span_id: [u8; 8]
+pub rust_web_server::otel::logs::TraceIds::trace_id: [u8; 16]
 pub rust_web_server::otel::metrics::MetricsExportConfig::endpoint: alloc::string::String
 pub rust_web_server::otel::metrics::MetricsExportConfig::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub rust_web_server::otel::metrics::MetricsExportConfig::interval: core::time::Duration
@@ -10615,6 +10783,10 @@ pub rust_web_server::server::proxy_protocol::Parsed::Header::len: usize
 pub rust_web_server::server::proxy_protocol::Parsed::Header::source: core::option::Option<core::net::socket_addr::SocketAddr>
 pub rust_web_server::server::proxy_protocol::Parsed::Invalid(&'static str)
 pub rust_web_server::server::proxy_protocol::Parsed::Need(usize)
+pub rust_web_server::server_config::LogPrivacy::anonymize_ip: rust_web_server::server_config::log_privacy::AnonymizeIp
+pub rust_web_server::server_config::LogPrivacy::ip_hash_key: alloc::rcs::arc::Arc<[u8]>
+pub rust_web_server::server_config::LogPrivacy::redact_headers: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::server_config::LogPrivacy::redact_query: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::server_config::ServerConfig::cache_status: bool
 pub rust_web_server::server_config::ServerConfig::client_hints: bool
 pub rust_web_server::server_config::ServerConfig::client_ip_forwarded: bool
@@ -10632,6 +10804,7 @@ pub rust_web_server::server_config::ServerConfig::early_hints_http1: bool
 pub rust_web_server::server_config::ServerConfig::error_format_text: bool
 pub rust_web_server::server_config::ServerConfig::forwarded_header: bool
 pub rust_web_server::server_config::ServerConfig::log_format: alloc::string::String
+pub rust_web_server::server_config::ServerConfig::log_privacy: rust_web_server::server_config::log_privacy::LogPrivacy
 pub rust_web_server::server_config::ServerConfig::metrics_allow: rust_web_server::ip_filter::TrustedProxies
 pub rust_web_server::server_config::ServerConfig::nanos_headers: bool
 pub rust_web_server::server_config::ServerConfig::proxy_name: alloc::string::String
@@ -10642,6 +10815,13 @@ pub rust_web_server::server_config::ServerConfig::security_headers: bool
 pub rust_web_server::server_config::ServerConfig::shutdown_delay_secs: u64
 pub rust_web_server::server_config::ServerConfig::static_cache_control: alloc::string::String
 pub rust_web_server::server_config::ServerConfig::trusted_proxies: rust_web_server::ip_filter::TrustedProxies
+pub rust_web_server::server_config::log_privacy::AnonymizeIp::Hash
+pub rust_web_server::server_config::log_privacy::AnonymizeIp::Off
+pub rust_web_server::server_config::log_privacy::AnonymizeIp::Truncate
+pub rust_web_server::server_config::log_privacy::LogPrivacy::anonymize_ip: rust_web_server::server_config::log_privacy::AnonymizeIp
+pub rust_web_server::server_config::log_privacy::LogPrivacy::ip_hash_key: alloc::rcs::arc::Arc<[u8]>
+pub rust_web_server::server_config::log_privacy::LogPrivacy::redact_headers: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::server_config::log_privacy::LogPrivacy::redact_query: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::service_discovery::DiscoverySource::Consul
 pub rust_web_server::service_discovery::DiscoverySource::Consul::addr: alloc::string::String
 pub rust_web_server::service_discovery::DiscoverySource::Consul::service: alloc::string::String
@@ -10926,6 +11106,7 @@ pub struct rust_web_server::admin::AdminApi
 pub struct rust_web_server::admin::AdminConfig
 pub struct rust_web_server::admin::AdminOidcConfig
 pub struct rust_web_server::admin::access::AuditEntry
+pub struct rust_web_server::admin::access::ChainReport
 pub struct rust_web_server::admin::access::McpAuditLayer
 pub struct rust_web_server::admin::access::Principal
 pub struct rust_web_server::admin::access::TokenUser
@@ -11150,6 +11331,7 @@ pub struct rust_web_server::llm::UsageParser
 pub struct rust_web_server::llm::usage::Usage
 pub struct rust_web_server::llm::usage::UsageParser
 pub struct rust_web_server::log::Log
+pub struct rust_web_server::log::syslog::Sender
 pub struct rust_web_server::maintenance::MaintenanceLayer
 pub struct rust_web_server::mcp::InputRequired
 pub struct rust_web_server::mcp::McpContent
@@ -11209,6 +11391,8 @@ pub struct rust_web_server::otel::StdoutExporter
 pub struct rust_web_server::otel::TraceContext
 pub struct rust_web_server::otel::TracingConfig
 pub struct rust_web_server::otel::baggage::Baggage
+pub struct rust_web_server::otel::logs::LogsExportConfig
+pub struct rust_web_server::otel::logs::TraceIds
 pub struct rust_web_server::otel::metrics::MetricsExportConfig
 pub struct rust_web_server::pagination::CursorPage<T>
 pub struct rust_web_server::pagination::Page<T>
@@ -11283,7 +11467,9 @@ pub struct rust_web_server::schema::ObjectSchema
 pub struct rust_web_server::server::Address
 pub struct rust_web_server::server::ConnectionInfo
 pub struct rust_web_server::server::Server
+pub struct rust_web_server::server_config::LogPrivacy
 pub struct rust_web_server::server_config::ServerConfig
+pub struct rust_web_server::server_config::log_privacy::LogPrivacy
 pub struct rust_web_server::service_discovery::BackendPool
 pub struct rust_web_server::session::DbSessionStore
 pub struct rust_web_server::session::RedisSessionStore

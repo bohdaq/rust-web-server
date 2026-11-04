@@ -383,7 +383,14 @@ impl Application for AdminApi {
         let response = match (request.method.as_str(), route) {
             ("GET", "/whoami") => ok(format!(r#"{{"user":"{}","role":"{}","via":"{}"}}"#, json_escape(&principal.user), principal.role.as_str(), principal.via)),
             ("GET", "/audit") => ok(access::recent_json(query(request, "n").and_then(|n| n.parse().ok()).unwrap_or(100).min(access::AUDIT_CAPACITY))),
-            (_, "/whoami" | "/audit") => wrong_method("GET"),
+            ("GET", "/audit/verify") => match access::verify_audit_file() {
+                Ok((file, report)) => {
+                    let report = report.to_json();
+                    ok(format!(r#"{{"file":"{}",{}"#, json_escape(&file), &report[1..]))
+                }
+                Err(e) => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+            },
+            (_, "/whoami" | "/audit" | "/audit/verify") => wrong_method("GET"),
             _ => self.route(request, connection, route),
         };
         if !is_read(&request.method) && !(request.method == "POST" && route == "/authz/check") {

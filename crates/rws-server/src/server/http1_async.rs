@@ -203,7 +203,7 @@ where
                 name: Header::_CONNECTION.into(),
                 value: if reusable { "keep-alive" } else { "close" }.into(),
             });
-            Log::log_access(&request, &response, &peer_addr);
+            Log::log_served(&request, &mut response, &peer_addr);
             if response.stream_pipe.is_some() || response.stream_file.is_some() {
                 write_streaming(&mut stream, response, request).await?;
             } else {
@@ -322,7 +322,7 @@ where
         // A WebSocket upgrade: send the 101, then the connection is the
         // handler's (`WebSocket::upgrade`).
         if let Some(upgrade) = crate::websocket::take_upgrade(&mut response) {
-            Log::log_access(&request, &response, &peer_addr);
+            Log::log_served(&request, &mut response, &peer_addr);
             stream.write_all(&crate::websocket::upgrade_head(&response)).await.map_err(|e| e.to_string())?;
             stream.flush().await.map_err(|e| e.to_string())?;
             crate::websocket::hand_over_async(stream, std::mem::take(&mut pending), upgrade);
@@ -343,7 +343,7 @@ where
             value: if keep_alive { "keep-alive" } else { "close" }.into(),
         });
 
-        Log::log_access(&request, &response, &peer_addr);
+        Log::log_served(&request, &mut response, &peer_addr);
 
         if response.stream_pipe.is_some() || response.stream_file.is_some() {
             if !write_file_zero_copy(&mut stream, &mut response, &request).await?
