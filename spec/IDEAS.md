@@ -37,7 +37,7 @@ Updated 2026-10-25.
 
 ## Operations and distribution
 
-- **OpenSSF Scorecard**, reproducible builds, automated crates.io publishing.
+- **OpenSSF Scorecard**, reproducible builds (moved to ROADMAP #103), automated crates.io publishing.
 - **kTLS and CPU affinity** (HAProxy 3.3, Ferron).
 
 ## Data / ML

@@ -301,6 +301,30 @@ Rws as a Rails/Spring-class framework built agent-first: the app explains itself
 
 **Done when:** `starters/fullstack` uses the auth flows, a job, a mail and the web layer, and passes in CI.
 
+## 18.32.0 — Developer adoption
+
+Plan and gap review for developers and enterprises: [ADOPTION.md](ADOPTION.md) (2026-11-04).
+
+- **#96** **docs.rs and feature presets** — every feature's items on docs.rs; presets (`web`, `api`, `proxy`, `full`) with compile times.
+- **#97** **Library quick start** — `cargo add` → route → database → template → test, run by CI.
+- **#98** **Migration guides** — from axum and actix; nginx / Caddy config to `rws.config.toml`.
+- **#99** **README for two audiences** — library first, server second.
+- **#100** **Deploy recipes** — Fly.io, Cloud Run, Railway, Render; a Dockerfile template for library apps.
+- **#101** **Deprecation policy** in the support policy.
+
+**Done when:** docs.rs shows every feature's items; the quick start and each recipe's Dockerfile build in CI.
+
+## 18.33.0 — Enterprise readiness
+
+- **#102** **Logs for security monitoring** — OTLP logs, syslog/CEF, IP anonymisation and header redaction in access logs, a hash-chained audit log.
+- **#103** **Supply chain** — OpenSSF Scorecard, reproducible builds, a SLSA statement, a signed Helm chart.
+- **#104** **HA/DR and upgrade runbook** — with an N-1 → N compatibility e2e.
+- **#105** **SCIM and LDAP for admin users**, admin roles scoped per host.
+- **#106** **Module maturity tiers** — production / preview per module, with conformance status, on the docs home.
+- **#107** **Observability recipes** — Datadog, Splunk, Elastic, New Relic.
+
+**Done when:** `ci/e2e/otlp.sh` receives logs; a release build reproduces bit for bit; the compatibility e2e passes for 18.31 → 18.33. Non-code items (second maintainer, independent audit, commercial support) are listed in [ADOPTION.md](ADOPTION.md#outside-the-code).
+
 ## 19.0.0 — Breaking changes
 
 - **#63** **Proxy response pass-through.** On the 18.0.0 benchmarks rws leads nginx in most scenarios, but on proxy-1k it is level or slightly behind (EPYC 7763: 48.7 vs 45.3 µs CPU per request; the one Intel run: −2% requests per second, +9% CPU per request). The remaining cost is rws parsing every upstream response into a `Response` and writing it out again, about 7% of a proxied request's CPU in the per-core profile. Carry a simple upstream head through unparsed instead, keeping what the parse does for safety: dropping hop-by-hop and duplicate `Content-Length` headers and rejecting CR/LF. That needs a new field on `Response`, whose fields are all public and built by struct literal, so it breaks apps; mark `Response` `#[non_exhaustive]` (with constructors) in the same release so later fields don't. Judge it by same-run A/B against 18.x on proxy-1k. *Planned 2026-10-26.* **Shelved 2026-10-30**: re-measured (proxy-1k level with nginx on throughput, +4.6% CPU/request); a same-run A/B of the cheap non-breaking half was noise, so a major version for the rest isn't worth it ([RELEASE_19_0.md](RELEASE_19_0.md)).

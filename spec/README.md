@@ -10,6 +10,7 @@ at https://rws8.tech); API docs are rustdoc.
 | [IDEAS.md](IDEAS.md) | Unordered ideas, not yet planned |
 | [PROXY_STATUS_PROBLEM_JSON.md](PROXY_STATUS_PROBLEM_JSON.md) | Proxy-Status, Cache-Status, problem+json (18.17.0) |
 | [A2A_SERVER.md](A2A_SERVER.md) | A2A 1.0 server and gateway (18.18.0) |
+| [ADOPTION.md](ADOPTION.md) | Developer and enterprise adoption: docs.rs, migration guides, deploy recipes, SIEM logs, supply chain, HA/DR, SCIM/LDAP (18.32–18.33) |
 | [AGENT_FIRST_FRAMEWORK.md](AGENT_FIRST_FRAMEWORK.md) | Agent-first framework: gap review vs Rails/Spring, dev MCP, compile-checked routes, generators, ORM, auth flows (18.28–18.31) |
 | [OPENAPI_TO_MCP.md](OPENAPI_TO_MCP.md) | MCP tools from OpenAPI documents and routes (18.19.0) |
 | [OPERATIONS_AND_TRUST.md](OPERATIONS_AND_TRUST.md) | systemd notify/socket activation, Forwarded + CRLs, key rotation, rwsctl (18.20.0) |
