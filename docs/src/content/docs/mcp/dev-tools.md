@@ -66,7 +66,7 @@ claude mcp add --transport http my-app http://localhost:7878/mcp
 | `recent_requests` `{"n": 50}` | The last requests (at most 100): method, path, status, client IP, latency |
 | `recent_errors` `{"n": 50}` | The last 4xx/5xx |
 | `models` | With a `model-*` feature: each type registered with `DevTools::model::<T>()` — type, table, columns, primary key; with `DevTools::database(pool)` also each column's type there, `table_exists`, `missing_columns` (model columns the table lacks) and `unmapped_columns` (table columns no field maps) |
-| `db_schema` | With `DevTools::database(pool)`: every table and its columns (name, type, nullable, default, primary key) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
+| `db_schema` | With `DevTools::database(pool)`: every table: its columns (name, type, nullable, default, primary key), primary key, indexes and foreign keys (18.30.0; `DbPool::schema`, the JSON `rws db schema --json` prints) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
 | `migrations` | With `DevTools::migrations(dir)` too: each migration file, whether it is applied and whether it has a `.down.sql` |
 | `migrations_run` | Apply the pending migrations; answers the status afterwards |
 | `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none). The same operations from a shell: [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
@@ -119,7 +119,7 @@ to the release's API, written into the project `layout` reports (the
 
 | Tool | Arguments |
 |---|---|
-| `gen_model` | `name` (`Post`), `fields` (`["title:String", "views:i64", "note:Option<String>"]`), `db` (`sqlite`, `postgres`, `mysql`; default from `Cargo.toml`), `dry_run` |
+| `gen_model` | `name` (`Post`), `fields` (`["title:String", "views:i64", "note:Option<String>"]`), `db` (`sqlite`, `postgres`, `mysql`; default from `Cargo.toml`), `timestamps`, `soft_delete` (booleans, 18.30.0: `--timestamps`, `--soft-delete`), `dry_run` |
 | `gen_route` | `resource` (`posts`), `fields`, `methods` (`["list", "show", "create", "update", "remove"]`, default all), `prefix` (`/api`), `dry_run` |
 | `gen_migration` | `name` (`add_index_to_posts`), `dry_run` |
 | `gen_test` | `resource`, `app_expr` (`app(Store::memory())` when `app` takes arguments), `dry_run` |

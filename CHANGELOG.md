@@ -5,6 +5,49 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- **ORM, part 2** (roadmap #90):
+  - Eager loading: `Post::query(&pool).with(Post::comments()).with(Post::author()).fetch_all()`
+    loads each relation for the whole result set in one more query
+    (`WHERE fk IN (…)`, 500 keys per query), not one per row. A
+    `model::Relation<O, R>` describes it — `has_many(fk)`, `has_one(fk)`,
+    `belongs_to(fk)`, `belongs_to_many(join, owner_key, related_key)` — and
+    loads one owner's (`load`) or many owners' (`load_for`) rows too.
+    `with()` returns an `EagerQuery` whose `fetch_all` / `fetch_one` /
+    `paginate` answer `Loaded<T>` (derefs to the model; `related(&rel)`,
+    `one(&rel)`, `take`, `is_loaded`). Soft-deleted related rows are left
+    out. See [Eager loading](https://rws8.tech/database/relations/#eager-loading-with-with).
+  - Many-to-many: `BelongsToMany<R>` — `load`, `ids`, `attach`, `detach`,
+    `detach_all`, `sync` (answers `SyncChanges`), through a join table.
+  - Scopes: `QueryBuilder::scope(f)` applies a reusable query function;
+    `where_in`, `where_null`, `where_not_null`. See
+    [Scopes](https://rws8.tech/database/query-builder/#scopes).
+  - Seeds in Rust: `model::Seeders` (`add(name, |pool| async move { … })`,
+    or the `Seeder` trait) run after `seeds/*.sql` by
+    `DbPool::seed_with(dir, &seeders)`; factories make the rows.
+    `db_cli::run_with_seeders` gives an app's own binary `db seed` with
+    them. See [Seeds in Rust](https://rws8.tech/database/migrations/#seeds-in-rust).
+  - Read replicas: `DbPool::with_replicas(primary, replicas)` (or
+    `RWS_DB_REPLICA_URLS` with `DbPool::from_env`) sends `query*` — so the
+    query builder's and repository's reads and relation loads — to the
+    replicas in turn, and writes, transactions, migrations, seeds, `save`
+    and `schema` to the primary; `primary()`, `replica()`, `replicas()`,
+    `close()`. `DbPool` has a new variant, `Replicated`: code matching on
+    its variants needs an arm for it (`close()` replaces the usual match
+    to close a pool). See [Read replicas](https://rws8.tech/database/overview/#read-replicas).
+  - The schema as data: `DbPool::schema()` → `DbSchema` (tables, columns
+    with type / nullability / default, primary key, indexes, foreign keys)
+    on SQLite, PostgreSQL and MySQL, `to_json()`; `rws db schema [--json]`,
+    and the dev MCP server's `db_schema` now lists keys, indexes and
+    foreign keys too. See [The schema as data](https://rws8.tech/database/migrations/#the-schema-as-data).
+  - `rws gen model … --timestamps --soft-delete` (and the `gen_model`
+    tool's `timestamps` / `soft_delete`): `#[timestamps]` with
+    `created_at` / `updated_at`, `#[soft_delete]` with `deleted_at`, the
+    columns in the migration; `Generate::Model` has the two new fields.
+
 ## 18.30.0 — 2026-11-04
 
 ### Added

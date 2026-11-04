@@ -20,6 +20,7 @@ Usage: rws gen <generator> <name> [args] [--dir <project>] [--dry-run] [--json]
 Generators:
   model <Name> field:type...      src/models/<name>.rs (#[derive(Model)], id auto-increment)
         [--db sqlite|postgres|mysql]  and migrations/NNNN_create_<table>.sql + .down.sql
+        [--timestamps] [--soft-delete]  created_at/updated_at, deleted_at kept by save/delete
   route <resource> [field:type...]  src/routes/<resource>.rs: typed handlers and register(app)
         [--methods list,show,create,update,remove] [--prefix /api]
   migration <name>                migrations/NNNN_<name>.sql + .down.sql to fill in
@@ -110,6 +111,7 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
     let mut dir = PathBuf::from(".");
     let (mut dry_run, mut json) = (false, false);
     let (mut db, mut methods, mut prefix, mut app_expr) = (None, None, None, None);
+    let (mut timestamps, mut soft_delete) = (false, false);
     let mut i = 0;
     while i < args.len() {
         let arg = args[i].as_str();
@@ -135,6 +137,8 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
         };
         match flag {
             "--dry-run" => dry_run = true,
+            "--timestamps" => timestamps = true,
+            "--soft-delete" => soft_delete = true,
             "--json" => json = true,
             "--dir" => dir = PathBuf::from(value("--dir")?),
             "--db" => {
@@ -165,10 +169,12 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
             only("--methods", methods.is_some(), "route")?;
             only("--prefix", prefix.is_some(), "route")?;
             only("--app-expr", app_expr.is_some(), "test")?;
-            Generate::Model { name: need_name("model's name (e.g. Post)")?, fields: parse_fields(rest)?, db }
+            Generate::Model { name: need_name("model's name (e.g. Post)")?, fields: parse_fields(rest)?, db, timestamps, soft_delete }
         }
         "route" => {
             only("--db", db.is_some(), "model")?;
+            only("--timestamps", timestamps, "model")?;
+            only("--soft-delete", soft_delete, "model")?;
             only("--app-expr", app_expr.is_some(), "test")?;
             let actions = match &methods {
                 Some(m) => RouteAction::parse_list(m)?,
@@ -178,6 +184,8 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
         }
         "migration" | "test" => {
             only("--db", db.is_some(), "model")?;
+            only("--timestamps", timestamps, "model")?;
+            only("--soft-delete", soft_delete, "model")?;
             only("--methods", methods.is_some(), "route")?;
             only("--prefix", prefix.is_some(), "route")?;
             if let Some(extra) = rest.first() {

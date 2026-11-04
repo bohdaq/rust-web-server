@@ -260,6 +260,7 @@ namespace — they use a shorter `RWS_DB_*` prefix.
 | `RWS_DB_PASSWORD` | `` (empty) | Database password. |
 | `RWS_DB_NAME` | `` (required) | Database name. No default — the server will fail to start if this is unset when the model feature is active. |
 | `RWS_DB_POOL_SIZE` | `10` | Number of connections to pre-create in the connection pool at startup. |
+| `RWS_DB_REPLICA_URLS` | — | Read replicas for `DbPool::from_env`: comma-separated database URLs (`postgres://…`, `mysql://…`, `sqlite:…`) of the primary's backend. Reads go to them in turn, writes and transactions to the primary. See [Read replicas](/database/overview/#read-replicas). |
 | `RWS_DB_SSL_MODE` | `prefer` | TLS to PostgreSQL / MySQL: `disable`, `prefer`, `require`, `verify-ca`, `verify-full`. See [Database TLS](/database/overview/#tls). |
 | `RWS_DB_SSL_ROOT_CERT` | — | PEM CA certificates the server's certificate is checked against (`verify-ca`, `verify-full`). |
 | `RWS_DB_SSL_CLIENT_CERT` | — | PEM client certificate; with `RWS_DB_SSL_CLIENT_KEY`. |

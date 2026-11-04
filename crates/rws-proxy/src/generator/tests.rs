@@ -40,7 +40,7 @@ fn fields(specs: &[&str]) -> Vec<Field> {
 }
 
 fn model(name: &str, specs: &[&str]) -> Generate {
-    Generate::Model { name: name.into(), fields: fields(specs), db: None }
+    Generate::Model { name: name.into(), fields: fields(specs), db: None, timestamps: false, soft_delete: false }
 }
 
 fn route(resource: &str) -> Generate {
@@ -210,12 +210,47 @@ fn a_model_follows_the_database_in_cargo_toml() {
     assert_eq!(ChangeKind::Unchanged, change(&plan, "Cargo.toml").kind);
     assert!(change(&plan, "src/models/mod.rs").content.contains("pub mod note;\npub mod post;\n\npub use note::Note;\npub use post::Post;\n"));
 
-    let mysql = super::plan(&*dir, &Generate::Model { name: "Post".into(), fields: fields(&["views:i64", "rank:i32"]), db: Some(Db::Mysql) }).unwrap();
+    let mysql = super::plan(&*dir, &Generate::Model { name: "Post".into(), fields: fields(&["views:i64", "rank:i32"]), db: Some(Db::Mysql), timestamps: false, soft_delete: false }).unwrap();
     assert!(change(&mysql, "migrations/0001_create_posts.sql").content.contains("BIGINT AUTO_INCREMENT PRIMARY KEY"));
     assert!(change(&mysql, "Cargo.toml").content.contains("\"model-postgres\", \"model-mysql\"]"), "the asked-for backend is added");
 
     let both = project("model_both", &[("Cargo.toml", &cargo.replace("\"model-postgres\"", "\"model-postgres\", \"model-mysql\""))]);
     assert!(super::plan(&*both, &model("Post", &["a:i64"])).unwrap_err().message.contains("--db"));
+}
+
+#[test]
+fn a_model_with_timestamps_and_soft_delete() {
+    let dir = api_project("model_conventions");
+    let request = Generate::Model { name: "Post".into(), fields: fields(&["title:String"]), db: None, timestamps: true, soft_delete: true };
+    assert_eq!("rws gen model Post title:String --timestamps --soft-delete", request.command_line());
+    let plan = plan(&*dir, &request).unwrap();
+    let model = &change(&plan, "src/models/post.rs").content;
+    assert!(model.contains("use rust_web_server::model::Timestamp;\n"), "{model}");
+    assert!(model.contains("#[table(name = \"posts\")]\n#[timestamps]\n#[soft_delete]\npub struct Post {"), "{model}");
+    assert!(model.contains("    pub created_at: Timestamp,\n") && model.contains("    pub updated_at: Timestamp,\n") && model.contains("    pub deleted_at: Option<Timestamp>,\n"), "{model}");
+    assert!(model.contains(r#"assert_eq!(&["id", "title", "created_at", "updated_at", "deleted_at"], Post::column_names());"#), "{model}");
+    assert!(model.contains("created_at: Default::default(), updated_at: Default::default(), deleted_at: None }"), "the round trip builds one: {model}");
+    let up = &change(&plan, "migrations/0001_create_posts.sql").content;
+    assert!(up.contains("created_at TEXT NOT NULL,\n") && up.contains("updated_at TEXT NOT NULL,\n") && up.contains("deleted_at TEXT\n"), "{up}");
+
+    // The columns per database; one convention alone.
+    let pg = Generate::Model { name: "Post".into(), fields: fields(&["title:String"]), db: Some(Db::Postgres), timestamps: true, soft_delete: false };
+    let pg_plan = super::plan(&*dir, &pg).unwrap();
+    let up = &change(&pg_plan, "migrations/0001_create_posts.sql").content;
+    assert!(up.contains("created_at TIMESTAMPTZ NOT NULL") && !up.contains("deleted_at"), "{up}");
+    assert!(!change(&pg_plan, "src/models/post.rs").content.contains("#[soft_delete]"));
+    let my = Generate::Model { name: "Post".into(), fields: fields(&["title:String"]), db: Some(Db::Mysql), timestamps: false, soft_delete: true };
+    assert!(change(&super::plan(&*dir, &my).unwrap(), "migrations/0001_create_posts.sql").content.contains("deleted_at DATETIME(6)\n"));
+    // Without either, no Timestamp import.
+    assert!(!change(&super::plan(&*dir, &super::tests::model("Post", &["title:String"])).unwrap(), "src/models/post.rs").content.contains("Timestamp"));
+    // Timestamp is (de)serialized with rust-web-server's `serde` feature: added.
+    let bare = project("model_conventions_serde", &[("Cargo.toml", &CARGO.replace("[\"serde\", \"macros\"]", "[\"macros\"]")), ("src/lib.rs", "pub mod models;\n")]);
+    let bare_plan = super::plan(&*bare, &request).unwrap();
+    let cargo = &change(&bare_plan, "Cargo.toml").content;
+    assert!(cargo.contains("features = [\"macros\", \"model-sqlite\", \"serde\"]"), "{cargo}");
+    // A field the conventions write is refused.
+    let clash = Generate::Model { name: "Post".into(), fields: fields(&["created_at:String"]), db: None, timestamps: true, soft_delete: false };
+    assert!(super::plan(&*dir, &clash).unwrap_err().message.contains("--timestamps"));
 }
 
 #[test]
@@ -407,6 +442,8 @@ fn the_command_line_answers_usage_errors_with_exit_2() {
         vec!["model"],
         vec!["model", "Post", "title:u8", "--dir", d],
         vec!["route", "posts", "--db", "sqlite", "--dir", d],
+        vec!["route", "posts", "--timestamps", "--dir", d],
+        vec!["migration", "a", "--soft-delete", "--dir", d],
         vec!["migration", "a", "b", "--dir", d],
         vec!["scaffold", "x"],
         vec!["test", "posts", "--nope"],

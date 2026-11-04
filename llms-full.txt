@@ -1972,6 +1972,7 @@ namespace — they use a shorter `RWS_DB_*` prefix.
 | `RWS_DB_PASSWORD` | `` (empty) | Database password. |
 | `RWS_DB_NAME` | `` (required) | Database name. No default — the server will fail to start if this is unset when the model feature is active. |
 | `RWS_DB_POOL_SIZE` | `10` | Number of connections to pre-create in the connection pool at startup. |
+| `RWS_DB_REPLICA_URLS` | — | Read replicas for `DbPool::from_env`: comma-separated database URLs (`postgres://…`, `mysql://…`, `sqlite:…`) of the primary's backend. Reads go to them in turn, writes and transactions to the primary. See [Read replicas](/database/overview/#read-replicas). |
 | `RWS_DB_SSL_MODE` | `prefer` | TLS to PostgreSQL / MySQL: `disable`, `prefer`, `require`, `verify-ca`, `verify-full`. See [Database TLS](/database/overview/#tls). |
 | `RWS_DB_SSL_ROOT_CERT` | — | PEM CA certificates the server's certificate is checked against (`verify-ca`, `verify-full`). |
 | `RWS_DB_SSL_CLIENT_CERT` | — | PEM client certificate; with `RWS_DB_SSL_CLIENT_KEY`. |
@@ -3462,6 +3463,33 @@ mod tests {
   down file drops the table.
 - To list the model in the dev MCP endpoint's `models` tool, add
   `.model::<models::Post>()` to your `DevTools` (the plan's note says so).
+- `--timestamps` and `--soft-delete` (18.30.0) add the repository's
+  [conventions](/database/conventions/): `#[timestamps]` with
+  `created_at: Timestamp` and `updated_at: Timestamp` (columns `NOT NULL`),
+  `#[soft_delete]` with `deleted_at: Option` (nullable). The
+  columns are `TEXT` on SQLite, `TIMESTAMPTZ` on PostgreSQL, `DATETIME(6)` on
+  MySQL; the `serde` feature is added for `Timestamp`'s `Serialize`. A field
+  of the same name is refused — `save` and `delete_by_id` write these columns.
+
+  ```sh
+  rws gen model Comment body:String post_id:i64 --timestamps --soft-delete
+  ```
+
+  ```rust
+  #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Model)]
+  #[table(name = "comments")]
+  #[timestamps]
+  #[soft_delete]
+  pub struct Comment {
+      #[primary_key(auto_increment)]
+      pub id: i64,
+      pub body: String,
+      pub post_id: i64,
+      pub created_at: Timestamp,
+      pub updated_at: Timestamp,
+      pub deleted_at: Option,
+  }
+  ```
 
 ### Routes
 
@@ -16883,6 +16911,7 @@ Unlike most feature pairs in this crate, `model-sqlite`, `model-postgres`, and `
 | `RWS_DB_PASSWORD` | — | Ignored for SQLite |
 | `RWS_DB_NAME` | **required** | File path for SQLite; use `:memory:` for in-memory |
 | `RWS_DB_POOL_SIZE` | `10` | Maximum number of connections in the pool |
+| `RWS_DB_REPLICA_URLS` | — | Read replicas, comma-separated database URLs (`DbPool::from_env` only; see [Read replicas](#read-replicas)) |
 
 ### TLS
 
@@ -17012,7 +17041,39 @@ When reading config from the environment instead, set `RWS_DB_BACKEND` before ea
 
 `DbPool::new(config).await` creates a `sqlx::Pool` with `max_connections = config.pool_size` for whichever backend `config.backend` names. sqlx manages the connection lifecycle internally — connections are acquired on demand and returned to the pool automatically after each `await` point. There is no `get()`/`PooledConnection` API; just `pool.execute(...)` and `pool.query_rows(...)` directly.
 
-Under the hood, `DbPool` is an enum with one variant per compiled-in backend (`Sqlite`/`Postgres`/`MySql`) — `execute`, `query_rows`, `begin`, and every other method dispatch to the matching variant internally, so calling code never needs to match on it itself unless it specifically wants to know which backend it's holding (`pool.backend()`).
+Under the hood, `DbPool` is an enum with one variant per compiled-in backend (`Sqlite`/`Postgres`/`MySql`), plus `Replicated` for a pool with [read replicas](#read-replicas) — `execute`, `query_rows`, `begin`, and every other method dispatch to the matching variant internally, so calling code never needs to match on it itself unless it specifically wants to know which backend it's holding (`pool.backend()`). Code that does match on the variants needs a `Replicated` arm since 18.30.0; `pool.close().await` closes any pool without matching.
+
+## Read replicas
+
+A pool can send reads to replicas and everything else to the primary (18.30.0):
+
+```rust
+use rust_web_server::model::DbPool;
+
+let pool = DbPool::with_replicas(
+    DbPool::connect("postgres://app:secret@db-primary/app").await?,
+    vec![
+        DbPool::connect("postgres://app:secret@db-replica-1/app").await?,
+        DbPool::connect("postgres://app:secret@db-replica-2/app").await?,
+    ],
+)?;
+```
+
+Or from the environment: `DbPool::from_env()` connects the `RWS_DB_*` database as the primary and, when `RWS_DB_REPLICA_URLS` is set, each of its comma-separated URLs as a replica (at most `RWS_DB_POOL_SIZE` connections each):
+
+```bash
+RWS_DB_BACKEND=postgres RWS_DB_HOST=db-primary RWS_DB_NAME=app RWS_DB_USER=app RWS_DB_PASSWORD=secret \
+RWS_DB_REPLICA_URLS=postgres://app:secret@db-replica-1/app,postgres://app:secret@db-replica-2/app
+```
+
+| Goes to a replica (round robin) | Goes to the primary |
+|---|---|
+| `query_rows`, `query`, `query_raw` | `execute`, `begin`, `transaction` (reads inside a transaction too) |
+| `QueryBuilder::fetch_all` / `fetch_one` / `count` / `paginate` / `paginate_after` | `QueryBuilder::update` / `delete` / `force_delete` / `restore` |
+| `Repository::find_by_id` / `find_all` / `count` / `exists_by_id` | `Repository::save` (it reads the saved row back from the primary), `delete_by_id`, factories' `create` |
+| relation loads and `with()` | `migrate`, `migration_status`, `rollback`, `seed`, `seed_with`, `schema` |
+
+A replica lags behind its primary, so a read right after a write may not see it. Where it must, read from the primary: `User::query(pool.primary())`, `pool.primary().query_rows(…)`. `pool.replica()` is the pool the next read goes to, `pool.replicas()` all of them. Replicas must use the primary's backend; with no replicas every statement goes to the primary.
 
 ## What's next
 
@@ -17023,7 +17084,7 @@ Under the hood, `DbPool` is an enum with one variant per compiled-in backend (`S
 - [Raw SQL](/database/raw-sql/) — full control
 - [Transactions](/database/transactions/) — atomic operations
 - [Migrations](/database/migrations/) — schema versioning
-- [Relations](/database/relations/) — HasMany, HasOne, BelongsTo
+- [Relations](/database/relations/) — HasMany, HasOne, BelongsTo, BelongsToMany, eager `with()`
 - [In-memory SQLite](/database/in-memory/) — isolated databases for tests
 
 ---
@@ -17648,6 +17709,57 @@ let adults = User::query(&pool)
     .filter("age >= ?", vec![Value::Int(18)])
     .fetch_all().await?;
 ```
+
+### `IN` and `NULL` filters
+
+`where_in(col, values)` adds `col IN (?, ?, …)` (no values match no rows); `where_null(col)` and `where_not_null(col)` add `IS NULL` / `IS NOT NULL` (18.30.0).
+
+```rust
+let staff = User::query(&pool)
+    .where_in("role", ["admin", "moderator"])
+    .where_null("banned_at")
+    .fetch_all().await?;
+```
+
+## Scopes
+
+A scope is a reusable piece of a query: a function from a `QueryBuilder` to a narrower one. `.scope(f)` applies it (18.30.0); scopes take arguments by being closures, and compose:
+
+```rust
+use rust_web_server::model::QueryBuilder;
+
+fn published(q: QueryBuilder<'_, Post>) -> QueryBuilder<'_, Post> {
+    q.where_eq("published", true).where_null("hidden_at")
+}
+
+fn by_author(id: i64) -> impl FnOnce(QueryBuilder<'_, Post>) -> QueryBuilder<'_, Post> {
+    move |q| q.where_eq("author_id", id)
+}
+
+let mine = Post::query(&pool).scope(published).scope(by_author(7)).count().await?;
+```
+
+To call them as methods — `Post::query(&pool).published()` — put them in an extension trait for that model's builder:
+
+```rust
+pub trait PostScopes {
+    fn published(self) -> Self;
+    fn recent(self, n: u64) -> Self;
+}
+
+impl PostScopes for QueryBuilder<'_, Post> {
+    fn published(self) -> Self {
+        self.where_eq("published", true)
+    }
+    fn recent(self, n: u64) -> Self {
+        self.order_by("created_at", Order::Desc).limit(n)
+    }
+}
+
+let front_page = Post::query(&pool).published().recent(10).with(Post::author()).fetch_all().await?;
+```
+
+Scopes run before the terminal call, so they work with `count`, `paginate`, `update`, `delete` and [`with()`](/database/relations/#eager-loading-with-with) alike.
 
 ## Ordering
 
@@ -18343,6 +18455,45 @@ INSERT INTO roles (name) VALUES ('member') ON CONFLICT DO NOTHING;
 
 The convention is a `seeds/` directory beside the migrations directory: `migrations/` → `seeds/`, `db/migrations/` → `db/seeds/`.
 
+### Seeds in Rust
+
+Rows that are easier to make in Rust — with [factories](/testing/database/), computed values, several tables at once — go in seeders (18.30.0). A seeder is a name and an async function of the pool; `pool.seed_with(dir, &seeders)` runs the `*.sql` files first, then the seeders in the order added, and answers what it ran:
+
+```rust
+use rust_web_server::model::{DbPool, Seeders};
+
+pub fn seeders() -> Seeders {
+    Seeders::new()
+        .add("users", |pool: DbPool| async move {
+            User::factory().create_many(10, &pool).await?;
+            Ok(())
+        })
+        .add("admin", |pool: DbPool| async move {
+            if User::query(&pool).where_eq("email", "admin@example.com").count().await? == 0 {
+                User::factory().with(|u| { u.email = "admin@example.com".into(); u.admin = true; }).create(&pool).await?;
+            }
+            Ok(())
+        })
+}
+
+let ran = pool.seed_with("seeds", &seeders()).await?; // ["01_roles.sql", "users", "admin"]
+```
+
+Like SQL seeds, seeders run every time, so write them to tolerate their rows being there (the `admin` one looks first). A seeder isn't wrapped in a transaction — use `pool.transaction(…)` in it when its rows must go in together — and a failing one stops the run with its name in the error. With seeders, a missing SQL directory means no SQL seeds rather than an error. Implement the `Seeder` trait instead of a closure when a seeder needs state of its own.
+
+The `rws` binary can't run an app's Rust code, so `rws db seed` runs the SQL files only. Give the app's own binary the same command, with its seeders, through `db_cli::run_with_seeders`:
+
+```rust
+// src/main.rs
+let args: Vec = std::env::args().collect();
+if let Some(db_args) = rust_web_server::db_cli::requested(&args) {
+    let code = rust_web_server::db_cli::run_with_seeders(db_args, &myapp::seeders(), &mut std::io::stdout(), &mut std::io::stderr());
+    std::process::exit(code);
+}
+```
+
+`cargo run -- db seed` then runs `seeds/*.sql` and the seeders (`--json`: `{"directory":…,"seeded":["01_roles.sql","users","admin"]}`); every other `db` command works as `rws db`'s.
+
 ## From the command line: `rws db`
 
 `rws db` runs the same operations on the project in the working directory (or `--dir`), with the migrations directory from its [`rws.app.toml`](/building-apps/project-layout/) and the seeds beside it:
@@ -18352,10 +18503,38 @@ rws db status                    # applied / pending, and which have a .down.sql
 rws db migrate                   # apply every pending migration
 rws db rollback                  # undo the last one; `rws db rollback 3` the last three
 rws db seed                      # run seeds/*.sql
+rws db schema                    # tables: columns, primary key, indexes, foreign keys
 rws db migrate --database-url postgres://app:secret@db/app --json
 ```
 
 The database is `--database-url`, else `DATABASE_URL`, else the `RWS_DB_*` variables (see [the overview](/database/overview/#environment-variables)); URLs are sqlx's — `sqlite:app.db` (`sqlite:app.db?mode=rwc` creates the file), `postgres://user:password@host:5432/db`, `mysql://user:password@host:3306/db`. `--migrations <dir>` and `--seeds <dir>` override the directories. `--json` prints the result for agents: `status` is the dev MCP server's `migrations` answer (`{"directory":…,"migrations":[{"version":…,"applied":…,"has_down":…}]}`), `migrate` adds `"applied"` (the versions this run applied), `rollback` answers `{"directory":…,"rolled_back":[…]}`, `seed` `{"directory":…,"seeded":[…]}`, and a failure `{"error":…}`. Exit codes: `0` done, `1` a database or migration error (including a missing `.down.sql`), `2` bad arguments.
+
+## The schema as data
+
+`pool.schema().await?` reads the connected schema from the database's catalog — SQLite's `sqlite_master` and `pragma_*` functions, PostgreSQL's `information_schema` and `pg_catalog` (the `current_schema()`), MySQL's `information_schema` (the `DATABASE()`) — into a `DbSchema` (18.30.0): every table (views left out, `_schema_migrations` included) with its columns (type as the backend spells it, nullability, default, whether it is in the primary key), the primary key in key order, the indexes (columns, `unique`, `primary`; SQLite has none for an `INTEGER PRIMARY KEY`) and the foreign keys (columns, referenced table and columns, `on_update`, `on_delete`). It reads the primary of a [replicated pool](/database/overview/#read-replicas).
+
+```rust
+let schema = pool.schema().await?;
+let users = schema.table("users").expect("migrated");
+assert_eq!(vec!["id".to_string()], users.primary_key);
+for fk in &schema.table("orders").unwrap().foreign_keys {
+    println!("{:?} -> {}({:?}) on delete {}", fk.columns, fk.references_table, fk.references_columns, fk.on_delete);
+}
+println!("{}", schema.to_json());
+```
+
+`to_json()` is what `rws db schema --json` prints and the dev MCP server's `db_schema` tool answers:
+
+```json
+{"backend":"sqlite","tables":[{"name":"orders",
+  "columns":[{"name":"id","type":"INTEGER","nullable":true,"default":null,"primary_key":true},
+             {"name":"user_id","type":"INTEGER","nullable":false,"default":null,"primary_key":false}],
+  "primary_key":["id"],
+  "indexes":[{"name":"orders_by_user","columns":["user_id"],"unique":false,"primary":false}],
+  "foreign_keys":[{"name":null,"columns":["user_id"],"references":{"table":"users","columns":["id"]},"on_update":"NO ACTION","on_delete":"CASCADE"}]}]}
+```
+
+Without `--json`, `rws db schema` prints a table per block: `  user_id  INTEGER  NOT NULL`, `  index orders_by_user (user_id)`, `  foreign key (user_id) references users (id) on delete CASCADE`.
 
 The command needs a `rws` built with a database driver — `cargo install rust-web-server --features model-sqlite,model-postgres,model-mysql`; the release binaries have none, and say so.
 
@@ -18400,7 +18579,7 @@ Prefer `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` so that rer
 
 <https://rws8.tech/database/relations/>
 
-The ORM provides three relationship helpers: `HasMany`, `HasOne`, and `BelongsTo`. Each holds the information needed to load related records on demand. There is no lazy loading — you call `.load(&pool).await` explicitly when you want the data.
+The ORM provides relationship helpers for one record — `HasMany`, `HasOne`, `BelongsTo` and (18.30.0) `BelongsToMany` — and `Relation` descriptors that [load a relation for a whole result set](#eager-loading-with-with). There is no lazy loading — you call `.load(&pool).await` or `.with(…)` explicitly when you want the data.
 
 Relation helpers are not fields of a model: `#[derive(Model)]` maps every field to a column, and a `HasMany` field has no column. Build the helper from a loaded record instead — a small method per relation keeps the call site readable.
 
@@ -18507,38 +18686,81 @@ if let Some(post) = posts.first() {
 }
 ```
 
-## Avoiding N+1 queries
 
-The explicit `.load().await` design makes N+1 queries visible — if you call `.load().await` inside a loop you will issue one query per iteration. The recommended pattern is to batch-load related records using `IN (…)`.
+## Eager loading with `with()`
+
+Calling `.load()` for each row of a list is one query per row (N+1). `with()` loads a relation for the whole result set in **one more query per relation**, `WHERE fk IN (…)` (18.30.0). Describe each relation once, as a `Relation`:
 
 ```rust
-use rust_web_server::model::{DbPool, Value};
+use rust_web_server::model::{Order, Relation};
 
-// Step 1 — load users (1 query)
-let users: Vec = pool.query::("SELECT * FROM users WHERE active = ?", &[Value::Bool(true)]).await?;
+impl Post {
+    pub fn comments() -> Relation { Relation::has_many("post_id") } // comments.post_id = posts.id
+    pub fn author() -> Relation { Relation::belongs_to("user_id") }    // posts.user_id = users.id
+    pub fn tags() -> Relation { Relation::belongs_to_many("post_tags", "post_id", "tag_id") }
+}
 
-// Step 2 — collect IDs
-let user_ids: Vec = users.iter().map(|u| Value::Int(u.id)).collect();
+impl User {
+    pub fn profile() -> Relation { Relation::has_one("user_id") }
+}
 
-// Step 3 — build IN clause and load all posts (1 query)
-if !user_ids.is_empty() {
-    let placeholders = user_ids.iter().map(|_| "?").collect::>().join(", ");
-    let sql = format!("SELECT * FROM posts WHERE user_id IN ({})", placeholders);
-    let posts: Vec = pool.query::(&sql, &user_ids).await?;
+// Three queries, however many posts: the posts, their comments, their authors.
+let posts = Post::query(&pool)
+    .where_eq("published", true)
+    .order_by("id", Order::Desc)
+    .with(Post::comments())
+    .with(Post::author())
+    .fetch_all()
+    .await?;
 
-    // Step 4 — group in memory
-    use std::collections::HashMap;
-    let mut posts_by_user: HashMap<i64, Vec> = HashMap::new();
-    for post in posts {
-        posts_by_user.entry(post.user_id).or_default().push(post);
-    }
+for post in &posts {
+    let comments: &[Comment] = post.related(&Post::comments());
+    let author: Option<&User> = post.one(&Post::author());
+    println!("{} by {:?}: {} comments", post.title, author.map(|a| &a.name), comments.len());
 }
 ```
 
-This loads N users and all their posts in exactly 2 queries regardless of how many users there are.
+`with()` turns the query into an `EagerQuery` whose `fetch_all`, `fetch_one` and `paginate` answer `Loaded` values. A `Loaded` derefs to the model (`post.title`); `related(&rel)` is the relation's rows (empty when there are none), `one(&rel)` the first — the row of a `belongs_to` or `has_one` — `take(&rel)` moves them out, `into_inner()` drops the relations, and `is_loaded(&rel)` says whether the query loaded it.
+
+| Constructor | Meaning | Query |
+|---|---|---|
+| `Relation::has_many(fk)` | `R.fk` holds the owner's key | `SELECT * FROM r WHERE fk IN (…)` |
+| `Relation::has_one(fk)` | as `has_many`, at most one row (the lowest key) | the same |
+| `Relation::belongs_to(fk)` | the owner's `fk` holds `R`'s key (`NULL`: none) | `SELECT * FROM r WHERE id IN (…)` |
+| `Relation::belongs_to_many(join, owner_key, related_key)` | through a join table | `SELECT r.*, j.owner_key … JOIN join j ON j.related_key = r.id WHERE j.owner_key IN (…)` |
+
+Related rows come in primary-key order, soft-deleted ones (`#[soft_delete]`) left out. Keys go in batches of 500 (`eager::IN_BATCH`), so a larger result set costs one query per batch. A row related to several owners (a shared author, a tag) is cloned into each, so the related type must be `Clone`. The same descriptor loads without a query builder: `Post::comments().load(&pool, &post)` for one owner, `Post::comments().load_for(&pool, &posts)` for a slice (one `Vec` per owner, in order).
+
+Nested loading (comments' authors) is a second step: collect the comments and call `Comment::author().load_for(&pool, &comments)`.
+
+## Many-to-many: `BelongsToMany`
+
+`BelongsToMany` is one owner's links through a join table (18.30.0). It loads the linked rows and adds and removes the links:
+
+```rust
+use rust_web_server::model::{BelongsToMany, Value};
+
+// CREATE TABLE post_tags (post_id BIGINT NOT NULL, tag_id BIGINT NOT NULL, PRIMARY KEY (post_id, tag_id));
+impl Post {
+    pub fn tag_links(&self) -> BelongsToMany {
+        BelongsToMany::new(Value::Int(self.id), "post_tags", "post_id", "tag_id")
+    }
+}
+
+let links = post.tag_links();
+links.attach(&pool, [rust.id, web.id]).await?;          // links added: 2 (an existing link is skipped)
+links.detach(&pool, [web.id]).await?;                   // links removed: 1
+let changes = links.sync(&pool, [rust.id, async_.id]).await?; // exactly these: adds and removes as needed
+println!("attached {:?}, detached {:?}", changes.attached, changes.detached);
+let tags: Vec = links.load(&pool).await?;          // the linked rows, soft-deleted ones left out
+let ids = links.ids(&pool).await?;                      // the join table's keys
+links.detach_all(&pool).await?;
+```
+
+`attach` and `sync` run in a transaction (read the links, then write). They insert the two key columns only, so other join-table columns need defaults. Give the join table a primary key or unique index over both columns: the methods never link twice, but two processes attaching at once could. For a whole result set use `Relation::belongs_to_many(…)` with `with()`, above.
 
 :::note[No lazy loading by design]
-Lazy loading hides database access behind field access, making it easy to accidentally trigger hundreds of queries. Explicit `.load().await` calls keep all I/O visible at the call site, making performance characteristics clear during code review.
+Lazy loading hides database access behind field access, making it easy to accidentally trigger hundreds of queries. Explicit `.load().await` calls and `with()` keep all I/O visible at the call site, making performance characteristics clear during code review.
 :::
 
 ---
@@ -20737,7 +20959,7 @@ claude mcp add --transport http my-app http://localhost:7878/mcp
 | `recent_requests` `{"n": 50}` | The last requests (at most 100): method, path, status, client IP, latency |
 | `recent_errors` `{"n": 50}` | The last 4xx/5xx |
 | `models` | With a `model-*` feature: each type registered with `DevTools::model::()` — type, table, columns, primary key; with `DevTools::database(pool)` also each column's type there, `table_exists`, `missing_columns` (model columns the table lacks) and `unmapped_columns` (table columns no field maps) |
-| `db_schema` | With `DevTools::database(pool)`: every table and its columns (name, type, nullable, default, primary key) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
+| `db_schema` | With `DevTools::database(pool)`: every table: its columns (name, type, nullable, default, primary key), primary key, indexes and foreign keys (18.30.0; `DbPool::schema`, the JSON `rws db schema --json` prints) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
 | `migrations` | With `DevTools::migrations(dir)` too: each migration file, whether it is applied and whether it has a `.down.sql` |
 | `migrations_run` | Apply the pending migrations; answers the status afterwards |
 | `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none). The same operations from a shell: [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
@@ -20790,7 +21012,7 @@ to the release's API, written into the project `layout` reports (the
 
 | Tool | Arguments |
 |---|---|
-| `gen_model` | `name` (`Post`), `fields` (`["title:String", "views:i64", "note:Option"]`), `db` (`sqlite`, `postgres`, `mysql`; default from `Cargo.toml`), `dry_run` |
+| `gen_model` | `name` (`Post`), `fields` (`["title:String", "views:i64", "note:Option"]`), `db` (`sqlite`, `postgres`, `mysql`; default from `Cargo.toml`), `timestamps`, `soft_delete` (booleans, 18.30.0: `--timestamps`, `--soft-delete`), `dry_run` |
 | `gen_route` | `resource` (`posts`), `fields`, `methods` (`["list", "show", "create", "update", "remove"]`, default all), `prefix` (`/api`), `dry_run` |
 | `gen_migration` | `name` (`add_index_to_posts`), `dry_run` |
 | `gen_test` | `resource`, `app_expr` (`app(Store::memory())` when `app` takes arguments), `dry_run` |
@@ -23832,8 +24054,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `WithMiddleware` | `middleware` | Wraps any `Application` with a layer stack; `app.wrap(layer)`, first-pushed is outermost |
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
 | `AppManifest` | `app_manifest` | `rws.app.toml`, parsed: `name`, `paths`, `file`, `warnings`; `load(dir)` (conventional when absent; name from `Cargo.toml`), `parse(text)` / `FromStr`, `conventional(name)`, `layout(dir)` (18.28.0). See [Project layout](/building-apps/project-layout/) |
-| `Generate` / `plan` / `Plan` | `generator` | `rws gen model|route|migration|test` as a library (18.29.0): `Generate::{Model, Route, Migration, Test}`, `plan(dir, &request)` reads the project and answers a `Plan` (`changes`, `notes`, `status()`, `has_conflicts()`, `render(diffs)`, `to_json(written)`), `Plan::apply(dir)` writes it — never overwriting a file; `run(args, out, err)` is the command line (`EXIT_OK`/`EXIT_CONFLICT`/`EXIT_USAGE`). See [Generators](/building-apps/generators/) |
-| `db_cli::run` / `requested` | `db_cli` | `rws db migrate|rollback [N]|status|seed` (18.30.0): `run(args, out, err)` answers the exit code (`EXIT_OK`, `EXIT_FAILED`, `EXIT_USAGE`); `--database-url` / `DATABASE_URL` / `RWS_DB_*`, `--dir`, `--migrations`, `--seeds`, `--json`. See [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
+| `Generate` / `plan` / `Plan` | `generator` | `rws gen model|route|migration|test` as a library (18.29.0): `Generate::{Model, Route, Migration, Test}` (`Model`'s `timestamps` / `soft_delete`, 18.30.0), `plan(dir, &request)` reads the project and answers a `Plan` (`changes`, `notes`, `status()`, `has_conflicts()`, `render(diffs)`, `to_json(written)`), `Plan::apply(dir)` writes it — never overwriting a file; `run(args, out, err)` is the command line (`EXIT_OK`/`EXIT_CONFLICT`/`EXIT_USAGE`). See [Generators](/building-apps/generators/) |
+| `db_cli::run` / `run_with_seeders` / `requested` | `db_cli` | `rws db migrate|rollback [N]|status|seed|schema` (18.30.0): `run(args, out, err)` answers the exit code (`EXIT_OK`, `EXIT_FAILED`, `EXIT_USAGE`); `--database-url` / `DATABASE_URL` / `RWS_DB_*`, `--dir`, `--migrations`, `--seeds`, `--json`; `run_with_seeders(args, &Seeders, out, err)` for an app's own binary, whose `db seed` runs Rust seeders after the SQL files. See [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
 | `FileChange` / `ChangeKind` / `GenError` | `generator` | One file of a plan (`path`, `kind` — `Create`, `Edit`, `Unchanged`, `Conflict` — `content`, `original`, `diff`); why a generator refused (`usage`, `message`, `to_json()`) |
 | `Field` / `FieldType` / `BaseType` / `Db` / `RouteAction` | `generator` | `name:type` (`Field::parse`, `parse_fields`; types `i64`, `i32`, `f64`, `bool`, `String`, `Option`); the database a migration is written for (`sqlite`, `postgres`, `mysql`); the routes `gen route` writes (`List`, `Show`, `Create`, `Update`, `Remove`; `parse_list("list,show")`) |
 | `AppPaths` / `LayoutEntry` / `EntryKind` / `ManifestError` | `app_manifest` | Where each part lives (`main`, `lib`, `routes`, `models`, `jobs`, `migrations`, `templates`, `tests`, `static_files`; `Default` = the conventional layout; `entries()`, `get(role)`); one role as found on disk (`role`, `path`, `kind` file/dir, `exists`); a parse error (`line`, `message`) |
@@ -24137,7 +24359,10 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `DbPool` | `model` | Async `sqlx` pool, one variant per compiled-in backend: `new(DbConfig)`, `from_env()`, `memory()` (SQLite `:memory:`), `connect(url)` (sqlx URLs, 18.30.0); `execute`, `query`, `begin`, `transaction`, `migrate`, `seed(dir)` (18.30.0). See [Database](/database/overview/) |
+| `DbPool` | `model` | Async `sqlx` pool, one variant per compiled-in backend: `new(DbConfig)`, `from_env()`, `memory()` (SQLite `:memory:`), `connect(url)` (sqlx URLs, 18.30.0); `execute`, `query`, `begin`, `transaction`, `migrate`, `seed(dir)` (18.30.0); `with_replicas(primary, replicas)`, `primary()`, `replica()`, `replicas()`, `close()`, `seed_with(dir, &Seeders)`, `schema()` (18.30.0). See [Database](/database/overview/) |
+| `Replicas` | `model` | The pools of `DbPool::Replicated` (a primary and its read replicas): `primary()`, `replicas()`; reads go to a replica round robin, writes and transactions to the primary; `RWS_DB_REPLICA_URLS` for `DbPool::from_env` (18.30.0). See [Read replicas](/database/overview/#read-replicas) |
+| `DbSchema` / `TableSchema` / `ColumnSchema` / `IndexSchema` / `ForeignKeySchema` | `model` (`model::db_schema`) | The connected schema from `DbPool::schema()`: tables with columns, primary key, indexes and foreign keys; `table(name)`, `column(name)`, `to_json()` (what `rws db schema --json` and the dev MCP `db_schema` tool answer) (18.30.0). See [The schema as data](/database/migrations/#the-schema-as-data) |
+| `Seeder` / `Seeders` | `model` (`model::seed`) | Seeds written in Rust: `Seeders::new().add(name, \|pool\| async move { … })`, `.seeder(impl Seeder)`, `run(&pool)`; `DbPool::seed_with` runs them after `seeds/*.sql`, `db_cli::run_with_seeders` gives an app's binary `db seed` with them (18.30.0). See [Seeds in Rust](/database/migrations/#seeds-in-rust) |
 | `DbTls` / `DbSslMode` | `model` | TLS for PostgreSQL / MySQL pools: mode (`disable` … `verify-full`), CA file, client certificate; `DbTls::from_env()` reads `RWS_DB_SSL_*`; used by `DbPool::new_with_tls` and `DbPool::from_env`. See [Database TLS](/database/overview/#tls) |
 | `DbTransaction` | `model` | Open transaction from `DbPool::begin`; `commit` / `rollback` |
 | `DbConfig` | `model` | Connection settings; `from_env()` reads `RWS_DB_*` |
@@ -24148,8 +24373,11 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `Timestamp` | `model` | A UTC instant in microseconds: `now()`, `parse`, `to_rfc3339`, `to_value(backend)`, `FromColumn`/`ToColumn`, `serde` as RFC 3339; the type of `#[timestamps]` / `#[soft_delete]` fields (18.30.0). See [Timestamps](/database/conventions/#timestamps) |
 | `Uuid` | `model` | 16-byte UUID for keys: `now_v7()`, `new_v4()`, `parse`, `NIL` (`save` replaces it with a v7), stored as text (18.30.0). See [Primary keys](/database/conventions/#primary-keys) |
 | `DbError` / `DbErrorKind` | `model` | The model layer's error (its message in `.0`); `kind()` — `StaleVersion` (a `#[version]`ed `save` of a stale copy), `NotFound`, `Other` — and `is_stale_version()` / `is_not_found()` (18.30.0). See [Optimistic locking](/database/conventions/#optimistic-locking) |
-| `QueryBuilder` | `model` | Fluent query builder: `where_eq`, `filter`, `order_by`, `limit`, `fetch_all`, `count`, `paginate`, `paginate_after`; `with_deleted`, `only_deleted`, `force_delete`, `restore` for soft-delete models (18.30.0). See [Query builder](/database/query-builder/) |
+| `QueryBuilder` | `model` | Fluent query builder: `where_eq`, `filter`, `order_by`, `limit`, `fetch_all`, `count`, `paginate`, `paginate_after`; `with_deleted`, `only_deleted`, `force_delete`, `restore` for soft-delete models; `where_in`, `where_null`, `where_not_null`, `scope(f)`, `with(relation)` (18.30.0). See [Query builder](/database/query-builder/) and [Scopes](/database/query-builder/#scopes) |
 | `HasMany` / `HasOne` / `BelongsTo` | `model` | Explicit-load relations with `.load(&pool).await` — no hidden N+1. See [Relations](/database/relations/) |
+| `BelongsToMany` / `SyncChanges` | `model` | One owner's many-to-many links through a join table: `load`, `ids`, `attach`, `detach`, `detach_all`, `sync` (answers the `SyncChanges`: `attached`, `detached`) (18.30.0). See [Many-to-many](/database/relations/#many-to-many-belongstomany) |
+| `Relation` / `RelationKind` | `model` (`model::eager`) | How `O` reaches `R`: `has_many(fk)`, `has_one(fk)`, `belongs_to(fk)`, `belongs_to_many(join, owner_key, related_key)`; `load(&pool, &owner)`, `load_for(&pool, &owners)` — one query per 500 keys (18.30.0). See [Eager loading](/database/relations/#eager-loading-with-with) |
+| `EagerQuery` / `Loaded` | `model` (`model::eager`) | From `QueryBuilder::with(relation)`: `.with(…)` more, `fetch_all` / `fetch_one` / `paginate` answer `Loaded` — derefs to the model; `related(&rel)`, `one(&rel)`, `take(&rel)`, `is_loaded(&rel)`, `into_inner()` (18.30.0) |
 | `MigrationStatus` | `model` | Applied/pending state from `DbPool::migration_status`. See [Migrations](/database/migrations/) |
 | `ModelInfo` | `model` | What a `Model` type maps to — `type_name`, `table`, `columns`, `primary_key`, `auto_increment`; `ModelInfo::of::()`, `short_name()` (18.28.0). What `DevTools::model::()` reports. See [dev tools](/mcp/dev-tools/) |
 | `Page` | `pagination` (re-exported from `model`) | Offset page: totals, `has_next`/`has_prev`, `.map(f)`, `.link_header(base_url)`; usable without the model layer. See [Pagination](/database/pagination/) |

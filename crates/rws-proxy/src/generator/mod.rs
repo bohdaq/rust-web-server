@@ -32,6 +32,8 @@
 //!     name: "Post".into(),
 //!     fields: vec![Field::parse("title:String").unwrap(), Field::parse("views:i64").unwrap()],
 //!     db: None, // from Cargo.toml's model-* feature, else SQLite
+//!     timestamps: false,
+//!     soft_delete: false,
 //! };
 //! let plan = plan(".", &request).unwrap();
 //! println!("{}", plan.render(true)); // what would change, with diffs
@@ -197,7 +199,10 @@ pub enum Generate {
     /// `rws gen model <Name> field:type…`: a `#[derive(Model)]` type and
     /// the migration creating its table. `db: None` takes the database
     /// from the `model-*` feature in `Cargo.toml`, else SQLite.
-    Model { name: String, fields: Vec<Field>, db: Option<Db> },
+    /// `timestamps` (`--timestamps`, 18.30.0) adds `#[timestamps]` with
+    /// `created_at` / `updated_at` columns, `soft_delete`
+    /// (`--soft-delete`) `#[soft_delete]` with a nullable `deleted_at`.
+    Model { name: String, fields: Vec<Field>, db: Option<Db>, timestamps: bool, soft_delete: bool },
     /// `rws gen route <resource> [field:type…]`: typed handlers for
     /// `actions` under `prefix` + `/<resource>`, and `register(app)`.
     /// Without fields: the fields of `src/models/<singular>.rs` when
@@ -227,11 +232,17 @@ impl Generate {
     pub fn command_line(&self) -> String {
         let mut words = vec!["rws".to_string(), "gen".to_string(), self.kind().to_string()];
         match self {
-            Generate::Model { name, fields, db } => {
+            Generate::Model { name, fields, db, timestamps, soft_delete } => {
                 words.push(name.clone());
                 words.extend(fields.iter().map(Field::spec));
                 if let Some(db) = db {
                     words.push(format!("--db {}", db.as_str()));
+                }
+                if *timestamps {
+                    words.push("--timestamps".to_string());
+                }
+                if *soft_delete {
+                    words.push("--soft-delete".to_string());
                 }
             }
             Generate::Route { resource, fields, actions, prefix } => {
@@ -651,7 +662,10 @@ pub(crate) fn plan_with(files: &dyn Files, request: &Generate) -> Result<Plan, G
     let mut b = Builder { files, changes: Vec::new(), notes: Vec::new() };
     let command = request.command_line();
     match request {
-        Generate::Model { name, fields, db } => plan_model(&mut b, &manifest, &command, name, fields, *db)?,
+        Generate::Model { name, fields, db, timestamps, soft_delete } => {
+            let conventions = templates::Conventions { timestamps: *timestamps, soft_delete: *soft_delete };
+            plan_model(&mut b, &manifest, &command, name, fields, *db, conventions)?
+        }
         Generate::Route { resource, fields, actions, prefix } => plan_route(&mut b, &manifest, &command, resource, fields, actions, prefix)?,
         Generate::Migration { name } => {
             check_snake(name, "migration")?;
@@ -665,12 +679,26 @@ pub(crate) fn plan_with(files: &dyn Files, request: &Generate) -> Result<Plan, G
     Ok(Plan { command, changes: b.changes, notes: b.notes })
 }
 
-fn plan_model(b: &mut Builder<'_>, manifest: &AppManifest, command: &str, name: &str, fields: &[Field], db: Option<Db>) -> Result<(), GenError> {
+fn plan_model(
+    b: &mut Builder<'_>,
+    manifest: &AppManifest,
+    command: &str,
+    name: &str,
+    fields: &[Field],
+    db: Option<Db>,
+    conventions: templates::Conventions,
+) -> Result<(), GenError> {
     let module = to_snake(name, "model")?;
     let type_name = to_camel(&module);
     check_type_name(&type_name, "model")?;
     if fields.is_empty() {
         return Err(GenError::usage("a model needs at least one field besides `id`, e.g. `rws gen model Post title:String`"));
+    }
+    if let Some(f) = fields.iter().find(|f| conventions.columns().contains(&f.name.as_str())) {
+        return Err(GenError::usage(format!(
+            "`{}` is written by --timestamps / --soft-delete: leave it out of the fields",
+            f.name
+        )));
     }
     let table = pluralize(&module);
     let cargo = cargo(b.files)?;
@@ -682,7 +710,7 @@ fn plan_model(b: &mut Builder<'_>, manifest: &AppManifest, command: &str, name: 
         b.note("no tokio dependency with the `macros` feature: the model's test checks the mapping only, not a round trip through SQLite");
     }
     let file = join(&manifest.paths.models, &format!("{module}.rs"));
-    let text = templates::ModelText { command, type_name: &type_name, table: &table, fields, migration: &up, sqlite_test };
+    let text = templates::ModelText { command, type_name: &type_name, table: &table, fields, migration: &up, sqlite_test, conventions };
     b.create(&file, templates::model(&text));
     let models_dir = manifest.paths.models.clone();
     add_module(b, manifest, &models_dir, &module, templates::models_mod(&module, &type_name));
@@ -695,7 +723,15 @@ fn plan_model(b: &mut Builder<'_>, manifest: &AppManifest, command: &str, name: 
         Ok(edited) => b.edit("Cargo.toml", edited),
         Err(()) => b.note(format!("add the `{}` feature to the rust-web-server dependency in Cargo.toml", db.feature())),
     }
-    b.create(&up, templates::create_table_up(command, &table, fields, db));
+    if conventions != templates::Conventions::default() {
+        // The model derives Serialize/Deserialize; Timestamp has them with `serde`.
+        let now = b.current("Cargo.toml").unwrap_or_else(|| cargo.clone());
+        match scan::add_rws_feature(&now, "serde") {
+            Ok(edited) => b.edit("Cargo.toml", edited),
+            Err(()) => b.note("add the `serde` feature to the rust-web-server dependency in Cargo.toml (Timestamp's Serialize and Deserialize)"),
+        }
+    }
+    b.create(&up, templates::create_table_up_with(command, &table, fields, db, conventions));
     b.create(&down, templates::create_table_down(&table));
     let models_mod = module_beside(&manifest.paths.lib, &models_dir).unwrap_or_else(|| "models".to_string());
     b.note(format!(
@@ -712,7 +748,8 @@ fn default_fields(b: &mut Builder<'_>, manifest: &AppManifest, singular: &str, t
         if let Some(found) = scan::struct_fields(&text, type_name) {
             let fields: Option<Vec<Field>> = found
                 .into_iter()
-                .filter(|f| !matches!(f, Ok((name, _)) if name == "id"))
+                // The key and the columns the repository writes (--timestamps, --soft-delete).
+                .filter(|f| !matches!(f, Ok((name, _)) if ["id", "created_at", "updated_at", "deleted_at"].contains(&name.as_str())))
                 .map(|f| f.ok().and_then(|(name, ty)| Field::parse(&format!("{name}:{ty}")).ok()))
                 .collect();
             if let Some(fields) = fields.filter(|f| !f.is_empty()) {

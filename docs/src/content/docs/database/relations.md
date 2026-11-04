@@ -1,9 +1,9 @@
 ---
 title: Relations
-description: Load related records with async HasMany, HasOne, and BelongsTo helpers that make queries explicit and prevent hidden N+1 problems.
+description: Load related records with HasMany, HasOne, BelongsTo and BelongsToMany, eager-load them for a whole result set with with(), and manage many-to-many links.
 ---
 
-The ORM provides three relationship helpers: `HasMany<T>`, `HasOne<O>`, and `BelongsTo<O>`. Each holds the information needed to load related records on demand. There is no lazy loading — you call `.load(&pool).await` explicitly when you want the data.
+The ORM provides relationship helpers for one record — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>` and (18.30.0) `BelongsToMany<T>` — and `Relation<O, R>` descriptors that [load a relation for a whole result set](#eager-loading-with-with). There is no lazy loading — you call `.load(&pool).await` or `.with(…)` explicitly when you want the data.
 
 Relation helpers are not fields of a model: `#[derive(Model)]` maps every field to a column, and a `HasMany` field has no column. Build the helper from a loaded record instead — a small method per relation keeps the call site readable.
 
@@ -110,36 +110,79 @@ if let Some(post) = posts.first() {
 }
 ```
 
-## Avoiding N+1 queries
 
-The explicit `.load().await` design makes N+1 queries visible — if you call `.load().await` inside a loop you will issue one query per iteration. The recommended pattern is to batch-load related records using `IN (…)`.
+## Eager loading with `with()`
+
+Calling `.load()` for each row of a list is one query per row (N+1). `with()` loads a relation for the whole result set in **one more query per relation**, `WHERE fk IN (…)` (18.30.0). Describe each relation once, as a `Relation<Owner, Related>`:
 
 ```rust
-use rust_web_server::model::{DbPool, Value};
+use rust_web_server::model::{Order, Relation};
 
-// Step 1 — load users (1 query)
-let users: Vec<User> = pool.query::<User>("SELECT * FROM users WHERE active = ?", &[Value::Bool(true)]).await?;
+impl Post {
+    pub fn comments() -> Relation<Post, Comment> { Relation::has_many("post_id") } // comments.post_id = posts.id
+    pub fn author() -> Relation<Post, User> { Relation::belongs_to("user_id") }    // posts.user_id = users.id
+    pub fn tags() -> Relation<Post, Tag> { Relation::belongs_to_many("post_tags", "post_id", "tag_id") }
+}
 
-// Step 2 — collect IDs
-let user_ids: Vec<Value> = users.iter().map(|u| Value::Int(u.id)).collect();
+impl User {
+    pub fn profile() -> Relation<User, Profile> { Relation::has_one("user_id") }
+}
 
-// Step 3 — build IN clause and load all posts (1 query)
-if !user_ids.is_empty() {
-    let placeholders = user_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-    let sql = format!("SELECT * FROM posts WHERE user_id IN ({})", placeholders);
-    let posts: Vec<Post> = pool.query::<Post>(&sql, &user_ids).await?;
+// Three queries, however many posts: the posts, their comments, their authors.
+let posts = Post::query(&pool)
+    .where_eq("published", true)
+    .order_by("id", Order::Desc)
+    .with(Post::comments())
+    .with(Post::author())
+    .fetch_all()
+    .await?;
 
-    // Step 4 — group in memory
-    use std::collections::HashMap;
-    let mut posts_by_user: HashMap<i64, Vec<Post>> = HashMap::new();
-    for post in posts {
-        posts_by_user.entry(post.user_id).or_default().push(post);
-    }
+for post in &posts {
+    let comments: &[Comment] = post.related(&Post::comments());
+    let author: Option<&User> = post.one(&Post::author());
+    println!("{} by {:?}: {} comments", post.title, author.map(|a| &a.name), comments.len());
 }
 ```
 
-This loads N users and all their posts in exactly 2 queries regardless of how many users there are.
+`with()` turns the query into an `EagerQuery` whose `fetch_all`, `fetch_one` and `paginate` answer `Loaded<Post>` values. A `Loaded<T>` derefs to the model (`post.title`); `related(&rel)` is the relation's rows (empty when there are none), `one(&rel)` the first — the row of a `belongs_to` or `has_one` — `take(&rel)` moves them out, `into_inner()` drops the relations, and `is_loaded(&rel)` says whether the query loaded it.
+
+| Constructor | Meaning | Query |
+|---|---|---|
+| `Relation::has_many(fk)` | `R.fk` holds the owner's key | `SELECT * FROM r WHERE fk IN (…)` |
+| `Relation::has_one(fk)` | as `has_many`, at most one row (the lowest key) | the same |
+| `Relation::belongs_to(fk)` | the owner's `fk` holds `R`'s key (`NULL`: none) | `SELECT * FROM r WHERE id IN (…)` |
+| `Relation::belongs_to_many(join, owner_key, related_key)` | through a join table | `SELECT r.*, j.owner_key … JOIN join j ON j.related_key = r.id WHERE j.owner_key IN (…)` |
+
+Related rows come in primary-key order, soft-deleted ones (`#[soft_delete]`) left out. Keys go in batches of 500 (`eager::IN_BATCH`), so a larger result set costs one query per batch. A row related to several owners (a shared author, a tag) is cloned into each, so the related type must be `Clone`. The same descriptor loads without a query builder: `Post::comments().load(&pool, &post)` for one owner, `Post::comments().load_for(&pool, &posts)` for a slice (one `Vec` per owner, in order).
+
+Nested loading (comments' authors) is a second step: collect the comments and call `Comment::author().load_for(&pool, &comments)`.
+
+## Many-to-many: `BelongsToMany`
+
+`BelongsToMany<R>` is one owner's links through a join table (18.30.0). It loads the linked rows and adds and removes the links:
+
+```rust
+use rust_web_server::model::{BelongsToMany, Value};
+
+// CREATE TABLE post_tags (post_id BIGINT NOT NULL, tag_id BIGINT NOT NULL, PRIMARY KEY (post_id, tag_id));
+impl Post {
+    pub fn tag_links(&self) -> BelongsToMany<Tag> {
+        BelongsToMany::new(Value::Int(self.id), "post_tags", "post_id", "tag_id")
+    }
+}
+
+let links = post.tag_links();
+links.attach(&pool, [rust.id, web.id]).await?;          // links added: 2 (an existing link is skipped)
+links.detach(&pool, [web.id]).await?;                   // links removed: 1
+let changes = links.sync(&pool, [rust.id, async_.id]).await?; // exactly these: adds and removes as needed
+println!("attached {:?}, detached {:?}", changes.attached, changes.detached);
+let tags: Vec<Tag> = links.load(&pool).await?;          // the linked rows, soft-deleted ones left out
+let ids = links.ids(&pool).await?;                      // the join table's keys
+links.detach_all(&pool).await?;
+```
+
+`attach` and `sync` run in a transaction (read the links, then write). They insert the two key columns only, so other join-table columns need defaults. Give the join table a primary key or unique index over both columns: the methods never link twice, but two processes attaching at once could. For a whole result set use `Relation::belongs_to_many(…)` with `with()`, above.
 
 :::note[No lazy loading by design]
-Lazy loading hides database access behind field access, making it easy to accidentally trigger hundreds of queries. Explicit `.load().await` calls keep all I/O visible at the call site, making performance characteristics clear during code review.
+Lazy loading hides database access behind field access, making it easy to accidentally trigger hundreds of queries. Explicit `.load().await` calls and `with()` keep all I/O visible at the call site, making performance characteristics clear during code review.
 :::

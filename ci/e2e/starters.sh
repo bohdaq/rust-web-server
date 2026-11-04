@@ -60,6 +60,8 @@ generate() {
     gen 0 test posts
   fi
   gen 0 migration add_index_to_posts
+  # The repository's conventions: compiled and round-tripped by the tests below.
+  gen 0 model Comment body:String --timestamps --soft-delete
   # Idempotent: the same commands change nothing.
   gen 0 model Post title:String views:i64 published:bool 'note:Option<String>'
   grep -q 'nothing to do' "$WORK/gen.out" || { echo "FAIL: a second gen model changed something:"; cat "$WORK/gen.out"; exit 1; }

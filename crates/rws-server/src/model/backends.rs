@@ -67,14 +67,7 @@ impl TestBackend {
 }
 
 async fn close(pool: &DbPool) {
-    match pool {
-        #[cfg(feature = "model-sqlite")]
-        DbPool::Sqlite(p) => p.close().await,
-        #[cfg(feature = "model-postgres")]
-        DbPool::Postgres(p) => p.close().await,
-        #[cfg(feature = "model-mysql")]
-        DbPool::MySql(p) => p.close().await,
-    }
+    pool.close().await;
 }
 
 /// Replace the type tokens in `sql`:

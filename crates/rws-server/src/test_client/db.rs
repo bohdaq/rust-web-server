@@ -160,6 +160,7 @@ impl TestDb {
             DbPool::Postgres(pool) => rollback_and_close(pool).await,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => rollback_and_close(pool).await,
+            DbPool::Replicated(_) => Ok(()),
         }
     }
 }
@@ -183,6 +184,7 @@ impl Drop for TestDb {
             DbPool::Postgres(pool) => close_soon(pool.clone()),
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => close_soon(pool.clone()),
+            DbPool::Replicated(_) => {}
         }
     }
 }
@@ -350,13 +352,6 @@ where
         }
         done.insert(key);
     }
-    match &pool {
-        #[cfg(feature = "model-sqlite")]
-        DbPool::Sqlite(p) => p.close().await,
-        #[cfg(feature = "model-postgres")]
-        DbPool::Postgres(p) => p.close().await,
-        #[cfg(feature = "model-mysql")]
-        DbPool::MySql(p) => p.close().await,
-    }
+    pool.close().await;
     result
 }

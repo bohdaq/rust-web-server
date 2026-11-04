@@ -1,8 +1,8 @@
-//! `rws db migrate|rollback|status|seed` (18.30.0, #91): the project's
-//! migrations and seeds from the command line — the same operations, and
-//! for `status` the same JSON, as the dev MCP server's `migrations`,
-//! `migrations_run` and `migrations_rollback_last` tools (they share
-//! `dev_mcp::db`).
+//! `rws db migrate|rollback|status|seed|schema` (18.30.0, #91): the
+//! project's migrations and seeds from the command line — the same
+//! operations, and for `status` / `schema` the same JSON, as the dev MCP
+//! server's `migrations`, `migrations_run`, `migrations_rollback_last` and
+//! `db_schema` tools (they share `dev_mcp::db`).
 //!
 //! - **Database**: `--database-url <url>`, else `DATABASE_URL`, else the
 //!   `RWS_DB_*` variables `DbPool::from_env` reads. URLs are sqlx's:
@@ -14,7 +14,12 @@
 //! - **Seeds**: `seeds/` beside the migrations directory (`migrations/` →
 //!   `seeds/`, `db/migrations/` → `db/seeds/`); `--seeds <dir>` overrides
 //!   it. Every `*.sql` file runs, in name order, each in its own
-//!   transaction, every time — see `DbPool::seed`.
+//!   transaction, every time — see `DbPool::seed`. An app's own binary can
+//!   offer the same command with seeders written in Rust after the SQL
+//!   files: [`run_with_seeders`].
+//! - **Schema**: `schema` prints every table's columns, primary key,
+//!   indexes and foreign keys (`DbPool::schema`); `--json` as the dev MCP
+//!   server's `db_schema` answers it.
 //!
 //! The `rws` binary has the command in every build, but it only reaches a
 //! database when built with a `model-*` feature (`cargo install
@@ -48,6 +53,7 @@ Commands:
   rollback [N]   undo the last N applied migrations (default 1) with their .down.sql files
   status         list the migrations in order: applied or pending, and whether each has a .down.sql
   seed           run every *.sql seed file, in name order, each in its own transaction
+  schema         the tables: columns, primary key, indexes, foreign keys (--json: as data)
 
 Database: --database-url (sqlite:app.db, postgres://user:pass@host/db,
 mysql://user:pass@host/db), else DATABASE_URL, else RWS_DB_BACKEND, RWS_DB_NAME,
@@ -71,6 +77,7 @@ enum Command {
     Rollback(usize),
     Status,
     Seed,
+    Schema,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +99,36 @@ enum Parsed {
 /// `err`; answers the exit code ([`EXIT_OK`], [`EXIT_FAILED`],
 /// [`EXIT_USAGE`]).
 pub fn run(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+    run_seeding(args, Seeding::default(), out, err)
+}
+
+/// As [`run`], with `seeders` run after the SQL seed files by `seed`
+/// (18.30.0) — for an app's own binary, so `myapp db seed` runs the seeds
+/// written in Rust too (the `rws` binary can't link them):
+///
+/// ```rust,ignore
+/// let args: Vec<String> = std::env::args().collect();
+/// if let Some(db_args) = rust_web_server::db_cli::requested(&args) {
+///     let code = rust_web_server::db_cli::run_with_seeders(db_args, &myapp::seeders(), &mut std::io::stdout(), &mut std::io::stderr());
+///     std::process::exit(code);
+/// }
+/// ```
+///
+/// With seeders, a missing seeds directory means no SQL seeds rather than
+/// an error (`DbPool::seed_with`).
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+pub fn run_with_seeders(args: &[String], seeders: &crate::model::Seeders, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+    run_seeding(args, Seeding { seeders: Some(seeders.clone()) }, out, err)
+}
+
+/// The Rust seeders `seed` runs, if any.
+#[derive(Default)]
+struct Seeding {
+    #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+    seeders: Option<crate::model::Seeders>,
+}
+
+fn run_seeding(args: &[String], seeding: Seeding, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
     let json = args.iter().any(|a| a == "--json");
     let cli = match parse(args) {
         Ok(Parsed::Help) => {
@@ -105,7 +142,7 @@ pub fn run(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
         Ok(dirs) => dirs,
         Err(message) => return fail(&message, &message, json, EXIT_FAILED, out, err),
     };
-    execute(&cli, &migrations, &seeds, out, err)
+    execute(&cli, &migrations, &seeds, seeding, out, err)
 }
 
 fn fail(text: &str, message: &str, json: bool, code: i32, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
@@ -157,17 +194,18 @@ fn parse(args: &[String]) -> Result<Parsed, String> {
         }
     }
     let Some(command) = positional.first() else {
-        return Err("name a command: migrate, rollback, status or seed".to_string());
+        return Err("name a command: migrate, rollback, status, seed or schema".to_string());
     };
     let extra = |at: usize| positional.get(at).map(|extra| format!("rws db {command} takes no `{extra}`"));
     cli.command = match command.as_str() {
-        "migrate" | "status" | "seed" => {
+        "migrate" | "status" | "seed" | "schema" => {
             if let Some(e) = extra(1) {
                 return Err(e);
             }
             match command.as_str() {
                 "migrate" => Command::Migrate,
                 "status" => Command::Status,
+                "schema" => Command::Schema,
                 _ => Command::Seed,
             }
         }
@@ -184,7 +222,7 @@ fn parse(args: &[String]) -> Result<Parsed, String> {
             };
             Command::Rollback(n)
         }
-        other => return Err(format!("unknown command `{other}`: use migrate, rollback, status or seed")),
+        other => return Err(format!("unknown command `{other}`: use migrate, rollback, status, seed or schema")),
     };
     Ok(Parsed::Run(cli))
 }
@@ -219,14 +257,14 @@ fn path_text(path: &Path) -> String {
 }
 
 #[cfg(not(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
-fn execute(cli: &Cli, _migrations: &str, _seeds: &str, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+fn execute(cli: &Cli, _migrations: &str, _seeds: &str, _seeding: Seeding, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
     let message = "this rws was built without a database driver — install one with them: \
                    cargo install rust-web-server --features model-sqlite,model-postgres,model-mysql";
     fail(message, message, cli.json, EXIT_USAGE, out, err)
 }
 
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
-fn execute(cli: &Cli, migrations: &str, seeds: &str, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+fn execute(cli: &Cli, migrations: &str, seeds: &str, seeding: Seeding, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
     let (command, url) = (cli.command.clone(), cli.database_url.clone().or_else(|| std::env::var("DATABASE_URL").ok().filter(|u| !u.trim().is_empty())));
     let (migrations, seeds) = (migrations.to_string(), seeds.to_string());
     let result = crate::dev_mcp::db::run(async move {
@@ -236,7 +274,7 @@ fn execute(cli: &Cli, migrations: &str, seeds: &str, out: &mut dyn Write, err: &
                 crate::model::DbError::new(format!("{} (or give --database-url / DATABASE_URL)", e.0))
             })?,
         };
-        let answer = answer(&pool, &command, &migrations, &seeds).await;
+        let answer = answer(&pool, &command, &migrations, &seeds, seeding.seeders.as_ref()).await;
         close(&pool).await;
         answer
     });
@@ -255,22 +293,22 @@ fn execute(cli: &Cli, migrations: &str, seeds: &str, out: &mut dyn Write, err: &
 
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
 async fn close(pool: &DbPool) {
-    match pool {
-        #[cfg(feature = "model-sqlite")]
-        DbPool::Sqlite(p) => p.close().await,
-        #[cfg(feature = "model-postgres")]
-        DbPool::Postgres(p) => p.close().await,
-        #[cfg(feature = "model-mysql")]
-        DbPool::MySql(p) => p.close().await,
-    }
+    pool.close().await;
 }
 
 /// The command's result as JSON: `status` is the dev MCP server's
 /// `migrations` answer; `migrate` adds `"applied"` (the versions this run
 /// applied) to it; `rollback` is `{"rolled_back":[…]}`, `seed`
-/// `{"directory":…,"seeded":[…]}`.
+/// `{"directory":…,"seeded":[…]}` (SQL files, then Rust seeders), `schema`
+/// the dev MCP server's `db_schema` answer.
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
-async fn answer(pool: &DbPool, command: &Command, migrations: &str, seeds: &str) -> Result<String, crate::model::DbError> {
+async fn answer(
+    pool: &DbPool,
+    command: &Command,
+    migrations: &str,
+    seeds: &str,
+    seeders: Option<&crate::model::Seeders>,
+) -> Result<String, crate::model::DbError> {
     let list = |items: &[String]| format!("[{}]", items.iter().map(|v| quoted(v)).collect::<Vec<_>>().join(","));
     match command {
         Command::Status => crate::dev_mcp::db::status_json(pool, migrations).await,
@@ -287,9 +325,13 @@ async fn answer(pool: &DbPool, command: &Command, migrations: &str, seeds: &str)
             Ok(format!(r#"{{"directory":{},"rolled_back":{}}}"#, quoted(migrations), list(&undone)))
         }
         Command::Seed => {
-            let ran = pool.seed(seeds).await?;
+            let ran = match seeders {
+                Some(seeders) => pool.seed_with(seeds, seeders).await?,
+                None => pool.seed(seeds).await?,
+            };
             Ok(format!(r#"{{"directory":{},"seeded":{}}}"#, quoted(seeds), list(&ran)))
         }
+        Command::Schema => crate::dev_mcp::db::schema_json(pool).await,
     }
 }
 
@@ -315,6 +357,7 @@ fn render(command: &Command, json: &str) -> String {
         Command::Migrate => lines(strings("applied"), "nothing to apply: every migration is applied", "applied  "),
         Command::Rollback(_) => lines(strings("rolled_back"), "nothing to roll back: no migration is applied", "rolled back  "),
         Command::Seed => lines(strings("seeded"), "no seed files", "seeded  "),
+        Command::Schema => render_schema(json),
         Command::Status => {
             let migrations = elements("migrations");
             if migrations.is_empty() {
@@ -331,4 +374,58 @@ fn render(command: &Command, json: &str) -> String {
                 .collect()
         }
     }
+}
+
+/// `schema` for a person: each table, its columns (type, `NOT NULL`,
+/// default, `PK`), indexes and foreign keys.
+#[cfg_attr(not(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")), allow(dead_code))]
+fn render_schema(json: &str) -> String {
+    use crate::mcp::json_rpc::{extract_raw, extract_str, split_array_elements};
+    let elements = |json: &str, key: &str| extract_raw(json, key).map(|raw| split_array_elements(raw.trim())).unwrap_or_default();
+    let names = |json: &str, key: &str| -> String {
+        elements(json, key).iter().map(|v| v.trim().trim_matches('"').to_string()).collect::<Vec<_>>().join(", ")
+    };
+    let tables = elements(json, "tables");
+    if tables.is_empty() {
+        return "no tables\n".to_string();
+    }
+    let mut out = String::new();
+    for table in tables {
+        out.push_str(&format!("{}\n", extract_str(&table, "name").unwrap_or_default()));
+        for column in elements(&table, "columns") {
+            let mut line = format!("  {}  {}", extract_str(&column, "name").unwrap_or_default(), extract_str(&column, "type").unwrap_or_default());
+            if column.contains(r#""nullable":false"#) {
+                line.push_str("  NOT NULL");
+            }
+            if let Some(default) = extract_str(&column, "default") {
+                line.push_str(&format!("  DEFAULT {default}"));
+            }
+            if column.contains(r#""primary_key":true"#) {
+                line.push_str("  PK");
+            }
+            out.push_str(&line);
+            out.push('\n');
+        }
+        for index in elements(&table, "indexes") {
+            let kind = if index.contains(r#""primary":true"#) {
+                "primary key"
+            } else if index.contains(r#""unique":true"#) {
+                "unique index"
+            } else {
+                "index"
+            };
+            out.push_str(&format!("  {kind} {} ({})\n", extract_str(&index, "name").unwrap_or_default(), names(&index, "columns")));
+        }
+        for key in elements(&table, "foreign_keys") {
+            let references = extract_raw(&key, "references").unwrap_or_default();
+            out.push_str(&format!(
+                "  foreign key ({}) references {} ({}) on delete {}\n",
+                names(&key, "columns"),
+                extract_str(&references, "table").unwrap_or_default(),
+                names(&references, "columns"),
+                extract_str(&key, "on_delete").unwrap_or_default()
+            ));
+        }
+    }
+    out
 }

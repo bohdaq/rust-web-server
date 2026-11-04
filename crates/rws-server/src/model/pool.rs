@@ -84,6 +84,47 @@ pub enum DbPool {
     Postgres(sqlx::Pool<sqlx::Postgres>),
     #[cfg(feature = "model-mysql")]
     MySql(sqlx::Pool<sqlx::MySql>),
+    /// A primary and its read replicas (18.30.0): made by
+    /// [`DbPool::with_replicas`] or [`DbPool::from_env`] with
+    /// `RWS_DB_REPLICA_URLS`. Reads ([`query_rows`](DbPool::query_rows),
+    /// [`query`](DbPool::query), the query builder's `fetch_*` / `count`,
+    /// the repository's `find_*` / `count`) go to a replica, round robin;
+    /// writes, transactions, migrations and seeds go to the primary. Code
+    /// that matches on `DbPool`'s variants needs an arm for this one —
+    /// [`DbPool::close`] closes any.
+    Replicated(std::sync::Arc<Replicas>),
+}
+
+/// The pools of a [`DbPool::Replicated`]: one primary, the replicas reads
+/// go to, and the round-robin position (18.30.0).
+pub struct Replicas {
+    primary: DbPool,
+    replicas: Vec<DbPool>,
+    next: std::sync::atomic::AtomicUsize,
+}
+
+impl Replicas {
+    /// The pool writes go to.
+    pub fn primary(&self) -> &DbPool {
+        &self.primary
+    }
+
+    /// The pools reads go to (in the order given).
+    pub fn replicas(&self) -> &[DbPool] {
+        &self.replicas
+    }
+}
+
+impl std::fmt::Debug for Replicas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Replicas").field("primary", &self.primary).field("replicas", &self.replicas).finish()
+    }
+}
+
+/// The error for a [`DbPool::Replicated`] found where a backend's pool was
+/// expected — [`DbPool::with_replicas`] never nests them.
+fn nested() -> DbError {
+    DbError::new("a replicated DbPool can't hold another replicated pool")
 }
 
 impl DbPool {
@@ -138,8 +179,130 @@ impl DbPool {
     }
 
     /// Create a pool using [`DbConfig::from_env`] and [`DbTls::from_env`].
+    ///
+    /// With `RWS_DB_REPLICA_URLS` set (18.30.0) — comma-separated database
+    /// URLs as [`DbPool::connect`] takes them, each with
+    /// `RWS_DB_POOL_SIZE` connections at most — the pool is
+    /// [replicated](DbPool::with_replicas): reads go to those replicas,
+    /// writes to the database the other `RWS_DB_*` variables name.
     pub async fn from_env() -> Result<Self, DbError> {
-        DbPool::new_with_tls(DbConfig::from_env()?, DbTls::from_env()?).await
+        let config = DbConfig::from_env()?;
+        let size = config.pool_size;
+        let primary = DbPool::new_with_tls(config, DbTls::from_env()?).await?;
+        let urls = std::env::var("RWS_DB_REPLICA_URLS").unwrap_or_default();
+        let urls: Vec<&str> = urls.split(',').map(str::trim).filter(|u| !u.is_empty()).collect();
+        if urls.is_empty() {
+            return Ok(primary);
+        }
+        let mut replicas = Vec::with_capacity(urls.len());
+        for url in urls {
+            let replica = DbPool::connect_sized(url, size)
+                .await
+                .map_err(|e| DbError::new(format!("RWS_DB_REPLICA_URLS: {}", e.0)))?;
+            replicas.push(replica);
+        }
+        DbPool::with_replicas(primary, replicas)
+    }
+
+    /// A pool that sends reads to `replicas` (round robin) and everything
+    /// else to `primary` (18.30.0). Reads are [`query_rows`](Self::query_rows),
+    /// [`query`](Self::query), [`query_raw`](Self::query_raw) — so
+    /// `QueryBuilder::fetch_all` / `fetch_one` / `count` / `paginate`, the
+    /// repository's `find_by_id` / `find_all` / `count` / `exists_by_id`
+    /// and relation loads. [`execute`](Self::execute),
+    /// [`begin`](Self::begin) / [`transaction`](Self::transaction) (reads
+    /// inside a transaction too), migrations, seeds, [`schema`](Self::schema)
+    /// and `save` (which reads the saved row back) go to the primary.
+    ///
+    /// A replica lags behind its primary: a read right after a write may not
+    /// see it. Read from [`primary`](Self::primary) when it must
+    /// (`User::query(pool.primary())`). With no replicas every statement
+    /// goes to the primary. An error when a replica's backend differs from
+    /// the primary's; a replicated `primary` contributes its primary and
+    /// replicas.
+    ///
+    /// ```rust,no_run
+    /// # extern crate rws_server as rust_web_server;
+    /// # #[cfg(feature = "model-postgres")]
+    /// # async fn example() -> Result<(), rust_web_server::model::DbError> {
+    /// use rust_web_server::model::{DbPool, Value};
+    ///
+    /// let pool = DbPool::with_replicas(
+    ///     DbPool::connect("postgres://app:secret@db-primary/app").await?,
+    ///     vec![DbPool::connect("postgres://app:secret@db-replica-1/app").await?],
+    /// )?;
+    /// pool.execute("UPDATE users SET active = false WHERE id = $1", &[Value::Int(7)]).await?; // the primary
+    /// let rows = pool.query_rows("SELECT * FROM users", &[]).await?; // a replica
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_replicas(primary: DbPool, replicas: Vec<DbPool>) -> Result<DbPool, DbError> {
+        let (primary, mut all) = match primary {
+            DbPool::Replicated(r) => (r.primary.clone(), r.replicas.clone()),
+            other => (other, Vec::new()),
+        };
+        for replica in replicas {
+            match replica {
+                DbPool::Replicated(r) => all.extend(r.replicas.iter().cloned()),
+                other => all.push(other),
+            }
+        }
+        if let Some(other) = all.iter().find(|r| r.backend() != primary.backend()) {
+            return Err(DbError::new(format!(
+                "a replica is {} but the primary is {}: replicas use the primary's backend",
+                other.backend().name(),
+                primary.backend().name()
+            )));
+        }
+        Ok(DbPool::Replicated(std::sync::Arc::new(Replicas { primary, replicas: all, next: Default::default() })))
+    }
+
+    /// The pool writes go to: the primary of a replicated pool, else this
+    /// pool (18.30.0).
+    pub fn primary(&self) -> &DbPool {
+        match self {
+            DbPool::Replicated(r) => &r.primary,
+            other => other,
+        }
+    }
+
+    /// The pool the next read goes to: a replicated pool's replicas in
+    /// turn (its primary when it has none), else this pool (18.30.0).
+    pub fn replica(&self) -> &DbPool {
+        match self {
+            DbPool::Replicated(r) if !r.replicas.is_empty() => {
+                let i = r.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % r.replicas.len();
+                &r.replicas[i]
+            }
+            DbPool::Replicated(r) => &r.primary,
+            other => other,
+        }
+    }
+
+    /// A replicated pool's replicas; empty for any other (18.30.0).
+    pub fn replicas(&self) -> &[DbPool] {
+        match self {
+            DbPool::Replicated(r) => &r.replicas,
+            _ => &[],
+        }
+    }
+
+    /// Close the pool — every pool of a replicated one — waiting for the
+    /// connections in use to be returned (18.30.0).
+    pub async fn close(&self) {
+        let mut pools: Vec<&DbPool> = vec![self.primary()];
+        pools.extend(self.replicas());
+        for pool in pools {
+            match pool {
+                #[cfg(feature = "model-sqlite")]
+                DbPool::Sqlite(p) => p.close().await,
+                #[cfg(feature = "model-postgres")]
+                DbPool::Postgres(p) => p.close().await,
+                #[cfg(feature = "model-mysql")]
+                DbPool::MySql(p) => p.close().await,
+                DbPool::Replicated(_) => {}
+            }
+        }
     }
 
     /// Create a pool backed by a SQLite in-memory database.
@@ -181,6 +344,7 @@ impl DbPool {
             DbPool::Postgres(_) => Backend::Postgres,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(_) => Backend::MySql,
+            DbPool::Replicated(r) => r.primary.backend(),
         }
     }
 
@@ -191,28 +355,31 @@ impl DbPool {
     /// Returns the number of rows affected.
     pub async fn execute(&self, sql: &str, params: &[Value]) -> Result<u64, DbError> {
         let span = db_span(self.backend(), sql);
-        let result = match self {
+        let result = match self.primary() {
             #[cfg(feature = "model-sqlite")]
             DbPool::Sqlite(pool) => sqlite_pool_execute(pool, sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbPool::Postgres(pool) => pg_pool_execute(pool, sql, params).await,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => mysql_pool_execute(pool, sql, params).await,
+            DbPool::Replicated(_) => Err(nested()),
         };
         finish_db_span(span, &result);
         result
     }
 
-    /// Execute a SQL query and return untyped rows.
+    /// Execute a SQL query and return untyped rows — on a
+    /// [replica](Self::with_replicas) when the pool has them.
     pub async fn query_rows(&self, sql: &str, params: &[Value]) -> Result<Vec<ModelRow>, DbError> {
         let span = db_span(self.backend(), sql);
-        let result = match self {
+        let result = match self.replica() {
             #[cfg(feature = "model-sqlite")]
             DbPool::Sqlite(pool) => sqlite_pool_query_rows(pool, sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbPool::Postgres(pool) => pg_pool_query_rows(pool, sql, params).await,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => mysql_pool_query_rows(pool, sql, params).await,
+            DbPool::Replicated(_) => Err(nested()),
         };
         finish_db_span(span, &result);
         result
@@ -240,13 +407,14 @@ impl DbPool {
         _pk_col: &str,
     ) -> Result<i64, DbError> {
         let span = db_span(self.backend(), insert_sql);
-        let result = match self {
+        let result = match self.primary() {
             #[cfg(feature = "model-sqlite")]
             DbPool::Sqlite(pool) => sqlite_last_insert_id(pool, insert_sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbPool::Postgres(pool) => pg_insert_returning(pool, insert_sql, params, _pk_col).await,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => mysql_last_insert_id(pool, insert_sql, params).await,
+            DbPool::Replicated(_) => Err(nested()),
         };
         finish_db_span(span, &result);
         result
@@ -257,7 +425,7 @@ impl DbPool {
     /// Begin a transaction. Call [`DbTransaction::commit`] to commit or let it
     /// drop to automatically roll back.
     pub async fn begin(&self) -> Result<DbTransaction, DbError> {
-        match self {
+        match self.primary() {
             #[cfg(feature = "model-sqlite")]
             DbPool::Sqlite(pool) => {
                 let tx = pool.begin().await.map_err(|e| DbError::new(e.to_string()))?;
@@ -273,6 +441,7 @@ impl DbPool {
                 let tx = pool.begin().await.map_err(|e| DbError::new(e.to_string()))?;
                 Ok(DbTransaction::MySql(tx))
             }
+            DbPool::Replicated(_) => Err(nested()),
         }
     }
 
@@ -318,12 +487,12 @@ impl DbPool {
     /// Files are applied in lexicographic order. Already-applied versions are
     /// tracked in a `_schema_migrations` table (created if absent). Idempotent.
     pub async fn migrate(&self, dir: &str) -> Result<(), DbError> {
-        migration::run_migrations(self, dir).await
+        migration::run_migrations(self.primary(), dir).await
     }
 
     /// Return the status (applied / pending) for each SQL file in `dir`.
     pub async fn migration_status(&self, dir: &str) -> Result<Vec<MigrationStatus>, DbError> {
-        migration::migration_status(self, dir).await
+        migration::migration_status(self.primary(), dir).await
     }
 
     /// Roll back the most recently applied migration in `dir`.
@@ -333,7 +502,7 @@ impl DbPool {
     /// `Err` if that file is missing. Returns `Ok(None)` if nothing is
     /// currently applied.
     pub async fn rollback_last(&self, dir: &str) -> Result<Option<String>, DbError> {
-        migration::rollback_last(self, dir).await
+        migration::rollback_last(self.primary(), dir).await
     }
 
     /// Roll back the last `n` applied migrations, most recently applied
@@ -342,7 +511,7 @@ impl DbPool {
     /// down file or SQL error; migrations already rolled back in earlier
     /// iterations stay rolled back.
     pub async fn rollback(&self, dir: &str, n: usize) -> Result<Vec<String>, DbError> {
-        migration::rollback(self, dir, n).await
+        migration::rollback(self.primary(), dir, n).await
     }
 
     /// Run the seed files in `dir` (18.30.0): every `*.sql` file, in
@@ -353,7 +522,7 @@ impl DbPool {
     /// on MySQL). Answers the files run; stops at the first that fails,
     /// whose statements are rolled back.
     pub async fn seed(&self, dir: &str) -> Result<Vec<String>, DbError> {
-        migration::run_seeds(self, dir).await
+        migration::run_seeds(self.primary(), dir).await
     }
 
     /// A pool for a database URL (18.30.0): `sqlite:<path>` (or
@@ -362,6 +531,12 @@ impl DbPool {
     /// `mariadb://`) — sqlx's syntax, query parameters included (`sslmode`,
     /// `ssl-mode`, …). The backend's `model-*` feature must be compiled in.
     pub async fn connect(url: &str) -> Result<Self, DbError> {
+        DbPool::connect_sized(url, 4).await
+    }
+
+    /// [`DbPool::connect`] with at most `size` connections (SQLite: one).
+    async fn connect_sized(url: &str, size: u32) -> Result<Self, DbError> {
+        let _ = size;
         let url = url.trim();
         let scheme = url.split(':').next().unwrap_or("").to_ascii_lowercase();
         let backend = match scheme.as_str() {
@@ -395,7 +570,7 @@ impl DbPool {
             Backend::Postgres => {
                 let options: sqlx::postgres::PgConnectOptions = url.parse().map_err(bad_url)?;
                 let pool = sqlx::pool::PoolOptions::<sqlx::Postgres>::new()
-                    .max_connections(4)
+                    .max_connections(size.max(1))
                     .connect_with(options)
                     .await
                     .map_err(|e| DbError::new(e.to_string()))?;
@@ -405,7 +580,7 @@ impl DbPool {
             Backend::MySql => {
                 let options: sqlx::mysql::MySqlConnectOptions = url.parse().map_err(bad_url)?;
                 let pool = sqlx::pool::PoolOptions::<sqlx::MySql>::new()
-                    .max_connections(4)
+                    .max_connections(size.max(1))
                     .connect_with(options)
                     .await
                     .map_err(|e| DbError::new(e.to_string()))?;

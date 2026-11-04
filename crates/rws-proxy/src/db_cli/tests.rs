@@ -31,6 +31,7 @@ fn parses_commands_and_options() {
     assert_eq!(Command::Migrate, cli(&["migrate"]).command);
     assert_eq!(Command::Status, cli(&["status"]).command);
     assert_eq!(Command::Seed, cli(&["seed"]).command);
+    assert_eq!(Command::Schema, cli(&["schema", "--json"]).command);
     assert_eq!(Command::Rollback(1), cli(&["rollback"]).command);
     assert_eq!(Command::Rollback(3), cli(&["rollback", "3"]).command);
     let c = cli(&["migrate", "--database-url", "sqlite:x.db", "--dir=app", "--migrations", "db/m", "--seeds=db/s", "--json"]);
@@ -98,6 +99,7 @@ fn renders_each_answer_for_a_person() {
     assert!(render(&Command::Migrate, r#"{"applied":[],"directory":"m","migrations":[]}"#).starts_with("nothing to apply"));
     assert_eq!("rolled back  0002_b.sql\nrolled back  0001_a.sql\n", render(&Command::Rollback(2), r#"{"directory":"m","rolled_back":["0002_b.sql","0001_a.sql"]}"#));
     assert_eq!("seeded  01.sql\n", render(&Command::Seed, r#"{"directory":"seeds","seeded":["01.sql"]}"#));
+    assert_eq!("no tables\n", render(&Command::Schema, r#"{"backend":"sqlite","tables":[]}"#));
 }
 
 #[cfg(not(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
@@ -163,6 +165,59 @@ fn migrate_status_rollback_and_seed_against_sqlite() {
     assert!(err.contains("seeds directory"), "{err}");
 }
 
+#[cfg(feature = "model-sqlite")]
+#[test]
+fn schema_and_rust_seeders_against_sqlite() {
+    use crate::model::{DbPool, Seeders, Value};
+    let dir = crate::test_env::TempPath::new("db_cli_schema_project");
+    std::fs::create_dir_all(dir.join("migrations")).unwrap();
+    std::fs::create_dir_all(dir.join("seeds")).unwrap();
+    std::fs::write(
+        dir.join("migrations/0001_shop.sql"),
+        "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, role TEXT DEFAULT 'member');\
+         CREATE TABLE orders (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE);\
+         CREATE INDEX orders_by_user ON orders (user_id);",
+    )
+    .unwrap();
+    std::fs::write(dir.join("seeds/01_users.sql"), "INSERT OR IGNORE INTO users (email) VALUES ('sql@example.com')").unwrap();
+    let url = format!("sqlite:{}?mode=rwc", dir.join("app.db").display());
+    let full = |list: &[&str]| {
+        let mut full: Vec<String> = list.iter().map(|s| s.to_string()).collect();
+        full.extend(["--dir".to_string(), dir.as_str().to_string(), "--database-url".to_string(), url.clone()]);
+        full
+    };
+    assert_eq!(EXIT_OK, run_db(&full(&["migrate"]).iter().map(String::as_str).collect::<Vec<_>>()).0);
+
+    let (code, out, err) = run_db(&full(&["schema"]).iter().map(String::as_str).collect::<Vec<_>>());
+    assert_eq!(EXIT_OK, code, "{err}");
+    assert!(out.contains("orders\n  id  INTEGER  PK\n  user_id  INTEGER  NOT NULL\n  index orders_by_user (user_id)\n"), "{out}");
+    assert!(out.contains("  foreign key (user_id) references users (id) on delete CASCADE\n"), "{out}");
+    assert!(out.contains("  role  TEXT  DEFAULT 'member'\n") && out.contains("  unique index sqlite_autoindex_users_1 (email)\n"), "{out}");
+    let (code, out, _) = run_db(&full(&["schema", "--json"]).iter().map(String::as_str).collect::<Vec<_>>());
+    assert!(code == EXIT_OK && out.starts_with(r#"{"backend":"sqlite","tables":[{"name":"_schema_migrations""#), "{out}");
+    assert!(out.contains(r#""foreign_keys":[{"name":null,"columns":["user_id"],"references":{"table":"users","columns":["id"]}"#), "{out}");
+
+    // An app's binary: the SQL seeds, then its Rust ones.
+    let seeders = Seeders::new().add("admin", |pool: DbPool| async move {
+        pool.execute("INSERT OR IGNORE INTO users (email, role) VALUES (?, 'admin')", &[Value::Text("admin@example.com".into())]).await?;
+        Ok(())
+    });
+    let (mut out, mut err) = (Vec::new(), Vec::new());
+    let code = run_with_seeders(&full(&["seed", "--json"]), &seeders, &mut out, &mut err);
+    let out = String::from_utf8(out).unwrap();
+    assert_eq!(EXIT_OK, code, "{}", String::from_utf8_lossy(&err));
+    assert!(out.contains(r#""seeded":["01_users.sql","admin"]"#), "{out}");
+    let (mut out, mut err) = (Vec::new(), Vec::new());
+    assert_eq!(EXIT_OK, run_with_seeders(&full(&["seed"]), &seeders, &mut out, &mut err));
+    assert_eq!("seeded  01_users.sql\nseeded  admin\n", String::from_utf8(out).unwrap());
+    // Seeders only: no seeds directory is no SQL seeds.
+    let (mut out, mut err) = (Vec::new(), Vec::new());
+    assert_eq!(EXIT_OK, run_with_seeders(&full(&["seed", "--seeds", "/no/such/seeds"]), &seeders, &mut out, &mut err));
+    assert_eq!("seeded  admin\n", String::from_utf8(out).unwrap());
+    let (code, _, _) = run_db(&full(&["schema", "extra"]).iter().map(String::as_str).collect::<Vec<_>>());
+    assert_eq!(EXIT_USAGE, code);
+}
+
 /// `rws db` on a server's database (`RWS_TEST_POSTGRES_URL` /
 /// `RWS_TEST_MYSQL_URL`; skipped without, failed when
 /// `RWS_TEST_REQUIRE_BACKENDS` names the backend). The database is shared,
@@ -193,6 +248,12 @@ fn against_server(var: &str, name: &str) {
     assert_eq!(format!("applied  {version}\n"), out);
     let (code, out, err) = db(&["seed"]);
     assert_eq!((EXIT_OK, "seeded  01.sql\n"), (code, out.as_str()), "[{name}] {err}");
+    let (code, out, err) = db(&["schema", "--json"]);
+    assert_eq!(EXIT_OK, code, "[{name}] {err}");
+    assert!(out.contains(&format!(r#"{{"name":"rws_db_cli_{tag}","columns":[{{"name":"id","type":"#)), "[{name}] {out}");
+    assert!(out.contains(r#""primary_key":["id"]"#), "[{name}] {out}");
+    let (code, out, _) = db(&["schema"]);
+    assert!(code == EXIT_OK && out.contains(&format!("rws_db_cli_{tag}\n  id  ")), "[{name}] {out}");
     let (code, out, _) = db(&["status"]);
     assert_eq!((EXIT_OK, format!("applied  {version}\n")), (code, out), "[{name}]");
     let (code, out, err) = db(&["rollback"]);

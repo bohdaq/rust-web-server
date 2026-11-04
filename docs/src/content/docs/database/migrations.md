@@ -174,6 +174,45 @@ INSERT INTO roles (name) VALUES ('member') ON CONFLICT DO NOTHING;
 
 The convention is a `seeds/` directory beside the migrations directory: `migrations/` → `seeds/`, `db/migrations/` → `db/seeds/`.
 
+### Seeds in Rust
+
+Rows that are easier to make in Rust — with [factories](/testing/database/), computed values, several tables at once — go in seeders (18.30.0). A seeder is a name and an async function of the pool; `pool.seed_with(dir, &seeders)` runs the `*.sql` files first, then the seeders in the order added, and answers what it ran:
+
+```rust
+use rust_web_server::model::{DbPool, Seeders};
+
+pub fn seeders() -> Seeders {
+    Seeders::new()
+        .add("users", |pool: DbPool| async move {
+            User::factory().create_many(10, &pool).await?;
+            Ok(())
+        })
+        .add("admin", |pool: DbPool| async move {
+            if User::query(&pool).where_eq("email", "admin@example.com").count().await? == 0 {
+                User::factory().with(|u| { u.email = "admin@example.com".into(); u.admin = true; }).create(&pool).await?;
+            }
+            Ok(())
+        })
+}
+
+let ran = pool.seed_with("seeds", &seeders()).await?; // ["01_roles.sql", "users", "admin"]
+```
+
+Like SQL seeds, seeders run every time, so write them to tolerate their rows being there (the `admin` one looks first). A seeder isn't wrapped in a transaction — use `pool.transaction(…)` in it when its rows must go in together — and a failing one stops the run with its name in the error. With seeders, a missing SQL directory means no SQL seeds rather than an error. Implement the `Seeder` trait instead of a closure when a seeder needs state of its own.
+
+The `rws` binary can't run an app's Rust code, so `rws db seed` runs the SQL files only. Give the app's own binary the same command, with its seeders, through `db_cli::run_with_seeders`:
+
+```rust
+// src/main.rs
+let args: Vec<String> = std::env::args().collect();
+if let Some(db_args) = rust_web_server::db_cli::requested(&args) {
+    let code = rust_web_server::db_cli::run_with_seeders(db_args, &myapp::seeders(), &mut std::io::stdout(), &mut std::io::stderr());
+    std::process::exit(code);
+}
+```
+
+`cargo run -- db seed` then runs `seeds/*.sql` and the seeders (`--json`: `{"directory":…,"seeded":["01_roles.sql","users","admin"]}`); every other `db` command works as `rws db`'s.
+
 ## From the command line: `rws db`
 
 `rws db` runs the same operations on the project in the working directory (or `--dir`), with the migrations directory from its [`rws.app.toml`](/building-apps/project-layout/) and the seeds beside it:
@@ -183,10 +222,38 @@ rws db status                    # applied / pending, and which have a .down.sql
 rws db migrate                   # apply every pending migration
 rws db rollback                  # undo the last one; `rws db rollback 3` the last three
 rws db seed                      # run seeds/*.sql
+rws db schema                    # tables: columns, primary key, indexes, foreign keys
 rws db migrate --database-url postgres://app:secret@db/app --json
 ```
 
 The database is `--database-url`, else `DATABASE_URL`, else the `RWS_DB_*` variables (see [the overview](/database/overview/#environment-variables)); URLs are sqlx's — `sqlite:app.db` (`sqlite:app.db?mode=rwc` creates the file), `postgres://user:password@host:5432/db`, `mysql://user:password@host:3306/db`. `--migrations <dir>` and `--seeds <dir>` override the directories. `--json` prints the result for agents: `status` is the dev MCP server's `migrations` answer (`{"directory":…,"migrations":[{"version":…,"applied":…,"has_down":…}]}`), `migrate` adds `"applied"` (the versions this run applied), `rollback` answers `{"directory":…,"rolled_back":[…]}`, `seed` `{"directory":…,"seeded":[…]}`, and a failure `{"error":…}`. Exit codes: `0` done, `1` a database or migration error (including a missing `.down.sql`), `2` bad arguments.
+
+## The schema as data
+
+`pool.schema().await?` reads the connected schema from the database's catalog — SQLite's `sqlite_master` and `pragma_*` functions, PostgreSQL's `information_schema` and `pg_catalog` (the `current_schema()`), MySQL's `information_schema` (the `DATABASE()`) — into a `DbSchema` (18.30.0): every table (views left out, `_schema_migrations` included) with its columns (type as the backend spells it, nullability, default, whether it is in the primary key), the primary key in key order, the indexes (columns, `unique`, `primary`; SQLite has none for an `INTEGER PRIMARY KEY`) and the foreign keys (columns, referenced table and columns, `on_update`, `on_delete`). It reads the primary of a [replicated pool](/database/overview/#read-replicas).
+
+```rust
+let schema = pool.schema().await?;
+let users = schema.table("users").expect("migrated");
+assert_eq!(vec!["id".to_string()], users.primary_key);
+for fk in &schema.table("orders").unwrap().foreign_keys {
+    println!("{:?} -> {}({:?}) on delete {}", fk.columns, fk.references_table, fk.references_columns, fk.on_delete);
+}
+println!("{}", schema.to_json());
+```
+
+`to_json()` is what `rws db schema --json` prints and the dev MCP server's `db_schema` tool answers:
+
+```json
+{"backend":"sqlite","tables":[{"name":"orders",
+  "columns":[{"name":"id","type":"INTEGER","nullable":true,"default":null,"primary_key":true},
+             {"name":"user_id","type":"INTEGER","nullable":false,"default":null,"primary_key":false}],
+  "primary_key":["id"],
+  "indexes":[{"name":"orders_by_user","columns":["user_id"],"unique":false,"primary":false}],
+  "foreign_keys":[{"name":null,"columns":["user_id"],"references":{"table":"users","columns":["id"]},"on_update":"NO ACTION","on_delete":"CASCADE"}]}]}
+```
+
+Without `--json`, `rws db schema` prints a table per block: `  user_id  INTEGER  NOT NULL`, `  index orders_by_user (user_id)`, `  foreign key (user_id) references users (id) on delete CASCADE`.
 
 The command needs a `rws` built with a database driver — `cargo install rust-web-server --features model-sqlite,model-postgres,model-mysql`; the release binaries have none, and say so.
 
