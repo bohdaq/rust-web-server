@@ -18,4 +18,10 @@ url-build-parse = "12.1.0"
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
 
 [lints.rust]
-unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)'] }
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)', 'cfg(docsrs)'] }
+
+# docs.rs shows every feature's items, each labelled with the features it
+# needs (`--cfg docsrs` turns on `doc_cfg` in lib.rs). No features.
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]

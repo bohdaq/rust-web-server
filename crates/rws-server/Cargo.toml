@@ -10,7 +10,18 @@ rust-version.workspace = true
 license.workspace = true
 
 [lints.rust]
-unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)'] }
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)', 'cfg(docsrs)'] }
+
+# docs.rs shows every feature's items, each labelled with the features it
+# needs (`--cfg docsrs` turns on `doc_cfg` in lib.rs). Every feature but
+# `fips` (rustls/fips builds aws-lc's FIPS module, which needs CMake and Go;
+# it adds no items) and `test-support` (rust-web-server's test helpers, not
+# API). `pkcs11` builds without an HSM (cryptoki loads the module at run
+# time).
+[package.metadata.docs.rs]
+features = ["http1", "http2", "http3", "http-client", "pkcs11", "serde", "auth", "auth-asymmetric", "macros", "model-sqlite", "model-postgres", "model-mysql", "crypto", "csrf", "sso", "sso-server", "sso-saml", "storage-local", "storage-s3", "storage-azure", "storage-gcs", "openapi", "rewrite-regex", "secrets", "gateway-api", "acme"]
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
 
 [features]
 default = []
