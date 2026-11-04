@@ -58,6 +58,55 @@ jobs:
       - if: matrix.args == ''
         run: cargo test --locked -p rws-gateway-api
 
+  # The ORM on real servers (18.30.0, #90/#91): the model, TestDb and
+  # `rws db` tests run on SQLite, PostgreSQL 16 and MySQL 8.4. Each model
+  # test makes a schema (PostgreSQL) or database (MySQL) of its own and drops
+  # it. RWS_TEST_REQUIRE_BACKENDS turns a missing URL into a failure, so a
+  # broken service can't pass as "skipped".
+  model-databases:
+    name: model (SQLite, PostgreSQL 16, MySQL 8.4)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rws
+          POSTGRES_PASSWORD: rws
+          POSTGRES_DB: rws_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rws -d rws_test"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: rws
+          MYSQL_DATABASE: rws_test
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -prws"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      RWS_TEST_POSTGRES_URL: postgres://rws:rws@127.0.0.1:5432/rws_test
+      # root: the model tests create and drop a database each.
+      RWS_TEST_MYSQL_URL: mysql://root:rws@127.0.0.1:3306/rws_test
+      RWS_TEST_REQUIRE_BACKENDS: postgres,mysql
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: model-databases
+      - name: model and TestDb tests on SQLite, PostgreSQL and MySQL
+        run: cargo test --locked -p rws-server --features "http2 test-support macros serde model-sqlite model-postgres model-mysql" --lib -- model test_client
+      - name: rws db on SQLite, PostgreSQL and MySQL
+        run: cargo test --locked -p rws-proxy --features "http2 serde model-sqlite model-postgres model-mysql" --lib -- db_cli dev_mcp
+      - name: what ran
+        if: always()
+        run: |
+          echo "PostgreSQL: $(docker exec "$(docker ps -qf ancestor=postgres:16)" psql -U rws -d rws_test -Atc 'select version()')"
+          echo "MySQL: $(docker exec "$(docker ps -qf ancestor=mysql:8.4)" mysql -uroot -prws -Nse 'select version()' 2>/dev/null)"
+
   msrv:
     name: msrv (1.99, all features)
     runs-on: ubuntu-latest

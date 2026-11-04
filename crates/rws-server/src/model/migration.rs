@@ -1,7 +1,9 @@
 //! Async migration runner.
 //!
 //! Reads `*.sql` files from a directory in lexicographic order. Creates
-//! `_schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)` if absent.
+//! `_schema_migrations(version VARCHAR(255) PRIMARY KEY, applied_at VARCHAR(64))`
+//! if absent (`VARCHAR`: MySQL can't key a `TEXT` column; tables made as
+//! `TEXT` by earlier releases keep working).
 //! Runs each unapplied file inside a transaction.
 //!
 //! Rollback: an up file `NNNN_name.sql` may have a companion down file
@@ -32,7 +34,7 @@ pub struct MigrationStatus {
 
 const CREATE_TABLE_SQL: &str =
     "CREATE TABLE IF NOT EXISTS _schema_migrations \
-     (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)";
+     (version VARCHAR(255) PRIMARY KEY, applied_at VARCHAR(64) NOT NULL)";
 
 async fn ensure_migrations_table(pool: &DbPool) -> Result<(), DbError> {
     pool.execute(CREATE_TABLE_SQL, &[]).await?;
@@ -247,4 +249,24 @@ pub async fn rollback(pool: &DbPool, dir: &str, n: usize) -> Result<Vec<String>,
         }
     }
     Ok(rolled_back)
+}
+
+/// Run every `*.sql` file in `dir`, in order, each in one transaction.
+/// Called by `DbPool::seed`.
+pub async fn run_seeds(pool: &DbPool, dir: &str) -> Result<Vec<String>, DbError> {
+    let files = read_sql_files(dir)
+        .map_err(|e| DbError::new(e.0.replace("migrations directory", "seeds directory")))?;
+    let mut ran = Vec::with_capacity(files.len());
+    for (filename, sql) in files {
+        let mut tx = pool.begin().await?;
+        for stmt in sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            if let Err(e) = tx.execute(stmt, &[]).await {
+                let _ = tx.rollback().await;
+                return Err(DbError::new(format!("seed '{}' failed: {}", filename, e)));
+            }
+        }
+        tx.commit().await?;
+        ran.push(filename);
+    }
+    Ok(ran)
 }

@@ -1,0 +1,5 @@
+error: #[derive(Model)] takes at most one #[version] field
+ --> tests/ui/model_two_versions.rs:5:8
+  |
+5 | struct Note {
+  |        ^^^^

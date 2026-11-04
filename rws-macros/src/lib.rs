@@ -686,16 +686,23 @@ fn is_option_type(ty: &syn::Type) -> bool {
 /// | Attribute | Meaning |
 /// |---|---|
 /// | `#[table(name = "tbl")]` | Override table name (default: struct name lowercased) |
+/// | `#[timestamps]` | `save` sets the `created_at` and `updated_at` fields' columns (17.31.0) |
+/// | `#[soft_delete]` | `delete` sets the `deleted_at` field's column (an `Option`); queries skip such rows (17.31.0) |
 ///
 /// # Field attributes
 ///
 /// | Attribute | Meaning |
 /// |---|---|
-/// | `#[primary_key]` | Mark as primary key |
+/// | `#[primary_key]` | Mark as primary key (`i64`, `i32`, `String` or `Uuid`) |
 /// | `#[primary_key(auto_increment)]` | Auto-increment primary key |
 /// | `#[column(name = "col")]` | Override column name |
 /// | `#[column(unique)]` | Mark column unique (informational) |
+/// | `#[version]` | Optimistic-locking version (an integer), checked and incremented by `save` (17.31.0) |
 /// | `#[ignore]` | Exclude from DB mapping |
+///
+/// `T::repository(&pool)` is keyed by `i64` for an integer primary key of
+/// any width (as before 17.31.0) and by the field's type otherwise
+/// (`String`, `Uuid`).
 ///
 /// # Example
 ///
@@ -711,8 +718,24 @@ fn is_option_type(ty: &syn::Type) -> bool {
 ///     #[ignore]
 ///     pub display_label: String,
 /// }
+///
+/// // Conventions the repository maintains (17.31.0):
+/// #[derive(rust_web_server::Model, Debug, Clone)]
+/// #[table(name = "posts")]
+/// #[timestamps]
+/// #[soft_delete]
+/// pub struct Post {
+///     #[primary_key]
+///     pub id: rust_web_server::model::Uuid, // Uuid::NIL → save picks a v7
+///     pub title: String,
+///     #[version]
+///     pub lock_version: i64,
+///     pub created_at: rust_web_server::model::Timestamp,
+///     pub updated_at: rust_web_server::model::Timestamp,
+///     pub deleted_at: Option<rust_web_server::model::Timestamp>,
+/// }
 /// ```
-#[proc_macro_derive(Model, attributes(table, column, primary_key))]
+#[proc_macro_derive(Model, attributes(table, column, primary_key, timestamps, soft_delete, version))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     impl_model(ast)
@@ -753,6 +776,8 @@ fn impl_model(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         is_pk: bool,
         is_auto_increment: bool,
         is_ignored: bool,
+        is_version: bool,
+        ty: syn::Type,
     }
 
     let mut pk_field: Option<FieldMeta> = None;
@@ -764,10 +789,13 @@ fn impl_model(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut is_pk = false;
         let mut is_auto_increment = false;
         let mut is_ignored = false;
+        let mut is_version = false;
 
         for attr in &field.attrs {
             if attr.path().is_ident("ignore") {
                 is_ignored = true;
+            } else if attr.path().is_ident("version") {
+                is_version = true;
             } else if attr.path().is_ident("primary_key") {
                 is_pk = true;
                 // Check for (auto_increment)
@@ -795,8 +823,13 @@ fn impl_model(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             is_pk,
             is_auto_increment,
             is_ignored,
+            is_version,
+            ty: field.ty.clone(),
         };
 
+        if is_version && (is_pk || is_ignored) {
+            return Err(syn::Error::new_spanned(field, "#[version] goes on a mapped integer field, not the #[primary_key] or an #[ignore]d one"));
+        }
         if is_pk {
             pk_field = Some(meta);
         } else {
@@ -807,6 +840,56 @@ fn impl_model(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let pk = pk_field.ok_or_else(|| {
         syn::Error::new(span, "#[derive(Model)] requires exactly one #[primary_key] field")
     })?;
+
+    // ── Conventions: #[timestamps], #[soft_delete], #[version] ───────────────
+    let has_struct_attr = |name: &str| input.attrs.iter().any(|a| a.path().is_ident(name));
+    let column_of = |field: &str, attr: &str, must_be_option: bool| -> syn::Result<String> {
+        let found = regular_fields.iter().find(|f| f.field_ident == field && !f.is_ignored).ok_or_else(|| {
+            syn::Error::new(span, format!("#[{attr}] needs a mapped field named `{field}` (e.g. `{field}: {}`)", if must_be_option { "Option<Timestamp>" } else { "Timestamp" }))
+        })?;
+        if must_be_option && !is_option_type(&found.ty) {
+            return Err(syn::Error::new_spanned(&found.ty, format!("#[{attr}]: `{field}` must be an Option (NULL means not deleted), e.g. Option<Timestamp>")));
+        }
+        Ok(found.col_name.clone())
+    };
+    // Only the conventions in use become methods: a model without them
+    // expands exactly as before 17.31.0, so it still compiles against a
+    // rust-web-server whose `Model` trait predates them.
+    let opt = |name: &str, c: Option<String>| -> proc_macro2::TokenStream {
+        let name = syn::Ident::new(name, proc_macro2::Span::call_site());
+        match c {
+            Some(c) => quote! {
+                fn #name() -> ::core::option::Option<&'static str> {
+                    ::core::option::Option::Some(#c)
+                }
+            },
+            None => quote! {},
+        }
+    };
+    let (created_at, updated_at) = if has_struct_attr("timestamps") {
+        (Some(column_of("created_at", "timestamps", false)?), Some(column_of("updated_at", "timestamps", false)?))
+    } else {
+        (None, None)
+    };
+    let deleted_at = if has_struct_attr("soft_delete") { Some(column_of("deleted_at", "soft_delete", true)?) } else { None };
+    let versions: Vec<&FieldMeta> = regular_fields.iter().filter(|f| f.is_version).collect();
+    if versions.len() > 1 {
+        return Err(syn::Error::new(span, "#[derive(Model)] takes at most one #[version] field"));
+    }
+    let version = versions.first().map(|f| f.col_name.clone());
+    let (created_at, updated_at, deleted_at, version) = (
+        opt("created_at_column", created_at),
+        opt("updated_at_column", updated_at),
+        opt("soft_delete_column", deleted_at),
+        opt("version_column", version),
+    );
+
+    // `repository()`'s key: i64 for any integer key (as before), else the
+    // key's own type.
+    let pk_ty = &pk.ty;
+    let is_integer = matches!(pk_ty, syn::Type::Path(tp) if tp.qself.is_none() && tp.path.segments.len() == 1
+        && ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize"].iter().any(|t| tp.path.segments[0].ident == t));
+    let repo_key = if is_integer { quote! { i64 } } else { quote! { #pk_ty } };
 
     // ── column_names (all mapped fields, including PK) ────────────────────────
     let mut all_col_names: Vec<String> = Vec::new();
@@ -933,11 +1016,16 @@ fn impl_model(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     #(#regular_to_values),*
                 ]
             }
+
+            #created_at
+            #updated_at
+            #deleted_at
+            #version
         }
 
         impl #struct_name {
             /// Create a `ModelRepository` tied to the given pool.
-            pub fn repository(pool: &::rust_web_server::model::DbPool) -> ::rust_web_server::model::ModelRepository<#struct_name, i64> {
+            pub fn repository(pool: &::rust_web_server::model::DbPool) -> ::rust_web_server::model::ModelRepository<#struct_name, #repo_key> {
                 ::rust_web_server::model::ModelRepository::new(pool)
             }
 

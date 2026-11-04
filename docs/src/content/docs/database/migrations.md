@@ -7,7 +7,7 @@ The migration runner reads `*.sql` files from a directory in lexicographic order
 
 ## How it works
 
-1. `pool.migrate("migrations/").await` creates `_schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)` if it does not already exist.
+1. `pool.migrate("migrations/").await` creates `_schema_migrations(version VARCHAR(255) PRIMARY KEY, applied_at VARCHAR(64) NOT NULL)` if it does not already exist (`VARCHAR` since 18.30: MySQL can't key a `TEXT` column; a table created as `TEXT` by an earlier release keeps working).
 2. It reads every `*.sql` file in the directory sorted lexicographically by filename.
 3. Files whose name is already in `_schema_migrations` are skipped.
 4. Each unapplied file is executed inside a `BEGIN` / `COMMIT` transaction, one statement at a time — the file is split on `;`, so a `;` inside a string literal or a trigger/function body breaks it. If the file fails, the transaction is rolled back and `migrate` returns `Err` immediately — subsequent files are not attempted.
@@ -161,6 +161,34 @@ Both methods return `Err` if the migration they're trying to undo has no compani
 :::caution[Down migrations are not automatically the inverse]
 `rust-web-server` does not generate down SQL for you — you write it, the same way you write the up file. Get it right by hand: `DROP TABLE` undoes `CREATE TABLE`, `DROP COLUMN` undoes `ADD COLUMN`, and so on. A down file that doesn't actually reverse its up file will leave the schema in an inconsistent state relative to `_schema_migrations`.
 :::
+
+## Seeds
+
+`pool.seed("seeds/").await` runs every `*.sql` file in the directory, in name order, each in its own transaction (split at `;`, like migrations), and answers the files it ran. Nothing records that a seed ran: it runs again every time, so write seeds that can — `INSERT … ON CONFLICT DO NOTHING` (PostgreSQL, SQLite), `INSERT OR IGNORE` (SQLite), `INSERT IGNORE` (MySQL). A failing file is rolled back and stops the run.
+
+```sql
+-- seeds/01_roles.sql
+INSERT INTO roles (name) VALUES ('admin') ON CONFLICT DO NOTHING;
+INSERT INTO roles (name) VALUES ('member') ON CONFLICT DO NOTHING;
+```
+
+The convention is a `seeds/` directory beside the migrations directory: `migrations/` → `seeds/`, `db/migrations/` → `db/seeds/`.
+
+## From the command line: `rws db`
+
+`rws db` runs the same operations on the project in the working directory (or `--dir`), with the migrations directory from its [`rws.app.toml`](/building-apps/project-layout/) and the seeds beside it:
+
+```bash
+rws db status                    # applied / pending, and which have a .down.sql
+rws db migrate                   # apply every pending migration
+rws db rollback                  # undo the last one; `rws db rollback 3` the last three
+rws db seed                      # run seeds/*.sql
+rws db migrate --database-url postgres://app:secret@db/app --json
+```
+
+The database is `--database-url`, else `DATABASE_URL`, else the `RWS_DB_*` variables (see [the overview](/database/overview/#environment-variables)); URLs are sqlx's — `sqlite:app.db` (`sqlite:app.db?mode=rwc` creates the file), `postgres://user:password@host:5432/db`, `mysql://user:password@host:3306/db`. `--migrations <dir>` and `--seeds <dir>` override the directories. `--json` prints the result for agents: `status` is the dev MCP server's `migrations` answer (`{"directory":…,"migrations":[{"version":…,"applied":…,"has_down":…}]}`), `migrate` adds `"applied"` (the versions this run applied), `rollback` answers `{"directory":…,"rolled_back":[…]}`, `seed` `{"directory":…,"seeded":[…]}`, and a failure `{"error":…}`. Exit codes: `0` done, `1` a database or migration error (including a missing `.down.sql`), `2` bad arguments.
+
+The command needs a `rws` built with a database driver — `cargo install rust-web-server --features model-sqlite,model-postgres,model-mysql`; the release binaries have none, and say so.
 
 ## Startup pattern
 

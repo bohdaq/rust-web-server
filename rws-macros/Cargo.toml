@@ -1,6 +1,6 @@
 [package]
 name = "rws-macros"
-version = "17.30.0"
+version = "17.31.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"

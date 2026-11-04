@@ -78,6 +78,10 @@ pub mod dev_mcp;
 /// conventional layout (18.29.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod generator;
+/// `rws db migrate|rollback|status|seed`: the project's migrations and
+/// seeds from the command line (18.30.0).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod db_cli;
 /// Runtime state shared across replicas through Redis (18.22.0).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cluster;

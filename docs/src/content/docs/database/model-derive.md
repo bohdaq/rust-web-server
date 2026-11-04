@@ -47,7 +47,7 @@ Marks the field as the primary key. Exactly one field must carry this attribute;
 pub id: i64,   // caller sets id before INSERT
 ```
 
-Use this variant when you manage the primary key yourself. Note that `Repository::save` treats any key other than `0`/`NULL` as an UPDATE (and `ModelRepository` is keyed by `i64`), so insert rows with a caller-assigned key through raw SQL (`pool.execute`).
+Use this variant when you manage the primary key yourself — an integer, a `String` or a `Uuid`. `Repository::save` then inserts the row when the key isn't in the table yet and updates it otherwise; a `Uuid::NIL` key gets a generated one. See [Keys, timestamps, soft delete and locking](/database/conventions/#primary-keys).
 
 ### `#[primary_key(auto_increment)]`
 
@@ -90,6 +90,14 @@ Excludes the field from all database operations. On `from_row` the field receive
 pub display_label: String,   // computed at runtime, not stored
 ```
 
+### `#[version]`
+
+An integer field the repository uses for optimistic locking: saving a copy whose version is no longer the row's fails with `DbErrorKind::StaleVersion`. See [Optimistic locking](/database/conventions/#optimistic-locking).
+
+## Conventions: `#[timestamps]`, `#[soft_delete]`
+
+Two more struct attributes hand columns to the repository: `#[timestamps]` (fields `created_at`, `updated_at`, set by `save`) and `#[soft_delete]` (field `deleted_at: Option<…>`, set by `delete`; queries skip such rows). See [Keys, timestamps, soft delete and locking](/database/conventions/).
+
 ## Supported field types
 
 | Rust type | `Value` variant |
@@ -99,6 +107,8 @@ pub display_label: String,   // computed at runtime, not stored
 | `f32`, `f64` | `Value::Float(f64)` |
 | `bool` | `Value::Bool(bool)` |
 | `String` | `Value::Text(String)` |
+| `model::Timestamp` | `Value::Text` (RFC 3339; see [timestamps](/database/conventions/#timestamps)) |
+| `model::Uuid` | `Value::Text` (hyphenated) |
 | `Option<T>` | `Value::Null` or inner type |
 
 ## Complete example
@@ -187,7 +197,8 @@ In addition, two inherent methods are generated on the struct:
 
 ```rust
 impl User {
-    /// Returns a ModelRepository bound to this pool.
+    /// Returns a ModelRepository bound to this pool, keyed by i64 for an
+    /// integer primary key and by the key's type (String, Uuid) otherwise.
     pub fn repository(pool: &DbPool) -> ModelRepository<User, i64>;
 
     /// Returns a QueryBuilder bound to this pool.

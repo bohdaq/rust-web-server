@@ -133,6 +133,7 @@ Use it as:
 - [Database Overview](https://rws8.tech/database/overview/): Async SQLite, PostgreSQL, and/or MySQL — even more than one at once — with a built-in connection pool via sqlx.
 - [#[derive(Model)]](https://rws8.tech/database/model-derive/): Map a Rust struct to a database table with the Model proc-macro and its field attributes.
 - [Repository](https://rws8.tech/database/repository/): Async CRUD operations for a model type via the Repository trait and ModelRepository.
+- [Keys, timestamps, soft delete and locking](https://rws8.tech/database/conventions/): String and UUID primary keys, created_at/updated_at, soft delete with restore, and optimistic locking with #[version] — maintained by the repository, on SQLite, PostgreSQL and MySQL.
 - [Query Builder](https://rws8.tech/database/query-builder/): Use QueryBuilder to construct typed async SELECT, COUNT, DELETE, and UPDATE queries without writing SQL.
 - [Pagination](https://rws8.tech/database/pagination/): Paginate query results with Page<T> (offset) and CursorPage<T> (keyset), plus a built-in Link header builder.
 - [Raw SQL](https://rws8.tech/database/raw-sql/): Execute hand-written SQL queries and map results to typed structs or untyped rows.

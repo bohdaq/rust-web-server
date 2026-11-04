@@ -344,6 +344,90 @@ impl DbPool {
     pub async fn rollback(&self, dir: &str, n: usize) -> Result<Vec<String>, DbError> {
         migration::rollback(self, dir, n).await
     }
+
+    /// Run the seed files in `dir` (18.30.0): every `*.sql` file, in
+    /// lexicographic order, each in its own transaction (statements split
+    /// at `;`, as migrations). Unlike migrations nothing records that a
+    /// seed ran — it runs again every time, so write seeds that can (`INSERT
+    /// … ON CONFLICT DO NOTHING` on PostgreSQL and SQLite, `INSERT IGNORE`
+    /// on MySQL). Answers the files run; stops at the first that fails,
+    /// whose statements are rolled back.
+    pub async fn seed(&self, dir: &str) -> Result<Vec<String>, DbError> {
+        migration::run_seeds(self, dir).await
+    }
+
+    /// A pool for a database URL (18.30.0): `sqlite:<path>` (or
+    /// `sqlite::memory:`), `postgres://user:password@host:port/db` (also
+    /// `postgresql://`), `mysql://user:password@host:port/db` (also
+    /// `mariadb://`) — sqlx's syntax, query parameters included (`sslmode`,
+    /// `ssl-mode`, …). The backend's `model-*` feature must be compiled in.
+    pub async fn connect(url: &str) -> Result<Self, DbError> {
+        let url = url.trim();
+        let scheme = url.split(':').next().unwrap_or("").to_ascii_lowercase();
+        let backend = match scheme.as_str() {
+            "sqlite" => "sqlite",
+            "postgres" | "postgresql" => "postgres",
+            "mysql" | "mariadb" => "mysql",
+            _ => {
+                return Err(DbError::new(format!(
+                    "database URL {:?}: expected sqlite:<path>, postgres://… or mysql://…",
+                    redact_url(url)
+                )))
+            }
+        };
+        let backend = Backend::parse(backend)
+            .map_err(|e| DbError::new(format!("database URL {:?}: {}", redact_url(url), e.0)))?;
+        #[cfg(any(feature = "model-postgres", feature = "model-mysql"))]
+        let _ = crate::crypto_provider().install_default();
+        let bad_url = |e: sqlx::Error| DbError::new(format!("database URL {:?}: {e}", redact_url(url)));
+        match backend {
+            #[cfg(feature = "model-sqlite")]
+            Backend::Sqlite => {
+                let options: sqlx::sqlite::SqliteConnectOptions = url.parse().map_err(bad_url)?;
+                let pool = sqlx::pool::PoolOptions::<sqlx::Sqlite>::new()
+                    .max_connections(1)
+                    .connect_with(options)
+                    .await
+                    .map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbPool::Sqlite(pool))
+            }
+            #[cfg(feature = "model-postgres")]
+            Backend::Postgres => {
+                let options: sqlx::postgres::PgConnectOptions = url.parse().map_err(bad_url)?;
+                let pool = sqlx::pool::PoolOptions::<sqlx::Postgres>::new()
+                    .max_connections(4)
+                    .connect_with(options)
+                    .await
+                    .map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbPool::Postgres(pool))
+            }
+            #[cfg(feature = "model-mysql")]
+            Backend::MySql => {
+                let options: sqlx::mysql::MySqlConnectOptions = url.parse().map_err(bad_url)?;
+                let pool = sqlx::pool::PoolOptions::<sqlx::MySql>::new()
+                    .max_connections(4)
+                    .connect_with(options)
+                    .await
+                    .map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbPool::MySql(pool))
+            }
+        }
+    }
+}
+
+/// `url` with the password replaced by `***`, for error messages.
+#[doc(hidden)]
+pub fn redact_url(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else { return url.to_string() };
+    let authority_end = rest.find('/').unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+    match authority.rsplit_once('@') {
+        Some((userinfo, host)) => match userinfo.split_once(':') {
+            Some((user, _)) => format!("{scheme}://{user}:***@{host}{tail}"),
+            None => url.to_string(),
+        },
+        None => url.to_string(),
+    }
 }
 
 // ── DbTransaction ─────────────────────────────────────────────────────────────
@@ -559,14 +643,33 @@ fn sqlite_row_to_model_row(
                 Value::Null
             }
         } else {
-            // TEXT, VARCHAR, CHAR, and anything else → try string
-            row.try_get::<Option<String>, _>(col.ordinal())
-                .map(|v| v.map(Value::Text).unwrap_or(Value::Null))
-                .unwrap_or(Value::Null)
+            // TEXT, VARCHAR, CHAR → string; a declared type sqlx won't read
+            // as one (DATETIME, DATE, …) → whatever the value is stored as.
+            match row.try_get::<Option<String>, _>(col.ordinal()) {
+                Ok(v) => v.map(Value::Text).unwrap_or(Value::Null),
+                Err(_) => sqlite_stored_value(&row, col.ordinal()),
+            }
         };
         cols.push((name, value));
     }
     Ok(ModelRow::new(cols))
+}
+
+/// A SQLite value by its storage class, whatever the column's declared type.
+#[cfg(feature = "model-sqlite")]
+fn sqlite_stored_value(row: &sqlx::sqlite::SqliteRow, ordinal: usize) -> Value {
+    use sqlx::{Row, TypeInfo, ValueRef};
+    let Ok(raw) = row.try_get_raw(ordinal) else { return Value::Null };
+    if raw.is_null() {
+        return Value::Null;
+    }
+    let class = raw.type_info().name().to_string();
+    match class.as_str() {
+        "INTEGER" => row.try_get_unchecked::<i64, _>(ordinal).map(Value::Int).unwrap_or(Value::Null),
+        "REAL" => row.try_get_unchecked::<f64, _>(ordinal).map(Value::Float).unwrap_or(Value::Null),
+        "BLOB" => row.try_get_unchecked::<Vec<u8>, _>(ordinal).map(Value::Bytes).unwrap_or(Value::Null),
+        _ => row.try_get_unchecked::<String, _>(ordinal).map(Value::Text).unwrap_or(Value::Null),
+    }
 }
 
 /// Insert then return the last inserted row ID from SQLite's
@@ -674,16 +777,37 @@ fn pg_row_to_model_row(row: sqlx::postgres::PgRow) -> Result<ModelRow, DbError> 
     for col in row.columns() {
         let name = col.name().to_string();
         let type_name = col.type_info().name();
+        // sqlx decodes a Rust type only from the PostgreSQL types it maps
+        // to (an `i64` from INT8 alone): each width is read as itself.
         let value = match type_name {
             "BOOL" => row.try_get::<Option<bool>, _>(col.ordinal())
                 .map(|v| v.map(Value::Bool).unwrap_or(Value::Null))
                 .unwrap_or(Value::Null),
-            "INT2" | "INT4" | "INT8" => row.try_get::<Option<i64>, _>(col.ordinal())
+            "INT2" => row.try_get::<Option<i16>, _>(col.ordinal())
+                .map(|v| v.map(|n| Value::Int(n as i64)).unwrap_or(Value::Null))
+                .unwrap_or(Value::Null),
+            "INT4" => row.try_get::<Option<i32>, _>(col.ordinal())
+                .map(|v| v.map(|n| Value::Int(n as i64)).unwrap_or(Value::Null))
+                .unwrap_or(Value::Null),
+            "INT8" => row.try_get::<Option<i64>, _>(col.ordinal())
                 .map(|v| v.map(Value::Int).unwrap_or(Value::Null))
                 .unwrap_or(Value::Null),
-            "FLOAT4" | "FLOAT8" | "NUMERIC" => row.try_get::<Option<f64>, _>(col.ordinal())
+            "FLOAT4" => row.try_get::<Option<f32>, _>(col.ordinal())
+                .map(|v| v.map(|f| Value::Float(f as f64)).unwrap_or(Value::Null))
+                .unwrap_or(Value::Null),
+            "FLOAT8" | "NUMERIC" => row.try_get::<Option<f64>, _>(col.ordinal())
                 .map(|v| v.map(Value::Float).unwrap_or(Value::Null))
                 .unwrap_or(Value::Null),
+            "TIMESTAMPTZ" | "TIMESTAMP" | "DATE" | "UUID" => {
+                use sqlx::ValueRef;
+                match row.try_get_raw(col.ordinal()) {
+                    Ok(raw) if !raw.is_null() => {
+                        let binary = matches!(raw.format(), sqlx::postgres::PgValueFormat::Binary);
+                        raw.as_bytes().ok().and_then(|bytes| super::decode::pg_value(type_name, binary, bytes)).unwrap_or(Value::Null)
+                    }
+                    _ => Value::Null,
+                }
+            }
             "BYTEA" => row.try_get::<Option<Vec<u8>>, _>(col.ordinal())
                 .map(|v| v.map(Value::Bytes).unwrap_or(Value::Null))
                 .unwrap_or(Value::Null),
@@ -711,9 +835,12 @@ async fn pg_insert_returning(
         .fetch_one(pool)
         .await
         .map_err(|e| DbError::new(e.to_string()))?;
-    use sqlx::Row;
-    let id: i64 = row.try_get(pk_col).map_err(|e| DbError::new(e.to_string()))?;
-    Ok(id)
+    // Through the row conversion, so an INT4 (SERIAL) key reads as well as
+    // an INT8 (BIGSERIAL) one.
+    match pg_row_to_model_row(row)?.columns.into_iter().next() {
+        Some((_, Value::Int(id))) => Ok(id),
+        other => Err(DbError::new(format!("INSERT … RETURNING {pk_col}: expected an integer key, got {other:?}"))),
+    }
 }
 
 // ── Internal helpers (MySQL) ──────────────────────────────────────────────────
@@ -805,8 +932,21 @@ fn mysql_row_to_model_row(row: sqlx::mysql::MySqlRow) -> Result<ModelRow, DbErro
         let name = col.name().to_string();
         let type_name = col.type_info().name().to_uppercase();
         let value = if type_name.contains("INT") || type_name.contains("SERIAL") {
-            row.try_get::<Option<i64>, _>(col.ordinal())
-                .map(|v| v.map(Value::Int).unwrap_or(Value::Null))
+            match row.try_get::<Option<i64>, _>(col.ordinal()) {
+                Ok(v) => v.map(Value::Int).unwrap_or(Value::Null),
+                // UNSIGNED columns decode as u64 only.
+                Err(_) => row
+                    .try_get::<Option<u64>, _>(col.ordinal())
+                    .map(|v| v.map(|n| Value::Int(n as i64)).unwrap_or(Value::Null))
+                    .unwrap_or(Value::Null),
+            }
+        } else if matches!(type_name.as_str(), "DATETIME" | "TIMESTAMP" | "DATE") {
+            // sqlx decodes these only into chrono/time types; read the wire
+            // bytes instead (decoded without its type check).
+            row.try_get_unchecked::<Option<Vec<u8>>, _>(col.ordinal())
+                .ok()
+                .flatten()
+                .and_then(|bytes| super::decode::mysql_temporal(&type_name, &bytes))
                 .unwrap_or(Value::Null)
         } else if type_name.contains("FLOAT")
             || type_name.contains("DOUBLE")

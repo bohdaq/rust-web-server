@@ -14,6 +14,7 @@ migrations and tests into it:
 rws gen model Post title:String       # src/models/post.rs + migrations/0001_create_posts.sql
 rws gen route posts                   # src/routes/posts.rs, registered in app()
 rws gen test posts                    # tests/posts.rs
+rws db migrate                        # apply migrations/ (rws db status|rollback|seed)
 ```
 
 ```text

@@ -1,0 +1,5 @@
+error: #[timestamps] needs a mapped field named `updated_at` (e.g. `updated_at: Timestamp`)
+ --> tests/ui/model_timestamps_without_fields.rs:6:8
+  |
+6 | struct Note {
+  |        ^^^^

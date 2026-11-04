@@ -290,6 +290,8 @@ Rws as a Rails/Spring-class framework built agent-first: the app explains itself
 - **#90** **ORM** — generic/UUID keys, timestamps, eager `with()`, many-to-many, scopes, soft delete, optimistic locking, seeds, read replicas, schema dump as JSON.
 - **#91** **`rws db migrate|rollback|status|seed`**.
 
+*Part 1 implemented 2026-11-04 (Unreleased in CHANGELOG): `i32`/`String`/`Uuid` keys, `#[timestamps]`, `#[soft_delete]`, `#[version]` (optimistic locking), SQL seeds (`DbPool::seed`), `rws db` (#91), and the CI job `model-databases` running the model, `TestDb` and `rws db` tests on SQLite, PostgreSQL 16 and MySQL 8.4. Left for part 2: eager `with()`, many-to-many, scopes, seeds from Rust factories, read replicas, schema dump as JSON, `rws gen model --timestamps/--soft-delete`.*
+
 **Done when:** SQLite, PostgreSQL and MySQL pass the new model tests in CI.
 
 ## 18.31.0 — App building blocks
