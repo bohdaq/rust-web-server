@@ -52,7 +52,12 @@ fn config_routes_check_relations_and_runtime_tuples_survive_a_reload() {
     std::env::set_var("RWS_TEST_AUTHZ_JWT", "secret");
     let report = crate::config_check::check_str(AUTHZ_TOML);
     assert!(report.errors.is_empty() && report.warnings.is_empty(), "{:?} {:?}", report.errors, report.warnings);
-    let (app, _handles) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(AUTHZ_TOML));
+    let config = crate::proxy_config::ProxyConfig::from_str(AUTHZ_TOML);
+    // An authorizer over the same process-wide memory store the routes use;
+    // the process-wide `authz::config::current()` may already belong to a
+    // config another test built in parallel.
+    let authorizer = crate::proxy_config::builder::config_authorizer(&config).unwrap().unwrap();
+    let (app, _handles) = crate::proxy_config::builder::build(config);
     let client = crate::test_client::TestClient::new(app.clone());
     let token = |sub: &str| format!("Bearer {}", crate::auth::build_jwt(&format!(r#"{{"sub":"{sub}"}}"#), b"secret"));
     assert_eq!(client.get("/docs/42").header("Authorization", &token("alice")).send().status(), 200);
@@ -62,7 +67,6 @@ fn config_routes_check_relations_and_runtime_tuples_survive_a_reload() {
     assert_eq!(client.get("/docs/42/../7").header("Authorization", &token("alice")).send().status(), 403);
     assert_eq!(client.get("/docs/42/%2e%2e/7").header("Authorization", &token("alice")).send().status(), 403);
     // A tuple written at runtime (as the admin API will) survives a reload.
-    let authorizer = crate::authz::config::current().unwrap().unwrap();
     authorizer.write_str("doc:42#viewer@user:bob").unwrap();
     app.reload_from_str(&AUTHZ_TOML.replace("the doc", "the doc, v2")).unwrap();
     let response = client.get("/docs/42").header("Authorization", &token("bob")).send();

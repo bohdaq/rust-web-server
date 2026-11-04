@@ -57,7 +57,11 @@ pub fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>) -> Ve
     if let Some(Err(e)) = &authorizer {
         eprintln!("[proxy_config] ERROR: [authz]: {e} — routes with authz answer 503 until it's fixed.");
     }
-    crate::authz::config::set_current(authorizer);
+    crate::authz::config::set_current(authorizer.clone());
+    // Routes compiled below take this authorizer, not the process-wide slot,
+    // which a concurrent compile (tests build configs in parallel) may
+    // already have replaced.
+    let _compiling = CompilingAuthorizer::enter(authorizer);
     // ── 1. Build upstream name → live backends map ─────────────────────────
     let mut upstream_lives: HashMap<String, Arc<RwLock<Vec<String>>>> = HashMap::new();
     // tls_ca_file trust settings per upstream, loaded once per compile (so a
@@ -369,6 +373,32 @@ fn build_mirror(route: &str, config: &crate::proxy_config::MirrorConfig, lives: 
     mirror.percent(if config.percent.is_finite() { config.percent } else { 0.0 })
 }
 
+thread_local! {
+    static COMPILING_AUTHORIZER: std::cell::RefCell<Option<Option<Result<crate::authz::Authorizer, String>>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// The `[authz]` authorizer of the compile running on this thread, for its
+/// routes' authz middleware; outside a compile, the process-wide one.
+struct CompilingAuthorizer(Option<Option<Result<crate::authz::Authorizer, String>>>);
+
+impl CompilingAuthorizer {
+    fn enter(authorizer: Option<Result<crate::authz::Authorizer, String>>) -> Self {
+        CompilingAuthorizer(COMPILING_AUTHORIZER.with(|c| c.replace(Some(authorizer))))
+    }
+
+    fn current() -> Option<Result<crate::authz::Authorizer, String>> {
+        COMPILING_AUTHORIZER.with(|c| c.borrow().clone()).unwrap_or_else(crate::authz::config::current)
+    }
+}
+
+impl Drop for CompilingAuthorizer {
+    fn drop(&mut self) {
+        let previous = self.0.take();
+        COMPILING_AUTHORIZER.with(|c| *c.borrow_mut() = previous);
+    }
+}
+
 #[doc(hidden)]
 pub fn apply_middleware(
     handler: Arc<dyn crate::application::Application + Send + Sync>,
@@ -443,7 +473,7 @@ pub fn apply_middleware_named(
 
     // ── Authorization (inside auth, which sets the caller) ─────────────────
     if let Some(ref rule) = mw.authz {
-        let layer = match crate::authz::config::current() {
+        let layer = match CompilingAuthorizer::current() {
             Some(Ok(authorizer)) => crate::authz::AuthzLayer::new(authorizer, &rule.relation, &rule.object),
             Some(Err(e)) => Err(format!("[authz] couldn't be built: {e}")),
             None => Err("the route has [route.middleware.authz] but there's no [authz] section".to_string()),
@@ -709,4 +739,38 @@ pub fn config_authorizer_with(
         }
         Ok(authorizer)
     })())
+}
+
+#[cfg(test)]
+mod compiling_authorizer_tests {
+    use super::CompilingAuthorizer;
+
+    fn marker(current: Option<Result<crate::authz::Authorizer, String>>) -> Option<String> {
+        match current {
+            Some(Err(e)) => Some(e),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn a_compile_sees_its_own_authorizer_and_restores_the_outer_one() {
+        let outer = CompilingAuthorizer::enter(Some(Err("outer".to_string())));
+        assert_eq!(marker(CompilingAuthorizer::current()), Some("outer".to_string()));
+        {
+            let _inner = CompilingAuthorizer::enter(Some(Err("inner".to_string())));
+            assert_eq!(marker(CompilingAuthorizer::current()), Some("inner".to_string()));
+        }
+        assert_eq!(marker(CompilingAuthorizer::current()), Some("outer".to_string()));
+        // `None` (no [authz]) also wins over the process-wide slot.
+        let _none = CompilingAuthorizer::enter(None);
+        assert!(CompilingAuthorizer::current().is_none());
+        drop(outer);
+    }
+
+    #[test]
+    fn another_thread_does_not_see_this_threads_compile() {
+        let _compiling = CompilingAuthorizer::enter(Some(Err("this thread".to_string())));
+        let seen = std::thread::spawn(|| marker(CompilingAuthorizer::current())).join().unwrap();
+        assert_ne!(seen, Some("this thread".to_string()));
+    }
 }

@@ -108,6 +108,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- Config-file routes with `[route.middleware.authz]` take the authorizer of
+  the compile that builds them. They used to read the process-wide one back
+  after setting it, so two configs compiled at once (parallel tests) could
+  hand a route the other config's authorizer, or none, so it answered `503`.
+  This was the cause of a flaky `server_tests::authz` test.
+
 - PostgreSQL and MySQL pools panicked at their first TLS connection
   (rustls: no process-level crypto provider) in an app that doesn't serve
   TLS itself, as behind a load balancer; rws now installs its provider
