@@ -6,7 +6,7 @@ pub use problem::problem;
 
 use crate::header::Header;
 use crate::request::Request;
-use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::response::{Response, StatusCodeReasonPhrase, STATUS_CODE_REASON_PHRASE};
 
 /// Implemented by any type that can be turned into an HTTP [`Response`].
 ///
@@ -22,6 +22,43 @@ pub trait IntoResponse {
 impl IntoResponse for Response {
     fn into_response(self) -> Response {
         self
+    }
+}
+
+/// `Ok` and `Err` each become their own response, so a handler can return
+/// `Result<Json<Post>, AppError>` (18.28.0).
+impl<T: IntoResponse, E: IntoResponse> IntoResponse for Result<T, E> {
+    fn into_response(self) -> Response {
+        match self {
+            Ok(value) => value.into_response(),
+            Err(error) => error.into_response(),
+        }
+    }
+}
+
+/// `200 OK`, `text/plain` (18.28.0).
+impl IntoResponse for String {
+    fn into_response(self) -> Response {
+        Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &self)
+    }
+}
+
+/// `200 OK`, `text/plain` (18.28.0).
+impl IntoResponse for &'static str {
+    fn into_response(self) -> Response {
+        Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, self)
+    }
+}
+
+/// The inner response with its status replaced:
+/// `(STATUS_CODE_REASON_PHRASE.n201_created, Json(post))` (18.28.0).
+impl<T: IntoResponse> IntoResponse for (&'static StatusCodeReasonPhrase, T) {
+    fn into_response(self) -> Response {
+        let (status, inner) = self;
+        let mut response = inner.into_response();
+        response.status_code = *status.status_code;
+        response.reason_phrase = status.reason_phrase.to_string();
+        response
     }
 }
 

@@ -18,9 +18,31 @@
 //! | `#[patch("/path")]` | shorthand for PATCH |
 //! | `#[delete("/path")]` | shorthand for DELETE |
 //!
-//! All attributes add a `Route: METHOD /path` doc-comment and leave the
-//! function body completely unchanged. They work with named functions used
-//! as handlers in `routes!` or registered directly with `.get()`, `.post()`, etc.
+//! On a classic handler — `fn(&Request, &PathParams, &ConnectionInfo[, &S])`
+//! — the attributes add a `Route: METHOD /path` doc comment and leave the
+//! function unchanged; register it with `routes!` or `.get()`, `.post()`, etc.
+//!
+//! On any other function (18.28.0) the arguments are extractors
+//! (`Path<T>`, `Query<T>`, `Json<T>`, `Form<T>`, `State<S>`, `&S`, `Body`,
+//! `BodyText`, `RequestHeaders`, `&Request`, `&ConnectionInfo`, any
+//! `FromRequest` type) and the return type anything `IntoResponse`: the
+//! function becomes a unit struct implementing
+//! `rust_web_server::handler::{Handler, AsyncHandler, RouteSpec}`, registered
+//! with `.route(handler)`, and the function itself stays callable as
+//! `handler::call(…)`. The route's parameters are checked against the
+//! `Path` argument at compile time. See `rust_web_server::handler`.
+//!
+//! ```ignore
+//! #[get("/posts/{id}")]
+//! fn show_post(Path(id): Path<u64>, State(db): State<Db>) -> Result<Json<Post>, AppError> { … }
+//!
+//! let app = App::with_state(db).route(show_post);
+//! ```
+//!
+//! ## `#[derive(FromPath)]`
+//!
+//! A struct with one `FromStr` field per route parameter, named after it,
+//! for `Path<T>`.
 //!
 //! ## `#[derive(Config)]`
 //!
@@ -34,15 +56,12 @@ use syn::{
     parse_macro_input, Data, DeriveInput, Fields, Ident, ItemFn, Lit, LitInt, LitStr, Token,
 };
 
+mod handler;
+
 // ── Shared helper ─────────────────────────────────────────────────────────────
 
 fn annotate(method: &str, path: LitStr, func: ItemFn) -> TokenStream {
-    let doc = format!("Route: `{} {}`", method, path.value());
-    quote! {
-        #[doc = #doc]
-        #func
-    }
-    .into()
+    handler::expand(method, path, func).into()
 }
 
 // ── #[route(METHOD, "/path")] ─────────────────────────────────────────────────
@@ -63,9 +82,11 @@ impl Parse for RouteArgs {
 
 /// Annotate a handler function with its HTTP method and path.
 ///
-/// Adds a `Route: METHOD /path` doc-comment to the function and otherwise
-/// leaves it completely unchanged. Use [`crate::routes!`] (from the main
-/// crate) to register the handler with the router.
+/// On a classic handler (`&Request, &PathParams, &ConnectionInfo[, state]`)
+/// it adds a `Route: METHOD /path` doc comment and otherwise leaves the
+/// function unchanged; register it with `routes!` or `.get()`. On a typed
+/// handler (extractor arguments) it generates the adapter — see the crate
+/// docs and `rust_web_server::handler`.
 ///
 /// # Example
 ///
@@ -152,6 +173,28 @@ pub fn delete(args: TokenStream, input: TokenStream) -> TokenStream {
     let path = parse_macro_input!(args as LitStr);
     let func = parse_macro_input!(input as ItemFn);
     annotate("DELETE", path, func)
+}
+
+// ── #[derive(FromPath)] ───────────────────────────────────────────────────────
+
+/// Derive `rust_web_server::handler::FromPath` for a struct with named
+/// fields: one route parameter per field, by name, each parsed with
+/// `FromStr`. A typed handler's route must have exactly these parameters
+/// (checked at compile time).
+///
+/// ```ignore
+/// #[derive(rust_web_server::FromPath)]
+/// struct PostKey { id: u64, slug: String }
+///
+/// #[get("/posts/{id}/{slug}")]
+/// fn post(Path(key): Path<PostKey>) -> String { format!("{} {}", key.id, key.slug) }
+/// ```
+#[proc_macro_derive(FromPath)]
+pub fn derive_from_path(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    handler::derive_from_path(ast)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
 }
 
 // ── #[derive(FromRequest)] ────────────────────────────────────────────────────

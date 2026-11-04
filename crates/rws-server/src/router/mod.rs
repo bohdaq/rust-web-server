@@ -123,6 +123,105 @@ pub struct RouteInfo {
     pub pattern: String,
 }
 
+/// A route that never runs because one registered before it, with the same
+/// method, matches every path it does — what
+/// [`Router::route_conflicts`] (and `AppWithState`/`AsyncAppWithState`'s)
+/// report (18.28.0). Patterns are in the `:name`/`*name` form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RouteConflict {
+    pub method: String,
+    /// The route that never runs.
+    pub pattern: String,
+    /// The earlier route that answers its requests.
+    pub earlier: String,
+    pub kind: RouteConflictKind,
+}
+
+/// How a [`RouteConflict`]'s earlier route hides the later one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RouteConflictKind {
+    /// The same pattern, parameter names aside: registered twice.
+    Duplicate,
+    /// The earlier pattern is more general (a parameter or wildcard where
+    /// the later one has a literal).
+    Shadowed,
+}
+
+impl std::fmt::Display for RouteConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            RouteConflictKind::Duplicate => write!(
+                f,
+                "route {} {} is registered twice (first as {} {}); the second never runs",
+                self.method, self.pattern, self.method, self.earlier
+            ),
+            RouteConflictKind::Shadowed => write!(
+                f,
+                "route {} {} never runs: {} {}, registered before it, matches every path it does",
+                self.method, self.pattern, self.method, self.earlier
+            ),
+        }
+    }
+}
+
+impl RouteConflict {
+    /// Print the conflict to stderr, once per process for each distinct one.
+    #[doc(hidden)]
+    pub fn warn_once(&self) {
+        use std::collections::HashSet;
+        use std::sync::{Mutex, OnceLock};
+        static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+        let message = self.to_string();
+        let fresh = SEEN
+            .get_or_init(|| Mutex::new(HashSet::new()))
+            .lock()
+            .map(|mut seen| seen.insert(message.clone()))
+            .unwrap_or(false);
+        if fresh {
+            eprintln!("rws: warning: {message}");
+        }
+    }
+}
+
+/// The conflicts among `routes`, in registration order.
+#[doc(hidden)]
+pub fn conflicts<'a>(routes: impl Iterator<Item = (&'a str, &'a [Segment])>) -> Vec<RouteConflict> {
+    let all: Vec<(&str, &[Segment])> = routes.collect();
+    (1..all.len())
+        .filter_map(|i| conflict_with(all[..i].iter().copied(), all[i].0, all[i].1))
+        .collect()
+}
+
+/// The first of `earlier` that hides a route `method` `segments` added after them.
+pub(crate) fn conflict_with<'a>(
+    earlier: impl Iterator<Item = (&'a str, &'a [Segment])>,
+    method: &str,
+    segments: &[Segment],
+) -> Option<RouteConflict> {
+    if matcher::never_matches(segments) {
+        return None;
+    }
+    for (m, segs) in earlier {
+        if m != method {
+            continue;
+        }
+        let kind = if matcher::equivalent(segs, segments) {
+            RouteConflictKind::Duplicate
+        } else if matcher::covers(segs, segments) {
+            RouteConflictKind::Shadowed
+        } else {
+            continue;
+        };
+        return Some(RouteConflict {
+            method: method.to_string(),
+            pattern: matcher::segments_to_pattern(segments),
+            earlier: matcher::segments_to_pattern(segs),
+            kind,
+        });
+    }
+    None
+}
+
 #[derive(Clone)]
 pub struct Router {
     routes: Vec<Route>,
@@ -204,7 +303,18 @@ impl Router {
     }
 
     #[doc(hidden)]
-    pub fn add<F>(mut self, method: &str, pattern: &str, handler: F) -> Self
+    pub fn add<F>(self, method: &str, pattern: &str, handler: F) -> Self
+    where F: Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static {
+        let router = self.add_unchecked(method, pattern, handler);
+        if let Some(conflict) = router.last_route_conflict() {
+            conflict.warn_once();
+        }
+        router
+    }
+
+    /// [`add`](Self::add) without the conflict warning, for routers that
+    /// are only matched (`AppWithState::stream_body`).
+    pub(crate) fn add_unchecked<F>(mut self, method: &str, pattern: &str, handler: F) -> Self
     where F: Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static {
         self.routes.push(Route {
             method: method.to_string(),
@@ -212,6 +322,39 @@ impl Router {
             handler: Arc::new(handler),
         });
         self
+    }
+
+    /// Register a typed handler (18.28.0): a function with extractor
+    /// arguments annotated `#[get("/path")]` & co., whose method and pattern
+    /// come from the attribute. A router has no state, so `State<S>` and
+    /// `&S` arguments aren't available here — use
+    /// [`AppWithState::route`](crate::state::AppWithState::route).
+    ///
+    /// ```rust,ignore
+    /// #[get("/users/{id}")]
+    /// fn user(Path(id): Path<u64>) -> String { format!("user {id}") }
+    ///
+    /// let router = Router::new().route(user);
+    /// ```
+    pub fn route<H: crate::handler::Handler<()>>(self, handler: H) -> Self {
+        let unit = Arc::new(());
+        self.add(H::METHOD, H::PATTERN, move |request, params, connection| {
+            handler.handle(request, params, connection, &unit)
+        })
+    }
+
+    /// Routes that never run (18.28.0): registered after a route with the
+    /// same method whose pattern is equivalent (`/users/:id` and
+    /// `/users/{uid}`) or matches every path they do (`/users/:id` before
+    /// `/users/me`). Routes are tried in order, so the earlier one always
+    /// wins. Each is also printed once to stderr when it is registered.
+    pub fn route_conflicts(&self) -> Vec<RouteConflict> {
+        conflicts(self.routes.iter().map(|r| (r.method.as_str(), r.segments.as_slice())))
+    }
+
+    fn last_route_conflict(&self) -> Option<RouteConflict> {
+        let (last, earlier) = self.routes.split_last()?;
+        conflict_with(earlier.iter().map(|r| (r.method.as_str(), r.segments.as_slice())), &last.method, &last.segments)
     }
 
     /// Return a snapshot of all registered routes as `(method, pattern)` pairs.

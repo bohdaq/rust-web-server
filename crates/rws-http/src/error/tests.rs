@@ -109,3 +109,34 @@ fn rws_errors_are_problem_details_unless_text_is_asked_for() {
     std::env::remove_var("RWS_CONFIG_ERROR_FORMAT");
     crate::server_config::invalidate();
 }
+
+#[test]
+fn result_responds_with_whichever_side_it_holds() {
+    let ok: Result<String, AppError> = Ok("fine".to_string());
+    let r = ok.into_response();
+    assert_eq!(200, r.status_code);
+    assert_eq!(b"fine".to_vec(), r.content_range_list[0].body);
+
+    let err: Result<String, AppError> = Err(AppError::NotFound("gone".to_string()));
+    assert_eq!(404, err.into_response().status_code);
+}
+
+#[test]
+fn strings_are_plain_text_200s() {
+    let r = "hello".into_response();
+    assert_eq!(200, r.status_code);
+    assert_eq!(crate::mime_type::MimeType::TEXT_PLAIN, r.content_range_list[0].content_type);
+    assert_eq!(b"hello".to_vec(), r.content_range_list[0].body);
+    assert_eq!(b"owned".to_vec(), "owned".to_string().into_response().content_range_list[0].body);
+}
+
+#[test]
+fn a_status_tuple_replaces_the_inner_status() {
+    let r = (STATUS_CODE_REASON_PHRASE.n201_created, "made").into_response();
+    assert_eq!(201, r.status_code);
+    assert_eq!("Created", r.reason_phrase);
+    assert_eq!(b"made".to_vec(), r.content_range_list[0].body);
+    // An error keeps its body but takes the tuple's status.
+    let r = (STATUS_CODE_REASON_PHRASE.n409_conflict, AppError::BadRequest("x".to_string())).into_response();
+    assert_eq!(409, r.status_code);
+}

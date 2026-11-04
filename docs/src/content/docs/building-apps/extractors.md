@@ -101,6 +101,63 @@ let id: &str = id.as_str();
 
 Two more extractors live outside `extract`: `json::Json<T>` (`serde` feature, see [JSON](/building-apps/json/)) and `validate::Validated<T>` (see [Validation](/building-apps/validation/)).
 
+## Extractors as handler arguments
+
+Since 18.28.0 a function annotated with a route attribute (`#[get("/path")]` & co., `macros` feature) takes extractors as arguments: each runs in order, the first failure answers with its rejection, and the function only sees values that were extracted. Registration and the compile-time path checks are on [Routing](/building-apps/routing/#typed-handlers-get-with-extractors). Everything below is in `rust_web_server::handler` (which also re-exports `Body`, `BodyText`, `RequestHeaders`, `RequestId` and `Json`):
+
+```rust
+use rust_web_server::handler::{Form, Path, Query, State};
+use rust_web_server::{get, post};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Page { page: Option<u32>, tag: Vec<String> }
+
+#[get("/shelves/{shelf}/books")]
+fn books(Path(shelf): Path<u32>, Query(p): Query<Page>, db: &Db) -> String {
+    format!("shelf {shelf}, page {}, tags {:?}", p.page.unwrap_or(1), p.tag)
+}
+
+#[derive(Deserialize)]
+struct Signup { email: String, age: u8 }
+
+#[post("/signup")]
+fn signup(Form(form): Form<Signup>, State(db): State<Db>) -> (&'static StatusCodeReasonPhrase, String) {
+    (STATUS_CODE_REASON_PHRASE.n201_created, form.email)
+}
+```
+
+| Argument | Gives | Rejection |
+|---|---|---|
+| `Path<T>` | the route's parameters, percent-decoded: a scalar (`Path<u64>`), a tuple of `FromStr` values, or a `#[derive(FromPath)]` struct | `400` when one doesn't parse |
+| `Query<T>` (`serde`) | the query string as a `Deserialize` struct (scalars, `String`, `Option` — empty is `None` — unit enums, `Vec` from a repeated key) | `400` |
+| `Form<T>` (`serde`) | an `application/x-www-form-urlencoded` body, same field types | `415` for another `Content-Type`, `400` for a body that isn't UTF-8, `422` when the fields don't fit |
+| `Json<T>` (`serde`) | the JSON body | `400` |
+| `State<S>` / `&S` | the app's state (`State` holds a clone of its `Arc`) | — |
+| `Body`, `BodyText`, `RequestHeaders`, `RequestId` | as above | `BodyText`: `400` |
+| `&Request`, `&ConnectionInfo`, `&PathParams` | the raw request, connection and parameters | — |
+| any `FromRequest` type (`Validated<T>`, `#[derive(FromRequest)]`, yours) | its value | its own |
+
+Rejections are problem details, like rws's own errors (`error_format = "text"` makes them text). `extract::Query` stays the untyped map; `handler::Query<HashMap<String, String>>` works too.
+
+The return type is anything `IntoResponse`: `Response`, `Json<T>`, `String` / `&'static str` (`200`, `text/plain`), `AppError`, `Result<T, E>` of two such types, or `(STATUS_CODE_REASON_PHRASE.n201_created, value)` to set the status.
+
+### `#[derive(FromPath)]`
+
+For several parameters by name, derive `FromPath` on a struct with one `FromStr` field per parameter, named after it. The route must have exactly those parameters — checked at compile time:
+
+```rust
+#[derive(rust_web_server::FromPath)]
+struct PostKey { id: u64, slug: String }
+
+#[get("/posts/{id}/{slug}")]
+fn post(Path(key): Path<PostKey>) -> String {
+    format!("{} {}", key.id, key.slug)
+}
+```
+
+A type of your own that implements `FromStr` works as a one-tuple, `Path((slug,)): Path<(Slug,)>`, or implement `handler::FromPath` for it. Your own argument type with access to the state implements `handler::FromRequestParts<S>`.
+
 ## Combining extractors
 
 Extractors are ordinary function calls; combine as many as you need:

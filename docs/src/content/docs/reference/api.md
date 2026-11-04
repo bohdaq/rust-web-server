@@ -27,7 +27,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Item | Module | Description |
 |---|---|---|
 | `routes!` | `macros` | Declarative routing table — builds `AppWithState`, `AsyncAppWithState` or `Router` from `METHOD "path" => handler` lines. See [Routing](/building-apps/routing/) |
-| `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` | crate root (`macros`) | Attribute macros annotating a handler with its method and path |
+| `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` | crate root (`macros`) | On a classic handler, a `Route:` doc comment; on one with extractor arguments (18.28.0), a unit struct implementing `handler::Handler`/`AsyncHandler`/`RouteSpec`, registered with `.route(h)`, the pattern's parameters checked against the `Path` argument at compile time. See [Routing](/building-apps/routing/#typed-handlers-get-with-extractors) |
+| `#[derive(FromPath)]` | crate root (`macros`) | `handler::FromPath` for a struct with one `FromStr` field per route parameter, by name (18.28.0) |
 | `#[derive(FromRequest)]` | crate root (`macros`) | Derives `FromRequest` for a named-field struct, extracting fields in order and stopping at the first error |
 | `#[derive(JsonSchema)]` | crate root (`macros`) | Derives `schema::JsonSchema` for a named-field struct or unit enum, following its `#[serde]` renames (18.0.0). See [Typed tools](/mcp/tools/#typed-tools) |
 | `#[derive(Validate)]` | crate root (`macros`) | Derives `Validate` from `#[validate(length, range, email, required, url)]` field annotations |
@@ -60,6 +61,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 |---|---|---|
 | `Router` | `router` | Path-pattern router with `:param` and `*wildcard`; `.with_host(name)` restricts it to one virtual host; `.matches(request, connection)` tells whether `handle()` would run a handler |
 | `PathParams` | `router` | Extracted path parameters; `.get(name) -> Option<&str>` |
+| `RouteConflict` / `RouteConflictKind` | `router` | A route that never runs because an earlier one with the same method matches every path it does (`Duplicate`, `Shadowed`); `route_conflicts()` on `Router`, `AppWithState`, `AsyncAppWithState`, also printed once when registered (18.28.0). See [Route conflicts](/building-apps/routing/#route-conflicts) |
+| `Handler<S>` / `AsyncHandler<S>` / `RouteSpec` | `handler` | What the route macros generate for a typed handler: `handle(request, params, connection, &Arc<S>)`, `handle_async(…)` → `HandlerFuture`, `METHOD`/`PATTERN`; `.route(h)` registers one (18.28.0) |
 | `ConnectionInfo` | `server` | Client/server IP, port, and SNI hostname per connection |
 | `VirtualHostConfig` | `virtual_host` | Per-domain certificate config `{ domain, cert_file, key_file }` for SNI. See [Virtual hosting](/features/virtual-hosting/) |
 
@@ -68,6 +71,10 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `FromRequest` | `extract` | Trait for typed extraction from a request, returning a ready error response on failure. See [Extractors](/building-apps/extractors/) |
+| `FromRequestParts<S>` / `RequestParts` | `handler` | A typed handler argument, built from the request, route parameters, connection and state; every `FromRequest` type is one (18.28.0). See [Extractors as handler arguments](/building-apps/extractors/#extractors-as-handler-arguments) |
+| `Path<T>` / `FromPath` | `handler` | Route parameters, percent-decoded and parsed: a scalar, a tuple of `FromStr` values, or a `#[derive(FromPath)]` struct; `400` when one doesn't parse (18.28.0) |
+| `Query<T>` / `Form<T>` | `handler` (`serde`) | Query string / `application/x-www-form-urlencoded` body as a `Deserialize` struct; `400`, or `415`/`400`/`422` for a form (18.28.0) |
+| `State<S>` | `handler` | The app's state as a handler argument (a clone of its `Arc`) (18.28.0) |
 | `Body` | `extract` | Raw request body bytes (never fails) |
 | `Storage::put_stream` / `S3_PART_SIZE` | `storage` | Store a `Read` stream: S3 multipart upload (8 MiB parts), local temp file + rename; default buffers (18.0.0) |
 | `request::Body` | `request` | `Request.body` (18.0.0): bytes, or a stream (`Body::stream`, `body_bytes()`, `into_reader()`); derefs to `&[u8]`. Not the `extract::Body` extractor |
@@ -87,7 +94,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Catalog` | `i18n` | One language's messages (flat TOML subset); `parse`, `get` |
 | `Translator` | `i18n` | Messages in the chosen language: `t`, `t_with`, `plural`, `plural_with`, `locale`, `localize(response)` |
 | `plural_category` | `i18n` | CLDR plural category (`one`/`few`/`many`/`other`) of a count in a language |
-| `IntoResponse` | `error` | Trait for mapping error enums to `Response` values. See [Error handling](/building-apps/error-handling/) |
+| `IntoResponse` | `error` | Trait for mapping error enums to `Response` values; also implemented by `Result<T, E>`, `String`, `&'static str`, `Json<T>` and `(&StatusCodeReasonPhrase, T)` (18.28.0). See [Error handling](/building-apps/error-handling/) |
 | `AppError` | `error` | Built-in error variants: `BadRequest`, `NotFound`, `Internal`, etc. |
 | `Validate` | `validate` | Field-level validation trait. See [Validation](/building-apps/validation/) |
 | `ValidationErrors` | `validate` | Collects every validation failure before returning |

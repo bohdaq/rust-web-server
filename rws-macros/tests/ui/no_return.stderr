@@ -1,0 +1,5 @@
+error: a typed route handler returns a value that implements `IntoResponse` (a `Response`, `Json<T>`, `String`, `Result<T, E>`, …)
+ --> tests/ui/no_return.rs:5:4
+  |
+5 | fn ping(State(db): State<Db>) {}
+  |    ^^^^

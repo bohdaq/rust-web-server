@@ -114,8 +114,15 @@ extensions.
   answering every tool in CI.
 - **#86 Compile-checked routes** — `#[get]`/`#[post]`/… generate the adapter;
   extractors as arguments; path parameters checked at compile time; duplicate
-  and shadowed routes reported when the app is built (panic in debug, startup
-  error in release).
+  and shadowed routes reported when the app is built. *Done (unreleased):*
+  the attribute turns a typed function into a unit struct implementing
+  `handler::Handler`/`AsyncHandler`, registered with `.route(f)` (actix's
+  shape, so the pattern served is the one checked); conflicts are a one-time
+  stderr warning plus `route_conflicts()`, not a panic or startup error —
+  18.x is additive and a panic would break apps that build today. The
+  compile-fail tests (trybuild, `rws-macros/tests/ui/`) cover wrong and
+  missing path parameters and arity; a duplicate route is a runtime
+  report, since routes are registered at run time.
 - **#87 Conventional layout + `rws.app.toml` manifest** — `src/routes/`,
   `src/models/`, `src/jobs/`, `migrations/`, `templates/`, `tests/`; starters
   adopt it; `dev_mcp` and `rws gen` read it.

@@ -1,0 +1,5 @@
+error: route `GET /posts/{id}` has 1 parameter (`id`), but this `Path<…>` tuple takes 2
+ --> tests/ui/tuple_arity.rs:5:32
+  |
+5 | fn show_post(Path((id, slug)): Path<(u64, String)>) -> String {
+  |                                ^^^^

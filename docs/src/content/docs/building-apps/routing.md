@@ -151,22 +151,74 @@ let www_router = Router::new()
 
 `AppWithState` and `AsyncAppWithState` already compose the two: they hold a `Router` internally, try it first, and fall through to `App`'s built-in controller chain for anything the router doesn't match — so static files, health checks, and metrics keep working automatically even in a fully custom, stateful app.
 
-## Attribute macros
+## Typed handlers: `#[get]` with extractors
 
-The `macros` feature also adds `#[get("/path")]`, `#[post("/path")]`, `#[put]`, `#[patch]`, `#[delete]` and the generic `#[route(GET, "/path")]`. They only add a `Route: METHOD /path` doc comment and leave the function unchanged — you still register the handler with `routes!` or a `.get()` builder call:
+Since 18.28.0 a handler can take [extractors](/building-apps/extractors/#extractors-as-handler-arguments) as arguments and return anything that implements `IntoResponse`; the route attribute (`macros` feature) generates the adapter and the app takes the method and pattern from it:
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "18", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros", "serde"] }
 ```
 
 ```rust
-use rust_web_server::get;
+use rust_web_server::app::App;
+use rust_web_server::error::AppError;
+use rust_web_server::handler::{Json, Path, State};
+use rust_web_server::{get, post};
 
-#[get("/items")]
-fn list_items(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response {
-    // ...
+struct Db { /* pool, … */ }
+
+#[get("/posts/{id}")]
+fn show_post(Path(id): Path<u64>, State(db): State<Db>) -> Result<Json<Post>, AppError> {
+    db.find(id).map(Json).ok_or_else(|| AppError::NotFound(format!("no post {id}")))
 }
+
+#[post("/posts")]
+fn create_post(Json(new): Json<NewPost>, db: &Db) -> Result<Json<Post>, AppError> {
+    db.insert(new).map(Json)
+}
+
+let app = App::with_state(Db { /* … */ })
+    .route(show_post)
+    .route(create_post);
 ```
+
+- `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` and `#[route(METHOD, "/path")]` turn the function into a unit struct of the same name implementing `handler::Handler<S>` (and `AsyncHandler<S>`). `.route(h)` registers it on `AppWithState`, on `Router` (handlers without state arguments) and on `AsyncAppWithState`, where `async fn` handlers go too. The function as written stays callable as `show_post::call(Path(1), State(db))`, e.g. in unit tests.
+- The generated `handle` runs the extractors in argument order and calls the function: the same work as a handler that calls them by hand, behind the same route dispatch, with no extra allocation for a classic handler's path.
+- The first extractor that fails answers the request with its rejection (`400`, `415`, `422`, … as problem details); the function doesn't run.
+- `show_post::METHOD` and `show_post::PATTERN` (trait `handler::RouteSpec`) are the attribute's arguments.
+
+**Checked at compile time** — the route's parameters against the `Path` argument:
+
+| Mistake | Error |
+|---|---|
+| `#[get("/posts/{id}")] fn f(Path(post_id): Path<u64>)` | `` `post_id` is not a parameter of route `GET /posts/{id}` `` |
+| `#[get("/posts/{id}")] fn f(Path((id, slug)): Path<(u64, String)>)` | the tuple takes 2, the route has 1 |
+| `#[get("/posts/{id}/{slug}")] fn f(Path(id): Path<u64>)` | a scalar takes one parameter |
+| `#[post("/posts/{id}/comments")] fn f(State(db): State<Db>)` | `{id}` isn't taken by any `Path` (or `&PathParams`) argument |
+| `#[get("/posts")] fn f(Path(id): Path<u64>)` | the route has no parameters |
+| a `#[derive(FromPath)]` struct whose fields aren't exactly the route's parameters | a `const` assertion naming the route |
+
+A name bound inside `Path(…)` names the route parameter it takes (as in Rocket), so a tuple's bindings may come in any order: `Path((slug, id))` for `/posts/{id}/{slug}`. A plain binding (`p: Path<(u64, String)>`) or `_` takes them in route order. `/posts/:id` and `/posts/{id}` are the same route.
+
+**Classic handlers are unchanged.** On a function with the classic signature — `(&Request, &PathParams, &ConnectionInfo)` plus the state for `AppWithState` (or `AsyncAppWithState`'s owned form) — the attribute only adds a `Route: METHOD /path` doc comment, as before 18.28.0, and you register it with `.get(pattern, handler)` or `routes!`.
+
+## Route conflicts
+
+A route registered after one with the same method that matches every path it does never runs: routes are tried in order and the first match wins. `AppWithState`, `AsyncAppWithState` and `Router` report these when the route is added — one line on stderr per distinct conflict — and list them with `route_conflicts()`:
+
+```rust
+let app = App::with_state(db)
+    .get("/users/:id", show_user)
+    .get("/users/me", me)          // shadowed: /users/:id answers /users/me
+    .get("/users/{uid}", other);   // duplicate: same pattern as /users/:id
+
+for conflict in app.route_conflicts() {
+    eprintln!("{conflict}");
+}
+// rws: warning: route GET /users/me never runs: GET /users/:id, registered before it, matches every path it does
+```
+
+Each `RouteConflict` has the `method`, the `pattern` that never runs, the `earlier` one that answers instead, and a `kind` (`Duplicate`: the same pattern, parameter names aside; `Shadowed`: the earlier one has a parameter or wildcard where it has a literal). It's a warning only — the app is built and serves as before; register the specific route first (`/users/me`, then `/users/:id`). Patterns that only overlap (`/a/:x` and `/:y/b`) aren't reported. A test can assert `app.route_conflicts().is_empty()`.
 
 See the [API reference](/reference/api/) for the full list of public types.

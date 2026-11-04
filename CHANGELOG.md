@@ -30,6 +30,32 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `Middleware::layer_name()`, default methods that let tools describe an app;
   `WithMiddleware`, `McpServer` and `TimeoutLayer` forward them.
 
+- **Compile-checked routes (#86).** `#[get("/posts/{id}")]` & co. on a
+  function whose arguments are extractors — `Path<T>`, `Query<T>`,
+  `Form<T>` (`serde`), `Json<T>`, `State<S>` or `&S`, `Body`, `BodyText`,
+  `RequestHeaders`, `&Request`, `&ConnectionInfo`, any `FromRequest` type —
+  and whose return type is anything `IntoResponse` generates the handler
+  adapter: register it with `.route(show_post)` on `AppWithState`, `Router`
+  or `AsyncAppWithState` (which also takes `async fn` handlers). The route's
+  parameters are checked against the `Path` argument at compile time (a
+  wrong name, a tuple of the wrong arity, a parameter nobody takes, a
+  `#[derive(FromPath)]` struct whose fields don't match). A failed
+  extraction answers with its rejection (`400`/`415`/`422`, problem
+  details). Classic handlers keep the doc-comment-only behaviour. New:
+  module `handler` (`Handler`, `AsyncHandler`, `RouteSpec`,
+  `FromRequestParts`, `RequestParts`, `Path`, `FromPath`, `State`, `Query`,
+  `Form`, `HandlerFuture`) and `#[derive(FromPath)]`. See
+  [Routing](https://rws8.tech/building-apps/routing/#typed-handlers-get-with-extractors).
+  **rws-macros 17.29.0 must be published before rust-web-server.**
+- **Duplicate and shadowed routes are reported.** `route_conflicts()` on
+  `Router`, `AppWithState` and `AsyncAppWithState` lists routes that never
+  run because an earlier one with the same method matches every path they
+  do (`/users/:id` and `/users/{uid}`; `/users/:id` before `/users/me`);
+  each is printed once to stderr when it's registered. Dispatch doesn't
+  change.
+- `IntoResponse` for `Result<T, E>`, `String`, `&'static str`, `Json<T>` and
+  `(&StatusCodeReasonPhrase, T)`.
+
 - **Feature presets** (#96): `web` (templates, cookies and CSRF, password
   hashing, SQLite ORM, jobs, mail), `api` (serde, macros, OpenAPI, JWT auth,
   SQLite ORM, jobs), `proxy` (HTTP/3, ACME, compression, route auth, regex

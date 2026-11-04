@@ -2,42 +2,63 @@
 # in front of the test app's MCP server, A2A echo agent and mock LLM.
 # Sourced by run.sh with lib.sh.
 
+# A rerun on a kept project starts with a fresh token budget (valkey keeps
+# the counts under the LLM route's prefix).
+[ "${APP_READY:-0}" = 1 ] && k exec deploy/valkey -- sh -c "valkey-cli --scan --pattern 'rws:llm:*' | xargs -r valkey-cli del" >/dev/null 2>&1
+
 MCP_H=(-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream')
-mcp() { # <session id or -> <json> — the body (SSE data unwrapped)
-  local sid=() ; [ "$1" != - ] && sid=(-H "Mcp-Session-Id: $1")
-  curl -sS --max-time 20 -D "$LAST_HEADERS" "${MCP_H[@]}" -H "Authorization: Bearer $E2E_MCP_CALLER" "${sid[@]}" -d "$2" "$RWS_URL/e2e/mcp" | sed -n 's/^data: //p; /^{/p'
+# MCP 2026-07-28 (stateless): no session, so any replica answers. Sessions
+# (earlier versions) live in one replica's memory: S7.0 shows what that
+# does behind the gateway.
+MCP_META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"stage-e2e","version":"1"}}'
+mcp() { # <method> <params without _meta, or ""> [Mcp-Name] — the body
+  local params=$MCP_META name=()
+  [ -n "$2" ] && params="$2,$MCP_META"
+  [ -n "${3:-}" ] && name=(-H "Mcp-Name: $3")
+  curl -sS --max-time 20 -D "$LAST_HEADERS" "${MCP_H[@]}" -H "Authorization: Bearer $E2E_MCP_CALLER" -H 'MCP-Protocol-Version: 2026-07-28' \
+    -H "Mcp-Method: $1" "${name[@]}" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":{$params}}" "$RWS_URL/e2e/mcp" | sed -n 's/^data: //p; /^{/p'
 }
-mcp_init() {
-  mcp - '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"stage-e2e","version":"1"}}}' >/dev/null
-  MCP_SID=$(header_of mcp-session-id)
-  [ -n "$MCP_SID" ] && mcp "$MCP_SID" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+add() { mcp tools/call "\"name\":\"app__add\",\"arguments\":{\"a\":$1,\"b\":$2}" app__add; }
+
+mcp_session_ok() { # initialize, then 6 more requests, each on its own connection
+  local sid i ok=0
+  curl -sS --max-time 20 -D "$LAST_HEADERS" -o /dev/null "${MCP_H[@]}" -H "Authorization: Bearer $E2E_MCP_CALLER" "$RWS_URL/e2e/mcp" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"stage-e2e","version":"1"}}}'
+  sid=$(header_of mcp-session-id)
+  for i in $(seq 6); do
+    [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "${MCP_H[@]}" -H "Authorization: Bearer $E2E_MCP_CALLER" -H "Mcp-Session-Id: $sid" \
+      -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' "$RWS_URL/e2e/mcp")" = 200 ] && ok=$((ok + 1))
+  done
+  echo "    session kept on $ok of 6 connections" >&2
+  [ "$ok" = 6 ]
 }
-mcp_tools_ok() {
-  eventually 90 mcp_init || return 1
-  local out; out=$(mcp "$MCP_SID" '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
+app_check S7.0 "MCP session (2025-06-18) holds across rws's 3 replicas" mcp_session_ok
+mcp_tools_ok() { # each replica lists the upstream's tools in the background (every
+  # 10 s until it can, e.g. while the app restarts): 6 answers in a row, a
+  # connection each, so every replica has.
+  local out i run=0
+  for i in $(seq 60); do
+    out=$(mcp tools/list "")
+    if grep -q '"name":"app__add"' <<<"$out"; then run=$((run + 1)); [ "$run" -ge 6 ] && break; else run=0; sleep 3; fi
+  done
   echo "    tools: $(grep -o '"name":"[^"]*"' <<<"$out" | tr '\n' ' ')" >&2
   grep -q '"name":"app__add"' <<<"$out"
 }
-app_check S7.1 "MCP gateway: the app's tools listed as app__*" mcp_tools_ok
-mcp_call_ok() {
-  mcp "$MCP_SID" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"app__add","arguments":{"a":2,"b":40}}}' | grep -q '"text":"42"'
-}
+app_check S7.1 "MCP gateway (stateless): the app's tools listed as app__*" mcp_tools_ok
+mcp_call_ok() { add 2 40 | grep -q '"text":"42"'; }
 app_check S7.2 "MCP gateway: app__add(2, 40) = 42 through the gateway" mcp_call_ok
 mcp_auth_ok() {
   [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "${MCP_H[@]}" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$RWS_URL/e2e/mcp")" = 401 ] &&
     [ "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "${MCP_H[@]}" -H 'Authorization: Bearer wrong' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$RWS_URL/e2e/mcp")" = 401 ]
 }
 app_check S7.3 "MCP gateway: no or a wrong caller token 401" mcp_auth_ok
-mcp_limit_ok() { # 5 calls an hour per caller (S7.2 was one), on every replica
-  local i out limited=0
-  for i in $(seq 8); do
-    out=$(mcp "$MCP_SID" "{\"jsonrpc\":\"2.0\",\"id\":$((10 + i)),\"method\":\"tools/call\",\"params\":{\"name\":\"app__add\",\"arguments\":{\"a\":1,\"b\":1}}}")
-    grep -q '"text":"2"' <<<"$out" || limited=$((limited + 1))
-  done
-  echo "    8 more calls: $limited refused" >&2
-  [ "$limited" -ge 4 ]
+mcp_limit_ok() { # 5 calls an hour per caller (S7.2 was one); the count is per replica
+  local i limited=0
+  for i in $(seq 14); do add 1 1 | grep -q '"text":"2"' || limited=$((limited + 1)); done
+  echo "    14 more calls: $limited refused" >&2
+  [ "$limited" -ge 1 ]
 }
-app_check S7.4 "MCP gateway: the per-caller tool limit (5 an hour) refuses the rest" mcp_limit_ok
+app_check S7.4 "MCP gateway: the per-caller tool limit refuses calls past it" mcp_limit_ok
 
 a2a_card_ok() {
   local card; card=$(curl -sS --max-time 20 "$RWS_URL/e2e/a2a/.well-known/agent-card.json")
