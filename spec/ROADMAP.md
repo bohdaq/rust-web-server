@@ -268,7 +268,7 @@ No new features: the fixes and release gating from the review of 18.20–18.23. 
 - **#83** **Release gating** — CI-gated tags, `--locked`, actionlint, a Windows check.
 - **#84** **`trusted_proxies`** — forwarding headers believed only from trusted peers.
 
-## 18.28.0 — Agent-first foundations
+## 18.28.0 — Agent-first foundations (released 2026-11-04)
 
 Rws as a Rails/Spring-class framework built agent-first: the app explains itself to agents, mistakes fail at compile time, one conventional layout. Plan, gap review and decisions: [AGENT_FIRST_FRAMEWORK.md](AGENT_FIRST_FRAMEWORK.md) (2026-11-04).
 
