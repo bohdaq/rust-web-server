@@ -39,9 +39,10 @@ jobs:
           key: ${{ matrix.name }}
       - run: cargo test --locked ${{ matrix.args }}
       # The crates the facade is split into (spec/WORKSPACE_SPLIT.md) run their
-      # own tests; `cargo test` above covers only the root package.
+      # own tests; `cargo test` above covers only the root package. rws-macros
+      # has the route macros' compile-fail (trybuild) tests.
       - if: matrix.args == ''
-        run: cargo test --locked -p rws-base -p rws-http --all-features
+        run: cargo test --locked -p rws-base -p rws-http -p rws-macros --all-features
       - if: matrix.args == ''
         run: cargo test --locked -p rws-server --features "http3 test-support sso sso-server sso-saml auth-asymmetric http-client acme serde macros openapi gateway-api model-sqlite storage-local storage-s3 storage-azure storage-gcs pkcs11"
       - if: matrix.name == 'http1 only'

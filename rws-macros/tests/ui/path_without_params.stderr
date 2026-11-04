@@ -1,0 +1,5 @@
+error: route `GET /posts` has no parameters for this `Path<…>` argument
+ --> tests/ui/path_without_params.rs:5:19
+  |
+5 | fn list(Path(id): Path<u64>) -> String {
+  |                   ^^^^

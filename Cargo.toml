@@ -238,7 +238,7 @@ serde_json = { version = "1", optional = true }
 hmac  = { version = "0.12", optional = true }
 sha2  = { version = "0.10", features = ["oid"], optional = true }
 p256      = { version = "0.14", features = ["ecdsa"], optional = true }
-rws-macros = { path = "rws-macros", version = "17.28", optional = true }
+rws-macros = { path = "rws-macros", version = "17.29", optional = true }
 tera = { version = "1", optional = true }
 sqlx = { version = "0.8", default-features = false, optional = true }
 argon2    = { version = "0.5", features = ["password-hash"], optional = true }

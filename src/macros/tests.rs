@@ -156,3 +156,42 @@ fn many_routes_all_work() {
     assert_eq!(201, client.post("/a").send().status());
     assert_eq!(200, client.get("/b").send().status());
 }
+
+// ── Typed handlers through the facade's paths (18.28.0) ──────────────────────
+
+#[cfg(feature = "macros")]
+mod typed_routes {
+    use crate::app::App;
+    use crate::error::AppError;
+    use crate::handler::{Path, State};
+    use crate::server_config::ServerConfig;
+    use crate::test_client::TestClient;
+    use crate::{get, FromPath};
+
+    struct Shelf {
+        books: Vec<&'static str>,
+    }
+
+    #[derive(FromPath)]
+    struct BookRef {
+        shelf: u32,
+        n: usize,
+    }
+
+    #[get("/shelves/{shelf}/books/{n}")]
+    fn book(Path(r): Path<BookRef>, State(s): State<Shelf>) -> Result<String, AppError> {
+        s.books.get(r.n).map(|b| format!("{}: {b}", r.shelf)).ok_or_else(|| AppError::NotFound(format!("book {}", r.n)))
+    }
+
+    #[test]
+    fn a_typed_handler_registered_with_route() {
+        let app = App::with_state(Shelf { books: vec!["Dune", "Emma"] })
+            .with_config(ServerConfig::default())
+            .route(book);
+        assert!(app.route_conflicts().is_empty());
+        let client = TestClient::new(app);
+        assert_eq!("1: Emma", client.get("/shelves/1/books/1").send().body_text());
+        assert_eq!(404, client.get("/shelves/1/books/9").send().status());
+        assert_eq!(400, client.get("/shelves/x/books/1").send().status());
+    }
+}

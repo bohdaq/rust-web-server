@@ -64,6 +64,7 @@ pub mod otel;
 pub mod middleware;
 pub mod rate_limit;
 pub mod router;
+pub mod handler;
 pub mod schema;
 pub mod state;
 pub mod test_client;
@@ -162,4 +163,4 @@ pub(crate) mod test_env;
 // above, `extern crate rws_server as rust_web_server` in doctests).
 #[cfg(feature = "macros")]
 #[doc(hidden)]
-pub use rws_macros::{Config, FromRequest, JsonSchema, Validate};
+pub use rws_macros::{Config, FromPath, FromRequest, JsonSchema, Validate};

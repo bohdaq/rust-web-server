@@ -3363,23 +3363,75 @@ let www_router = Router::new()
 
 `AppWithState` and `AsyncAppWithState` already compose the two: they hold a `Router` internally, try it first, and fall through to `App`'s built-in controller chain for anything the router doesn't match — so static files, health checks, and metrics keep working automatically even in a fully custom, stateful app.
 
-## Attribute macros
+## Typed handlers: `#[get]` with extractors
 
-The `macros` feature also adds `#[get("/path")]`, `#[post("/path")]`, `#[put]`, `#[patch]`, `#[delete]` and the generic `#[route(GET, "/path")]`. They only add a `Route: METHOD /path` doc comment and leave the function unchanged — you still register the handler with `routes!` or a `.get()` builder call:
+Since 18.28.0 a handler can take [extractors](/building-apps/extractors/#extractors-as-handler-arguments) as arguments and return anything that implements `IntoResponse`; the route attribute (`macros` feature) generates the adapter and the app takes the method and pattern from it:
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "18", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros", "serde"] }
 ```
 
 ```rust
-use rust_web_server::get;
+use rust_web_server::app::App;
+use rust_web_server::error::AppError;
+use rust_web_server::handler::{Json, Path, State};
+use rust_web_server::{get, post};
 
-#[get("/items")]
-fn list_items(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response {
-    // ...
+struct Db { /* pool, … */ }
+
+#[get("/posts/{id}")]
+fn show_post(Path(id): Path<u64>, State(db): State) -> Result, AppError> {
+    db.find(id).map(Json).ok_or_else(|| AppError::NotFound(format!("no post {id}")))
 }
+
+#[post("/posts")]
+fn create_post(Json(new): Json, db: &Db) -> Result, AppError> {
+    db.insert(new).map(Json)
+}
+
+let app = App::with_state(Db { /* … */ })
+    .route(show_post)
+    .route(create_post);
 ```
+
+- `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` and `#[route(METHOD, "/path")]` turn the function into a unit struct of the same name implementing `handler::Handler` (and `AsyncHandler`). `.route(h)` registers it on `AppWithState`, on `Router` (handlers without state arguments) and on `AsyncAppWithState`, where `async fn` handlers go too. The function as written stays callable as `show_post::call(Path(1), State(db))`, e.g. in unit tests.
+- The generated `handle` runs the extractors in argument order and calls the function: the same work as a handler that calls them by hand, behind the same route dispatch, with no extra allocation for a classic handler's path.
+- The first extractor that fails answers the request with its rejection (`400`, `415`, `422`, … as problem details); the function doesn't run.
+- `show_post::METHOD` and `show_post::PATTERN` (trait `handler::RouteSpec`) are the attribute's arguments.
+
+**Checked at compile time** — the route's parameters against the `Path` argument:
+
+| Mistake | Error |
+|---|---|
+| `#[get("/posts/{id}")] fn f(Path(post_id): Path<u64>)` | `` `post_id` is not a parameter of route `GET /posts/{id}` `` |
+| `#[get("/posts/{id}")] fn f(Path((id, slug)): Path<(u64, String)>)` | the tuple takes 2, the route has 1 |
+| `#[get("/posts/{id}/{slug}")] fn f(Path(id): Path<u64>)` | a scalar takes one parameter |
+| `#[post("/posts/{id}/comments")] fn f(State(db): State)` | `{id}` isn't taken by any `Path` (or `&PathParams`) argument |
+| `#[get("/posts")] fn f(Path(id): Path<u64>)` | the route has no parameters |
+| a `#[derive(FromPath)]` struct whose fields aren't exactly the route's parameters | a `const` assertion naming the route |
+
+A name bound inside `Path(…)` names the route parameter it takes (as in Rocket), so a tuple's bindings may come in any order: `Path((slug, id))` for `/posts/{id}/{slug}`. A plain binding (`p: Path<(u64, String)>`) or `_` takes them in route order. `/posts/:id` and `/posts/{id}` are the same route.
+
+**Classic handlers are unchanged.** On a function with the classic signature — `(&Request, &PathParams, &ConnectionInfo)` plus the state for `AppWithState` (or `AsyncAppWithState`'s owned form) — the attribute only adds a `Route: METHOD /path` doc comment, as before 18.28.0, and you register it with `.get(pattern, handler)` or `routes!`.
+
+## Route conflicts
+
+A route registered after one with the same method that matches every path it does never runs: routes are tried in order and the first match wins. `AppWithState`, `AsyncAppWithState` and `Router` report these when the route is added — one line on stderr per distinct conflict — and list them with `route_conflicts()`:
+
+```rust
+let app = App::with_state(db)
+    .get("/users/:id", show_user)
+    .get("/users/me", me)          // shadowed: /users/:id answers /users/me
+    .get("/users/{uid}", other);   // duplicate: same pattern as /users/:id
+
+for conflict in app.route_conflicts() {
+    eprintln!("{conflict}");
+}
+// rws: warning: route GET /users/me never runs: GET /users/:id, registered before it, matches every path it does
+```
+
+Each `RouteConflict` has the `method`, the `pattern` that never runs, the `earlier` one that answers instead, and a `kind` (`Duplicate`: the same pattern, parameter names aside; `Shadowed`: the earlier one has a parameter or wildcard where it has a literal). It's a warning only — the app is built and serves as before; register the specific route first (`/users/me`, then `/users/:id`). Patterns that only overlap (`/a/:x` and `/:y/b`) aren't reported. A test can assert `app.route_conflicts().is_empty()`.
 
 See the [API reference](/reference/api/) for the full list of public types.
 
@@ -3955,6 +4007,63 @@ let id: &str = id.as_str();
 ```
 
 Two more extractors live outside `extract`: `json::Json` (`serde` feature, see [JSON](/building-apps/json/)) and `validate::Validated` (see [Validation](/building-apps/validation/)).
+
+## Extractors as handler arguments
+
+Since 18.28.0 a function annotated with a route attribute (`#[get("/path")]` & co., `macros` feature) takes extractors as arguments: each runs in order, the first failure answers with its rejection, and the function only sees values that were extracted. Registration and the compile-time path checks are on [Routing](/building-apps/routing/#typed-handlers-get-with-extractors). Everything below is in `rust_web_server::handler` (which also re-exports `Body`, `BodyText`, `RequestHeaders`, `RequestId` and `Json`):
+
+```rust
+use rust_web_server::handler::{Form, Path, Query, State};
+use rust_web_server::{get, post};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Page { page: Option<u32>, tag: Vec }
+
+#[get("/shelves/{shelf}/books")]
+fn books(Path(shelf): Path<u32>, Query(p): Query, db: &Db) -> String {
+    format!("shelf {shelf}, page {}, tags {:?}", p.page.unwrap_or(1), p.tag)
+}
+
+#[derive(Deserialize)]
+struct Signup { email: String, age: u8 }
+
+#[post("/signup")]
+fn signup(Form(form): Form, State(db): State) -> (&'static StatusCodeReasonPhrase, String) {
+    (STATUS_CODE_REASON_PHRASE.n201_created, form.email)
+}
+```
+
+| Argument | Gives | Rejection |
+|---|---|---|
+| `Path` | the route's parameters, percent-decoded: a scalar (`Path<u64>`), a tuple of `FromStr` values, or a `#[derive(FromPath)]` struct | `400` when one doesn't parse |
+| `Query` (`serde`) | the query string as a `Deserialize` struct (scalars, `String`, `Option` — empty is `None` — unit enums, `Vec` from a repeated key) | `400` |
+| `Form` (`serde`) | an `application/x-www-form-urlencoded` body, same field types | `415` for another `Content-Type`, `400` for a body that isn't UTF-8, `422` when the fields don't fit |
+| `Json` (`serde`) | the JSON body | `400` |
+| `State` / `&S` | the app's state (`State` holds a clone of its `Arc`) | — |
+| `Body`, `BodyText`, `RequestHeaders`, `RequestId` | as above | `BodyText`: `400` |
+| `&Request`, `&ConnectionInfo`, `&PathParams` | the raw request, connection and parameters | — |
+| any `FromRequest` type (`Validated`, `#[derive(FromRequest)]`, yours) | its value | its own |
+
+Rejections are problem details, like rws's own errors (`error_format = "text"` makes them text). `extract::Query` stays the untyped map; `handler::Query>` works too.
+
+The return type is anything `IntoResponse`: `Response`, `Json`, `String` / `&'static str` (`200`, `text/plain`), `AppError`, `Result` of two such types, or `(STATUS_CODE_REASON_PHRASE.n201_created, value)` to set the status.
+
+### `#[derive(FromPath)]`
+
+For several parameters by name, derive `FromPath` on a struct with one `FromStr` field per parameter, named after it. The route must have exactly those parameters — checked at compile time:
+
+```rust
+#[derive(rust_web_server::FromPath)]
+struct PostKey { id: u64, slug: String }
+
+#[get("/posts/{id}/{slug}")]
+fn post(Path(key): Path) -> String {
+    format!("{} {}", key.id, key.slug)
+}
+```
+
+A type of your own that implements `FromStr` works as a one-tuple, `Path((slug,)): Path<(Slug,)>`, or implement `handler::FromPath` for it. Your own argument type with access to the state implements `handler::FromRequestParts`.
 
 ## Combining extractors
 
@@ -22353,7 +22462,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Item | Module | Description |
 |---|---|---|
 | `routes!` | `macros` | Declarative routing table — builds `AppWithState`, `AsyncAppWithState` or `Router` from `METHOD "path" => handler` lines. See [Routing](/building-apps/routing/) |
-| `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` | crate root (`macros`) | Attribute macros annotating a handler with its method and path |
+| `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` | crate root (`macros`) | On a classic handler, a `Route:` doc comment; on one with extractor arguments (18.28.0), a unit struct implementing `handler::Handler`/`AsyncHandler`/`RouteSpec`, registered with `.route(h)`, the pattern's parameters checked against the `Path` argument at compile time. See [Routing](/building-apps/routing/#typed-handlers-get-with-extractors) |
+| `#[derive(FromPath)]` | crate root (`macros`) | `handler::FromPath` for a struct with one `FromStr` field per route parameter, by name (18.28.0) |
 | `#[derive(FromRequest)]` | crate root (`macros`) | Derives `FromRequest` for a named-field struct, extracting fields in order and stopping at the first error |
 | `#[derive(JsonSchema)]` | crate root (`macros`) | Derives `schema::JsonSchema` for a named-field struct or unit enum, following its `#[serde]` renames (18.0.0). See [Typed tools](/mcp/tools/#typed-tools) |
 | `#[derive(Validate)]` | crate root (`macros`) | Derives `Validate` from `#[validate(length, range, email, required, url)]` field annotations |
@@ -22386,6 +22496,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 |---|---|---|
 | `Router` | `router` | Path-pattern router with `:param` and `*wildcard`; `.with_host(name)` restricts it to one virtual host; `.matches(request, connection)` tells whether `handle()` would run a handler |
 | `PathParams` | `router` | Extracted path parameters; `.get(name) -> Option<&str>` |
+| `RouteConflict` / `RouteConflictKind` | `router` | A route that never runs because an earlier one with the same method matches every path it does (`Duplicate`, `Shadowed`); `route_conflicts()` on `Router`, `AppWithState`, `AsyncAppWithState`, also printed once when registered (18.28.0). See [Route conflicts](/building-apps/routing/#route-conflicts) |
+| `Handler` / `AsyncHandler` / `RouteSpec` | `handler` | What the route macros generate for a typed handler: `handle(request, params, connection, &Arc)`, `handle_async(…)` → `HandlerFuture`, `METHOD`/`PATTERN`; `.route(h)` registers one (18.28.0) |
 | `ConnectionInfo` | `server` | Client/server IP, port, and SNI hostname per connection |
 | `VirtualHostConfig` | `virtual_host` | Per-domain certificate config `{ domain, cert_file, key_file }` for SNI. See [Virtual hosting](/features/virtual-hosting/) |
 
@@ -22394,6 +22506,10 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `FromRequest` | `extract` | Trait for typed extraction from a request, returning a ready error response on failure. See [Extractors](/building-apps/extractors/) |
+| `FromRequestParts` / `RequestParts` | `handler` | A typed handler argument, built from the request, route parameters, connection and state; every `FromRequest` type is one (18.28.0). See [Extractors as handler arguments](/building-apps/extractors/#extractors-as-handler-arguments) |
+| `Path` / `FromPath` | `handler` | Route parameters, percent-decoded and parsed: a scalar, a tuple of `FromStr` values, or a `#[derive(FromPath)]` struct; `400` when one doesn't parse (18.28.0) |
+| `Query` / `Form` | `handler` (`serde`) | Query string / `application/x-www-form-urlencoded` body as a `Deserialize` struct; `400`, or `415`/`400`/`422` for a form (18.28.0) |
+| `State` | `handler` | The app's state as a handler argument (a clone of its `Arc`) (18.28.0) |
 | `Body` | `extract` | Raw request body bytes (never fails) |
 | `Storage::put_stream` / `S3_PART_SIZE` | `storage` | Store a `Read` stream: S3 multipart upload (8 MiB parts), local temp file + rename; default buffers (18.0.0) |
 | `request::Body` | `request` | `Request.body` (18.0.0): bytes, or a stream (`Body::stream`, `body_bytes()`, `into_reader()`); derefs to `&[u8]`. Not the `extract::Body` extractor |
@@ -22411,7 +22527,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Catalog` | `i18n` | One language's messages (flat TOML subset); `parse`, `get` |
 | `Translator` | `i18n` | Messages in the chosen language: `t`, `t_with`, `plural`, `plural_with`, `locale`, `localize(response)` |
 | `plural_category` | `i18n` | CLDR plural category (`one`/`few`/`many`/`other`) of a count in a language |
-| `IntoResponse` | `error` | Trait for mapping error enums to `Response` values. See [Error handling](/building-apps/error-handling/) |
+| `IntoResponse` | `error` | Trait for mapping error enums to `Response` values; also implemented by `Result`, `String`, `&'static str`, `Json` and `(&StatusCodeReasonPhrase, T)` (18.28.0). See [Error handling](/building-apps/error-handling/) |
 | `AppError` | `error` | Built-in error variants: `BadRequest`, `NotFound`, `Internal`, etc. |
 | `Validate` | `validate` | Field-level validation trait. See [Validation](/building-apps/validation/) |
 | `ValidationErrors` | `validate` | Collects every validation failure before returning |

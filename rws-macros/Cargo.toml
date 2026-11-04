@@ -1,6 +1,6 @@
 [package]
 name = "rws-macros"
-version = "17.28.0"
+version = "17.29.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -14,3 +14,6 @@ proc-macro = true
 syn  = { version = "3", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
+
+[dev-dependencies]
+trybuild = "1.0.122"

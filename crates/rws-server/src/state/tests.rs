@@ -416,3 +416,18 @@ fn stream_body_marks_only_its_routes() {
     assert!(!app.streams_body(&request("POST", "/upload/a.bin"), &conn));
     assert!(!app.streams_body(&request("POST", "/form"), &conn));
 }
+
+#[test]
+fn route_conflicts_cover_state_routes_but_not_stream_body() {
+    let app = AppWithState::new(())
+        .get("/posts/:id", |_, _, _, _| Response::new())
+        .get("/posts/new", |_, _, _, _| Response::new())
+        .put("/upload/:name", |_, _, _, _| Response::new())
+        // Matched only: the same pattern as a route is the point here.
+        .stream_body("PUT", "/upload/:name")
+        .stream_body("PUT", "/upload/:name");
+    let conflicts = app.route_conflicts();
+    assert_eq!(1, conflicts.len());
+    assert_eq!(("/posts/new", "/posts/:id"), (conflicts[0].pattern.as_str(), conflicts[0].earlier.as_str()));
+    assert!(AppWithState::new(()).get("/a", |_, _, _, _| Response::new()).route_conflicts().is_empty());
+}

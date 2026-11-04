@@ -105,3 +105,10 @@ impl<T: Serialize> Json<T> {
         }
     }
 }
+
+/// A handler may return `Json<T>` (18.28.0): `200 OK`, `application/json`.
+impl<T: Serialize> IntoResponse for Json<T> {
+    fn into_response(self) -> Response {
+        Json::<T>::into_response(self)
+    }
+}

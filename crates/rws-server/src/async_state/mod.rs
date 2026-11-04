@@ -152,7 +152,40 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
             segments: matcher::parse_pattern(pattern),
             handler: Arc::new(move |req, params, conn, state| Box::pin(handler(req, params, conn, state))),
         });
+        if let Some((last, earlier)) = self.routes.split_last() {
+            let earlier = earlier.iter().map(|r| (r.method.as_str(), r.segments.as_slice()));
+            if let Some(conflict) = crate::router::conflict_with(earlier, &last.method, &last.segments) {
+                conflict.warn_once();
+            }
+        }
         self
+    }
+
+    /// Routes that never run because an earlier one with the same method
+    /// matches every path they do (18.28.0). See
+    /// [`Router::route_conflicts`](crate::router::Router::route_conflicts);
+    /// each is also printed once to stderr when it's registered.
+    pub fn route_conflicts(&self) -> Vec<crate::router::RouteConflict> {
+        crate::router::conflicts(self.routes.iter().map(|r| (r.method.as_str(), r.segments.as_slice())))
+    }
+
+    /// Register a typed handler (18.28.0): an `async fn` (or a sync
+    /// function) with extractor arguments annotated `#[get("/path")]` &
+    /// co.; the method and pattern come from the attribute.
+    ///
+    /// ```rust,ignore
+    /// #[get("/posts/{id}")]
+    /// async fn show_post(Path(id): Path<i64>, State(pool): State<DbPool>) -> Result<Json<Post>, AppError> {
+    ///     // … .await …
+    /// }
+    ///
+    /// let app = App::with_async_state(pool).route(show_post);
+    /// ```
+    pub fn route<H: crate::handler::AsyncHandler<S>>(self, handler: H) -> Self {
+        let handler = Arc::new(handler);
+        self.add(H::METHOD, H::PATTERN, move |request, params, connection, state| {
+            handler.handle_async(request, params, connection, state)
+        })
     }
 
     /// Register an async `GET` handler for `pattern`.

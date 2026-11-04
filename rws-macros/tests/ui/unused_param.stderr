@@ -1,0 +1,5 @@
+error: route `POST /posts/{id}/comments` has the parameter `id`, but `comment` takes no `Path<…>` (or `&PathParams`) argument
+ --> tests/ui/unused_param.rs:5:4
+  |
+5 | fn comment(State(db): State<Db>) -> String {
+  |    ^^^^^^^
