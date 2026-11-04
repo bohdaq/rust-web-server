@@ -1,4 +1,4 @@
 # Expected failures: `<case id>: <where it is tracked>`, one per line.
 # A case listed here reports KNOWN instead of FAIL.
-S9.4: spec/STAGE_E2E_FINDINGS.md S9.4 FastCGI SCRIPT_FILENAME is the symlink-resolved path
-S9.5: spec/STAGE_E2E_FINDINGS.md S9.4 FastCGI SCRIPT_FILENAME is the symlink-resolved path
+S9.4: spec/STAGE_E2E_FINDINGS.md S9.4 (fixed on main, not in a release image yet)
+S9.5: spec/STAGE_E2E_FINDINGS.md S9.4 (fixed on main, not in a release image yet)

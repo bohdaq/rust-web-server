@@ -330,7 +330,13 @@ pub struct FastCgi {
 struct Inner {
     config: FastCgiConfig,
     address: Address,
+    /// The root with symlinks resolved: what a file must be under.
     root: PathBuf,
+    /// The root as configured (made absolute, symlinks kept): what php-fpm
+    /// is told. In another container the same files sit at the same paths,
+    /// but symlink targets may differ (a Kubernetes ConfigMap volume's
+    /// `..<timestamp>` directory), so resolved paths aren't found there.
+    lexical_root: PathBuf,
     pool: Pool,
     statics: Option<Arc<dyn Application + Send + Sync>>,
 }
@@ -353,8 +359,9 @@ impl FastCgi {
     pub fn new(config: FastCgiConfig) -> Result<FastCgi, String> {
         let address = Address::parse(&config.address)?;
         let root = config.root.canonicalize().map_err(|e| format!("FastCGI root {}: {e}", config.root.display()))?;
+        let lexical_root = std::path::absolute(&config.root).map_err(|e| format!("FastCGI root {}: {e}", config.root.display()))?;
         let max = config.max_idle;
-        Ok(FastCgi { inner: Arc::new(Inner { config, address, root, pool: Pool { idle: Mutex::new(Vec::new()), max }, statics: None }) })
+        Ok(FastCgi { inner: Arc::new(Inner { config, address, root, lexical_root, pool: Pool { idle: Mutex::new(Vec::new()), max }, statics: None }) })
     }
 
     /// Serve files under the root that aren't scripts with `app`.
@@ -365,6 +372,7 @@ impl FastCgi {
                 config: inner.config.clone(),
                 address: inner.address.clone(),
                 root: inner.root.clone(),
+                lexical_root: inner.lexical_root.clone(),
                 pool: Pool { idle: Mutex::new(Vec::new()), max: inner.pool.max },
                 statics: Some(app),
             }),
@@ -375,11 +383,13 @@ impl FastCgi {
         !self.inner.config.split_path.is_empty() && name.ends_with(&self.inner.config.split_path)
     }
 
-    /// A regular file under the root (symlinks resolved), or `None`.
+    /// A regular file under the root (checked with symlinks resolved), as
+    /// the configured root joined with `relative` — the path nginx's
+    /// `$document_root$fastcgi_script_name` gives — or `None`.
     fn file_under_root(&self, relative: &str) -> Option<PathBuf> {
-        let path = self.inner.root.join(relative.trim_start_matches('/'));
-        let real = path.canonicalize().ok()?;
-        (real.starts_with(&self.inner.root) && real.is_file()).then_some(real)
+        let relative = relative.trim_start_matches('/');
+        let real = self.inner.root.join(relative).canonicalize().ok()?;
+        (real.starts_with(&self.inner.root) && real.is_file()).then(|| self.inner.lexical_root.join(relative))
     }
 
     #[doc(hidden)]
@@ -450,7 +460,7 @@ impl FastCgi {
             Some((h, p)) if p.bytes().all(|b| b.is_ascii_digit()) && !h.ends_with(':') => h.to_string(),
             _ => host.clone(),
         };
-        let root = self.inner.root.to_string_lossy().to_string();
+        let root = self.inner.lexical_root.to_string_lossy().trim_end_matches('/').to_string();
         let mut params: Vec<(String, String)> = vec![
             ("GATEWAY_INTERFACE".into(), "CGI/1.1".into()),
             ("SERVER_SOFTWARE".into(), format!("rws/{}", env!("CARGO_PKG_VERSION"))),
