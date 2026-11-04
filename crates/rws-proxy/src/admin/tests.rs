@@ -453,6 +453,152 @@ fn the_audit_log_is_appended_to_a_file() {
     assert!(text.lines().any(|line| line.starts_with('{') && line.contains(r#""path":"/admin/api/v1/maintenance""#) && line.contains(r#""user":"deploy-bot""#)), "{text}");
 }
 
+// ── 18.33.0: the audit log's hash chain ──────────────────────────────────────
+
+fn entry_json(n: u64) -> String {
+    access::AuditEntry {
+        at: 1_700_000_000 + n,
+        user: "ann".into(),
+        role: "operator".into(),
+        via: "token".into(),
+        address: "127.0.0.1".into(),
+        method: "PUT".into(),
+        path: "/admin/api/v1/maintenance".into(),
+        detail: format!(r#"{{"active":{}}}"#, n % 2 == 0),
+        status: 200,
+        node: "web-1".into(),
+    }
+    .to_json()
+}
+
+/// `n` chained lines after `prev`, newline-terminated.
+fn chained(n: u64, mut prev: String) -> Vec<String> {
+    (0..n)
+        .map(|i| {
+            let line = access::chain_line(&entry_json(i), &prev);
+            prev = access::line_hash(&line);
+            line
+        })
+        .collect()
+}
+
+fn verify(lines: &[String]) -> access::ChainReport {
+    access::verify_chain(&(lines.join("\n") + "\n"))
+}
+
+#[test]
+fn a_chained_line_is_the_entry_plus_prev_and_hash() {
+    let line = access::chain_line(&entry_json(0), access::CHAIN_START);
+    let json = entry_json(0);
+    assert!(line.starts_with(&json[..json.len() - 1]), "{line}");
+    let with_prev = format!("{},\"prev\":\"{}\"}}", &json[..json.len() - 1], access::CHAIN_START);
+    assert_eq!(format!("{},\"prev\":\"{}\",\"hash\":\"{}\"}}", &json[..json.len() - 1], access::CHAIN_START, access::line_hash(&with_prev)), line);
+    // Still a JSON object a log shipper reads.
+    assert!(crate::mcp::json_rpc::object_members(&line).is_some_and(|m| m.len() == 13), "{line}");
+}
+
+#[test]
+fn an_intact_chain_verifies() {
+    let report = verify(&chained(5, access::CHAIN_START.to_string()));
+    assert!(report.ok(), "{report:?}");
+    assert_eq!((5, 5, 0, None), (report.entries, report.chained, report.unchained, report.continues_from.clone()));
+    assert_eq!(access::verify_chain(""), access::ChainReport::default());
+    assert!(report.to_json().starts_with(r#"{"ok":true,"entries":5,"chained":5,"unchained":0,"continues_from":null,"broken":null}"#));
+}
+
+#[test]
+fn an_edited_entry_breaks_its_own_hash() {
+    let mut lines = chained(4, access::CHAIN_START.to_string());
+    lines[2] = lines[2].replace(r#""user":"ann""#, r#""user":"bob""#);
+    let report = verify(&lines);
+    assert_eq!(Some(3), report.broken.as_ref().map(|b| b.0), "{report:?}");
+    assert!(report.broken.unwrap().1.contains("changed"));
+    assert_eq!(2, report.chained, "the lines before it verified");
+    assert!(verify(&lines).to_json().contains(r#""broken":{"line":3,"#));
+}
+
+#[test]
+fn a_removed_or_reordered_entry_breaks_the_next_prev() {
+    let lines = chained(4, access::CHAIN_START.to_string());
+    let mut removed = lines.clone();
+    removed.remove(1);
+    let report = verify(&removed);
+    assert_eq!(Some(2), report.broken.as_ref().map(|b| b.0), "{report:?}");
+    assert!(report.broken.unwrap().1.contains("removed"));
+    let mut swapped = lines.clone();
+    swapped.swap(1, 2);
+    assert_eq!(Some(2), verify(&swapped).broken.map(|b| b.0));
+    // A rewritten line whose hash was recomputed still breaks the next prev.
+    let mut forged = lines.clone();
+    let json = entry_json(9);
+    let prev = access::line_hash(&lines[0]);
+    forged[1] = access::chain_line(&json, &prev);
+    assert_eq!(Some(3), verify(&forged).broken.map(|b| b.0));
+}
+
+#[test]
+fn entries_from_before_the_chain_are_accepted_until_it_starts() {
+    // A pre-18.33 file, then entries appended by 18.33: the first chained
+    // line's prev is the hash of the last old line.
+    let old = vec![entry_json(0), entry_json(1)];
+    let mut lines = old.clone();
+    lines.extend(chained(2, access::line_hash(&old[1])));
+    let report = verify(&lines);
+    assert!(report.ok(), "{report:?}");
+    assert_eq!((4, 2, 2), (report.entries, report.chained, report.unchained));
+    // An old line edited: caught by the next chained line only if it is the
+    // last old one.
+    let mut edited = lines.clone();
+    edited[1] = edited[1].replace("ann", "eve");
+    assert_eq!(Some(3), verify(&edited).broken.map(|b| b.0));
+    // A line without hash after the chain started is refused (a stripped hash).
+    let mut stripped = lines.clone();
+    stripped.push(entry_json(7));
+    let report = verify(&stripped);
+    assert_eq!(Some(5), report.broken.as_ref().map(|b| b.0));
+    assert!(report.broken.unwrap().1.contains("no prev/hash"));
+}
+
+#[test]
+fn a_file_continuing_a_rotated_one_says_so() {
+    let previous_file = chained(3, access::CHAIN_START.to_string());
+    let next_file = chained(2, access::line_hash(previous_file.last().unwrap()));
+    let report = verify(&next_file);
+    assert!(report.ok());
+    assert_eq!(Some(access::line_hash(previous_file.last().unwrap())), report.continues_from);
+}
+
+#[test]
+fn the_audit_file_is_chained_across_restarts_and_verified_by_the_api() {
+    let _g = crate::test_env::lock();
+    let file = crate::test_env::TempPath::new("admin-audit-chain.log");
+    // A line written before 18.33.
+    std::fs::write(&*file, format!("{}\n", entry_json(0))).unwrap();
+    access::set_audit_file(file.as_str());
+    let api = team();
+    call_as(&api, "operator-token-0123456789", "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#);
+    // A restart: the chain continues from the file's last line.
+    access::set_audit_file(file.as_str());
+    call_as(&api, "operator-token-0123456789", "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#);
+    let (status, text) = call_as(&api, "viewer-token-0123456789", "GET", "/admin/api/v1/audit/verify", "");
+    assert_eq!(status, 200, "{text}");
+    assert!(text.starts_with(&format!(r#"{{"file":"{}","ok":true,"#, file.as_str())), "{text}");
+    assert!(text.contains(r#""unchained":1"#), "{text}");
+    let report = access::verify_chain(&std::fs::read_to_string(&*file).unwrap());
+    assert!(report.chained >= 2 && report.ok(), "{report:?}");
+    // Someone edits the file.
+    let tampered = std::fs::read_to_string(&*file).unwrap().replacen("deploy-bot", "someone-else", 1);
+    std::fs::write(&*file, tampered).unwrap();
+    let (status, text) = call_as(&api, "viewer-token-0123456789", "GET", "/admin/api/v1/audit/verify", "");
+    assert_eq!(status, 200);
+    assert!(text.contains(r#""ok":false"#) && text.contains(r#""broken":{"line":"#), "{text}");
+    assert_eq!(call_as(&api, "admin-token", "POST", "/admin/api/v1/audit/verify", "").0, 405);
+    access::set_audit_file("");
+    let (status, text) = call_as(&api, "viewer-token-0123456789", "GET", "/admin/api/v1/audit/verify", "");
+    assert_eq!(status, 404);
+    assert!(text.contains("no [admin] audit_log"), "{text}");
+}
+
 #[test]
 fn redaction_keeps_ordinary_values() {
     assert_eq!(access::redact(br#"{"ip":"1.2.3.4","password":"x","drained":true}"#), r#"{"ip":"1.2.3.4","password":"(redacted)","drained":true}"#);

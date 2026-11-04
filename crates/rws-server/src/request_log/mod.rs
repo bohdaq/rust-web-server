@@ -186,7 +186,16 @@ impl Middleware for LogLayer {
             Err(_) => 500,
         };
         let path = request.request_uri.split('?').next().unwrap_or(&request.request_uri);
-        global().record(now_secs(), &request.method, path, status, &crate::ip_filter::client_ip(request, &connection.client.ip), latency_ms);
+        let mut client_ip = crate::ip_filter::client_ip(request, &connection.client.ip);
+        // The access log's IP anonymisation applies here too (18.33.0); the
+        // configuration is only looked at when something is on.
+        if crate::server_config::log_privacy::maybe_active() {
+            let config = crate::server_config::ServerConfig::current();
+            if let Ok(ip) = client_ip.parse::<std::net::IpAddr>() {
+                client_ip = config.log_privacy.ip_string(ip).into();
+            }
+        }
+        global().record(now_secs(), &request.method, path, status, &client_ip, latency_ms);
 
         result
     }

@@ -1840,6 +1840,12 @@ don't use them.
 | `RWS_CONFIG_ACCESS_LOG` | (stdout) | path | Append access-log lines to this file instead of stdout (since 18.1.0). Opened at the first line; `SIGUSR1` reopens it (for logrotate). Read at startup. See [Logs](/deployment/observability/#writing-to-a-file). |
 | `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `100M` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate and `SIGUSR1`). The default was `0` before 18.15.0. |
 | `RWS_CONFIG_ACCESS_LOG_KEEP` | `5` | integer | Rotated access-log files to keep; `0` empties the file instead of keeping any. |
+| `RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP` | `off` | `off`, `truncate`, `hash` | Client addresses in access-log lines, OTLP log records and `recent_requests`: `truncate` keeps an IPv4 /24 or IPv6 /48, `hash` writes a keyed pseudonym (since 18.33.0). An unknown value truncates. Hot-reloadable. See [Anonymised addresses](/deployment/observability/#anonymised-addresses-and-redaction). |
+| `RWS_CONFIG_ACCESS_LOG_IP_HASH_SECRET` | (none) | string | The HMAC-SHA256 key for `access_log_anonymize_ip = "hash"`; without it `hash` truncates. Hidden in startup output and `/admin/api/v1/config`. |
+| `RWS_CONFIG_LOG_REDACT_QUERY` | (none) | comma list | Query parameter names whose values are logged as `REDACTED` in paths and `Referer`s, e.g. `token,api_key` (since 18.33.0). Hot-reloadable. |
+| `RWS_CONFIG_LOG_REDACT_HEADERS` | (none) | comma list | Header names whose values are logged as `REDACTED`, besides `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie`, which never are logged (since 18.33.0). Hot-reloadable. |
+| `RWS_CONFIG_ACCESS_LOG_SYSLOG` | (none) | `udp://host:port`, `tcp://host:port`, `unix:///path` | Also send access-log lines to this syslog server as RFC 5424 messages (TCP: octet counting), from a background thread (since 18.33.0). Port 514 when left out. Read at startup. See [Syslog](/deployment/observability/#syslog). |
+| `RWS_CONFIG_ACCESS_LOG_SYSLOG_FACILITY` | `local0` | facility name or 0–23 | The syslog facility of those messages. |
 | `RWS_CONFIG_MIN_FREE_DISK` | larger of 1% and 1G | size or `N%` | Below this much free space on its filesystem rws stops writing the access-log file and disk-cache entries (dropped and counted) until space returns; `0` turns it off (since 18.15.0). See [Disk safety](/deployment/observability/#disk-safety). |
 | `RWS_CONFIG_TRAFFIC_ENABLED` | on with the admin API | boolean | Count visitors (people, AI, bots) for the admin UI's Traffic page; `false` turns it off (since 18.15.0). |
 | `RWS_CONFIG_TRAFFIC_RETENTION_DAYS` | `30` | 1–90 | Days of traffic counts kept. |
@@ -2176,6 +2182,12 @@ proxy_protocol          = true       # RWS_CONFIG_PROXY_PROTOCOL: connections st
 access_log              = "/var/log/rws/access.log"  # RWS_CONFIG_ACCESS_LOG: write the access log here instead of stdout
 access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size (default 100M since 18.15.0); 0 = never (use logrotate + SIGUSR1)
 access_log_keep         = 5          # RWS_CONFIG_ACCESS_LOG_KEEP: rotated files kept (access.log.1 … .5)
+access_log_anonymize_ip = "truncate" # RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP: "off" (default) | "truncate" (IPv4 /24, IPv6 /48) | "hash"
+access_log_ip_hash_secret = "…"      # RWS_CONFIG_ACCESS_LOG_IP_HASH_SECRET: the key for "hash"
+log_redact_query        = ["token", "api_key"]  # RWS_CONFIG_LOG_REDACT_QUERY: these query values logged as REDACTED
+log_redact_headers      = ["x-api-key"]         # RWS_CONFIG_LOG_REDACT_HEADERS: these header values logged as REDACTED
+access_log_syslog       = "udp://127.0.0.1:514" # RWS_CONFIG_ACCESS_LOG_SYSLOG: also to syslog (udp://, tcp://, unix:///dev/log)
+access_log_syslog_facility = "local0"           # RWS_CONFIG_ACCESS_LOG_SYSLOG_FACILITY: default local0
 min_free_disk           = "2G"       # RWS_CONFIG_MIN_FREE_DISK: stop writing the access log / disk cache below this free (or "5%"); default max(1%, 1G); "0" = off
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
@@ -21468,6 +21480,102 @@ kubectl logs -f deployment/my-rws-app
 # Ship to Loki via Promtail — no application config required; just label the pod
 ```
 
+### Anonymised addresses and redaction
+
+Since 18.33.0 the access log can leave out what it doesn't need to keep
+about people. All of it is off by default, and then every line is byte for
+byte what it was; the settings are hot-reloadable.
+
+```toml
+access_log_anonymize_ip     = "truncate"            # or "hash"; default "off"
+# access_log_ip_hash_secret = "…"                   # the key for "hash"
+log_redact_query            = ["token", "api_key"]  # query parameter values → REDACTED
+log_redact_headers          = ["x-api-key"]         # header values → REDACTED
+```
+
+- **`access_log_anonymize_ip`**: `truncate` writes an IPv4 address as its
+  /24 and an IPv6 address as its /48 (`203.0.113.0`, `2001:db8:1::`), as
+  Google Analytics and nginx `map` recipes do. `hash` writes 16 hex digits
+  of HMAC-SHA256(`access_log_ip_hash_secret`, address) instead: one client
+  keeps one pseudonym, so you can still count and follow a client, but the
+  address can't be recovered without the key (and an IPv4 address space is
+  too small to hash without one — with no secret `hash` truncates). It
+  applies to the client address in JSON and combined lines, including the
+  one taken from a trusted proxy's `X-Forwarded-For`, to
+  [OTLP log records](#otlp-logs) and to the `recent_requests` list.
+  [Traffic insights](/deployment/traffic/) keep no addresses either way; the
+  [IP blocklist](/features/ip-filter/) and rate limits still see real ones.
+- **`log_redact_query`**: the values of these query parameters (any case)
+  are written as `REDACTED` in the logged path and `Referer`:
+  `/login?user=ann&token=REDACTED`.
+- **Headers.** An access-log line carries three request headers: `Host`,
+  `User-Agent` and `Referer` (JSON only). `Authorization`,
+  `Proxy-Authorization`, `Cookie` and `Set-Cookie` are never written —
+  not in the access log, not in `recent_requests`, and shown as `REDACTED`
+  in `Log::request_response`'s debugging dump. `log_redact_headers` adds
+  names whose values are written as `REDACTED` wherever a header is logged
+  (`user-agent`, `referer`, or your own in the dump).
+
+### Syslog
+
+`access_log_syslog` (since 18.33.0) sends every access-log line to a syslog
+server too, besides stdout or the [file](#writing-to-a-file):
+
+```toml
+log_format                 = "json"                 # what SIEMs parse best
+access_log_syslog          = "tcp://siem.internal:6514"   # or udp://host:514, unix:///dev/log
+access_log_syslog_facility = "local0"               # default; any facility name or 0–23
+```
+
+Each line is one RFC 5424 message, severity `info`, APP-NAME `rws`, MSGID
+`access`, the host name from `HOSTNAME` (else `/etc/hostname`):
+
+```
+<134>1 2026-11-04T12:00:00Z web-1 rws 4242 access - {"time":"2026-11-04T12:00:00Z","remote_addr":"203.0.113.0",…}
+```
+
+Over TCP messages are framed by octet counting (RFC 6587: `LEN SP MSG`),
+which rsyslog, syslog-ng, Splunk and Graylog accept; over UDP and Unix
+sockets each is one datagram. Nothing is sent on the request path: the
+background thread that flushes the access log every 100 ms hands each
+batch to the thread `rws-syslog`. While the server is unreachable up to
+8 MiB of lines wait, then lines are dropped; a TCP connection is re-made
+on the next batch. Read at startup; plain TCP only (put a local relay in
+front for TLS).
+
+### OTLP logs
+
+With `OTEL_LOGS_EXPORTER=otlp` (since 18.33.0) every access-log record also
+goes to an OpenTelemetry collector as an OTLP/HTTP JSON log record
+(`/v1/logs`), next to [metrics](#otlp-metrics-export) and
+[traces](#tracing):
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # logs go to /v1/logs
+export OTEL_LOGS_EXPORTER=otlp
+rws
+```
+
+| Variable | Meaning |
+|---|---|
+| `OTEL_LOGS_EXPORTER` | `otlp` turns log export on (off by default) |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Full logs URL, used as is; else the base URL + `/v1/logs`, else `http://localhost:4318/v1/logs` |
+| `OTEL_BLRP_SCHEDULE_DELAY` | Milliseconds between exports (default `1000`) |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | Request headers, `key=value,…` |
+
+A record's body is the access-log line (in `log_format`; JSON when that is
+`off`, so you can ship only OTLP), with the settings above applied. Its
+attributes are `http.request.method`, `url.path`,
+`http.response.status_code`, `client.address` and
+`network.protocol.version`; its severity INFO, WARN for 4xx and ERROR for
+5xx. When the request was traced (the binary traces when an OTLP endpoint
+is set), the record carries the server span's `traceId` and `spanId`, so a
+backend links each log line to its trace. Records are formatted into a
+buffer per thread and sent by the thread `rws-otlp-logs`; a thread with more
+than 1 MiB unsent drops records while the collector is down. The rest goes
+out on SIGTERM. From Rust: `otel::logs::start(LogsExportConfig { .. })` or
+`otel::logs::start_from_env()`.
+
 
 ## Tracing
 
@@ -21594,6 +21702,7 @@ rws ctl logs [-n 100] [-f]             # recent access-log lines; -f follows
 rws ctl traffic [--week | --month | --hours N] [--host example.com]
 rws ctl whoami                         # the token's user and role
 rws ctl audit [-n 50]                  # recent changes: who, what, when
+rws ctl audit --verify [FILE]          # check the audit log's hash chain (18.33.0)
 ```
 
 It finds the server the way the server finds its settings: `--admin
@@ -21664,6 +21773,43 @@ are kept in memory: `GET /admin/api/v1/audit?n=100`, `rws ctl audit`, and the
 lines (one per change, for your log shipper). Reads aren't recorded.
 `GET /admin/api/v1/whoami` (`rws ctl whoami`) says who a token is.
 
+### A tamper-evident audit log
+
+Since 18.33.0 every line rws appends to `audit_log` ends with two more
+fields, which make the file a hash chain:
+
+```json
+{"at":1793793600,"time":"…","user":"deploy-bot",…,"node":"web-1","prev":"9f86d0…","hash":"3a7bd3…"}
+```
+
+`prev` is the SHA-256 (hex) of the whole line before it in the file (64
+zeros for a new file's first line); `hash` is the SHA-256 of this line
+without its `,"hash":"…"`. Editing an entry breaks its `hash`; deleting,
+inserting or reordering entries breaks the next one's `prev`. Check a file:
+
+```sh
+rws ctl audit --verify                 # the server's audit_log, via GET /admin/api/v1/audit/verify
+rws ctl audit --verify audit.log.3     # a copy or an archived file, here, without the API
+# /var/log/rws/audit.log: intact — 1204 entries, 1204 chained
+# /var/log/rws/audit.log: BROKEN at line 731: the entry doesn't match its hash: it was changed
+```
+
+`--verify` exits 1 when the chain is broken (`--json` prints the report).
+
+- **Existing files** keep working: lines written before 18.33 have no hash
+  and are accepted until the first chained line, whose `prev` covers the last
+  of them. A line without a hash *after* the chain started is reported.
+- **Restarts** continue the chain from the file's last line. rws keeps the
+  hash of what it last wrote in memory, so an edit to the last line while
+  it runs is caught by the next entry.
+- **Rotation**: the first line of a new file has the last line of the old
+  one as its `prev`; the report says `continues_from` (offline, check the
+  old file too). Truncating the end of a file can't be detected from the
+  file alone — ship it to a log store as it is written (it's JSON lines) and
+  keep `rws ctl audit --verify` output alongside.
+- One rws process per file: replicas writing one shared file would
+  interleave two chains.
+
 ### Single sign-on for the admin UI
 
 People can sign in with your identity provider instead of pasting a token,
@@ -21706,6 +21852,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /status` | Version, process id, uptime, readiness, compile-time features, the main, redirect and admin listeners, and `disk`: each directory rws writes to with `free_bytes`, `total_bytes` and `low` (under `min_free_disk`, 18.15.0) |
 | `GET /whoami` | The caller: `{"user":"deploy-bot","role":"operator","via":"token"}` (`via`: `token` or `oidc`; 18.22.0) |
 | `GET /audit?n=100` | The newest changes and refused attempts, newest first (at most 1000): `at`, `time`, `user`, `role`, `via`, `address`, `method`, `path`, `detail` (body, secrets redacted), `status`, `node` |
+| `GET /audit/verify` | Check the `audit_log` file's [hash chain](#a-tamper-evident-audit-log) (18.33.0): `{"file":…,"ok":true,"entries":12,"chained":10,"unchained":2,"continues_from":null,"broken":null}`; when broken, `"broken":{"line":7,"reason":"…"}`. `404` without an `audit_log` file |
 | `GET /auth` | Without credentials: how to sign in, `{"token":true,"oidc":false}` (the UI's login page) |
 | `GET /config` | Every `RWS_CONFIG_*` setting in effect; values of names with `SECRET`, `PASSWORD` or `TOKEN` read `(hidden)` |
 | `POST /reload` | Reload the configuration and certificates, as `SIGHUP` does, and wait for it (up to 10 s): `{"reloaded":true,"applied":true,"reloads":3,"errors":[]}`. With errors (a config file that doesn't validate) `applied` is `false`, `errors` lists them and the running configuration stays. `503` while the server starts or stops, `504` when it didn't finish |
@@ -22425,6 +22572,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Server` | `server` | TCP listener, thread pool, TLS acceptor, and request loop. `Server::continue_response` / `expectation_failed_response` implement `Expect: 100-continue` / 417 on HTTP/1.1 |
 | `server::REQUEST_HEAD_TIMEOUT` | `server` | 30 s: a request head must complete within this of its first byte, else `408` |
 | `ServerConfig` | `server_config` | Typed snapshot of per-instance config (CORS, CSP, `client_hints`, `static_cache_control`, log format). `ServerConfig::current()` is the shared per-request snapshot; call `server_config::invalidate()` after a direct `std::env::set_var` |
+| `LogPrivacy`, `AnonymizeIp` | `server_config::log_privacy` | The access log's privacy settings (18.33.0): IP anonymisation (`truncate`, keyed `hash`), header and query-parameter redaction; `ServerConfig::log_privacy`. See [Anonymised addresses](/deployment/observability/#anonymised-addresses-and-redaction) |
 | `ConfigSnapshot` | `config_reload` | Hot-reloadable values, read with `config_reload::current()`. See [Hot reload](/features/hot-reload/) |
 | `config_reload::reload` / `config_reload::on_reload` | `config_reload` | Re-read `rws.config.toml` (also on `SIGHUP` and `POST /admin/config/reload`); register a closure run after every reload |
 | `ConfigReport` | `config_check` | Result of `config_check::check_file` / `check_str` (what `rws --check` runs): `errors`, `warnings`, `.is_ok()`, `.render(path)`, `.render_json(path)`. See [Config file](/configuration/config-file/) |
@@ -22543,6 +22691,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `LlmProxy` / `Provider` / `Api` | `llm` | One endpoint in front of OpenAI-compatible and Anthropic providers: virtual keys, provider fallback before the first byte, token budgets (memory or Redis), `rws_llm_*` metrics (18.9.0). See [LLM proxy](/proxy/llm-proxy/) |
 | `Mirror` / `MirrorLayer` | `proxy::mirror` | Copy a share of requests to other backends, fire-and-forget, through a bounded queue (18.11.0). See [Request mirroring](/proxy/config-driven/#request-mirroring) |
 | `AdminApi` / `AdminConfig` | `admin` | The admin API on its own listener behind a bearer token: `start(&config)`, or drive `AdminApi` as an `Application` (18.10.0). See [Admin API](/deployment/admin/) |
+| `admin::access::ChainReport`, `verify_chain`, `chain_line`, `line_hash` | `admin` | The audit log's hash chain: each file line's `prev`/`hash`, and its check (18.33.0). See [A tamper-evident audit log](/deployment/admin/#a-tamper-evident-audit-log) |
 | `WasmLayer` | `wasm_plugin` | WebAssembly middleware: a core module with no imports, fuel and memory limits, request and response hooks (`wasm-plugins` feature, 18.10.0). See [WebAssembly plugins](/features/wasm-plugins/) |
 | `UsageParser` / `Usage` | `llm` | Token usage out of a provider response fed in pieces, JSON or event stream (18.9.0) |
 | `InputRequired` / `PromptReply` | `mcp` | MCP 2026-07-28 multi round-trip requests: what a tool (`McpContent::input_required`) or prompt (`.prompt_with_context`) needs from the client — `.elicit`, `.sample`, `.list_roots`, `.state` (signed). See [Asking the client for input](/mcp/tools/#asking-the-client-for-input-mcp-2026-07-28) |
@@ -22603,6 +22752,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `Log` | `log` | Access log lines: `Log::json` / `Log::combined` return one line; `Log::log_access` buffers per thread; `Log::flush_access_log()` writes now. See [Observability](/deployment/observability/) |
+| `log::syslog::Sender`, `log::syslog::Target` | `log` | Access-log lines to syslog as RFC 5424 messages over UDP, TCP (octet counting) or a Unix socket (18.33.0). See [Syslog](/deployment/observability/#syslog) |
 | `OtelLayer` | `otel` | HTTP server root span, W3C `traceparent` propagation, stdout or OTLP export. See [Tracing](/features/tracing/) |
 | `otel::setup` / `setup_from_env` / `setup_with_exporter` | `otel` | Initialize the global tracer once at startup (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`) |
 | `otel::shutdown` / `otel::flush` | `otel` | Flush buffered spans; call `shutdown()` before exit |
@@ -22618,6 +22768,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `TracingConfig` | `otel` | Service name, exporter, sample rate, batch size |
 | `ExporterConfig` | `otel` | Built-in exporter choice |
 | `otel::metrics::MetricsExportConfig`, `otel::metrics::start` / `start_from_env` | `otel` | Push `http.server.request.duration` over OTLP/HTTP every interval. See [OTLP metrics export](/deployment/observability/#otlp-metrics-export) |
+| `otel::logs::LogsExportConfig`, `otel::logs::start` / `start_from_env`, `otel::logs::TraceIds` | `otel` | Access-log records as OTLP/HTTP JSON logs, with the request's trace and span ids (18.33.0). See [OTLP logs](/deployment/observability/#otlp-logs) |
 | `otel::parse_headers`, `otel::traces_configured` | `otel` | `OTEL_EXPORTER_OTLP_HEADERS` syntax; whether the environment asks for trace export |
 | `metrics::http::observe` | `metrics` | Record a request in `http_server_request_duration_seconds` (the server core does it for every request) |
 | `metrics::exposition::protobuf` / `accepts_protobuf` | `metrics` | Prometheus protobuf exposition (native histograms) and its `Accept` negotiation |

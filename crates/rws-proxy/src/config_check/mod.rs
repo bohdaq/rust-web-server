@@ -272,6 +272,23 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: expected \"shared\" or \"per-core\""));
                 }
             }
+            "RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP" => {
+                if crate::server_config::log_privacy::AnonymizeIp::parse(value).is_none() {
+                    report.error(format!("{key} = {value:?}: expected \"off\", \"truncate\" or \"hash\""));
+                }
+            }
+            "RWS_CONFIG_ACCESS_LOG_SYSLOG" => {
+                if !value.trim().is_empty() {
+                    if let Err(e) = crate::log::syslog::Target::parse(value) {
+                        report.error(format!("{key}: {e}"));
+                    }
+                }
+            }
+            "RWS_CONFIG_ACCESS_LOG_SYSLOG_FACILITY" => {
+                if let Err(e) = crate::log::syslog::parse_facility(value) {
+                    report.error(format!("{key}: {e}"));
+                }
+            }
             "RWS_CONFIG_LOG_FORMAT" => {
                 if !matches!(value.to_ascii_lowercase().as_str(), "combined" | "json" | "off" | "none") {
                     report.error(format!("{key} = {value:?}: expected \"combined\", \"json\" or \"off\""));

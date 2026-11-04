@@ -14,6 +14,10 @@
 //!   the body with secrets redacted, the status — kept in memory (the last
 //!   [`AUDIT_CAPACITY`]) and appended to `[admin] audit_log` when set. MCP
 //!   tools that change the server record here too.
+//! - **Tamper evidence** (18.33.0): each line appended to the file carries
+//!   `prev` (the SHA-256 of the line before it) and `hash` (of itself), so
+//!   [`verify_chain`] — `GET /admin/api/v1/audit/verify`, `rws ctl audit
+//!   --verify [FILE]` — finds an edited, removed or inserted entry.
 
 use std::collections::VecDeque;
 use std::io::Write;
@@ -199,16 +203,161 @@ pub fn redact(body: &[u8]) -> String {
 struct Audit {
     recent: VecDeque<AuditEntry>,
     file: Option<String>,
+    /// The `prev` of the next line appended to `file`: the hash of the last
+    /// line written (or found there at start). Kept in memory, not re-read,
+    /// so an edit to the file's last line can't be chained over.
+    chain_prev: String,
 }
 
 fn audit() -> &'static Mutex<Audit> {
     static AUDIT: OnceLock<Mutex<Audit>> = OnceLock::new();
-    AUDIT.get_or_init(|| Mutex::new(Audit { recent: VecDeque::new(), file: None }))
+    AUDIT.get_or_init(|| Mutex::new(Audit { recent: VecDeque::new(), file: None, chain_prev: CHAIN_START.to_string() }))
 }
 
-/// Append audit entries to `path` too (empty: memory only).
+/// Append audit entries to `path` too (empty: memory only). The hash
+/// chain continues from the file's last line.
 pub fn set_audit_file(path: &str) {
-    audit().lock().unwrap_or_else(|e| e.into_inner()).file = Some(path.trim().to_string()).filter(|p| !p.is_empty());
+    let file = Some(path.trim().to_string()).filter(|p| !p.is_empty());
+    let chain_prev = file.as_deref().and_then(last_line).map(|line| line_hash(&line)).unwrap_or_else(|| CHAIN_START.to_string());
+    let mut audit = audit().lock().unwrap_or_else(|e| e.into_inner());
+    audit.file = file;
+    audit.chain_prev = chain_prev;
+}
+
+// ── The hash chain (18.33.0) ─────────────────────────────────────────────────
+//
+// Each line appended to the file ends with `"prev":"<P>","hash":"<H>"}`:
+// P is the SHA-256 (hex) of the whole line before it in the file (64 zeros
+// for the first line of a new file), H the SHA-256 of this line as it reads
+// up to and including `"prev":"<P>"` and the closing `}` — i.e. the line
+// without its `,"hash":"<H>"`. Editing a line breaks its H; removing,
+// inserting or reordering lines breaks the next line's P. Lines without
+// them (written before 18.33) are accepted until the first chained line.
+
+/// The `prev` of a chain's first line.
+pub const CHAIN_START: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The SHA-256 of a whole line (without its newline), as the next line's `prev`.
+pub fn line_hash(line: &str) -> String {
+    hex(&crate::core::sha256::sha256(line.as_bytes()))
+}
+
+/// `json` (an [`AuditEntry::to_json`] object) as a chained file line after
+/// a line whose [`line_hash`] is `prev`.
+pub fn chain_line(json: &str, prev: &str) -> String {
+    let open = json.strip_suffix('}').unwrap_or(json);
+    let with_prev = format!("{open},\"prev\":\"{prev}\"}}");
+    let hash = line_hash(&with_prev);
+    format!("{open},\"prev\":\"{prev}\",\"hash\":\"{hash}\"}}")
+}
+
+/// A chained line's text without its hash, its `prev`, and its `hash`;
+/// `None` for a line without them.
+fn split_chained(line: &str) -> Option<(String, &str, &str)> {
+    let is_hash = |s: &str| s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    let body = line.strip_suffix("\"}")?;
+    let (rest, hash) = body.rsplit_once(",\"hash\":\"")?;
+    let (_, prev) = rest.rsplit_once(",\"prev\":\"")?;
+    let prev = prev.strip_suffix('"')?;
+    (is_hash(hash) && is_hash(prev)).then(|| (format!("{rest}}}"), prev, hash))
+}
+
+/// The last non-empty line of the file at `path`.
+fn last_line(path: &str) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    // Entries are a few KB at most; the tail holds the last one.
+    let start = len.saturating_sub(64 * 1024);
+    file.seek(SeekFrom::Start(start)).ok()?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail).ok()?;
+    let text = String::from_utf8_lossy(&tail);
+    text.lines().rev().find(|l| !l.trim().is_empty()).map(str::to_string)
+}
+
+/// What [`verify_chain`] found.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ChainReport {
+    /// Non-empty lines read.
+    pub entries: usize,
+    /// Lines carrying `prev` and `hash`, all verified.
+    pub chained: usize,
+    /// Lines from before the chain (no hash) at the start of the file.
+    pub unchained: usize,
+    /// The first chained line's `prev` when it isn't [`CHAIN_START`]: the
+    /// file continues one rotated away (or its start was cut off).
+    pub continues_from: Option<String>,
+    /// The first line (1-based) that fails, and why.
+    pub broken: Option<(usize, String)>,
+}
+
+impl ChainReport {
+    /// Nothing failed.
+    pub fn ok(&self) -> bool {
+        self.broken.is_none()
+    }
+
+    pub fn to_json(&self) -> String {
+        let continues = self.continues_from.as_deref().map_or("null".to_string(), |p| format!("\"{p}\""));
+        let broken = self.broken.as_ref().map_or("null".to_string(), |(line, why)| format!(r#"{{"line":{line},"reason":"{}"}}"#, json_escape(why)));
+        format!(
+            r#"{{"ok":{},"entries":{},"chained":{},"unchained":{},"continues_from":{continues},"broken":{broken}}}"#,
+            self.ok(),
+            self.entries,
+            self.chained,
+            self.unchained
+        )
+    }
+}
+
+/// Check an audit log's hash chain; stops at the first broken line.
+pub fn verify_chain(text: &str) -> ChainReport {
+    let mut report = ChainReport::default();
+    let mut previous: Option<&str> = None;
+    for (number, line) in text.lines().enumerate().map(|(i, l)| (i + 1, l.trim_end_matches('\r'))) {
+        if line.trim().is_empty() {
+            continue;
+        }
+        report.entries += 1;
+        match split_chained(line) {
+            None if report.chained > 0 => {
+                report.broken = Some((number, "no prev/hash after the chain started: the entry was changed, or written by something else".to_string()));
+                return report;
+            }
+            None => report.unchained += 1,
+            Some((without_hash, prev, hash)) => {
+                if line_hash(&without_hash) != hash {
+                    report.broken = Some((number, "the entry doesn't match its hash: it was changed".to_string()));
+                    return report;
+                }
+                match previous {
+                    Some(before) if line_hash(before) != prev => {
+                        report.broken = Some((number, "prev isn't the hash of the line before: an entry was removed, inserted or changed".to_string()));
+                        return report;
+                    }
+                    Some(_) => {}
+                    None if prev != CHAIN_START => report.continues_from = Some(prev.to_string()),
+                    None => {}
+                }
+                report.chained += 1;
+            }
+        }
+        previous = Some(line);
+    }
+    report
+}
+
+/// [`verify_chain`] on the configured `[admin] audit_log` file; `Err` when
+/// none is configured or it can't be read.
+pub fn verify_audit_file() -> Result<(String, ChainReport), String> {
+    let path = audit().lock().unwrap_or_else(|e| e.into_inner()).file.clone().ok_or("no [admin] audit_log file is configured")?;
+    let text = std::fs::read(&path).map_err(|e| format!("can't read {path}: {e}"))?;
+    Ok((path, verify_chain(&String::from_utf8_lossy(&text))))
 }
 
 /// This replica's name in audit entries and cluster heartbeats.
@@ -231,9 +380,11 @@ pub fn record(entry: AuditEntry) {
     }
     audit.recent.push_back(entry);
     if let Some(path) = audit.file.clone() {
-        let written = std::fs::OpenOptions::new().create(true).append(true).open(&path).and_then(|mut f| writeln!(f, "{line}"));
-        if let Err(e) = written {
-            eprintln!("[admin] can't append to the audit log {path}: {e}");
+        let chained = chain_line(&line, &audit.chain_prev);
+        let written = std::fs::OpenOptions::new().create(true).append(true).open(&path).and_then(|mut f| writeln!(f, "{chained}"));
+        match written {
+            Ok(()) => audit.chain_prev = line_hash(&chained),
+            Err(e) => eprintln!("[admin] can't append to the audit log {path}: {e}"),
         }
     }
 }

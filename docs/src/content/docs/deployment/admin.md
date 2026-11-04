@@ -43,6 +43,7 @@ rws ctl logs [-n 100] [-f]             # recent access-log lines; -f follows
 rws ctl traffic [--week | --month | --hours N] [--host example.com]
 rws ctl whoami                         # the token's user and role
 rws ctl audit [-n 50]                  # recent changes: who, what, when
+rws ctl audit --verify [FILE]          # check the audit log's hash chain (18.33.0)
 ```
 
 It finds the server the way the server finds its settings: `--admin
@@ -113,6 +114,43 @@ are kept in memory: `GET /admin/api/v1/audit?n=100`, `rws ctl audit`, and the
 lines (one per change, for your log shipper). Reads aren't recorded.
 `GET /admin/api/v1/whoami` (`rws ctl whoami`) says who a token is.
 
+### A tamper-evident audit log
+
+Since 18.33.0 every line rws appends to `audit_log` ends with two more
+fields, which make the file a hash chain:
+
+```json
+{"at":1793793600,"time":"…","user":"deploy-bot",…,"node":"web-1","prev":"9f86d0…","hash":"3a7bd3…"}
+```
+
+`prev` is the SHA-256 (hex) of the whole line before it in the file (64
+zeros for a new file's first line); `hash` is the SHA-256 of this line
+without its `,"hash":"…"`. Editing an entry breaks its `hash`; deleting,
+inserting or reordering entries breaks the next one's `prev`. Check a file:
+
+```sh
+rws ctl audit --verify                 # the server's audit_log, via GET /admin/api/v1/audit/verify
+rws ctl audit --verify audit.log.3     # a copy or an archived file, here, without the API
+# /var/log/rws/audit.log: intact — 1204 entries, 1204 chained
+# /var/log/rws/audit.log: BROKEN at line 731: the entry doesn't match its hash: it was changed
+```
+
+`--verify` exits 1 when the chain is broken (`--json` prints the report).
+
+- **Existing files** keep working: lines written before 18.33 have no hash
+  and are accepted until the first chained line, whose `prev` covers the last
+  of them. A line without a hash *after* the chain started is reported.
+- **Restarts** continue the chain from the file's last line. rws keeps the
+  hash of what it last wrote in memory, so an edit to the last line while
+  it runs is caught by the next entry.
+- **Rotation**: the first line of a new file has the last line of the old
+  one as its `prev`; the report says `continues_from` (offline, check the
+  old file too). Truncating the end of a file can't be detected from the
+  file alone — ship it to a log store as it is written (it's JSON lines) and
+  keep `rws ctl audit --verify` output alongside.
+- One rws process per file: replicas writing one shared file would
+  interleave two chains.
+
 ### Single sign-on for the admin UI
 
 People can sign in with your identity provider instead of pasting a token,
@@ -155,6 +193,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /status` | Version, process id, uptime, readiness, compile-time features, the main, redirect and admin listeners, and `disk`: each directory rws writes to with `free_bytes`, `total_bytes` and `low` (under `min_free_disk`, 18.15.0) |
 | `GET /whoami` | The caller: `{"user":"deploy-bot","role":"operator","via":"token"}` (`via`: `token` or `oidc`; 18.22.0) |
 | `GET /audit?n=100` | The newest changes and refused attempts, newest first (at most 1000): `at`, `time`, `user`, `role`, `via`, `address`, `method`, `path`, `detail` (body, secrets redacted), `status`, `node` |
+| `GET /audit/verify` | Check the `audit_log` file's [hash chain](#a-tamper-evident-audit-log) (18.33.0): `{"file":…,"ok":true,"entries":12,"chained":10,"unchained":2,"continues_from":null,"broken":null}`; when broken, `"broken":{"line":7,"reason":"…"}`. `404` without an `audit_log` file |
 | `GET /auth` | Without credentials: how to sign in, `{"token":true,"oidc":false}` (the UI's login page) |
 | `GET /config` | Every `RWS_CONFIG_*` setting in effect; values of names with `SECRET`, `PASSWORD` or `TOKEN` read `(hidden)` |
 | `POST /reload` | Reload the configuration and certificates, as `SIGHUP` does, and wait for it (up to 10 s): `{"reloaded":true,"applied":true,"reloads":3,"errors":[]}`. With errors (a config file that doesn't validate) `applied` is `false`, `errors` lists them and the running configuration stays. `503` while the server starts or stops, `504` when it didn't finish |

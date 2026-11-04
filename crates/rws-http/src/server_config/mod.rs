@@ -33,6 +33,9 @@ use std::sync::{Arc, RwLock};
 
 use crate::entry_point::Config;
 
+pub mod log_privacy;
+pub use log_privacy::LogPrivacy;
+
 /// Bumped whenever `RWS_CONFIG_*` variables change (see [`invalidate`]).
 static GENERATION: AtomicU64 = AtomicU64::new(1);
 
@@ -171,6 +174,10 @@ pub struct ServerConfig {
     // ── Server internals ──────────────────────────────────────────────────────
     /// `RWS_CONFIG_LOG_FORMAT` — `"json"` or `"combined"`. Default: `"json"`.
     pub log_format: String,
+    /// What the access log may say about clients (18.33.0):
+    /// `RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP`, `RWS_CONFIG_LOG_REDACT_HEADERS`,
+    /// `RWS_CONFIG_LOG_REDACT_QUERY`. Default: all off.
+    pub log_privacy: LogPrivacy,
     /// `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` — bytes allocated for
     /// incoming request parsing. Default: `10000`.
     pub request_allocation_size: i64,
@@ -207,6 +214,7 @@ impl Default for ServerConfig {
             compression_dictionaries: Vec::new(),
             directory_listing: true,
             log_format: Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE.to_string(),
+            log_privacy: LogPrivacy::default(),
             request_allocation_size: *Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES,
         }
     }
@@ -267,6 +275,7 @@ impl ServerConfig {
                 .collect(),
             directory_listing: !read("RWS_CONFIG_DIRECTORY_LISTING").eq_ignore_ascii_case("false"),
             log_format: read(Config::RWS_CONFIG_LOG_FORMAT),
+            log_privacy: LogPrivacy::from_env(),
             request_allocation_size: std::env::var(
                 Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES,
             )

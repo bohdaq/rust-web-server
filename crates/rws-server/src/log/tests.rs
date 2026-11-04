@@ -388,3 +388,104 @@ mod access_log_file {
         assert_eq!(None, parse_size("é"));
     }
 }
+
+// ── 18.33.0: IP anonymisation, header and query redaction ────────────────────
+
+mod privacy {
+    use super::{make_request, ok_response_with_body};
+    use crate::header::Header;
+    use crate::log::Log;
+    use crate::server_config::log_privacy::{AnonymizeIp, LogPrivacy};
+    use std::net::SocketAddr;
+
+    fn json(request: &crate::request::Request, peer: &str, privacy: &LogPrivacy) -> String {
+        let mut out = Vec::new();
+        Log::write_json_with(&mut out, request, &ok_response_with_body(b"hi"), &peer.parse::<SocketAddr>().unwrap(), privacy);
+        String::from_utf8(out).unwrap()
+    }
+
+    fn combined(request: &crate::request::Request, peer: &str, privacy: &LogPrivacy) -> String {
+        let mut out = Vec::new();
+        Log::write_combined_with(&mut out, request, &ok_response_with_body(b"hi"), &peer.parse::<SocketAddr>().unwrap(), privacy);
+        String::from_utf8(out).unwrap()
+    }
+
+    /// Everything after the timestamp, which changes every second.
+    fn after_time(line: &str) -> &str {
+        &line[line.find("\",\"remote_addr\"").unwrap()..]
+    }
+
+    fn request_with_headers() -> crate::request::Request {
+        let mut request = make_request("GET", "/login?user=ann&token=s3cr3t");
+        request.headers = vec![
+            Header::new("Host", "example.com".to_string()),
+            Header::new("User-Agent", "curl/8".to_string()),
+            Header::new("Referer", "https://example.com/p?api_key=k&x=1".to_string()),
+            Header::new("Authorization", "Bearer abc".to_string()),
+        ];
+        request
+    }
+
+    #[test]
+    fn with_everything_off_the_line_is_unchanged() {
+        let request = request_with_headers();
+        let line = json(&request, "203.0.113.77:5000", &LogPrivacy::default());
+        assert_eq!(
+            r#"","remote_addr":"203.0.113.77","method":"GET","path":"/login?user=ann&token=s3cr3t","protocol":"HTTP/1.1","status":200,"bytes":2,"host":"example.com","user_agent":"curl/8","referer":"https://example.com/p?api_key=k&x=1"}"#,
+            after_time(&line)
+        );
+        assert!(!line.contains("Bearer"), "Authorization was never logged: {line}");
+        let line = combined(&request, "[2001:db8:1:2::5]:5000", &LogPrivacy::default());
+        assert!(line.starts_with("2001:db8:1:2::5 - - ["), "{line}");
+        assert!(line.ends_with("] \"GET /login?user=ann&token=s3cr3t HTTP/1.1\" 200 2"), "{line}");
+    }
+
+    #[test]
+    fn truncated_addresses_and_redacted_queries_in_json() {
+        let privacy = LogPrivacy { anonymize_ip: AnonymizeIp::Truncate, redact_query: vec!["token".into(), "api_key".into()], ..LogPrivacy::default() };
+        let line = json(&request_with_headers(), "203.0.113.77:5000", &privacy);
+        assert_eq!(
+            r#"","remote_addr":"203.0.113.0","method":"GET","path":"/login?user=ann&token=REDACTED","protocol":"HTTP/1.1","status":200,"bytes":2,"host":"example.com","user_agent":"curl/8","referer":"https://example.com/p?api_key=REDACTED&x=1"}"#,
+            after_time(&line)
+        );
+    }
+
+    #[test]
+    fn listed_headers_are_redacted_in_json() {
+        let privacy = LogPrivacy { redact_headers: vec!["user-agent".into(), "referer".into()], ..LogPrivacy::default() };
+        let line = json(&request_with_headers(), "203.0.113.77:5000", &privacy);
+        assert!(line.ends_with(r#""host":"example.com","user_agent":"REDACTED","referer":"REDACTED"}"#), "{line}");
+        assert!(line.contains(r#""remote_addr":"203.0.113.77""#), "addresses untouched without anonymize_ip: {line}");
+    }
+
+    #[test]
+    fn combined_lines_are_anonymised_and_redacted() {
+        let privacy = LogPrivacy { anonymize_ip: AnonymizeIp::Truncate, redact_query: vec!["token".into()], ..LogPrivacy::default() };
+        let line = combined(&request_with_headers(), "[2001:db8:1:2::5]:5000", &privacy);
+        assert!(line.starts_with("2001:db8:1:: - - ["), "{line}");
+        assert!(line.ends_with("] \"GET /login?user=ann&token=REDACTED HTTP/1.1\" 200 2"), "{line}");
+        let hashed = LogPrivacy { anonymize_ip: AnonymizeIp::Hash, ip_hash_key: b"key".as_slice().into(), ..LogPrivacy::default() };
+        let line = combined(&request_with_headers(), "203.0.113.77:1", &hashed);
+        let pseudonym = &line[..line.find(' ').unwrap()];
+        assert_eq!(hashed.ip_string("203.0.113.77".parse().unwrap()), pseudonym);
+        assert!(!line.contains("203.0.113"), "{line}");
+    }
+
+    #[test]
+    fn the_debug_dump_redacts_credentials() {
+        let mut request = make_request("GET", "/");
+        request.headers = vec![
+            Header::new("Authorization", "Bearer abc".to_string()),
+            Header::new("Cookie", "session=xyz".to_string()),
+            Header::new("Accept", "*/*".to_string()),
+        ];
+        let mut response = ok_response_with_body(b"hi");
+        response.headers.push(Header::new("Set-Cookie", "session=new".to_string()));
+        let dump = Log::request_response(&request, &response, &"127.0.0.1:1".parse().unwrap());
+        assert!(dump.contains("Authorization: REDACTED") && dump.contains("Cookie: REDACTED") && dump.contains("Set-Cookie: REDACTED"), "{dump}");
+        assert!(dump.contains("Accept: */*"), "{dump}");
+        for secret in ["abc", "xyz", "session=new"] {
+            assert!(!dump.contains(secret), "{secret} in {dump}");
+        }
+    }
+}

@@ -99,6 +99,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Server` | `server` | TCP listener, thread pool, TLS acceptor, and request loop. `Server::continue_response` / `expectation_failed_response` implement `Expect: 100-continue` / 417 on HTTP/1.1 |
 | `server::REQUEST_HEAD_TIMEOUT` | `server` | 30 s: a request head must complete within this of its first byte, else `408` |
 | `ServerConfig` | `server_config` | Typed snapshot of per-instance config (CORS, CSP, `client_hints`, `static_cache_control`, log format). `ServerConfig::current()` is the shared per-request snapshot; call `server_config::invalidate()` after a direct `std::env::set_var` |
+| `LogPrivacy`, `AnonymizeIp` | `server_config::log_privacy` | The access log's privacy settings (18.33.0): IP anonymisation (`truncate`, keyed `hash`), header and query-parameter redaction; `ServerConfig::log_privacy`. See [Anonymised addresses](/deployment/observability/#anonymised-addresses-and-redaction) |
 | `ConfigSnapshot` | `config_reload` | Hot-reloadable values, read with `config_reload::current()`. See [Hot reload](/features/hot-reload/) |
 | `config_reload::reload` / `config_reload::on_reload` | `config_reload` | Re-read `rws.config.toml` (also on `SIGHUP` and `POST /admin/config/reload`); register a closure run after every reload |
 | `ConfigReport` | `config_check` | Result of `config_check::check_file` / `check_str` (what `rws --check` runs): `errors`, `warnings`, `.is_ok()`, `.render(path)`, `.render_json(path)`. See [Config file](/configuration/config-file/) |
@@ -217,6 +218,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `LlmProxy` / `Provider` / `Api` | `llm` | One endpoint in front of OpenAI-compatible and Anthropic providers: virtual keys, provider fallback before the first byte, token budgets (memory or Redis), `rws_llm_*` metrics (18.9.0). See [LLM proxy](/proxy/llm-proxy/) |
 | `Mirror` / `MirrorLayer` | `proxy::mirror` | Copy a share of requests to other backends, fire-and-forget, through a bounded queue (18.11.0). See [Request mirroring](/proxy/config-driven/#request-mirroring) |
 | `AdminApi` / `AdminConfig` | `admin` | The admin API on its own listener behind a bearer token: `start(&config)`, or drive `AdminApi` as an `Application` (18.10.0). See [Admin API](/deployment/admin/) |
+| `admin::access::ChainReport`, `verify_chain`, `chain_line`, `line_hash` | `admin` | The audit log's hash chain: each file line's `prev`/`hash`, and its check (18.33.0). See [A tamper-evident audit log](/deployment/admin/#a-tamper-evident-audit-log) |
 | `WasmLayer` | `wasm_plugin` | WebAssembly middleware: a core module with no imports, fuel and memory limits, request and response hooks (`wasm-plugins` feature, 18.10.0). See [WebAssembly plugins](/features/wasm-plugins/) |
 | `UsageParser` / `Usage` | `llm` | Token usage out of a provider response fed in pieces, JSON or event stream (18.9.0) |
 | `InputRequired` / `PromptReply` | `mcp` | MCP 2026-07-28 multi round-trip requests: what a tool (`McpContent::input_required`) or prompt (`.prompt_with_context`) needs from the client — `.elicit`, `.sample`, `.list_roots`, `.state` (signed). See [Asking the client for input](/mcp/tools/#asking-the-client-for-input-mcp-2026-07-28) |
@@ -277,6 +279,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `Log` | `log` | Access log lines: `Log::json` / `Log::combined` return one line; `Log::log_access` buffers per thread; `Log::flush_access_log()` writes now. See [Observability](/deployment/observability/) |
+| `log::syslog::Sender`, `log::syslog::Target` | `log` | Access-log lines to syslog as RFC 5424 messages over UDP, TCP (octet counting) or a Unix socket (18.33.0). See [Syslog](/deployment/observability/#syslog) |
 | `OtelLayer` | `otel` | HTTP server root span, W3C `traceparent` propagation, stdout or OTLP export. See [Tracing](/features/tracing/) |
 | `otel::setup` / `setup_from_env` / `setup_with_exporter` | `otel` | Initialize the global tracer once at startup (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`) |
 | `otel::shutdown` / `otel::flush` | `otel` | Flush buffered spans; call `shutdown()` before exit |
@@ -292,6 +295,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `TracingConfig` | `otel` | Service name, exporter, sample rate, batch size |
 | `ExporterConfig` | `otel` | Built-in exporter choice |
 | `otel::metrics::MetricsExportConfig`, `otel::metrics::start` / `start_from_env` | `otel` | Push `http.server.request.duration` over OTLP/HTTP every interval. See [OTLP metrics export](/deployment/observability/#otlp-metrics-export) |
+| `otel::logs::LogsExportConfig`, `otel::logs::start` / `start_from_env`, `otel::logs::TraceIds` | `otel` | Access-log records as OTLP/HTTP JSON logs, with the request's trace and span ids (18.33.0). See [OTLP logs](/deployment/observability/#otlp-logs) |
 | `otel::parse_headers`, `otel::traces_configured` | `otel` | `OTEL_EXPORTER_OTLP_HEADERS` syntax; whether the environment asks for trace export |
 | `metrics::http::observe` | `metrics` | Record a request in `http_server_request_duration_seconds` (the server core does it for every request) |
 | `metrics::exposition::protobuf` / `accepts_protobuf` | `metrics` | Prometheus protobuf exposition (native histograms) and its `Accept` negotiation |
