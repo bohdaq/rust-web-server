@@ -246,3 +246,25 @@ fn an_untrusted_peer_cant_claim_another_address() {
     let r = forwarded_for("10.0.0.7");
     assert_eq!(allow.handle(&r, &conn("203.0.113.9"), &OkApp).unwrap().status_code, 403);
 }
+
+#[test]
+fn the_scheme_comes_from_a_trusted_proxy_only() {
+    use crate::ip_filter::{request_scheme_with, TrustedProxies};
+    let trusted = TrustedProxies::parse("10.0.0.0/8").unwrap();
+    let with = |name: &str, value: &str| {
+        let mut r = get("/");
+        r.headers.push(crate::header::Header::new(name.to_string(), value.to_string()));
+        r
+    };
+    // A TLS connection is https whatever the headers say.
+    assert_eq!("https", request_scheme_with(&get("/"), "203.0.113.9", true, &trusted, true));
+    // Behind the gateway that terminated TLS.
+    assert_eq!("https", request_scheme_with(&with("X-Forwarded-Proto", "https"), "10.0.0.3", false, &trusted, true));
+    assert_eq!("https", request_scheme_with(&with("X-Forwarded-Proto", "HTTPS, http"), "10.0.0.3", false, &trusted, true));
+    assert_eq!("https", request_scheme_with(&with("Forwarded", "for=203.0.113.9;proto=https, for=10.0.0.1"), "10.0.0.3", false, &trusted, true));
+    assert_eq!("http", request_scheme_with(&with("X-Forwarded-Proto", "http"), "10.0.0.3", false, &trusted, true));
+    assert_eq!("http", request_scheme_with(&get("/"), "10.0.0.3", false, &trusted, true));
+    // A client on the internet can't claim it; nor anyone with client_ip = "peer".
+    assert_eq!("http", request_scheme_with(&with("X-Forwarded-Proto", "https"), "203.0.113.9", false, &trusted, true));
+    assert_eq!("http", request_scheme_with(&with("X-Forwarded-Proto", "https"), "10.0.0.3", false, &trusted, false));
+}

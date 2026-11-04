@@ -10,7 +10,15 @@ rust-version.workspace = true
 license.workspace = true
 
 [lints.rust]
-unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)'] }
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)', 'cfg(docsrs)'] }
+
+# docs.rs shows every feature's items, each labelled with the features it
+# needs (`--cfg docsrs` turns on `doc_cfg` in lib.rs). Every feature but
+# `test-support` (test helpers, not API).
+[package.metadata.docs.rs]
+features = ["http2", "tower"]
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
 
 [features]
 default = ["tower"]

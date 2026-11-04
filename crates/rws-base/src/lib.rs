@@ -6,6 +6,7 @@
 //! these through the `rust_web_server` paths (`rust_web_server::core`,
 //! `rust_web_server::mime_type`, …), which stay stable; this crate's own
 //! layout may change in any release. See `spec/WORKSPACE_SPLIT.md`.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod core;
 pub mod ext;

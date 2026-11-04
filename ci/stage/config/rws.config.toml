@@ -368,3 +368,62 @@ address = "php:9000"
 root    = "/var/www"
 [route.action.params]
 APP_ENV = "e2e"
+
+# ── S7 AI: gateways in front of the test app (manifests/app.yaml) ────────────
+# MCP gateway: the app's MCP server as upstream, its tools as app__*.
+[[route]]
+name = "mcp"
+[route.match]
+path = "/e2e/mcp"
+[route.action]
+type = "mcp"
+[route.action.mcp]
+name         = "e2e-gateway"
+refresh_secs = 60
+audit_log    = true
+[[route.action.mcp.upstream]]
+prefix      = "app"
+url         = "http://app:8080/mcp"
+headers_env = { Authorization = "E2E_APP_MCP_AUTH" }
+[[route.action.mcp.caller]]
+identity  = "e2e"
+token_env = "E2E_MCP_CALLER"
+[[route.action.mcp.allow]]
+identity = "e2e"
+tools    = ["app__add"]
+[[route.action.mcp.limit]]
+tools       = "app__add"
+max_calls   = 5
+window_secs = 3600
+
+# A2A gateway: the app's echo agent.
+[[route]]
+name = "a2a"
+[route.match]
+path = "/e2e/a2a/*"
+[route.action]
+type = "a2a"
+[route.action.a2a]
+upstream  = "http://app:8080"
+audit_log = true
+
+# LLM proxy: the app's mock OpenAI-compatible server, one virtual key with a
+# budget of 40 tokens an hour (each answer reports 15), shared through valkey.
+[[route]]
+name = "llm"
+[route.match]
+path = "/v1/*"
+[route.action]
+type = "llm"
+[route.action.llm]
+audit_log = true
+redis     = "valkey:6379"
+[[route.action.llm.provider]]
+name = "mock"
+api  = "openai"
+url  = "http://app:8080"
+[[route.action.llm.key]]
+identity      = "e2e"
+key_env       = "E2E_LLM_KEY"
+budget_tokens = 40
+window_secs   = 3600

@@ -130,7 +130,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `SqlStore` | `authz::sql` (`model-*`) | Relationship tuples in SQLite / Postgres / MySQL (`rws_authz_tuples`), 1 s read cache, own runtime (18.14.0). See [Authorization](/features/authorization/#storing-tuples-in-a-database) |
 | `AuthzLayer` / `ObjectTemplate` | `authz` | Middleware: the caller needs a relation on an object named from the request (`doc:{path:2}`, `{query:k}`, `{header:H}`); 401 / 403 (18.14.0). See [Authorization](/features/authorization/#protecting-routes) |
 | `ForwardAuthLayer` | `auth::forward` (`auth`) | Delegates allow/deny to an external HTTP service; verbatim pass-through on non-2xx, 502 if unreachable |
-| `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry. See [IP filter](/features/ip-filter/) |
+| `IpFilter` | `ip_filter` | IPv4/IPv6 address or CIDR allowlist/denylist; `ip_filter::is_valid_entry` checks an entry; `ip_filter::client_ip` / `request_scheme` give the client's address and scheme behind a trusted proxy. See [IP filter](/features/ip-filter/) |
 | `Blocklist` | `blocklist` | Runtime IP blocklist: `blocklist::global().block(ip)` / `.unblock` / `.is_blocked` / `.list` / `.clear` |
 | `BlocklistLayer` | `blocklist` | Answers `403` for blocked client IPs |
 | `MaintenanceLayer` / `MAINTENANCE_MODE` | `maintenance` | While the `AtomicBool` is `true`, answers `503` for everything but `/healthz` and `/readyz` |

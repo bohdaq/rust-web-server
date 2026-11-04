@@ -2,3 +2,4 @@
 # A case listed here reports KNOWN instead of FAIL.
 S9.4: spec/STAGE_E2E_FINDINGS.md S9.4 (fixed on main, not in a release image yet)
 S9.5: spec/STAGE_E2E_FINDINGS.md S9.4 (fixed on main, not in a release image yet)
+S4.6: spec/STAGE_E2E_FINDINGS.md 'S4 IdP and RP' (AuthServer signs HS256, empty JWKS)
