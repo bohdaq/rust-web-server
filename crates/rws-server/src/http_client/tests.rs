@@ -389,3 +389,48 @@ fn the_host_header_carries_a_non_default_port() {
     let request = seen.join().unwrap();
     assert!(request.contains(&format!("Host: 127.0.0.1:{port}\r\n")), "{request}");
 }
+
+/// `Client::ca_file`: an HTTPS server whose certificate a private CA signed
+/// is trusted with that CA, and refused with the public roots.
+#[test]
+fn a_private_ca_is_trusted_with_ca_file() {
+    use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
+    use std::io::{Read, Write};
+    let ca_key = KeyPair::generate().unwrap();
+    let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+    let issuer = Issuer::new(ca_params, ca_key);
+    let server_key = KeyPair::generate().unwrap();
+    let server_cert = CertificateParams::new(vec!["localhost".to_string()]).unwrap().signed_by(&server_key, &issuer).unwrap();
+
+    let config = std::sync::Arc::new(
+        rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(crate::crypto_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![server_cert.der().clone()], rustls::pki_types::PrivateKeyDer::try_from(server_key.serialize_der()).unwrap())
+            .unwrap(),
+    );
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().take(2) {
+            let Ok(tcp) = stream else { continue };
+            let conn = rustls::ServerConnection::new(config.clone()).unwrap();
+            let mut tls = rustls::StreamOwned::new(conn, tcp);
+            let mut buf = [0u8; 1024];
+            if tls.read(&mut buf).is_ok() {
+                let _ = tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nprivate");
+                let _ = tls.flush();
+            }
+        }
+    });
+    let url = format!("https://localhost:{port}/");
+    assert!(crate::http_client::Client::new().get(&url).send().is_err(), "the public roots don't know this CA");
+    let ca = crate::test_env::TempPath::new("http-client-ca.pem");
+    std::fs::write(&*ca, ca_cert.pem()).unwrap();
+    let client = crate::http_client::Client::new().ca_file(&ca.to_string_lossy()).unwrap();
+    assert_eq!("private", client.get(&url).send().unwrap().text().unwrap());
+    assert!(crate::http_client::Client::new().ca_file("/nonexistent.pem").is_err());
+}

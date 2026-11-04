@@ -36,6 +36,30 @@ Unlike most feature pairs in this crate, `model-sqlite`, `model-postgres`, and `
 | `RWS_DB_NAME` | **required** | File path for SQLite; use `:memory:` for in-memory |
 | `RWS_DB_POOL_SIZE` | `10` | Maximum number of connections in the pool |
 
+### TLS
+
+`DbPool::from_env()` also reads how PostgreSQL and MySQL connections use
+TLS (`DbTls::from_env()`; SQLite ignores it). A managed database usually
+requires TLS with a certificate from its own CA: give rws that CA and
+`verify-full`.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RWS_DB_SSL_MODE` | `prefer` | `disable`, `prefer` (TLS if the server offers it, certificate not checked), `require` (always TLS, not checked), `verify-ca` (signed by a trusted CA), `verify-full` (and names the host). MySQL's spellings (`required`, `verify_identity`) work too |
+| `RWS_DB_SSL_ROOT_CERT` | the system's roots | PEM file with the CA certificates that sign the server's certificate |
+| `RWS_DB_SSL_CLIENT_CERT` | — | PEM client certificate, for servers that require one; needs `RWS_DB_SSL_CLIENT_KEY` |
+| `RWS_DB_SSL_CLIENT_KEY` | — | Its private key |
+
+```bash
+RWS_DB_HOST=app-db.shop.svc RWS_DB_NAME=app RWS_DB_USER=owner RWS_DB_PASSWORD=… \
+RWS_DB_SSL_MODE=verify-full RWS_DB_SSL_ROOT_CERT=/etc/db/ca.crt ./app
+```
+
+In code, `DbPool::new_with_tls(config, DbTls { mode: DbSslMode::VerifyFull, root_cert: Some("/etc/db/ca.crt".into()), ..DbTls::default() })`.
+`DbPool::new(config)` keeps the default, `prefer`. User and password go to
+the driver as they are, so they may hold any character (`@`, `:`, `/` broke
+the connection URL before 18.28.0).
+
 ## Quick start
 
 The typical startup sequence is: read config, create pool, run migrations, then serve requests. All pool operations are `async fn`.

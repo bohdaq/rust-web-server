@@ -9,9 +9,65 @@
 use std::future::Future;
 
 use super::backend::Backend;
-use super::connection::DbConfig;
+use super::connection::{DbConfig, DbTls};
 use super::migration;
 use super::{DbError, Model, ModelRow, MigrationStatus, Value};
+
+// ── Connect options ───────────────────────────────────────────────────────────
+
+#[cfg(feature = "model-postgres")]
+#[doc(hidden)]
+pub fn pg_options(config: &DbConfig, tls: &DbTls) -> sqlx::postgres::PgConnectOptions {
+    use super::connection::DbSslMode;
+    use sqlx::postgres::{PgConnectOptions, PgSslMode};
+    let mut options = PgConnectOptions::new_without_pgpass()
+        .host(&config.host)
+        .port(config.port)
+        .username(&config.user)
+        .password(&config.password)
+        .database(&config.database)
+        .ssl_mode(match tls.mode {
+            DbSslMode::Disable => PgSslMode::Disable,
+            DbSslMode::Prefer => PgSslMode::Prefer,
+            DbSslMode::Require => PgSslMode::Require,
+            DbSslMode::VerifyCa => PgSslMode::VerifyCa,
+            DbSslMode::VerifyFull => PgSslMode::VerifyFull,
+        });
+    if let Some(ca) = &tls.root_cert {
+        options = options.ssl_root_cert(ca);
+    }
+    if let (Some(cert), Some(key)) = (&tls.client_cert, &tls.client_key) {
+        options = options.ssl_client_cert(cert).ssl_client_key(key);
+    }
+    options
+}
+
+#[cfg(feature = "model-mysql")]
+#[doc(hidden)]
+pub fn mysql_options(config: &DbConfig, tls: &DbTls) -> sqlx::mysql::MySqlConnectOptions {
+    use super::connection::DbSslMode;
+    use sqlx::mysql::{MySqlConnectOptions, MySqlSslMode};
+    let mut options = MySqlConnectOptions::new()
+        .host(&config.host)
+        .port(config.port)
+        .username(&config.user)
+        .password(&config.password)
+        .database(&config.database)
+        .ssl_mode(match tls.mode {
+            DbSslMode::Disable => MySqlSslMode::Disabled,
+            DbSslMode::Prefer => MySqlSslMode::Preferred,
+            DbSslMode::Require => MySqlSslMode::Required,
+            DbSslMode::VerifyCa => MySqlSslMode::VerifyCa,
+            DbSslMode::VerifyFull => MySqlSslMode::VerifyIdentity,
+        });
+    if let Some(ca) = &tls.root_cert {
+        options = options.ssl_ca(ca);
+    }
+    if let (Some(cert), Some(key)) = (&tls.client_cert, &tls.client_key) {
+        options = options.ssl_client_cert(cert).ssl_client_key(key);
+    }
+    options
+}
 
 // ── DbPool ────────────────────────────────────────────────────────────────────
 
@@ -31,15 +87,31 @@ pub enum DbPool {
 }
 
 impl DbPool {
-    /// Create a new pool for `config.backend`, with the given configuration.
+    /// Create a new pool for `config.backend`, with the given configuration
+    /// and the default TLS ([`DbTls::default`]: TLS when the server offers
+    /// it, certificate not checked).
     pub async fn new(config: DbConfig) -> Result<Self, DbError> {
-        let url = config.to_url();
+        DbPool::new_with_tls(config, DbTls::default()).await
+    }
+
+    /// As [`DbPool::new`], with `tls` for PostgreSQL and MySQL (SQLite
+    /// ignores it). User and password are passed as they are, not through a
+    /// URL, so any characters work.
+    pub async fn new_with_tls(config: DbConfig, tls: DbTls) -> Result<Self, DbError> {
+        let _ = &tls;
+        // sqlx builds its rustls config with `ClientConfig::builder()`, which
+        // panics when no process-wide crypto provider is installed — so far
+        // only rws's TLS listener installed one, and an app serving plain
+        // HTTP behind a load balancer panicked at its first TLS connection to
+        // the database. Install rws's (aws-lc-rs) unless one is set already.
+        #[cfg(any(feature = "model-postgres", feature = "model-mysql"))]
+        let _ = crate::crypto_provider().install_default();
         match config.backend {
             #[cfg(feature = "model-sqlite")]
             Backend::Sqlite => {
                 let pool = sqlx::pool::PoolOptions::<sqlx::Sqlite>::new()
                     .max_connections(config.pool_size)
-                    .connect(&url)
+                    .connect(&config.to_url())
                     .await
                     .map_err(|e| DbError::new(e.to_string()))?;
                 Ok(DbPool::Sqlite(pool))
@@ -48,7 +120,7 @@ impl DbPool {
             Backend::Postgres => {
                 let pool = sqlx::pool::PoolOptions::<sqlx::Postgres>::new()
                     .max_connections(config.pool_size)
-                    .connect(&url)
+                    .connect_with(pg_options(&config, &tls))
                     .await
                     .map_err(|e| DbError::new(e.to_string()))?;
                 Ok(DbPool::Postgres(pool))
@@ -57,7 +129,7 @@ impl DbPool {
             Backend::MySql => {
                 let pool = sqlx::pool::PoolOptions::<sqlx::MySql>::new()
                     .max_connections(config.pool_size)
-                    .connect(&url)
+                    .connect_with(mysql_options(&config, &tls))
                     .await
                     .map_err(|e| DbError::new(e.to_string()))?;
                 Ok(DbPool::MySql(pool))
@@ -65,9 +137,9 @@ impl DbPool {
         }
     }
 
-    /// Create a pool using [`DbConfig::from_env`].
+    /// Create a pool using [`DbConfig::from_env`] and [`DbTls::from_env`].
     pub async fn from_env() -> Result<Self, DbError> {
-        DbPool::new(DbConfig::from_env()?).await
+        DbPool::new_with_tls(DbConfig::from_env()?, DbTls::from_env()?).await
     }
 
     /// Create a pool backed by a SQLite in-memory database.
