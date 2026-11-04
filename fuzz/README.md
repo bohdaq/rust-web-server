@@ -16,7 +16,7 @@ cargo install cargo-fuzz
 | `range` | `Range::parse_range_in_content_range`, `Content-Range` | clients / backends |
 | `json` | `JSON::parse_as_properties`, `JSONProperty::parse` | request bodies |
 | `mcp` | `McpServer::handle_request` (JSON-RPC, batches) | MCP clients |
-| `form` | url-encoded + multipart form bodies | request bodies |
+| `form` | url-encoded + multipart form bodies; the `Query<T>`/`Form<T>` deserializer | request bodies, query strings |
 | `url` | `URL::parse_request_target` | request targets |
 | `jwt` | `auth::verify_jwt` | bearer tokens |
 | `saml_xml` | the SAML XML parser (via `fuzz_api`) | `POST /saml/acs`, unauthenticated |

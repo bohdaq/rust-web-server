@@ -103,3 +103,17 @@ fn from_request_trait_impl_works() {
     let Json(user) = <Json<User> as FromRequest>::from_request(&req).unwrap();
     assert_eq!("Grace", user.name);
 }
+
+#[test]
+fn json_is_an_into_response_value() {
+    use crate::error::IntoResponse;
+    #[derive(Serialize)]
+    struct Out { id: u32 }
+    fn respond<R: IntoResponse>(r: R) -> crate::response::Response { r.into_response() }
+    let r = respond(Json(Out { id: 7 }));
+    assert_eq!(200, r.status_code);
+    assert_eq!(MimeType::APPLICATION_JSON, r.content_range_list[0].content_type);
+    assert_eq!(br#"{"id":7}"#.to_vec(), r.content_range_list[0].body);
+    let failed: Result<Json<Out>, crate::error::AppError> = Err(crate::error::AppError::Conflict("taken".into()));
+    assert_eq!(409, respond(failed).status_code);
+}

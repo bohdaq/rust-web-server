@@ -363,6 +363,8 @@ impl core::clone::Clone for rust_web_server::response::ResponseStatusCodeReasonP
 impl core::clone::Clone for rust_web_server::response::StatusCodeReasonPhrase
 impl core::clone::Clone for rust_web_server::response::Trailers
 impl core::clone::Clone for rust_web_server::router::PathParams
+impl core::clone::Clone for rust_web_server::router::RouteConflict
+impl core::clone::Clone for rust_web_server::router::RouteConflictKind
 impl core::clone::Clone for rust_web_server::router::RouteInfo
 impl core::clone::Clone for rust_web_server::router::Router
 impl core::clone::Clone for rust_web_server::rsa_key::RsaPublicKey
@@ -467,6 +469,8 @@ impl core::cmp::Eq for rust_web_server::response::Error
 impl core::cmp::Eq for rust_web_server::response::Response
 impl core::cmp::Eq for rust_web_server::response::ResponseStatusCodeReasonPhrase
 impl core::cmp::Eq for rust_web_server::response::StatusCodeReasonPhrase
+impl core::cmp::Eq for rust_web_server::router::RouteConflict
+impl core::cmp::Eq for rust_web_server::router::RouteConflictKind
 impl core::cmp::Eq for rust_web_server::rsa_key::RsaPublicKey
 impl core::cmp::Eq for rust_web_server::server::proxy_protocol::Parsed
 impl core::cmp::Eq for rust_web_server::sse::SseClosed
@@ -669,6 +673,8 @@ impl core::cmp::PartialEq for rust_web_server::response::Error
 impl core::cmp::PartialEq for rust_web_server::response::Response
 impl core::cmp::PartialEq for rust_web_server::response::ResponseStatusCodeReasonPhrase
 impl core::cmp::PartialEq for rust_web_server::response::StatusCodeReasonPhrase
+impl core::cmp::PartialEq for rust_web_server::router::RouteConflict
+impl core::cmp::PartialEq for rust_web_server::router::RouteConflictKind
 impl core::cmp::PartialEq for rust_web_server::rsa_key::RsaPublicKey
 impl core::cmp::PartialEq for rust_web_server::server::proxy_protocol::Parsed
 impl core::cmp::PartialEq for rust_web_server::server_config::ServerConfig
@@ -1120,6 +1126,8 @@ impl core::fmt::Debug for rust_web_server::response::Response
 impl core::fmt::Debug for rust_web_server::response::ResponseStatusCodeReasonPhrase
 impl core::fmt::Debug for rust_web_server::response::StatusCodeReasonPhrase
 impl core::fmt::Debug for rust_web_server::response::Trailers
+impl core::fmt::Debug for rust_web_server::router::RouteConflict
+impl core::fmt::Debug for rust_web_server::router::RouteConflictKind
 impl core::fmt::Debug for rust_web_server::rsa_key::RsaPublicKey
 impl core::fmt::Debug for rust_web_server::scheduler::cron::CronSchedule
 impl core::fmt::Debug for rust_web_server::server::proxy_protocol::Parsed
@@ -1166,6 +1174,7 @@ impl core::fmt::Display for rust_web_server::json::property::JSONValue
 impl core::fmt::Display for rust_web_server::model::DbError
 impl core::fmt::Display for rust_web_server::null::Null
 impl core::fmt::Display for rust_web_server::request::Request
+impl core::fmt::Display for rust_web_server::router::RouteConflict
 impl core::fmt::Display for rust_web_server::sse::SseClosed
 impl core::fmt::Display for rust_web_server::sso::SsoError
 impl core::fmt::Display for rust_web_server::storage::StorageError
@@ -1199,6 +1208,7 @@ impl core::marker::Copy for rust_web_server::model::query::Order
 impl core::marker::Copy for rust_web_server::otel::SpanKind
 impl core::marker::Copy for rust_web_server::otel::TraceContext
 impl core::marker::Copy for rust_web_server::proxy::status::ProxyError
+impl core::marker::Copy for rust_web_server::router::RouteConflictKind
 impl core::marker::Copy for rust_web_server::sse::SseClosed
 impl core::marker::Copy for rust_web_server::sso::client_store::GrantType
 impl core::marker::Copy for rust_web_server::traffic::Group
@@ -1558,6 +1568,8 @@ impl core::marker::Freeze for rust_web_server::response::StatusCodeReasonPhrase
 impl core::marker::Freeze for rust_web_server::response::Trailers
 impl core::marker::Freeze for rust_web_server::rewrite::RewriteLayer
 impl core::marker::Freeze for rust_web_server::router::PathParams
+impl core::marker::Freeze for rust_web_server::router::RouteConflict
+impl core::marker::Freeze for rust_web_server::router::RouteConflictKind
 impl core::marker::Freeze for rust_web_server::router::RouteInfo
 impl core::marker::Freeze for rust_web_server::router::Router
 impl core::marker::Freeze for rust_web_server::rsa_key::RsaPublicKey
@@ -2003,6 +2015,8 @@ impl core::marker::Send for rust_web_server::response::StatusCodeReasonPhrase
 impl core::marker::Send for rust_web_server::response::Trailers
 impl core::marker::Send for rust_web_server::rewrite::RewriteLayer
 impl core::marker::Send for rust_web_server::router::PathParams
+impl core::marker::Send for rust_web_server::router::RouteConflict
+impl core::marker::Send for rust_web_server::router::RouteConflictKind
 impl core::marker::Send for rust_web_server::router::RouteInfo
 impl core::marker::Send for rust_web_server::router::Router
 impl core::marker::Send for rust_web_server::rsa_key::RsaPublicKey
@@ -2265,6 +2279,8 @@ impl core::marker::StructuralPartialEq for rust_web_server::request::Request
 impl core::marker::StructuralPartialEq for rust_web_server::response::Error
 impl core::marker::StructuralPartialEq for rust_web_server::response::ResponseStatusCodeReasonPhrase
 impl core::marker::StructuralPartialEq for rust_web_server::response::StatusCodeReasonPhrase
+impl core::marker::StructuralPartialEq for rust_web_server::router::RouteConflict
+impl core::marker::StructuralPartialEq for rust_web_server::router::RouteConflictKind
 impl core::marker::StructuralPartialEq for rust_web_server::server::proxy_protocol::Parsed
 impl core::marker::StructuralPartialEq for rust_web_server::server_config::ServerConfig
 impl core::marker::StructuralPartialEq for rust_web_server::sse::SseClosed
@@ -2651,6 +2667,8 @@ impl core::marker::Sync for rust_web_server::response::StatusCodeReasonPhrase
 impl core::marker::Sync for rust_web_server::response::Trailers
 impl core::marker::Sync for rust_web_server::rewrite::RewriteLayer
 impl core::marker::Sync for rust_web_server::router::PathParams
+impl core::marker::Sync for rust_web_server::router::RouteConflict
+impl core::marker::Sync for rust_web_server::router::RouteConflictKind
 impl core::marker::Sync for rust_web_server::router::RouteInfo
 impl core::marker::Sync for rust_web_server::router::Router
 impl core::marker::Sync for rust_web_server::rsa_key::RsaPublicKey
@@ -3103,6 +3121,8 @@ impl core::marker::Unpin for rust_web_server::response::StatusCodeReasonPhrase
 impl core::marker::Unpin for rust_web_server::response::Trailers
 impl core::marker::Unpin for rust_web_server::rewrite::RewriteLayer
 impl core::marker::Unpin for rust_web_server::router::PathParams
+impl core::marker::Unpin for rust_web_server::router::RouteConflict
+impl core::marker::Unpin for rust_web_server::router::RouteConflictKind
 impl core::marker::Unpin for rust_web_server::router::RouteInfo
 impl core::marker::Unpin for rust_web_server::router::Router
 impl core::marker::Unpin for rust_web_server::rsa_key::RsaPublicKey
@@ -3556,6 +3576,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::response::StatusCodeReasonPh
 impl core::marker::UnsafeUnpin for rust_web_server::response::Trailers
 impl core::marker::UnsafeUnpin for rust_web_server::rewrite::RewriteLayer
 impl core::marker::UnsafeUnpin for rust_web_server::router::PathParams
+impl core::marker::UnsafeUnpin for rust_web_server::router::RouteConflict
+impl core::marker::UnsafeUnpin for rust_web_server::router::RouteConflictKind
 impl core::marker::UnsafeUnpin for rust_web_server::router::RouteInfo
 impl core::marker::UnsafeUnpin for rust_web_server::router::Router
 impl core::marker::UnsafeUnpin for rust_web_server::rsa_key::RsaPublicKey
@@ -3979,6 +4001,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::response::Stat
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::response::Trailers
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::rewrite::RewriteLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::router::PathParams
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::router::RouteConflict
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::router::RouteConflictKind
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::router::RouteInfo
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::rsa_key::RsaPublicKey
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::scheduler::cron::CronSchedule
@@ -4394,6 +4418,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::response::StatusC
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::response::Trailers
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::rewrite::RewriteLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::router::PathParams
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::router::RouteConflict
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::router::RouteConflictKind
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::router::RouteInfo
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::rsa_key::RsaPublicKey
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::scheduler::cron::CronSchedule
@@ -4603,6 +4629,8 @@ impl rust_web_server::di::Container
 impl rust_web_server::early_hints::EarlyHintsLayer
 impl rust_web_server::entry_point::Config
 impl rust_web_server::entry_point::command_line_args::CommandLineArgument
+impl rust_web_server::error::IntoResponse for &'static str
+impl rust_web_server::error::IntoResponse for alloc::string::String
 impl rust_web_server::error::IntoResponse for rust_web_server::error::AppError
 impl rust_web_server::error::IntoResponse for rust_web_server::response::Response
 impl rust_web_server::ext::date_time_ext::DateTimeExt
@@ -4632,6 +4660,26 @@ impl rust_web_server::gateway_api::router::PortRouter
 impl rust_web_server::gateway_api::services::ServiceSettings
 impl rust_web_server::gateway_api::types::BackendObjectReference
 impl rust_web_server::gateway_api::types::ParentReference
+impl rust_web_server::handler::FromPath for alloc::string::String
+impl rust_web_server::handler::FromPath for bool
+impl rust_web_server::handler::FromPath for char
+impl rust_web_server::handler::FromPath for core::net::ip_addr::IpAddr
+impl rust_web_server::handler::FromPath for core::net::ip_addr::Ipv4Addr
+impl rust_web_server::handler::FromPath for core::net::ip_addr::Ipv6Addr
+impl rust_web_server::handler::FromPath for f32
+impl rust_web_server::handler::FromPath for f64
+impl rust_web_server::handler::FromPath for i128
+impl rust_web_server::handler::FromPath for i16
+impl rust_web_server::handler::FromPath for i32
+impl rust_web_server::handler::FromPath for i64
+impl rust_web_server::handler::FromPath for i8
+impl rust_web_server::handler::FromPath for isize
+impl rust_web_server::handler::FromPath for u128
+impl rust_web_server::handler::FromPath for u16
+impl rust_web_server::handler::FromPath for u32
+impl rust_web_server::handler::FromPath for u64
+impl rust_web_server::handler::FromPath for u8
+impl rust_web_server::handler::FromPath for usize
 impl rust_web_server::header::Header
 impl rust_web_server::header::content_disposition::ContentDisposition
 impl rust_web_server::http::HTTP
@@ -4928,6 +4976,13 @@ impl<'a, A> core::marker::UnsafeUnpin for rust_web_server::test_client::TestRequ
 impl<'a, A> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::test_client::TestRequest<'a, A> where &'a rust_web_server::test_client::TestClient<A>: core::panic::unwind_safe::RefUnwindSafe
 impl<'a, A> core::panic::unwind_safe::UnwindSafe for rust_web_server::test_client::TestRequest<'a, A> where &'a rust_web_server::test_client::TestClient<A>: core::panic::unwind_safe::UnwindSafe
 impl<'a, ReqBody> tower_service::Service<http::request::Request<ReqBody>> for rust_web_server::tower::Next<'a> where ReqBody: http_body::Body<Data = bytes::bytes::Bytes> + 'a, <ReqBody as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>
+impl<'a, S> core::marker::Freeze for rust_web_server::handler::RequestParts<'a, S> where &'a alloc::rcs::arc::Arc<S>: core::marker::Freeze
+impl<'a, S> core::marker::Send for rust_web_server::handler::RequestParts<'a, S> where &'a alloc::rcs::arc::Arc<S>: core::marker::Send
+impl<'a, S> core::marker::Sync for rust_web_server::handler::RequestParts<'a, S> where &'a alloc::rcs::arc::Arc<S>: core::marker::Sync
+impl<'a, S> core::marker::Unpin for rust_web_server::handler::RequestParts<'a, S> where &'a alloc::rcs::arc::Arc<S>: core::marker::Unpin
+impl<'a, S> core::marker::UnsafeUnpin for rust_web_server::handler::RequestParts<'a, S> where &'a alloc::rcs::arc::Arc<S>: core::marker::UnsafeUnpin
+impl<'a, S> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::handler::RequestParts<'a, S> where &'a alloc::rcs::arc::Arc<S>: core::panic::unwind_safe::RefUnwindSafe
+impl<'a, S> core::panic::unwind_safe::UnwindSafe for rust_web_server::handler::RequestParts<'a, S> where &'a alloc::rcs::arc::Arc<S>: core::panic::unwind_safe::UnwindSafe
 impl<'a, T, ID> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::repository::ModelRepository<'a, T, ID>
 impl<'a, T, ID> !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::repository::ModelRepository<'a, T, ID>
 impl<'a, T, ID> core::marker::Freeze for rust_web_server::model::repository::ModelRepository<'a, T, ID> where core::marker::PhantomData<(T, ID)>: core::marker::Freeze
@@ -5063,6 +5118,11 @@ impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::typ
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::TypedLocalReference
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::sso::jwks::OidcClaims
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::sso::saml::SamlClaims
+impl<A, B, C, D, E, F> rust_web_server::handler::FromPath for (A, B, C, D, E, F) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display, B: core::str::traits::FromStr, <B as core::str::traits::FromStr>::Err: core::fmt::Display, C: core::str::traits::FromStr, <C as core::str::traits::FromStr>::Err: core::fmt::Display, D: core::str::traits::FromStr, <D as core::str::traits::FromStr>::Err: core::fmt::Display, E: core::str::traits::FromStr, <E as core::str::traits::FromStr>::Err: core::fmt::Display, F: core::str::traits::FromStr, <F as core::str::traits::FromStr>::Err: core::fmt::Display
+impl<A, B, C, D, E> rust_web_server::handler::FromPath for (A, B, C, D, E) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display, B: core::str::traits::FromStr, <B as core::str::traits::FromStr>::Err: core::fmt::Display, C: core::str::traits::FromStr, <C as core::str::traits::FromStr>::Err: core::fmt::Display, D: core::str::traits::FromStr, <D as core::str::traits::FromStr>::Err: core::fmt::Display, E: core::str::traits::FromStr, <E as core::str::traits::FromStr>::Err: core::fmt::Display
+impl<A, B, C, D> rust_web_server::handler::FromPath for (A, B, C, D) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display, B: core::str::traits::FromStr, <B as core::str::traits::FromStr>::Err: core::fmt::Display, C: core::str::traits::FromStr, <C as core::str::traits::FromStr>::Err: core::fmt::Display, D: core::str::traits::FromStr, <D as core::str::traits::FromStr>::Err: core::fmt::Display
+impl<A, B, C> rust_web_server::handler::FromPath for (A, B, C) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display, B: core::str::traits::FromStr, <B as core::str::traits::FromStr>::Err: core::fmt::Display, C: core::str::traits::FromStr, <C as core::str::traits::FromStr>::Err: core::fmt::Display
+impl<A, B> rust_web_server::handler::FromPath for (A, B) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display, B: core::str::traits::FromStr, <B as core::str::traits::FromStr>::Err: core::fmt::Display
 impl<A, B> tower_service::Service<http::request::Request<B>> for rust_web_server::tower::TowerService<A> where A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static, B: http_body::Body<Data = bytes::bytes::Bytes> + core::marker::Send + 'static, <B as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>
 impl<A: core::clone::Clone> core::clone::Clone for rust_web_server::middleware::WithMiddleware<A>
 impl<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static> rust_web_server::timeout::TimeoutLayer<A>
@@ -5101,6 +5161,7 @@ impl<A> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::tower::Towe
 impl<A> core::panic::unwind_safe::UnwindSafe for rust_web_server::test_client::TestClient<A> where A: core::panic::unwind_safe::UnwindSafe
 impl<A> core::panic::unwind_safe::UnwindSafe for rust_web_server::timeout::TimeoutLayer<A> where alloc::rcs::arc::Arc<A>: core::panic::unwind_safe::UnwindSafe, A: ?core::marker::Sized
 impl<A> core::panic::unwind_safe::UnwindSafe for rust_web_server::tower::TowerService<A> where alloc::rcs::arc::Arc<A>: core::panic::unwind_safe::UnwindSafe
+impl<A> rust_web_server::handler::FromPath for (A) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display
 impl<A> rust_web_server::tower::TowerService<A>
 impl<F: core::ops::function::Fn(&str, &str) -> bool + core::marker::Send + core::marker::Sync + 'static> rust_web_server::auth::BasicAuthLayer<F>
 impl<F: core::ops::function::Fn(&str, &str) -> bool + core::marker::Send + core::marker::Sync + 'static> rust_web_server::middleware::Middleware for rust_web_server::auth::BasicAuthLayer<F>
@@ -5157,6 +5218,10 @@ impl<S, A> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::tower::M
 impl<S, A> core::panic::unwind_safe::UnwindSafe for rust_web_server::tower::Mount<S, A> where rust_web_server::tower::TowerApp<S>: core::panic::unwind_safe::UnwindSafe, A: core::panic::unwind_safe::UnwindSafe
 impl<S, B, A> rust_web_server::application::Application for rust_web_server::tower::Mount<S, A> where S: tower_service::Service<http::request::Request<rust_web_server::tower::Body>, Response = http::response::Response<B>> + core::clone::Clone + core::marker::Send + core::marker::Sync + 'static, <S as tower_service::Service>::Future: core::marker::Send + 'static, <S as tower_service::Service>::Error: core::convert::Into<rust_web_server::tower::BoxError>, B: http_body::Body<Data = bytes::bytes::Bytes> + core::marker::Send + 'static, <B as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>, A: rust_web_server::application::Application
 impl<S, B> rust_web_server::application::Application for rust_web_server::tower::TowerApp<S> where S: tower_service::Service<http::request::Request<rust_web_server::tower::Body>, Response = http::response::Response<B>> + core::clone::Clone + core::marker::Send + core::marker::Sync + 'static, <S as tower_service::Service>::Future: core::marker::Send + 'static, <S as tower_service::Service>::Error: core::convert::Into<rust_web_server::tower::BoxError>, B: http_body::Body<Data = bytes::bytes::Bytes> + core::marker::Send + 'static, <B as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>
+impl<S, T: rust_web_server::extract::FromRequest> rust_web_server::handler::FromRequestParts<S> for T
+impl<S, T: rust_web_server::handler::FromPath> rust_web_server::handler::FromRequestParts<S> for rust_web_server::handler::Path<T>
+impl<S, T: serde_core::de::DeserializeOwned> rust_web_server::handler::FromRequestParts<S> for rust_web_server::handler::Form<T>
+impl<S, T: serde_core::de::DeserializeOwned> rust_web_server::handler::FromRequestParts<S> for rust_web_server::handler::Query<T>
 impl<S: core::clone::Clone, A: core::clone::Clone> core::clone::Clone for rust_web_server::tower::Mount<S, A>
 impl<S: core::clone::Clone> core::clone::Clone for rust_web_server::async_state::AsyncAppWithState<S>
 impl<S: core::clone::Clone> core::clone::Clone for rust_web_server::state::AppWithState<S>
@@ -5170,45 +5235,72 @@ impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::async_stat
 impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::state::AppWithState<S>
 impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::async_state::AsyncAppWithState<S>
 impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::state::AppWithState<S>
+impl<S> core::clone::Clone for rust_web_server::handler::State<S>
 impl<S> core::marker::Freeze for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Freeze, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Freeze
+impl<S> core::marker::Freeze for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Freeze
 impl<S> core::marker::Freeze for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Freeze
 impl<S> core::marker::Freeze for rust_web_server::tower::TowerApp<S> where S: core::marker::Freeze
 impl<S> core::marker::Send for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Send, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Send
+impl<S> core::marker::Send for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Send
 impl<S> core::marker::Send for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::Send
 impl<S> core::marker::Send for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Send
 impl<S> core::marker::Send for rust_web_server::tower::TowerApp<S> where S: core::marker::Send
 impl<S> core::marker::Sync for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Sync, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Sync
+impl<S> core::marker::Sync for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Sync
 impl<S> core::marker::Sync for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::Sync
 impl<S> core::marker::Sync for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Sync
 impl<S> core::marker::Sync for rust_web_server::tower::TowerApp<S> where S: core::marker::Sync
 impl<S> core::marker::Unpin for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Unpin, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Unpin
+impl<S> core::marker::Unpin for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Unpin
 impl<S> core::marker::Unpin for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::Unpin
 impl<S> core::marker::Unpin for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Unpin
 impl<S> core::marker::Unpin for rust_web_server::tower::TowerApp<S> where S: core::marker::Unpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::UnsafeUnpin, alloc::vec::Vec<AsyncRoute<S>>: core::marker::UnsafeUnpin
+impl<S> core::marker::UnsafeUnpin for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::UnsafeUnpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::UnsafeUnpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::UnsafeUnpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::tower::TowerApp<S> where S: core::marker::UnsafeUnpin
+impl<S> core::ops::deref::Deref for rust_web_server::handler::State<S>
+impl<S> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::panic::unwind_safe::RefUnwindSafe
 impl<S> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::panic::unwind_safe::RefUnwindSafe
 impl<S> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::tower::TowerApp<S> where S: core::panic::unwind_safe::RefUnwindSafe
+impl<S> core::panic::unwind_safe::UnwindSafe for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::panic::unwind_safe::UnwindSafe
 impl<S> core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::panic::unwind_safe::UnwindSafe
 impl<S> core::panic::unwind_safe::UnwindSafe for rust_web_server::tower::TowerApp<S> where S: core::panic::unwind_safe::UnwindSafe
+impl<S> rust_web_server::handler::FromRequestParts<S> for rust_web_server::handler::State<S>
 impl<S> rust_web_server::proxy::pool::Pool<S>
 impl<S> rust_web_server::tower::TowerApp<S>
 impl<T: core::clone::Clone + rust_web_server::model::Model> core::clone::Clone for rust_web_server::model::relation::HasMany<T>
+impl<T: core::clone::Clone> core::clone::Clone for rust_web_server::handler::Form<T>
+impl<T: core::clone::Clone> core::clone::Clone for rust_web_server::handler::Path<T>
+impl<T: core::clone::Clone> core::clone::Clone for rust_web_server::handler::Query<T>
 impl<T: core::clone::Clone> core::clone::Clone for rust_web_server::pagination::CursorPage<T>
 impl<T: core::clone::Clone> core::clone::Clone for rust_web_server::pagination::Page<T>
+impl<T: core::cmp::Eq> core::cmp::Eq for rust_web_server::handler::Form<T>
+impl<T: core::cmp::Eq> core::cmp::Eq for rust_web_server::handler::Path<T>
+impl<T: core::cmp::Eq> core::cmp::Eq for rust_web_server::handler::Query<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for rust_web_server::handler::Form<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for rust_web_server::handler::Path<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for rust_web_server::handler::Query<T>
 impl<T: core::cmp::PartialEq> core::cmp::PartialEq for rust_web_server::pagination::CursorPage<T>
 impl<T: core::cmp::PartialEq> core::cmp::PartialEq for rust_web_server::pagination::Page<T>
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for rust_web_server::handler::Form<T>
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for rust_web_server::handler::Path<T>
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for rust_web_server::handler::Query<T>
 impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for rust_web_server::pagination::CursorPage<T>
 impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for rust_web_server::pagination::Page<T>
 impl<T: core::fmt::Debug + rust_web_server::model::Model> core::fmt::Debug for rust_web_server::model::relation::HasMany<T>
+impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::handler::Form<T>
+impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::handler::Path<T>
+impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::handler::Query<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::json::Json<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::pagination::CursorPage<T>
 impl<T: core::fmt::Debug> core::fmt::Debug for rust_web_server::pagination::Page<T>
 impl<T: rust_web_server::circuit_breaker::Breaker + ?core::marker::Sized> rust_web_server::circuit_breaker::Breaker for &T
 impl<T: rust_web_server::cluster::Store> rust_web_server::cluster::Store for alloc::rcs::arc::Arc<T>
 impl<T: rust_web_server::core::New> rust_web_server::json::array::object::JSONArrayOfObjects<T>
+impl<T: rust_web_server::error::IntoResponse, E: rust_web_server::error::IntoResponse> rust_web_server::error::IntoResponse for core::result::Result<T, E>
+impl<T: rust_web_server::error::IntoResponse> rust_web_server::error::IntoResponse for (&'static rust_web_server::response::StatusCodeReasonPhrase, T)
 impl<T: rust_web_server::extract::FromRequest + rust_web_server::validate::Validate> rust_web_server::extract::FromRequest for rust_web_server::validate::Validated<T>
 impl<T: rust_web_server::json::object::FromJSON + rust_web_server::core::New> rust_web_server::json::array::object::JSONArrayOfObjects<T>
 impl<T: rust_web_server::json::object::ToJSON> rust_web_server::json::array::object::JSONArrayOfObjects<T>
@@ -5230,45 +5322,70 @@ impl<T: rust_web_server::schema::JsonSchema> rust_web_server::schema::JsonSchema
 impl<T: rust_web_server::schema::JsonSchema> rust_web_server::schema::JsonSchema for core::option::Option<T>
 impl<T: serde_core::de::DeserializeOwned> rust_web_server::extract::FromRequest for rust_web_server::json::Json<T>
 impl<T: serde_core::de::DeserializeOwned> rust_web_server::json::Json<T>
+impl<T: serde_core::ser::Serialize> rust_web_server::error::IntoResponse for rust_web_server::json::Json<T>
 impl<T: serde_core::ser::Serialize> rust_web_server::json::Json<T>
+impl<T> core::marker::Freeze for rust_web_server::handler::Form<T> where T: core::marker::Freeze
+impl<T> core::marker::Freeze for rust_web_server::handler::Path<T> where T: core::marker::Freeze
+impl<T> core::marker::Freeze for rust_web_server::handler::Query<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::json::Json<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Freeze
 impl<T> core::marker::Freeze for rust_web_server::validate::Validated<T> where T: core::marker::Freeze
+impl<T> core::marker::Send for rust_web_server::handler::Form<T> where T: core::marker::Send
+impl<T> core::marker::Send for rust_web_server::handler::Path<T> where T: core::marker::Send
+impl<T> core::marker::Send for rust_web_server::handler::Query<T> where T: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::json::Json<T> where T: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Send
 impl<T> core::marker::Send for rust_web_server::validate::Validated<T> where T: core::marker::Send
+impl<T> core::marker::Sync for rust_web_server::handler::Form<T> where T: core::marker::Sync
+impl<T> core::marker::Sync for rust_web_server::handler::Path<T> where T: core::marker::Sync
+impl<T> core::marker::Sync for rust_web_server::handler::Query<T> where T: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::json::Json<T> where T: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Sync
 impl<T> core::marker::Sync for rust_web_server::validate::Validated<T> where T: core::marker::Sync
+impl<T> core::marker::Unpin for rust_web_server::handler::Form<T> where T: core::marker::Unpin
+impl<T> core::marker::Unpin for rust_web_server::handler::Path<T> where T: core::marker::Unpin
+impl<T> core::marker::Unpin for rust_web_server::handler::Query<T> where T: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::json::Json<T> where T: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::Unpin
 impl<T> core::marker::Unpin for rust_web_server::validate::Validated<T> where T: core::marker::Unpin
+impl<T> core::marker::UnsafeUnpin for rust_web_server::handler::Form<T> where T: core::marker::UnsafeUnpin
+impl<T> core::marker::UnsafeUnpin for rust_web_server::handler::Path<T> where T: core::marker::UnsafeUnpin
+impl<T> core::marker::UnsafeUnpin for rust_web_server::handler::Query<T> where T: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::json::Json<T> where T: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::marker::UnsafeUnpin
 impl<T> core::marker::UnsafeUnpin for rust_web_server::validate::Validated<T> where T: core::marker::UnsafeUnpin
+impl<T> core::ops::deref::Deref for rust_web_server::handler::Form<T>
+impl<T> core::ops::deref::Deref for rust_web_server::handler::Path<T>
+impl<T> core::ops::deref::Deref for rust_web_server::handler::Query<T>
 impl<T> core::ops::deref::Deref for rust_web_server::json::Json<T>
 impl<T> core::ops::deref::DerefMut for rust_web_server::json::Json<T>
+impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::handler::Form<T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::handler::Path<T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::handler::Query<T> where T: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::json::Json<T> where T: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::pagination::CursorPage<T> where alloc::vec::Vec<T>: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::pagination::Page<T> where alloc::vec::Vec<T>: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::validate::Validated<T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for rust_web_server::handler::Form<T> where T: core::panic::unwind_safe::UnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for rust_web_server::handler::Path<T> where T: core::panic::unwind_safe::UnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for rust_web_server::handler::Query<T> where T: core::panic::unwind_safe::UnwindSafe
 impl<T> core::panic::unwind_safe::UnwindSafe for rust_web_server::json::Json<T> where T: core::panic::unwind_safe::UnwindSafe
 impl<T> core::panic::unwind_safe::UnwindSafe for rust_web_server::json::array::object::JSONArrayOfObjects<T> where T: core::panic::unwind_safe::UnwindSafe
 impl<T> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::relation::HasMany<T> where core::marker::PhantomData<T>: core::panic::unwind_safe::UnwindSafe
@@ -5366,8 +5483,48 @@ pub async fn rust_web_server::session::DbSessionStore::save(&self, &rust_web_ser
 pub async fn rust_web_server::sse::SseSender::send_async(&self, rust_web_server::sse::SseEvent) -> core::result::Result<(), rust_web_server::sse::SseClosed>
 pub async fn rust_web_server::tower::from_http_request<B>(http::request::Request<B>) -> core::result::Result<rust_web_server::request::Request, rust_web_server::tower::BoxError> where B: http_body::Body<Data = bytes::bytes::Bytes>, <B as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>
 pub async fn rust_web_server::tower::from_http_response<B>(http::response::Response<B>) -> core::result::Result<rust_web_server::response::Response, rust_web_server::tower::BoxError> where B: http_body::Body<Data = bytes::bytes::Bytes> + core::marker::Send + 'static, <B as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>
+pub const (A)::ARITY: usize
+pub const (A)::NAMES: &'static [&'static str]
+pub const (A, B)::ARITY: usize
+pub const (A, B)::NAMES: &'static [&'static str]
+pub const (A, B, C)::ARITY: usize
+pub const (A, B, C)::NAMES: &'static [&'static str]
+pub const (A, B, C, D)::ARITY: usize
+pub const (A, B, C, D)::NAMES: &'static [&'static str]
+pub const (A, B, C, D, E)::ARITY: usize
+pub const (A, B, C, D, E)::NAMES: &'static [&'static str]
+pub const (A, B, C, D, E, F)::ARITY: usize
+pub const (A, B, C, D, E, F)::NAMES: &'static [&'static str]
+pub const alloc::string::String::ARITY: usize
+pub const alloc::string::String::NAMES: &'static [&'static str]
+pub const bool::ARITY: usize
+pub const bool::NAMES: &'static [&'static str]
+pub const char::ARITY: usize
+pub const char::NAMES: &'static [&'static str]
+pub const core::net::ip_addr::IpAddr::ARITY: usize
+pub const core::net::ip_addr::IpAddr::NAMES: &'static [&'static str]
+pub const core::net::ip_addr::Ipv4Addr::ARITY: usize
+pub const core::net::ip_addr::Ipv4Addr::NAMES: &'static [&'static str]
+pub const core::net::ip_addr::Ipv6Addr::ARITY: usize
+pub const core::net::ip_addr::Ipv6Addr::NAMES: &'static [&'static str]
+pub const f32::ARITY: usize
+pub const f32::NAMES: &'static [&'static str]
+pub const f64::ARITY: usize
+pub const f64::NAMES: &'static [&'static str]
 pub const fn rust_web_server::core::base64::Decoder::new(rust_web_server::core::base64::Alphabet) -> rust_web_server::core::base64::Decoder
 pub const fn rust_web_server::core::base64::Decoder::skip_whitespace(self) -> rust_web_server::core::base64::Decoder
+pub const i128::ARITY: usize
+pub const i128::NAMES: &'static [&'static str]
+pub const i16::ARITY: usize
+pub const i16::NAMES: &'static [&'static str]
+pub const i32::ARITY: usize
+pub const i32::NAMES: &'static [&'static str]
+pub const i64::ARITY: usize
+pub const i64::NAMES: &'static [&'static str]
+pub const i8::ARITY: usize
+pub const i8::NAMES: &'static [&'static str]
+pub const isize::ARITY: usize
+pub const isize::NAMES: &'static [&'static str]
 pub const rust_web_server::FIPS: bool
 pub const rust_web_server::a2a::AGENT_CARD_PATH: &str
 pub const rust_web_server::a2a::MAX_BODY: usize
@@ -5572,6 +5729,10 @@ pub const rust_web_server::gateway_api::translate::GATEWAY_NAME_LABEL: &str
 pub const rust_web_server::gateway_api::translate::MANAGED_BY: &str
 pub const rust_web_server::gateway_api::translate::SUPPORTED_FEATURES: &[&str]
 pub const rust_web_server::gateway_api::types::GATEWAY_GROUP: &str
+pub const rust_web_server::handler::FromPath::ARITY: usize
+pub const rust_web_server::handler::FromPath::NAMES: &'static [&'static str]
+pub const rust_web_server::handler::RouteSpec::METHOD: &'static str
+pub const rust_web_server::handler::RouteSpec::PATTERN: &'static str
 pub const rust_web_server::header::Header::NAME_VALUE_SEPARATOR: &'static str
 pub const rust_web_server::header::Header::_ACCEPT: &'static str
 pub const rust_web_server::header::Header::_ACCEPT_CH: &'static str
@@ -6160,6 +6321,18 @@ pub const rust_web_server::waf::detect::RULES: &[rust_web_server::waf::detect::R
 pub const rust_web_server::websocket::MAX_MESSAGE: usize
 pub const rust_web_server::websocket::UPGRADE_TTL: core::time::Duration
 pub const rust_web_server::websocket::WebSocket::MAX_FRAME_PAYLOAD: u64
+pub const u128::ARITY: usize
+pub const u128::NAMES: &'static [&'static str]
+pub const u16::ARITY: usize
+pub const u16::NAMES: &'static [&'static str]
+pub const u32::ARITY: usize
+pub const u32::NAMES: &'static [&'static str]
+pub const u64::ARITY: usize
+pub const u64::NAMES: &'static [&'static str]
+pub const u8::ARITY: usize
+pub const u8::NAMES: &'static [&'static str]
+pub const usize::ARITY: usize
+pub const usize::NAMES: &'static [&'static str]
 pub enum rust_web_server::a2a::A2aReply
 pub enum rust_web_server::a2a::PartContent
 pub enum rust_web_server::a2a::Role
@@ -6215,6 +6388,7 @@ pub enum rust_web_server::proxy_config::AuthConfig
 pub enum rust_web_server::proxy_config::ReloadOutcome
 pub enum rust_web_server::proxy_config::UpstreamHost
 pub enum rust_web_server::request::Body
+pub enum rust_web_server::router::RouteConflictKind
 pub enum rust_web_server::server::proxy_protocol::Parsed
 pub enum rust_web_server::service_discovery::DiscoverySource
 pub enum rust_web_server::sso::GrantType
@@ -6226,8 +6400,15 @@ pub enum rust_web_server::waf::Field
 pub enum rust_web_server::waf::Mode
 pub enum rust_web_server::websocket::Frame
 pub enum rust_web_server::websocket::Message
+pub fn &'static str::into_response(self) -> rust_web_server::response::Response
 pub fn &[u8]::eq(&self, &rust_web_server::request::Body) -> bool
 pub fn &rust_web_server::request::Body::read(&mut self, &mut [u8]) -> core::io::error::Result<usize>
+pub fn (&'static rust_web_server::response::StatusCodeReasonPhrase, T)::into_response(self) -> rust_web_server::response::Response
+pub fn (A, B)::from_path(&rust_web_server::router::PathParams, &[&str]) -> core::result::Result<Self, alloc::string::String>
+pub fn (A, B, C)::from_path(&rust_web_server::router::PathParams, &[&str]) -> core::result::Result<Self, alloc::string::String>
+pub fn (A, B, C, D)::from_path(&rust_web_server::router::PathParams, &[&str]) -> core::result::Result<Self, alloc::string::String>
+pub fn (A, B, C, D, E)::from_path(&rust_web_server::router::PathParams, &[&str]) -> core::result::Result<Self, alloc::string::String>
+pub fn (A, B, C, D, E, F)::from_path(&rust_web_server::router::PathParams, &[&str]) -> core::result::Result<Self, alloc::string::String>
 pub fn [T; N]::is_optional() -> bool
 pub fn [T; N]::json_schema() -> alloc::string::String
 pub fn [u8]::eq(&self, &rust_web_server::request::Body) -> bool
@@ -6235,6 +6416,7 @@ pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::is_op
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::json_schema() -> alloc::string::String
 pub fn alloc::string::String::from(rust_web_server::core::base64::DecodeError) -> alloc::string::String
 pub fn alloc::vec::Vec<u8>::eq(&self, &rust_web_server::request::Body) -> bool
+pub fn core::result::Result<T, E>::into_response(self) -> rust_web_server::response::Response
 pub fn rust_web_server::a2a::A2aContext::complete(&self, alloc::vec::Vec<rust_web_server::a2a::Artifact>) -> rust_web_server::a2a::Task
 pub fn rust_web_server::a2a::A2aContext::context_id(&self) -> &str
 pub fn rust_web_server::a2a::A2aContext::fail(&self, &str) -> rust_web_server::a2a::Task
@@ -6487,6 +6669,8 @@ pub fn rust_web_server::async_state::AsyncAppWithState<S>::openapi(self, rust_we
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::patch<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::post<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::put<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::async_state::AsyncAppWithState<S>::route<H: rust_web_server::handler::AsyncHandler<S>>(self, H) -> Self
+pub fn rust_web_server::async_state::AsyncAppWithState<S>::route_conflicts(&self) -> alloc::vec::Vec<rust_web_server::router::RouteConflict>
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::state(&self) -> &S
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::with_config(self, rust_web_server::server_config::ServerConfig) -> Self
@@ -7475,6 +7659,24 @@ pub fn rust_web_server::gateway_api::types::TypedLocalReference::deserialize<__D
 pub fn rust_web_server::gateway_api::types::TypedLocalReference::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::types::TypedLocalReference::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::types::TypedLocalReference::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::handler::AsyncHandler::handle_async(&self, rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> rust_web_server::handler::HandlerFuture
+pub fn rust_web_server::handler::Form<T>::clone(&self) -> Self
+pub fn rust_web_server::handler::Form<T>::deref(&self) -> &T
+pub fn rust_web_server::handler::Form<T>::eq(&self, &Self) -> bool
+pub fn rust_web_server::handler::Form<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::handler::FromPath::from_path(&rust_web_server::router::PathParams, &[&str]) -> core::result::Result<Self, alloc::string::String>
+pub fn rust_web_server::handler::FromRequestParts::from_request_parts(&rust_web_server::handler::RequestParts<'_, S>) -> core::result::Result<Self, rust_web_server::response::Response>
+pub fn rust_web_server::handler::Handler::handle(&self, &rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response
+pub fn rust_web_server::handler::Path<T>::clone(&self) -> Self
+pub fn rust_web_server::handler::Path<T>::deref(&self) -> &T
+pub fn rust_web_server::handler::Path<T>::eq(&self, &Self) -> bool
+pub fn rust_web_server::handler::Path<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::handler::Query<T>::clone(&self) -> Self
+pub fn rust_web_server::handler::Query<T>::deref(&self) -> &T
+pub fn rust_web_server::handler::Query<T>::eq(&self, &Self) -> bool
+pub fn rust_web_server::handler::Query<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::handler::State<S>::clone(&self) -> Self
+pub fn rust_web_server::handler::State<S>::deref(&self) -> &S
 pub fn rust_web_server::header::Header::as_string(&self) -> alloc::string::String
 pub fn rust_web_server::header::Header::clone(&self) -> Self
 pub fn rust_web_server::header::Header::eq(&self, &Self) -> bool
@@ -7611,7 +7813,6 @@ pub fn rust_web_server::ip_filter::request_scheme(&rust_web_server::request::Req
 pub fn rust_web_server::json::Json<T>::deref(&self) -> &T
 pub fn rust_web_server::json::Json<T>::deref_mut(&mut self) -> &mut T
 pub fn rust_web_server::json::Json<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn rust_web_server::json::Json<T>::into_response(self) -> rust_web_server::response::Response
 pub fn rust_web_server::json::array::RawUnprocessedJSONArray::split_into_vector_of_strings(alloc::string::String) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, alloc::string::String>
 pub fn rust_web_server::json::array::boolean::JSONArrayOfBooleans::parse_as_list_bool(alloc::string::String) -> core::result::Result<alloc::vec::Vec<bool>, alloc::string::String>
 pub fn rust_web_server::json::array::boolean::JSONArrayOfBooleans::to_json_from_list_bool(&alloc::vec::Vec<bool>) -> core::result::Result<alloc::string::String, alloc::string::String>
@@ -8417,6 +8618,12 @@ pub fn rust_web_server::rewrite::RewriteLayer::response_header_set(self, &str, &
 pub fn rust_web_server::rewrite::RewriteLayer::response_status(self, i16, &str) -> Self
 pub fn rust_web_server::router::PathParams::clone(&self) -> Self
 pub fn rust_web_server::router::PathParams::get(&self, &str) -> core::option::Option<&str>
+pub fn rust_web_server::router::RouteConflict::clone(&self) -> Self
+pub fn rust_web_server::router::RouteConflict::eq(&self, &Self) -> bool
+pub fn rust_web_server::router::RouteConflict::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::router::RouteConflictKind::clone(&self) -> Self
+pub fn rust_web_server::router::RouteConflictKind::eq(&self, &Self) -> bool
+pub fn rust_web_server::router::RouteConflictKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::router::RouteInfo::clone(&self) -> Self
 pub fn rust_web_server::router::Router::clone(&self) -> Self
 pub fn rust_web_server::router::Router::delete<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
@@ -8427,6 +8634,8 @@ pub fn rust_web_server::router::Router::new() -> Self
 pub fn rust_web_server::router::Router::patch<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::router::Router::post<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::router::Router::put<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::router::Router::route<H: rust_web_server::handler::Handler<()>>(self, H) -> Self
+pub fn rust_web_server::router::Router::route_conflicts(&self) -> alloc::vec::Vec<rust_web_server::router::RouteConflict>
 pub fn rust_web_server::router::Router::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
 pub fn rust_web_server::router::Router::websocket<F>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::websocket::WebSocketConnection, rust_web_server::router::PathParams) + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::router::Router::with_host(self, &str) -> Self
@@ -8669,6 +8878,8 @@ pub fn rust_web_server::state::AppWithState<S>::openapi_spec(&self, &rust_web_se
 pub fn rust_web_server::state::AppWithState<S>::patch<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::post<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::put<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::state::AppWithState<S>::route<H: rust_web_server::handler::Handler<S>>(self, H) -> Self
+pub fn rust_web_server::state::AppWithState<S>::route_conflicts(&self) -> alloc::vec::Vec<rust_web_server::router::RouteConflict>
 pub fn rust_web_server::state::AppWithState<S>::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
 pub fn rust_web_server::state::AppWithState<S>::state(&self) -> &S
 pub fn rust_web_server::state::AppWithState<S>::stream_body(self, &str, &str) -> Self
@@ -9003,6 +9214,7 @@ pub mod rust_web_server::gateway_api::routes
 pub mod rust_web_server::gateway_api::services
 pub mod rust_web_server::gateway_api::translate
 pub mod rust_web_server::gateway_api::types
+pub mod rust_web_server::handler
 pub mod rust_web_server::header
 pub mod rust_web_server::header::content_disposition
 pub mod rust_web_server::http
@@ -9741,6 +9953,11 @@ pub rust_web_server::gateway_api::types::TlsPortConfig::tls: rust_web_server::ga
 pub rust_web_server::gateway_api::types::TypedLocalReference::group: alloc::string::String
 pub rust_web_server::gateway_api::types::TypedLocalReference::kind: alloc::string::String
 pub rust_web_server::gateway_api::types::TypedLocalReference::name: alloc::string::String
+pub rust_web_server::handler::RequestParts::connection: &'a rust_web_server::server::ConnectionInfo
+pub rust_web_server::handler::RequestParts::params: &'a rust_web_server::router::PathParams
+pub rust_web_server::handler::RequestParts::path_names: &'static [&'static str]
+pub rust_web_server::handler::RequestParts::request: &'a rust_web_server::request::Request
+pub rust_web_server::handler::RequestParts::state: &'a alloc::rcs::arc::Arc<S>
 pub rust_web_server::header::Header::name: alloc::borrow::Cow<'static, str>
 pub rust_web_server::header::Header::value: alloc::borrow::Cow<'static, str>
 pub rust_web_server::header::content_disposition::ContentDisposition::disposition_type: alloc::string::String
@@ -10294,6 +10511,12 @@ pub rust_web_server::response::ResponseStatusCodeReasonPhrase::n510_not_extended
 pub rust_web_server::response::ResponseStatusCodeReasonPhrase::n511_network_authentication_required: &'static rust_web_server::response::StatusCodeReasonPhrase
 pub rust_web_server::response::StatusCodeReasonPhrase::reason_phrase: &'static str
 pub rust_web_server::response::StatusCodeReasonPhrase::status_code: &'static i16
+pub rust_web_server::router::RouteConflict::earlier: alloc::string::String
+pub rust_web_server::router::RouteConflict::kind: rust_web_server::router::RouteConflictKind
+pub rust_web_server::router::RouteConflict::method: alloc::string::String
+pub rust_web_server::router::RouteConflict::pattern: alloc::string::String
+pub rust_web_server::router::RouteConflictKind::Duplicate
+pub rust_web_server::router::RouteConflictKind::Shadowed
 pub rust_web_server::router::RouteInfo::method: alloc::string::String
 pub rust_web_server::router::RouteInfo::pattern: alloc::string::String
 pub rust_web_server::server::Address::ip: alloc::string::String
@@ -10796,6 +11019,11 @@ pub struct rust_web_server::gateway_api::types::SupportedFeature
 pub struct rust_web_server::gateway_api::types::TlsConfig
 pub struct rust_web_server::gateway_api::types::TlsPortConfig
 pub struct rust_web_server::gateway_api::types::TypedLocalReference
+pub struct rust_web_server::handler::Form<T>(pub T)
+pub struct rust_web_server::handler::Path<T>(pub T)
+pub struct rust_web_server::handler::Query<T>(pub T)
+pub struct rust_web_server::handler::RequestParts<'a, S>
+pub struct rust_web_server::handler::State<S>(pub alloc::rcs::arc::Arc<S>)
 pub struct rust_web_server::header::Header
 pub struct rust_web_server::header::content_disposition::ContentDisposition
 pub struct rust_web_server::header::content_disposition::DispositionType
@@ -10959,6 +11187,7 @@ pub struct rust_web_server::response::StatusCodeReasonPhrase
 pub struct rust_web_server::response::Trailers(_)
 pub struct rust_web_server::rewrite::RewriteLayer
 pub struct rust_web_server::router::PathParams
+pub struct rust_web_server::router::RouteConflict
 pub struct rust_web_server::router::RouteInfo
 pub struct rust_web_server::router::Router
 pub struct rust_web_server::rsa_key::RsaPublicKey
@@ -11070,6 +11299,11 @@ pub trait rust_web_server::controller::Controller
 pub trait rust_web_server::core::New
 pub trait rust_web_server::error::IntoResponse
 pub trait rust_web_server::extract::FromRequest: core::marker::Sized
+pub trait rust_web_server::handler::AsyncHandler<S>: rust_web_server::handler::RouteSpec + core::marker::Send + core::marker::Sync + 'static
+pub trait rust_web_server::handler::FromPath: core::marker::Sized
+pub trait rust_web_server::handler::FromRequestParts<S>: core::marker::Sized
+pub trait rust_web_server::handler::Handler<S>: rust_web_server::handler::RouteSpec + core::marker::Send + core::marker::Sync + 'static
+pub trait rust_web_server::handler::RouteSpec
 pub trait rust_web_server::json::object::FromJSON
 pub trait rust_web_server::json::object::ToJSON
 pub trait rust_web_server::middleware::Middleware: core::marker::Send + core::marker::Sync
@@ -11096,6 +11330,11 @@ pub type rust_web_server::gateway_api::resources::TlsRoute = kube_core::object::
 pub type rust_web_server::gateway_api::resources::UdpRoute = kube_core::object::Object<rust_web_server::gateway_api::types::L4RouteSpec, rust_web_server::gateway_api::types::RouteStatus>
 pub type rust_web_server::gateway_api::router::PortListeners = alloc::rcs::arc::Arc<std::sync::poison::rwlock::RwLock<alloc::rcs::arc::Arc<alloc::vec::Vec<rust_web_server::gateway_api::translate::ListenerConfig>>>>
 pub type rust_web_server::gateway_api::types::AllowedListeners = rust_web_server::gateway_api::types::RouteNamespacesHolder
+pub type rust_web_server::handler::Form<T>::Target = T
+pub type rust_web_server::handler::HandlerFuture = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static)>>
+pub type rust_web_server::handler::Path<T>::Target = T
+pub type rust_web_server::handler::Query<T>::Target = T
+pub type rust_web_server::handler::State<S>::Target = S
 pub type rust_web_server::json::Json<T>::Target = T
 pub type rust_web_server::null::Null::Err = rust_web_server::null::ParseNullError
 pub type rust_web_server::proxy::ConnPool = rust_web_server::proxy::pool::Pool<std::net::tcp::TcpStream>
@@ -11112,12 +11351,19 @@ pub type rust_web_server::tower::TowerService<A>::Error = never
 pub type rust_web_server::tower::TowerService<A>::Future = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<http::response::Response<rust_web_server::tower::Body>, never>> + core::marker::Send)>>
 pub type rust_web_server::tower::TowerService<A>::Response = http::response::Response<rust_web_server::tower::Body>
 pub use rust_web_server::Config
+pub use rust_web_server::FromPath
 pub use rust_web_server::FromRequest
 pub use rust_web_server::JsonSchema
 pub use rust_web_server::Model
 pub use rust_web_server::Validate
 pub use rust_web_server::delete
 pub use rust_web_server::get
+pub use rust_web_server::handler::Body
+pub use rust_web_server::handler::BodyText
+pub use rust_web_server::handler::IntoResponse
+pub use rust_web_server::handler::Json
+pub use rust_web_server::handler::RequestHeaders
+pub use rust_web_server::handler::RequestId
 pub use rust_web_server::model::CursorPage
 pub use rust_web_server::model::Page
 pub use rust_web_server::patch

@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2", "acme", "wasm-plugins", "pkcs11"] }
+rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2", "acme", "wasm-plugins", "pkcs11", "serde"] }
 
 # Separate workspace: the root workspace excludes fuzz/.
 [workspace]

@@ -1,0 +1,5 @@
+error: route `GET /a/{id}/b/:id` names the parameter `id` twice
+ --> tests/ui/duplicate_param.rs:4:7
+  |
+4 | #[get("/a/{id}/b/:id")]
+  |       ^^^^^^^^^^^^^^^

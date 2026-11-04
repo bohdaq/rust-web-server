@@ -197,3 +197,82 @@ fn with_host_matches_the_host_header_before_sni() {
     c.sni_hostname = Some("git.example.com".to_string());
     assert!(router.handle(&get("/"), &c).is_some());
 }
+
+// ── Route conflicts (18.28.0) ────────────────────────────────────────────────
+
+use crate::router::{RouteConflict, RouteConflictKind};
+
+fn ok(_: &Request, _: &crate::router::PathParams, _: &ConnectionInfo) -> Response {
+    Response::new()
+}
+
+fn conflict(method: &str, pattern: &str, earlier: &str, kind: RouteConflictKind) -> RouteConflict {
+    RouteConflict { method: method.to_string(), pattern: pattern.to_string(), earlier: earlier.to_string(), kind }
+}
+
+#[test]
+fn equivalent_patterns_are_duplicates_whatever_the_parameter_names() {
+    let router = Router::new()
+        .get("/users/:id", ok)
+        .get("/users/{uid}", ok)
+        .get("/files/*rest", ok)
+        .get("/files/{*path}", ok);
+    assert_eq!(
+        vec![
+            conflict("GET", "/users/:uid", "/users/:id", RouteConflictKind::Duplicate),
+            conflict("GET", "/files/*path", "/files/*rest", RouteConflictKind::Duplicate),
+        ],
+        router.route_conflicts()
+    );
+    assert_eq!(
+        "route GET /users/:uid is registered twice (first as GET /users/:id); the second never runs",
+        router.route_conflicts()[0].to_string()
+    );
+}
+
+#[test]
+fn a_more_general_earlier_route_shadows_a_later_one() {
+    let router = Router::new()
+        .get("/users/:id", ok)
+        .get("/users/me", ok)
+        .get("/static/*rest", ok)
+        .get("/static/css/:file", ok)
+        .get("/static", ok);
+    let conflicts = router.route_conflicts();
+    assert_eq!(
+        vec![
+            conflict("GET", "/users/me", "/users/:id", RouteConflictKind::Shadowed),
+            conflict("GET", "/static/css/:file", "/static/*rest", RouteConflictKind::Shadowed),
+            // A wildcard matches an empty rest too.
+            conflict("GET", "/static", "/static/*rest", RouteConflictKind::Shadowed),
+        ],
+        conflicts
+    );
+    assert!(conflicts[0].to_string().contains("never runs: GET /users/:id, registered before it"));
+}
+
+#[test]
+fn routes_that_only_overlap_or_differ_in_method_are_not_conflicts() {
+    let router = Router::new()
+        .get("/users/me", ok) // specific first: fine
+        .get("/users/:id", ok)
+        .post("/users/:id", ok) // other method
+        .get("/a/:x", ok)
+        .get("/:y/b", ok) // overlap on /a/b only
+        .get("/files/:name", ok)
+        .get("/files/*rest", ok) // matches more than the earlier one
+        .get("/x/*rest/y", ok) // a wildcard that isn't last never matches
+        .get("/x/*rest/y", ok);
+    assert_eq!(Vec::<RouteConflict>::new(), router.route_conflicts());
+}
+
+#[test]
+fn conflicts_do_not_change_dispatch() {
+    // Warning only: the first route still answers, the app still builds.
+    let router = Router::new()
+        .get("/users/:id", |_, _, _| Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "first"))
+        .get("/users/:id", |_, _, _| Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "second"));
+    let r = router.handle(&get("/users/1"), &conn()).unwrap();
+    assert_eq!(b"first".to_vec(), r.content_range_list[0].body);
+    assert_eq!(1, router.route_conflicts().len());
+}

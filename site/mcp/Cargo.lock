@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "rws-macros"
-version = "17.28.0"
+version = "17.29.0"
 dependencies = [
  "proc-macro2",
  "quote",

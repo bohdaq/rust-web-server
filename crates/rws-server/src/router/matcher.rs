@@ -106,3 +106,48 @@ pub fn segments_to_pattern(segs: &[Segment]) -> String {
         .collect();
     format!("/{}", parts.join("/"))
 }
+
+/// Whether `a` and `b` match exactly the same paths: equal segment by
+/// segment with parameter names ignored (`/users/:id` ≡ `/users/{uid}`).
+#[doc(hidden)]
+pub fn equivalent(a: &[Segment], b: &[Segment]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|pair| match pair {
+            (Segment::Literal(x), Segment::Literal(y)) => x == y,
+            (Segment::Param(_), Segment::Param(_)) | (Segment::Wildcard(_), Segment::Wildcard(_)) => true,
+            _ => false,
+        })
+}
+
+/// Whether `earlier` matches every path `later` matches, so `later` (tried
+/// after it) never runs: `/users/:id` covers `/users/me`, `/files/*rest`
+/// covers `/files/a/:b`. A wildcard that isn't last matches nothing.
+#[doc(hidden)]
+pub fn covers(earlier: &[Segment], later: &[Segment]) -> bool {
+    if never_matches(earlier) || never_matches(later) {
+        return false;
+    }
+    for (i, seg) in earlier.iter().enumerate() {
+        match (seg, later.get(i)) {
+            // A trailing wildcard matches any rest, even an empty one.
+            (Segment::Wildcard(_), _) => return true,
+            (_, None) => return false,
+            (Segment::Literal(x), Some(Segment::Literal(y))) => {
+                if x != y {
+                    return false;
+                }
+            }
+            (Segment::Literal(_), Some(_)) => return false,
+            (Segment::Param(_), Some(Segment::Wildcard(_))) => return false,
+            (Segment::Param(_), Some(_)) => {}
+        }
+    }
+    earlier.len() == later.len()
+}
+
+/// A pattern with a wildcard before its last segment, which [`try_match`]
+/// never matches.
+#[doc(hidden)]
+pub fn never_matches(segs: &[Segment]) -> bool {
+    segs.iter().rev().skip(1).any(|s| matches!(s, Segment::Wildcard(_)))
+}
