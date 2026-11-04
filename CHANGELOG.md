@@ -30,7 +30,27 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `Middleware::layer_name()`, default methods that let tools describe an app;
   `WithMiddleware`, `McpServer` and `TimeoutLayer` forward them.
 
+- Database TLS: `RWS_DB_SSL_MODE` (`disable`, `prefer`, `require`,
+  `verify-ca`, `verify-full`), `RWS_DB_SSL_ROOT_CERT` and
+  `RWS_DB_SSL_CLIENT_CERT`/`_KEY`, read by `DbPool::from_env()` (and the SQL
+  authorization store); in code `DbTls` / `DbSslMode` and
+  `DbPool::new_with_tls`. A managed PostgreSQL or MySQL with its own CA can
+  now be verified; before, rws could only connect without checking the
+  certificate. `DbPool::new` keeps `prefer`.
+- `http_client::Client::ca_file(path)` trusts a private CA instead of the
+  public roots; `S3Storage::with_ca_file` and `RWS_S3_CA_FILE` use it for an
+  S3 endpoint with a private certificate.
+
 ### Fixed
+
+- PostgreSQL and MySQL pools panicked at their first TLS connection
+  (rustls: no process-level crypto provider) in an app that doesn't serve
+  TLS itself, as behind a load balancer; rws now installs its provider
+  first. The user and password are passed to the driver as they are, not in
+  a URL, so `@`, `:`, `/` and `#` in them work.
+- S3: an endpoint on a port other than the scheme's default (MinIO's
+  `:9000`) got `SignatureDoesNotMatch` for every request: the signed `Host`
+  left the port out, the one sent had it.
 
 - FastCGI: `SCRIPT_FILENAME` and `DOCUMENT_ROOT` are the paths under the
   configured `root`, with symlinks left in (nginx's

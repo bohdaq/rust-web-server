@@ -86,3 +86,83 @@ impl DbConfig {
         }
     }
 }
+
+/// How a PostgreSQL or MySQL connection uses TLS (ignored for SQLite).
+///
+/// Separate from [`DbConfig`] so code that builds a `DbConfig` literal keeps
+/// compiling; [`DbPool::from_env`](super::DbPool::from_env) reads both, and
+/// [`DbPool::new_with_tls`](super::DbPool::new_with_tls) takes both.
+///
+/// | Variable | Default |
+/// |---|---|
+/// | `RWS_DB_SSL_MODE` | `prefer` |
+/// | `RWS_DB_SSL_ROOT_CERT` | _(none: the system's roots)_ |
+/// | `RWS_DB_SSL_CLIENT_CERT` | _(none)_ |
+/// | `RWS_DB_SSL_CLIENT_KEY` | _(none)_ |
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DbTls {
+    /// When to use TLS and what to check.
+    pub mode: DbSslMode,
+    /// PEM file with the CA certificates that sign the server's certificate
+    /// (a managed database's private CA).
+    pub root_cert: Option<String>,
+    /// PEM client certificate, for servers that require one.
+    pub client_cert: Option<String>,
+    /// PEM private key of `client_cert`.
+    pub client_key: Option<String>,
+}
+
+/// TLS modes, named as libpq's `sslmode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DbSslMode {
+    /// Never TLS.
+    Disable,
+    /// TLS when the server offers it, without checking its certificate
+    /// (the default, as before these settings existed).
+    #[default]
+    Prefer,
+    /// TLS always, certificate not checked.
+    Require,
+    /// TLS always, certificate signed by a trusted CA.
+    VerifyCa,
+    /// As `VerifyCa`, and the certificate names the host connected to.
+    VerifyFull,
+}
+
+impl DbSslMode {
+    /// Parse `disable`, `prefer`, `require`, `verify-ca` or `verify-full`
+    /// (MySQL's spellings `disabled`, `preferred`, `required`,
+    /// `verify_identity` too).
+    pub fn parse(value: &str) -> Result<DbSslMode, DbError> {
+        Ok(match value.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+            "disable" | "disabled" => DbSslMode::Disable,
+            "" | "prefer" | "preferred" => DbSslMode::Prefer,
+            "require" | "required" => DbSslMode::Require,
+            "verify-ca" => DbSslMode::VerifyCa,
+            "verify-full" | "verify-identity" => DbSslMode::VerifyFull,
+            other => {
+                return Err(DbError::new(format!(
+                    "RWS_DB_SSL_MODE: {other:?} is not disable, prefer, require, verify-ca or verify-full"
+                )))
+            }
+        })
+    }
+}
+
+impl DbTls {
+    /// Read `RWS_DB_SSL_*` (see the table above). A client certificate
+    /// without its key, or the other way round, is an error.
+    pub fn from_env() -> Result<DbTls, DbError> {
+        let get = |name: &str| std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+        let tls = DbTls {
+            mode: DbSslMode::parse(&get("RWS_DB_SSL_MODE").unwrap_or_default())?,
+            root_cert: get("RWS_DB_SSL_ROOT_CERT"),
+            client_cert: get("RWS_DB_SSL_CLIENT_CERT"),
+            client_key: get("RWS_DB_SSL_CLIENT_KEY"),
+        };
+        if tls.client_cert.is_some() != tls.client_key.is_some() {
+            return Err(DbError::new("RWS_DB_SSL_CLIENT_CERT and RWS_DB_SSL_CLIENT_KEY go together"));
+        }
+        Ok(tls)
+    }
+}

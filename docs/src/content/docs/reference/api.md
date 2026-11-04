@@ -309,6 +309,7 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | Type / Trait | Module | Description |
 |---|---|---|
 | `DbPool` | `model` | Async `sqlx` pool, one variant per compiled-in backend: `new(DbConfig)`, `from_env()`, `memory()` (SQLite `:memory:`); `execute`, `query`, `begin`, `transaction`, `migrate`. See [Database](/database/overview/) |
+| `DbTls` / `DbSslMode` | `model` | TLS for PostgreSQL / MySQL pools: mode (`disable` … `verify-full`), CA file, client certificate; `DbTls::from_env()` reads `RWS_DB_SSL_*`; used by `DbPool::new_with_tls` and `DbPool::from_env`. See [Database TLS](/database/overview/#tls) |
 | `DbTransaction` | `model` | Open transaction from `DbPool::begin`; `commit` / `rollback` |
 | `DbConfig` | `model` | Connection settings; `from_env()` reads `RWS_DB_*` |
 | `Backend` | `model` | `Sqlite`, `Postgres`, `MySql` (compiled-in only); `Backend::parse`; pick it explicitly only with several backends compiled in |

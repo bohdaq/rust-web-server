@@ -32,9 +32,11 @@ pub mod relation;
 pub mod repository;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tls_tests;
 
 pub use backend::Backend;
-pub use connection::DbConfig;
+pub use connection::{DbConfig, DbSslMode, DbTls};
 pub use migration::MigrationStatus;
 pub use pool::{DbPool, DbTransaction};
 pub use query::{Order, QueryBuilder};

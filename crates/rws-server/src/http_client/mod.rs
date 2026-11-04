@@ -491,16 +491,15 @@ fn decode_chunked(data: &[u8]) -> Result<Vec<u8>, HttpClientError> {
 fn tls_connect(
     host: &str,
     tcp: TcpStream,
+    roots: Option<&Arc<rustls::RootCertStore>>,
 ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>, HttpClientError> {
     use rustls::pki_types::ServerName;
 
-    let root_store =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let config = Arc::new(
-        crate::tls_client_builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth(),
-    );
+    let roots = match roots {
+        Some(roots) => Arc::clone(roots),
+        None => Arc::new(rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned())),
+    };
+    let config = Arc::new(crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth());
     let server_name = ServerName::try_from(host.to_string())
         .map_err(|e| HttpClientError(format!("invalid hostname '{host}': {e}")))?;
     let conn = rustls::ClientConnection::new(config, server_name)
@@ -517,6 +516,7 @@ fn send_once(
     headers: &[(String, String)],
     body: &Option<Vec<u8>>,
     timeout_ms: u64,
+    #[cfg(any(feature = "http-client", feature = "http2"))] tls: Option<&Arc<rustls::RootCertStore>>,
 ) -> Result<Response, HttpClientError> {
     let addr = format!("{}:{}", parsed.host, parsed.port);
     let timeout = Duration::from_millis(timeout_ms);
@@ -555,7 +555,7 @@ fn send_once(
     // Dispatch on scheme
     #[cfg(any(feature = "http-client", feature = "http2"))]
     if parsed.scheme == "https" {
-        let mut tls_stream = tls_connect(&parsed.host, tcp)?;
+        let mut tls_stream = tls_connect(&parsed.host, tcp, tls)?;
         tls_stream
             .write_all(&request_bytes)
             .map_err(|e| HttpClientError(format!("write error: {e}")))?;
@@ -591,6 +591,7 @@ fn send_once(
     headers: &[(String, String)],
     body: &Option<Vec<u8>>,
     timeout_ms: u64,
+    _tls: Option<&()>,
 ) -> Result<Response, HttpClientError> {
     use wasip2::http::outgoing_handler;
     use wasip2::http::types::{Fields, OutgoingBody, OutgoingRequest, RequestOptions, Scheme};
@@ -703,6 +704,11 @@ fn to_wasi_method(method: &str) -> wasip2::http::types::Method {
 pub struct Client {
     timeout_ms: u64,
     max_redirects: u8,
+    /// The CA from [`Client::ca_file`], trusted instead of the public roots
+    /// (a root store, not a `ClientConfig`: that one isn't `RefUnwindSafe`,
+    /// and `Client` is).
+    #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
+    tls: Option<Arc<rustls::RootCertStore>>,
 }
 
 impl Client {
@@ -713,7 +719,29 @@ impl Client {
         Self {
             timeout_ms: 30_000,
             max_redirects: 10,
+            #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
+            tls: None,
         }
+    }
+
+    /// Trust the CA certificates in the PEM file at `path` for `https://`
+    /// URLs, instead of the public roots (a private CA: an in-cluster S3
+    /// endpoint, an internal API). `Err` when the file can't be read or
+    /// holds no certificate.
+    #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
+    pub fn ca_file(mut self, path: &str) -> Result<Self, HttpClientError> {
+        use rustls::pki_types::{pem::PemObject, CertificateDer};
+        let bytes = std::fs::read(path).map_err(|e| HttpClientError(format!("cannot read CA file '{path}': {e}")))?;
+        let mut roots = rustls::RootCertStore::empty();
+        for cert in CertificateDer::pem_slice_iter(&bytes) {
+            let cert = cert.map_err(|e| HttpClientError(format!("cannot parse CA file '{path}': {e}")))?;
+            roots.add(cert).map_err(|e| HttpClientError(format!("invalid CA certificate in '{path}': {e}")))?;
+        }
+        if roots.is_empty() {
+            return Err(HttpClientError(format!("no certificates in CA file '{path}'")));
+        }
+        self.tls = Some(Arc::new(roots));
+        Ok(self)
     }
 
     /// Override the per-request timeout (connect + read combined).
@@ -894,7 +922,12 @@ impl<'a> RequestBuilder<'a> {
 
         loop {
             let parsed = ParsedUrl::parse(&url)?;
+            #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
+            let resp = send_once(&method, &parsed, &headers, &body, timeout, client.tls.as_ref())?;
+            #[cfg(all(not(any(feature = "http-client", feature = "http2")), not(target_arch = "wasm32")))]
             let resp = send_once(&method, &parsed, &headers, &body, timeout)?;
+            #[cfg(target_arch = "wasm32")]
+            let resp = send_once(&method, &parsed, &headers, &body, timeout, None)?;
 
             if resp.is_redirect() && redirects < max_redirects {
                 let location = resp
