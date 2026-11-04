@@ -138,7 +138,7 @@ Bring the library side up to what Rust web developers expect: typed OpenAPI, tow
 
 - **#22** ✅ *main: `Operation` (body/response/query/path schemas from `JsonSchema`), OpenAPI 3.1.0, `examples/mcp_inventory.rs` described, validated by openapi-spec-validator 0.9.0 (`ci/e2e/openapi.sh`)* **OpenAPI with request/response schemas** from serde types (paths only today), sharing one schema derivation with MCP `outputSchema`.
 - **#23** ✅ *main: adapters only, decided 2026-10-27 — Tower stays out of rws's own request path (performance): `tower` feature with `mount`/`TowerApp`, `TowerLayer`, `TowerService`, dedicated `rws-tower` runtime; `examples/tower.rs` mounts tonic-health + a tower-http layer, `ci/e2e/tower.sh` (grpcurl over h2c: unary, trailers-only, server streaming)* **Opt-in tower compatibility** — tower `Layer` / `Service` usable as rws middleware and handlers, and an rws `Application` usable as a tower `Service`; opens tower-http and tonic (gRPC serving) without building them.
-- **#42** ✅ *main: `{param}` syntax (0ac36e80); `starters/api` + `starters/mcp` (`ci/e2e/starters.sh`); `agents/` skill + generated Cursor/Copilot files (`ci/gen_agents.py`); llms files per release on the site* **Scaffolding and routing DX, for people and coding agents** — `{param}` path syntax next to `:param` (what axum 0.8 users expect); starters that are standalone projects (`starters/`, each with its own `AGENTS.md`, copyable with `cargo generate`); an agent skill/rules pack (`agents/`); `llms.txt` per release. *Changed 2026-10-27:* no `rws new` / `cargo-rws` — for agent-driven development a scaffolder adds little next to accurate, versioned context; the docs MCP server for that context is in [WEBSITE.md](WEBSITE.md#hosting-and-the-docs-mcp-server), for the hosted site.
+- **#42** ✅ *main: `{param}` syntax (0ac36e80); `starters/api` + `starters/mcp` (`ci/e2e/starters.sh`); `agents/` skill + generated Cursor/Copilot files (`ci/gen_agents.py`); llms files per release on the site* **Scaffolding and routing DX, for people and coding agents** — `{param}` path syntax next to `:param` (what axum 0.8 users expect); starters that are standalone projects (`starters/`, each with its own `AGENTS.md`, copyable with `cargo generate`); an agent skill/rules pack (`agents/`); `llms.txt` per release. *Changed 2026-10-27:* no `rws new` / `cargo-rws` (generators inside a project revisited in #88) — for agent-driven development a scaffolder adds little next to accurate, versioned context; the docs MCP server for that context is in [WEBSITE.md](WEBSITE.md#hosting-and-the-docs-mcp-server), for the hosted site.
 
 **Done when:** OpenAPI output validated with an OpenAPI 3.1 validator for an example app; a tower-http layer and a tonic service mounted in an example; each starter builds and passes its own tests in CI against the checkout; the agent pack and per-release `llms.txt` are published with the release.
 
@@ -267,6 +267,63 @@ No new features: the fixes and release gating from the review of 18.20–18.23. 
 
 - **#83** **Release gating** — CI-gated tags, `--locked`, actionlint, a Windows check.
 - **#84** **`trusted_proxies`** — forwarding headers believed only from trusted peers.
+
+## 18.28.0 — Agent-first foundations
+
+Rws as a Rails/Spring-class framework built agent-first: the app explains itself to agents, mistakes fail at compile time, one conventional layout. Plan, gap review and decisions: [AGENT_FIRST_FRAMEWORK.md](AGENT_FIRST_FRAMEWORK.md) (2026-11-04).
+
+- **#85** **`app.dev_mcp()`** — the binary's ops MCP tools moved into `rws-server`, plus routes with middleware, models, DB schema, migrations, config, jobs and recent errors; off unless `RWS_ENV=dev` or a token is set.
+- **#86** **Compile-checked routes** — `#[get]`/`#[post]` generate the handler adapter, extractors as arguments, path parameters checked at compile time, duplicate and shadowed routes reported when the app is built.
+- **#87** **Conventional layout and `rws.app.toml` manifest** — where routes, models, jobs, migrations, templates and tests go; the starters adopt it.
+
+**Done when:** a starter answers every `dev_mcp` tool in CI; compile-fail tests for a wrong path parameter and a duplicate route; starters on the new layout pass `ci/e2e/starters.sh`; SKILL.md and llms files updated.
+
+## 18.29.0 — Generators and test loop
+
+- **#88** **`rws gen model|route|migration|test`** — CLI and MCP tools, output pinned to the release's API. Revisits #42's "no scaffolder" in part: still no `rws new`, but generators inside a project ([AGENT_FIRST_FRAMEWORK.md](AGENT_FIRST_FRAMEWORK.md#decisions)).
+- **#89** **Test ergonomics** — `TestDb` (a transaction per test), factories, WebSocket/SSE in `TestClient`, an OpenAPI snapshot assertion.
+
+**Done when:** every generator's output compiles and passes its generated test in CI, for each starter.
+
+## 18.30.0 — Data
+
+- **#90** **ORM** — generic/UUID keys, timestamps, eager `with()`, many-to-many, scopes, soft delete, optimistic locking, seeds, read replicas, schema dump as JSON.
+- **#91** **`rws db migrate|rollback|status|seed`**.
+
+**Done when:** SQLite, PostgreSQL and MySQL pass the new model tests in CI.
+
+## 18.31.0 — App building blocks
+
+- **#92** **Auth flows** — sign-up, login, password reset, email confirmation (JSON and Tera).
+- **#93** **Jobs, mail and events** — `run_at`, queues, unique jobs, dead-letter, persistent cron across replicas; templated mail, previews, `deliver_later`; a typed `EventBus`.
+- **#94** **Web layer** — `resource()` routing, `nest`/`group`, route guards, `Form<T>`, flash messages, view helpers, Vite manifest helper, channels over WebSocket/SSE, attachments on models.
+- **#95** **Defaults** — `RWS_ENV` profiles, problem+json by default, a dev error page, a `fetch_or` cache, DI lifecycle hooks.
+
+**Done when:** `starters/fullstack` uses the auth flows, a job, a mail and the web layer, and passes in CI.
+
+## 18.32.0 — Developer adoption
+
+Plan and gap review for developers and enterprises: [ADOPTION.md](ADOPTION.md) (2026-11-04).
+
+- **#96** **docs.rs and feature presets** — every feature's items on docs.rs; presets (`web`, `api`, `proxy`, `full`) with compile times.
+- **#97** **Library quick start** — `cargo add` → route → database → template → test, run by CI.
+- **#98** **Migration guides** — from axum and actix; nginx / Caddy config to `rws.config.toml`.
+- **#99** **README for two audiences** — library first, server second.
+- **#100** **Deploy recipes** — Fly.io, Cloud Run, Railway, Render; a Dockerfile template for library apps.
+- **#101** **Deprecation policy** in the support policy.
+
+**Done when:** docs.rs shows every feature's items; the quick start and each recipe's Dockerfile build in CI.
+
+## 18.33.0 — Enterprise readiness
+
+- **#102** **Logs for security monitoring** — OTLP logs, syslog/CEF, IP anonymisation and header redaction in access logs, a hash-chained audit log.
+- **#103** **Supply chain** — OpenSSF Scorecard, reproducible builds, a SLSA statement, a signed Helm chart.
+- **#104** **HA/DR and upgrade runbook** — with an N-1 → N compatibility e2e.
+- **#105** **SCIM and LDAP for admin users**, admin roles scoped per host.
+- **#106** **Module maturity tiers** — production / preview per module, with conformance status, on the docs home.
+- **#107** **Observability recipes** — Datadog, Splunk, Elastic, New Relic.
+
+**Done when:** `ci/e2e/otlp.sh` receives logs; a release build reproduces bit for bit; the compatibility e2e passes for 18.31 → 18.33. Non-code items (second maintainer, independent audit, commercial support) are listed in [ADOPTION.md](ADOPTION.md#outside-the-code).
 
 ## 19.0.0 — Breaking changes
 
