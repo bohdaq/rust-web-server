@@ -772,3 +772,26 @@ fn sampling_follows_the_rate() {
     let hits = (0..20_000).filter(|_| sampled(super::random_u64(), 0.1)).count();
     assert!((1_500..2_500).contains(&hits), "{hits}");
 }
+
+#[cfg(feature = "http2")]
+#[test]
+fn async_handlers_on_the_shared_runtime_keep_the_callers_span() {
+    init_tracer();
+    std::thread::spawn(|| {
+        let root = span("root");
+        assert!(set_baggage("k", "v"));
+        let root_id = root.span_id();
+        let (parent, trace, baggage) = crate::async_bridge::block_on_shared(async {
+            // Polled on an `rws-async` worker; after the yield maybe another one.
+            tokio::task::yield_now().await;
+            let child = span("child");
+            (child.parent_span_id(), child.trace_id(), current_baggage().get("k").map(str::to_string))
+        });
+        assert_eq!(Some(root_id), parent);
+        assert_eq!(root.trace_id(), trace);
+        assert_eq!(Some("v".to_string()), baggage);
+        assert!(std::thread::spawn(|| Context::current().is_empty()).join().unwrap());
+    })
+    .join()
+    .unwrap();
+}

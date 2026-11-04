@@ -233,18 +233,16 @@ impl<'a, A: Application> TestRequest<'a, A> {
 
 #[cfg(feature = "http2")]
 impl<'a, S: Send + Sync + 'static> TestRequest<'a, crate::async_state::AsyncAppWithState<S>> {
-    /// Dispatch the request to an `App::with_async_state` app on the
-    /// caller's runtime, awaiting the handler there. Use it from
-    /// `#[tokio::test]` whenever the handler uses a `DbPool` (or anything
-    /// else that leaves tasks on a runtime): [`send`](Self::send) runs an
-    /// async handler on a runtime made for the request and dropped after
-    /// it, so tasks the handler leaves behind never run — sqlx returns a
-    /// pool connection with such a task, so the connection is closed (and a
-    /// `TestDb`'s in-memory SQLite database with it) — and while `send`
-    /// waits, a single-threaded test runtime can't run its own tasks either.
+    /// Dispatch the request to an `App::with_async_state` app and await
+    /// the handler, as the async servers do (on this runtime when it's
+    /// multi-threaded, else on rws's `rws-async` runtime). Use it from
+    /// `#[tokio::test]`: [`send`](Self::send) blocks the test's thread while
+    /// the handler runs, so on a single-threaded test runtime anything made
+    /// on it — a PostgreSQL or MySQL `DbPool`'s connections — can't make
+    /// progress meanwhile.
     pub async fn send_async(self) -> TestResponse {
         let (request, client) = self.into_request();
-        let result = client.app.execute_async(&request, &client.connection).await;
+        let result = client.app.respond(&request, &client.connection).await;
         TestResponse::from_response(result.unwrap_or_else(error_response))
     }
 }

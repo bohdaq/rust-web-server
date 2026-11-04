@@ -108,11 +108,9 @@ let app = App::new().wrap(proxy);
 ```
 
 `H2ReverseProxy` bridges between the synchronous middleware calling
-convention and the async tokio runtime via an internal `block_on_isolated`
-helper — a scoped OS thread running its own single-threaded tokio runtime,
-rather than `tokio::task::block_in_place`. This works under any tokio
-runtime flavor (including `current_thread`, where `block_in_place` would
-panic) and even with no runtime active at all.
+convention and async I/O by running its upstream connections on a dedicated
+two-thread runtime (`rws-h2-upstream`): one pooled, multiplexed connection
+per backend, whatever runtime (or none) the request arrives on.
 
 ## Async handlers
 

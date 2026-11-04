@@ -213,3 +213,18 @@ fn async_handlers_on_another_thread_see_the_caller() {
     assert_eq!(seen.as_deref(), Some("user:alice"));
 }
 
+#[cfg(feature = "http2")]
+#[test]
+fn async_handlers_on_the_shared_runtime_see_the_caller() {
+    let seen = with_identity(Identity::new("bob", "test"), || {
+        crate::async_bridge::block_on_shared(async {
+            tokio::task::yield_now().await;
+            Identity::current().map(|i| i.subject().to_string())
+        })
+    });
+    assert_eq!(seen.as_deref(), Some("user:bob"));
+    // Nothing stays behind on the runtime's worker.
+    let after = crate::async_bridge::block_on_shared(async { Identity::current().is_none() });
+    assert!(after);
+}
+

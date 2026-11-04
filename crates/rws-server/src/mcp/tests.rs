@@ -2399,6 +2399,31 @@ mod async_tool_tests {
         assert!(body.contains("\"isError\":false"), "unexpected call result: {body}");
     }
 
+    /// Regression: an async tool ran on a runtime dropped after the call, so
+    /// tasks it left behind (sqlx returning a pool connection) never ran.
+    #[test]
+    fn tasks_an_async_tool_spawns_outlive_the_call() {
+        let done = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&done);
+        let srv = McpServer::new("test-srv", "0.1").async_tool("later", "Spawns a task", r#"{"type":"object"}"#, move |_args: &str| {
+            let flag = Arc::clone(&flag);
+            async move {
+                tokio::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                    flag.store(true, Ordering::SeqCst);
+                });
+                Ok(McpContent::text("started"))
+            }
+        });
+        let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"later","arguments":{}}}"#);
+        assert!(body_of(&resp).contains("started"), "{}", body_of(&resp));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !done.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(done.load(Ordering::SeqCst), "the task was dropped with the call's runtime");
+    }
+
     #[test]
     fn async_tool_error_surfaces_as_is_error_true() {
         let srv = McpServer::new("test-srv", "0.1").async_tool(
