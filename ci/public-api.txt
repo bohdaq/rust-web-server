@@ -270,6 +270,16 @@ impl core::clone::Clone for rust_web_server::gateway_api::types::SupportedFeatur
 impl core::clone::Clone for rust_web_server::gateway_api::types::TlsConfig
 impl core::clone::Clone for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::clone::Clone for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::clone::Clone for rust_web_server::generator::BaseType
+impl core::clone::Clone for rust_web_server::generator::ChangeKind
+impl core::clone::Clone for rust_web_server::generator::Db
+impl core::clone::Clone for rust_web_server::generator::Field
+impl core::clone::Clone for rust_web_server::generator::FieldType
+impl core::clone::Clone for rust_web_server::generator::FileChange
+impl core::clone::Clone for rust_web_server::generator::GenError
+impl core::clone::Clone for rust_web_server::generator::Generate
+impl core::clone::Clone for rust_web_server::generator::Plan
+impl core::clone::Clone for rust_web_server::generator::RouteAction
 impl core::clone::Clone for rust_web_server::header::Header
 impl core::clone::Clone for rust_web_server::i18n::AcceptLanguage
 impl core::clone::Clone for rust_web_server::i18n::Catalog
@@ -465,6 +475,16 @@ impl core::cmp::Eq for rust_web_server::gateway_api::types::ParentReference
 impl core::cmp::Eq for rust_web_server::gateway_api::types::RouteGroupKind
 impl core::cmp::Eq for rust_web_server::gateway_api::types::SecretObjectReference
 impl core::cmp::Eq for rust_web_server::gateway_api::types::SupportedFeature
+impl core::cmp::Eq for rust_web_server::generator::BaseType
+impl core::cmp::Eq for rust_web_server::generator::ChangeKind
+impl core::cmp::Eq for rust_web_server::generator::Db
+impl core::cmp::Eq for rust_web_server::generator::Field
+impl core::cmp::Eq for rust_web_server::generator::FieldType
+impl core::cmp::Eq for rust_web_server::generator::FileChange
+impl core::cmp::Eq for rust_web_server::generator::GenError
+impl core::cmp::Eq for rust_web_server::generator::Generate
+impl core::cmp::Eq for rust_web_server::generator::Plan
+impl core::cmp::Eq for rust_web_server::generator::RouteAction
 impl core::cmp::Eq for rust_web_server::header::Header
 impl core::cmp::Eq for rust_web_server::i18n::AcceptLanguage
 impl core::cmp::Eq for rust_web_server::ingress::PathType
@@ -653,6 +673,16 @@ impl core::cmp::PartialEq for rust_web_server::gateway_api::types::SupportedFeat
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::TlsConfig
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::cmp::PartialEq for rust_web_server::generator::BaseType
+impl core::cmp::PartialEq for rust_web_server::generator::ChangeKind
+impl core::cmp::PartialEq for rust_web_server::generator::Db
+impl core::cmp::PartialEq for rust_web_server::generator::Field
+impl core::cmp::PartialEq for rust_web_server::generator::FieldType
+impl core::cmp::PartialEq for rust_web_server::generator::FileChange
+impl core::cmp::PartialEq for rust_web_server::generator::GenError
+impl core::cmp::PartialEq for rust_web_server::generator::Generate
+impl core::cmp::PartialEq for rust_web_server::generator::Plan
+impl core::cmp::PartialEq for rust_web_server::generator::RouteAction
 impl core::cmp::PartialEq for rust_web_server::header::Header
 impl core::cmp::PartialEq for rust_web_server::i18n::AcceptLanguage
 impl core::cmp::PartialEq for rust_web_server::ingress::IngressRule
@@ -916,6 +946,7 @@ impl core::default::Default for rust_web_server::waf::WafConfig
 impl core::error::Error for rust_web_server::app_manifest::ManifestError
 impl core::error::Error for rust_web_server::authz::rebac::AuthzError
 impl core::error::Error for rust_web_server::core::base64::DecodeError
+impl core::error::Error for rust_web_server::generator::GenError
 impl core::error::Error for rust_web_server::http_client::HttpClientError
 impl core::error::Error for rust_web_server::model::DbError
 impl core::error::Error for rust_web_server::sse::SseClosed
@@ -1080,6 +1111,16 @@ impl core::fmt::Debug for rust_web_server::gateway_api::types::SupportedFeature
 impl core::fmt::Debug for rust_web_server::gateway_api::types::TlsConfig
 impl core::fmt::Debug for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::fmt::Debug for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::fmt::Debug for rust_web_server::generator::BaseType
+impl core::fmt::Debug for rust_web_server::generator::ChangeKind
+impl core::fmt::Debug for rust_web_server::generator::Db
+impl core::fmt::Debug for rust_web_server::generator::Field
+impl core::fmt::Debug for rust_web_server::generator::FieldType
+impl core::fmt::Debug for rust_web_server::generator::FileChange
+impl core::fmt::Debug for rust_web_server::generator::GenError
+impl core::fmt::Debug for rust_web_server::generator::Generate
+impl core::fmt::Debug for rust_web_server::generator::Plan
+impl core::fmt::Debug for rust_web_server::generator::RouteAction
 impl core::fmt::Debug for rust_web_server::header::Header
 impl core::fmt::Debug for rust_web_server::http_client::HttpClientError
 impl core::fmt::Debug for rust_web_server::http_client::Response
@@ -1231,6 +1272,8 @@ impl core::fmt::Display for rust_web_server::authz::rebac::Subject
 impl core::fmt::Display for rust_web_server::authz::rebac::Tuple
 impl core::fmt::Display for rust_web_server::core::base64::DecodeError
 impl core::fmt::Display for rust_web_server::entry_point::RwsEnv
+impl core::fmt::Display for rust_web_server::generator::FieldType
+impl core::fmt::Display for rust_web_server::generator::GenError
 impl core::fmt::Display for rust_web_server::http_client::HttpClientError
 impl core::fmt::Display for rust_web_server::json::property::JSONValue
 impl core::fmt::Display for rust_web_server::model::DbError
@@ -1259,6 +1302,11 @@ impl core::marker::Copy for rust_web_server::compression::dictionary::Dictionary
 impl core::marker::Copy for rust_web_server::core::base64::Alphabet
 impl core::marker::Copy for rust_web_server::core::base64::Decoder
 impl core::marker::Copy for rust_web_server::entry_point::RwsEnv
+impl core::marker::Copy for rust_web_server::generator::BaseType
+impl core::marker::Copy for rust_web_server::generator::ChangeKind
+impl core::marker::Copy for rust_web_server::generator::Db
+impl core::marker::Copy for rust_web_server::generator::FieldType
+impl core::marker::Copy for rust_web_server::generator::RouteAction
 impl core::marker::Copy for rust_web_server::ingress::PathType
 impl core::marker::Copy for rust_web_server::llm::Api
 impl core::marker::Copy for rust_web_server::llm::usage::Usage
@@ -1492,6 +1540,16 @@ impl core::marker::Freeze for rust_web_server::gateway_api::types::SupportedFeat
 impl core::marker::Freeze for rust_web_server::gateway_api::types::TlsConfig
 impl core::marker::Freeze for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::marker::Freeze for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::marker::Freeze for rust_web_server::generator::BaseType
+impl core::marker::Freeze for rust_web_server::generator::ChangeKind
+impl core::marker::Freeze for rust_web_server::generator::Db
+impl core::marker::Freeze for rust_web_server::generator::Field
+impl core::marker::Freeze for rust_web_server::generator::FieldType
+impl core::marker::Freeze for rust_web_server::generator::FileChange
+impl core::marker::Freeze for rust_web_server::generator::GenError
+impl core::marker::Freeze for rust_web_server::generator::Generate
+impl core::marker::Freeze for rust_web_server::generator::Plan
+impl core::marker::Freeze for rust_web_server::generator::RouteAction
 impl core::marker::Freeze for rust_web_server::header::Header
 impl core::marker::Freeze for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Freeze for rust_web_server::header::content_disposition::DispositionType
@@ -1946,6 +2004,16 @@ impl core::marker::Send for rust_web_server::gateway_api::types::SupportedFeatur
 impl core::marker::Send for rust_web_server::gateway_api::types::TlsConfig
 impl core::marker::Send for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::marker::Send for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::marker::Send for rust_web_server::generator::BaseType
+impl core::marker::Send for rust_web_server::generator::ChangeKind
+impl core::marker::Send for rust_web_server::generator::Db
+impl core::marker::Send for rust_web_server::generator::Field
+impl core::marker::Send for rust_web_server::generator::FieldType
+impl core::marker::Send for rust_web_server::generator::FileChange
+impl core::marker::Send for rust_web_server::generator::GenError
+impl core::marker::Send for rust_web_server::generator::Generate
+impl core::marker::Send for rust_web_server::generator::Plan
+impl core::marker::Send for rust_web_server::generator::RouteAction
 impl core::marker::Send for rust_web_server::header::Header
 impl core::marker::Send for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Send for rust_web_server::header::content_disposition::DispositionType
@@ -2330,6 +2398,16 @@ impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::TlsConfig
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::marker::StructuralPartialEq for rust_web_server::generator::BaseType
+impl core::marker::StructuralPartialEq for rust_web_server::generator::ChangeKind
+impl core::marker::StructuralPartialEq for rust_web_server::generator::Db
+impl core::marker::StructuralPartialEq for rust_web_server::generator::Field
+impl core::marker::StructuralPartialEq for rust_web_server::generator::FieldType
+impl core::marker::StructuralPartialEq for rust_web_server::generator::FileChange
+impl core::marker::StructuralPartialEq for rust_web_server::generator::GenError
+impl core::marker::StructuralPartialEq for rust_web_server::generator::Generate
+impl core::marker::StructuralPartialEq for rust_web_server::generator::Plan
+impl core::marker::StructuralPartialEq for rust_web_server::generator::RouteAction
 impl core::marker::StructuralPartialEq for rust_web_server::header::Header
 impl core::marker::StructuralPartialEq for rust_web_server::i18n::AcceptLanguage
 impl core::marker::StructuralPartialEq for rust_web_server::ingress::IngressRule
@@ -2626,6 +2704,16 @@ impl core::marker::Sync for rust_web_server::gateway_api::types::SupportedFeatur
 impl core::marker::Sync for rust_web_server::gateway_api::types::TlsConfig
 impl core::marker::Sync for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::marker::Sync for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::marker::Sync for rust_web_server::generator::BaseType
+impl core::marker::Sync for rust_web_server::generator::ChangeKind
+impl core::marker::Sync for rust_web_server::generator::Db
+impl core::marker::Sync for rust_web_server::generator::Field
+impl core::marker::Sync for rust_web_server::generator::FieldType
+impl core::marker::Sync for rust_web_server::generator::FileChange
+impl core::marker::Sync for rust_web_server::generator::GenError
+impl core::marker::Sync for rust_web_server::generator::Generate
+impl core::marker::Sync for rust_web_server::generator::Plan
+impl core::marker::Sync for rust_web_server::generator::RouteAction
 impl core::marker::Sync for rust_web_server::header::Header
 impl core::marker::Sync for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Sync for rust_web_server::header::content_disposition::DispositionType
@@ -3092,6 +3180,16 @@ impl core::marker::Unpin for rust_web_server::gateway_api::types::SupportedFeatu
 impl core::marker::Unpin for rust_web_server::gateway_api::types::TlsConfig
 impl core::marker::Unpin for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::marker::Unpin for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::marker::Unpin for rust_web_server::generator::BaseType
+impl core::marker::Unpin for rust_web_server::generator::ChangeKind
+impl core::marker::Unpin for rust_web_server::generator::Db
+impl core::marker::Unpin for rust_web_server::generator::Field
+impl core::marker::Unpin for rust_web_server::generator::FieldType
+impl core::marker::Unpin for rust_web_server::generator::FileChange
+impl core::marker::Unpin for rust_web_server::generator::GenError
+impl core::marker::Unpin for rust_web_server::generator::Generate
+impl core::marker::Unpin for rust_web_server::generator::Plan
+impl core::marker::Unpin for rust_web_server::generator::RouteAction
 impl core::marker::Unpin for rust_web_server::header::Header
 impl core::marker::Unpin for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Unpin for rust_web_server::header::content_disposition::DispositionType
@@ -3562,6 +3660,16 @@ impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::Supporte
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::TlsConfig
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::marker::UnsafeUnpin for rust_web_server::generator::BaseType
+impl core::marker::UnsafeUnpin for rust_web_server::generator::ChangeKind
+impl core::marker::UnsafeUnpin for rust_web_server::generator::Db
+impl core::marker::UnsafeUnpin for rust_web_server::generator::Field
+impl core::marker::UnsafeUnpin for rust_web_server::generator::FieldType
+impl core::marker::UnsafeUnpin for rust_web_server::generator::FileChange
+impl core::marker::UnsafeUnpin for rust_web_server::generator::GenError
+impl core::marker::UnsafeUnpin for rust_web_server::generator::Generate
+impl core::marker::UnsafeUnpin for rust_web_server::generator::Plan
+impl core::marker::UnsafeUnpin for rust_web_server::generator::RouteAction
 impl core::marker::UnsafeUnpin for rust_web_server::header::Header
 impl core::marker::UnsafeUnpin for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::UnsafeUnpin for rust_web_server::header::content_disposition::DispositionType
@@ -4017,6 +4125,16 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::t
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::TlsConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::BaseType
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::ChangeKind
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::Db
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::Field
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::FieldType
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::FileChange
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::GenError
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::Generate
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::Plan
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::RouteAction
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::header::Header
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::header::content_disposition::ContentDisposition
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::header::content_disposition::DispositionType
@@ -4447,6 +4565,16 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::type
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::TlsConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::BaseType
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::ChangeKind
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::Db
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::Field
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::FieldType
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::FileChange
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::GenError
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::Generate
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::Plan
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::RouteAction
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::header::Header
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::header::content_disposition::ContentDisposition
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::header::content_disposition::DispositionType
@@ -4847,6 +4975,15 @@ impl rust_web_server::gateway_api::router::PortRouter
 impl rust_web_server::gateway_api::services::ServiceSettings
 impl rust_web_server::gateway_api::types::BackendObjectReference
 impl rust_web_server::gateway_api::types::ParentReference
+impl rust_web_server::generator::BaseType
+impl rust_web_server::generator::ChangeKind
+impl rust_web_server::generator::Db
+impl rust_web_server::generator::Field
+impl rust_web_server::generator::FieldType
+impl rust_web_server::generator::GenError
+impl rust_web_server::generator::Generate
+impl rust_web_server::generator::Plan
+impl rust_web_server::generator::RouteAction
 impl rust_web_server::handler::FromPath for alloc::string::String
 impl rust_web_server::handler::FromPath for bool
 impl rust_web_server::handler::FromPath for char
@@ -5814,6 +5951,7 @@ pub const rust_web_server::ctl::EXIT_OK: i32
 pub const rust_web_server::ctl::EXIT_UNUSABLE: i32
 pub const rust_web_server::dev_mcp::DEFAULT_TOKEN_ENV: &str
 pub const rust_web_server::dev_mcp::DEV_WRITE_TOOLS: [&str; 2]
+pub const rust_web_server::dev_mcp::GEN_TOOLS: [&str; 4]
 pub const rust_web_server::dev_mcp::OPS_WRITE_TOOLS: [&str; 8]
 pub const rust_web_server::disk_guard::RECHECK: core::time::Duration
 pub const rust_web_server::disk_guard::RWS_CONFIG_MIN_FREE_DISK: &str
@@ -5940,6 +6078,12 @@ pub const rust_web_server::gateway_api::translate::GATEWAY_NAME_LABEL: &str
 pub const rust_web_server::gateway_api::translate::MANAGED_BY: &str
 pub const rust_web_server::gateway_api::translate::SUPPORTED_FEATURES: &[&str]
 pub const rust_web_server::gateway_api::types::GATEWAY_GROUP: &str
+pub const rust_web_server::generator::EXIT_CONFLICT: i32
+pub const rust_web_server::generator::EXIT_OK: i32
+pub const rust_web_server::generator::EXIT_USAGE: i32
+pub const rust_web_server::generator::FIELD_TYPES: &str
+pub const rust_web_server::generator::MAX_NAME_LEN: usize
+pub const rust_web_server::generator::RouteAction::ALL: [rust_web_server::generator::RouteAction; 5]
 pub const rust_web_server::handler::FromPath::ARITY: usize
 pub const rust_web_server::handler::FromPath::NAMES: &'static [&'static str]
 pub const rust_web_server::handler::RouteSpec::METHOD: &'static str
@@ -6584,6 +6728,11 @@ pub enum rust_web_server::fleet::Source
 pub enum rust_web_server::gateway_api::filters::Cors
 pub enum rust_web_server::gateway_api::l4::Hello
 pub enum rust_web_server::gateway_api::lease::Decision
+pub enum rust_web_server::generator::BaseType
+pub enum rust_web_server::generator::ChangeKind
+pub enum rust_web_server::generator::Db
+pub enum rust_web_server::generator::Generate
+pub enum rust_web_server::generator::RouteAction
 pub enum rust_web_server::ingress::PathType
 pub enum rust_web_server::ip_filter::TrustedProxies
 pub enum rust_web_server::llm::Api
@@ -7957,6 +8106,61 @@ pub fn rust_web_server::gateway_api::types::TypedLocalReference::deserialize<__D
 pub fn rust_web_server::gateway_api::types::TypedLocalReference::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::types::TypedLocalReference::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::types::TypedLocalReference::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::generator::BaseType::clone(&self) -> Self
+pub fn rust_web_server::generator::BaseType::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::BaseType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::BaseType::rust(self) -> &'static str
+pub fn rust_web_server::generator::ChangeKind::as_str(self) -> &'static str
+pub fn rust_web_server::generator::ChangeKind::clone(&self) -> Self
+pub fn rust_web_server::generator::ChangeKind::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::ChangeKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::Db::as_str(self) -> &'static str
+pub fn rust_web_server::generator::Db::clone(&self) -> Self
+pub fn rust_web_server::generator::Db::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::Db::feature(self) -> &'static str
+pub fn rust_web_server::generator::Db::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::Db::parse(&str) -> core::option::Option<rust_web_server::generator::Db>
+pub fn rust_web_server::generator::Field::clone(&self) -> Self
+pub fn rust_web_server::generator::Field::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::Field::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::Field::parse(&str) -> core::result::Result<rust_web_server::generator::Field, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::Field::spec(&self) -> alloc::string::String
+pub fn rust_web_server::generator::FieldType::clone(&self) -> Self
+pub fn rust_web_server::generator::FieldType::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::FieldType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::FieldType::parse(&str) -> core::result::Result<rust_web_server::generator::FieldType, alloc::string::String>
+pub fn rust_web_server::generator::FieldType::rust(&self) -> alloc::string::String
+pub fn rust_web_server::generator::FileChange::clone(&self) -> Self
+pub fn rust_web_server::generator::FileChange::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::FileChange::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::GenError::clone(&self) -> Self
+pub fn rust_web_server::generator::GenError::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::GenError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::GenError::to_json(&self) -> alloc::string::String
+pub fn rust_web_server::generator::Generate::clone(&self) -> Self
+pub fn rust_web_server::generator::Generate::command_line(&self) -> alloc::string::String
+pub fn rust_web_server::generator::Generate::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::Generate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::Generate::kind(&self) -> &'static str
+pub fn rust_web_server::generator::Plan::apply(&self, impl core::convert::AsRef<std::path::Path>) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::Plan::clone(&self) -> Self
+pub fn rust_web_server::generator::Plan::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::Plan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::Plan::has_conflicts(&self) -> bool
+pub fn rust_web_server::generator::Plan::is_unchanged(&self) -> bool
+pub fn rust_web_server::generator::Plan::render(&self, bool) -> alloc::string::String
+pub fn rust_web_server::generator::Plan::status(&self) -> &'static str
+pub fn rust_web_server::generator::Plan::to_json(&self, bool) -> alloc::string::String
+pub fn rust_web_server::generator::RouteAction::clone(&self) -> Self
+pub fn rust_web_server::generator::RouteAction::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::RouteAction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::RouteAction::handler(self) -> &'static str
+pub fn rust_web_server::generator::RouteAction::parse(&str) -> core::option::Option<rust_web_server::generator::RouteAction>
+pub fn rust_web_server::generator::RouteAction::parse_list(&str) -> core::result::Result<alloc::vec::Vec<rust_web_server::generator::RouteAction>, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::parse_fields<S: core::convert::AsRef<str>>(&[S]) -> core::result::Result<alloc::vec::Vec<rust_web_server::generator::Field>, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::plan(impl core::convert::AsRef<std::path::Path>, &rust_web_server::generator::Generate) -> core::result::Result<rust_web_server::generator::Plan, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::requested(&[alloc::string::String]) -> core::option::Option<&[alloc::string::String]>
+pub fn rust_web_server::generator::run(&[alloc::string::String], &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
 pub fn rust_web_server::handler::AsyncHandler::handle_async(&self, rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> rust_web_server::handler::HandlerFuture
 pub fn rust_web_server::handler::Form<T>::clone(&self) -> Self
 pub fn rust_web_server::handler::Form<T>::deref(&self) -> &T
@@ -9561,6 +9765,7 @@ pub mod rust_web_server::gateway_api::routes
 pub mod rust_web_server::gateway_api::services
 pub mod rust_web_server::gateway_api::translate
 pub mod rust_web_server::gateway_api::types
+pub mod rust_web_server::generator
 pub mod rust_web_server::handler
 pub mod rust_web_server::header
 pub mod rust_web_server::header::content_disposition
@@ -10334,6 +10539,51 @@ pub rust_web_server::gateway_api::types::TlsPortConfig::tls: rust_web_server::ga
 pub rust_web_server::gateway_api::types::TypedLocalReference::group: alloc::string::String
 pub rust_web_server::gateway_api::types::TypedLocalReference::kind: alloc::string::String
 pub rust_web_server::gateway_api::types::TypedLocalReference::name: alloc::string::String
+pub rust_web_server::generator::BaseType::Bool
+pub rust_web_server::generator::BaseType::F64
+pub rust_web_server::generator::BaseType::I32
+pub rust_web_server::generator::BaseType::I64
+pub rust_web_server::generator::BaseType::String
+pub rust_web_server::generator::ChangeKind::Conflict
+pub rust_web_server::generator::ChangeKind::Create
+pub rust_web_server::generator::ChangeKind::Edit
+pub rust_web_server::generator::ChangeKind::Unchanged
+pub rust_web_server::generator::Db::Mysql
+pub rust_web_server::generator::Db::Postgres
+pub rust_web_server::generator::Db::Sqlite
+pub rust_web_server::generator::Field::name: alloc::string::String
+pub rust_web_server::generator::Field::ty: rust_web_server::generator::FieldType
+pub rust_web_server::generator::FieldType::base: rust_web_server::generator::BaseType
+pub rust_web_server::generator::FieldType::optional: bool
+pub rust_web_server::generator::FileChange::content: alloc::string::String
+pub rust_web_server::generator::FileChange::diff: alloc::string::String
+pub rust_web_server::generator::FileChange::kind: rust_web_server::generator::ChangeKind
+pub rust_web_server::generator::FileChange::original: core::option::Option<alloc::string::String>
+pub rust_web_server::generator::FileChange::path: alloc::string::String
+pub rust_web_server::generator::GenError::message: alloc::string::String
+pub rust_web_server::generator::GenError::usage: bool
+pub rust_web_server::generator::Generate::Migration
+pub rust_web_server::generator::Generate::Migration::name: alloc::string::String
+pub rust_web_server::generator::Generate::Model
+pub rust_web_server::generator::Generate::Model::db: core::option::Option<rust_web_server::generator::Db>
+pub rust_web_server::generator::Generate::Model::fields: alloc::vec::Vec<rust_web_server::generator::Field>
+pub rust_web_server::generator::Generate::Model::name: alloc::string::String
+pub rust_web_server::generator::Generate::Route
+pub rust_web_server::generator::Generate::Route::actions: alloc::vec::Vec<rust_web_server::generator::RouteAction>
+pub rust_web_server::generator::Generate::Route::fields: alloc::vec::Vec<rust_web_server::generator::Field>
+pub rust_web_server::generator::Generate::Route::prefix: alloc::string::String
+pub rust_web_server::generator::Generate::Route::resource: alloc::string::String
+pub rust_web_server::generator::Generate::Test
+pub rust_web_server::generator::Generate::Test::app_expr: core::option::Option<alloc::string::String>
+pub rust_web_server::generator::Generate::Test::resource: alloc::string::String
+pub rust_web_server::generator::Plan::changes: alloc::vec::Vec<rust_web_server::generator::FileChange>
+pub rust_web_server::generator::Plan::command: alloc::string::String
+pub rust_web_server::generator::Plan::notes: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::generator::RouteAction::Create
+pub rust_web_server::generator::RouteAction::List
+pub rust_web_server::generator::RouteAction::Remove
+pub rust_web_server::generator::RouteAction::Show
+pub rust_web_server::generator::RouteAction::Update
 pub rust_web_server::handler::RequestParts::connection: &'a rust_web_server::server::ConnectionInfo
 pub rust_web_server::handler::RequestParts::params: &'a rust_web_server::router::PathParams
 pub rust_web_server::handler::RequestParts::path_names: &'static [&'static str]
@@ -11434,6 +11684,11 @@ pub struct rust_web_server::gateway_api::types::SupportedFeature
 pub struct rust_web_server::gateway_api::types::TlsConfig
 pub struct rust_web_server::gateway_api::types::TlsPortConfig
 pub struct rust_web_server::gateway_api::types::TypedLocalReference
+pub struct rust_web_server::generator::Field
+pub struct rust_web_server::generator::FieldType
+pub struct rust_web_server::generator::FileChange
+pub struct rust_web_server::generator::GenError
+pub struct rust_web_server::generator::Plan
 pub struct rust_web_server::handler::Form<T>(pub T)
 pub struct rust_web_server::handler::Path<T>(pub T)
 pub struct rust_web_server::handler::Query<T>(pub T)

@@ -7,7 +7,33 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- **`rws gen model|route|migration|test`** (roadmap #88): code generators for
+  a project in the conventional layout (`rws.app.toml`). `gen model Post
+  title:String …` writes a `#[derive(Model)]` type (`id` auto-increment, a
+  test — with SQLite a round trip through the migrations) and
+  `migrations/NNNN_create_posts.sql` + `.down.sql` for SQLite, PostgreSQL or
+  MySQL (`--db`, else the `model-*` feature in `Cargo.toml`, which is added
+  when missing); `gen route posts` typed handlers (`#[get]` …, list, show,
+  create, update, remove) with `register(app)`, registered in `app()`;
+  `gen migration <name>` an empty up/down pair; `gen test posts`
+  `TestClient` tests for those routes. Output is pinned to the release's API —
+  CI generates into every starter and runs the generated tests. Nothing is
+  overwritten: a file in the way is a conflict shown as a unified diff (exit
+  1), so a second run changes nothing; `--dry-run`, `--json`, `--dir`. Also
+  the dev MCP endpoint's `gen_model`, `gen_route`, `gen_migration`,
+  `gen_test` tools (`dev_mcp::GEN_TOOLS`; left out by `.read_only()`;
+  `dry_run`) and the `rust_web_server::generator` module. See
+  [Generators](https://rws8.tech/building-apps/generators/).
+
 ### Fixed
+
+- **MCP: `tools/call` read the tool's name from its arguments** when an
+  argument was called `name` and the client sent `arguments` before `name`
+  (as clients that sort keys do): the call went to the wrong tool or failed
+  with "Unknown tool". The name and the arguments are now `params`' own
+  members.
 
 - **Proxy: no 502 for a POST after a backend closed an idle connection.** The
   upstream pools kept idle connections for 60 s, while an rws backend closes

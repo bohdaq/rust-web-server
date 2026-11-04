@@ -153,7 +153,29 @@ describe the new API.
 
 - **#88 `rws gen model|route|migration|test`** — CLI and `dev_mcp` tools,
   output pinned to the release; idempotent (refuses to overwrite, prints a
-  diff).
+  diff). *Shipped on main (unreleased):* `generator` in `rws-proxy` (beside
+  `dev_mcp`, which mounts it; re-exported as `rust_web_server::generator`):
+  `plan(dir, &Generate)` reads the project (paths from `rws.app.toml`) and
+  answers a `Plan` of file changes with unified diffs, `Plan::apply` writes
+  it; `rws gen` (exit 0/1/2, `--dry-run`, `--json`, `--dir`) and the
+  `gen_model`/`gen_route`/`gen_migration`/`gen_test` tools (`GEN_TOOLS`,
+  listed unless read-only, `dry_run`) are front ends. Files it creates are
+  never replaced (identical = unchanged, else a conflict and nothing of the
+  plan is written); existing files only get a line (`pub mod …;`, the
+  `model-<db>` feature, the new `register` call wrapped around `app()`'s
+  existing one), or a note says what to add by hand. Decisions taken: the
+  generated routes are stateless typed handlers over a module-level
+  in-memory store (they compile against any `AppWithState<S>` /
+  `AsyncAppWithState<S>`; the app type and `S` are read from `app()`'s
+  signature), not wired to the model — the starters' stores differ too much
+  to generate against; an app without such an `app()` (the `mcp` starter's
+  `McpServer`) is refused for `gen route`/`gen test`; the model's own test
+  round-trips through SQLite in memory when the backend is SQLite; the empty
+  migration is `SELECT 1;` (the migrator splits at `;` and runs each part).
+  `ci/e2e/starters.sh` runs the generators in every starter (twice, then a
+  conflicting model) and `cargo test`. Found on the way: `tools/call` took
+  the tool name from `arguments.name` when a client sent `arguments` first
+  (fixed in `McpServer::call_tool`).
 - **#89 Test ergonomics** — `TestDb` (a transaction per test, rolled back),
   factories from `#[derive(Model)]`, WebSocket/SSE in `TestClient`, an OpenAPI
   snapshot assertion; machine-readable test failures for agents.

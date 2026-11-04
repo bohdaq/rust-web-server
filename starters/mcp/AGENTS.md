@@ -24,6 +24,11 @@ are its MCP tools, so the manifest says `routes = "src/tools"`:
 - `tests/`: integration tests against `server()`; `tests/dev_mcp.rs`
   checks every dev MCP tool answers (CI runs it).
 
+`rws gen model` and `rws gen migration` (the `rws` binary of the same
+release) write `#[derive(Model)]` types and migrations here too; `rws gen
+route`/`test` are for HTTP apps with an `app()` and refuse this one — write
+tools by hand. https://rws8.tech/building-apps/generators/
+
 ## rws's MCP server, in brief
 
 Docs for this version: https://rws8.tech/mcp/overview/, all docs in one

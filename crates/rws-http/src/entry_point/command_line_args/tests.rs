@@ -314,6 +314,7 @@ fn informational_flag_help_lists_every_option_and_env_var() {
         assert!(help.contains(&argument.environment_variable), "missing {}", argument.environment_variable);
     }
     assert!(help.contains("--version"));
+    assert!(help.contains("ctl <command>") && help.contains("gen model|route|migration|test"), "the subcommands are listed");
 }
 
 #[test]
