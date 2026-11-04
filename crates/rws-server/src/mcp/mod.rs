@@ -931,12 +931,9 @@ pub struct ToolCallRecord<'a> {
     pub duration: Duration,
 }
 /// An async tool handler, boxed so `AsyncToolDef` can store handlers with
-/// different concrete `Future` types uniformly. The `Future` itself doesn't
-/// need `Send` for [`crate::async_bridge::block_on_isolated`] (which drives
-/// it to completion without ever moving it across a thread boundary), but
-/// it's required here anyway for consistency with [`crate::async_state`]'s
-/// equivalent handler type — the common case in practice, and one less
-/// surprise for anyone switching between the two async handler styles.
+/// different concrete `Future` types uniformly. `Send` because
+/// [`crate::async_bridge::block_on_shared`] runs it on the shared
+/// `rws-async` runtime, as [`crate::async_state`] does its handlers.
 #[cfg(feature = "http2")]
 type AsyncToolFn = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<McpContent, String>> + Send>> + Send + Sync>;
 
@@ -1076,7 +1073,7 @@ pub struct McpServer {
     tools: Arc<RwLock<Vec<ToolDef>>>,
     /// Tools registered via [`Self::async_tool`]/[`Self::register_async_tool`],
     /// bridged into synchronous [`Application::execute`] via
-    /// [`crate::async_bridge::block_on_isolated`] at call time. Kept
+    /// [`crate::async_bridge::block_on_shared`] at call time. Kept
     /// separate from `tools` rather than merged into one collection — see
     /// [`AsyncToolDef`]'s doc comment.
     #[cfg(feature = "http2")]
@@ -2107,14 +2104,12 @@ impl McpServer {
     /// query, awaiting another future) rather than forcing it through a
     /// blocking call inside a plain [`Self::tool`] handler.
     ///
-    /// Requires the `http2` feature (tokio). `tools/call` bridges into the
-    /// handler's future via [`crate::async_bridge::block_on_isolated`] —
-    /// the same mechanism `proxy::H2ReverseProxy` and
-    /// [`crate::async_state::AsyncAppWithState`] already use to call async
-    /// code from a synchronous [`Application::execute`] — rather than
-    /// `tokio::task::block_in_place`, which panics outside a `multi_thread`
-    /// runtime; `block_on_isolated` works under any runtime flavor,
-    /// including `current_thread`.
+    /// Requires the `http2` feature (tokio). `tools/call` runs the
+    /// handler's future on the process-wide `rws-async` runtime and waits
+    /// for it, as [`crate::async_state::AsyncAppWithState`] does — from any
+    /// calling context, `current_thread` runtimes included. That runtime
+    /// outlives the call, so tasks the handler leaves behind (a `DbPool`
+    /// taking its connection back) still run.
     ///
     /// Like [`Self::tool`] (not [`Self::tool_with_context`]), the handler
     /// only receives `arguments` — there is no async equivalent of
@@ -2925,7 +2920,7 @@ impl McpServer {
                     return Ok(Err(invalid));
                 }
                 let args_owned = args.clone();
-                return Ok(crate::async_bridge::block_on_isolated(move || handler(args_owned)));
+                return Ok(crate::async_bridge::block_on_shared(handler(args_owned)));
             }
         }
 

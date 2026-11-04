@@ -103,7 +103,7 @@ resp.sse()           // TestSse — the body's Server-Sent Events
 
 ## Async apps: `send_async`
 
-An `App::with_async_state` app can be driven from `#[tokio::test]` with `.send_async().await`, which awaits the handler on the test's runtime. Prefer it whenever the handler uses a `DbPool` or anything else that leaves tasks on its runtime — see [Test databases](/testing/database/#an-app-on-a-testdb) for why `.send()` loses pool connections there.
+An `App::with_async_state` app can be driven from `#[tokio::test]` with `.send_async().await`, which awaits the handler rather than blocking the test's thread as `.send()` does. Prefer it whenever the handler uses something made on the test's runtime, such as a PostgreSQL or MySQL `DbPool` — see [Test databases](/testing/database/#an-app-on-a-testdb).
 
 ```rust
 let resp = client.get("/notes").send_async().await;

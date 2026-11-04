@@ -35,8 +35,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
     `*_many(n)`, with per-type defaults (`name-3`, `email-3@example.com`,
     `0`, `false`, `None`). See [Test databases and factories](https://rws8.tech/testing/database/).
   - `TestRequest::send_async().await` for `App::with_async_state` apps:
-    awaits the handler on the test's runtime (`send` runs it on a
-    per-request runtime, where a `DbPool` loses the connection it used).
+    awaits the handler instead of blocking the test's thread (`send`
+    does), for pools made on a single-threaded test runtime.
 - **rws-macros 17.30.0** must be published before rust-web-server.
 
 - **`rws gen model|route|migration|test`** (roadmap #88): code generators for
@@ -58,6 +58,24 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   [Generators](https://rws8.tech/building-apps/generators/).
 
 ### Fixed
+
+- **`App::with_async_state` handlers lost their `DbPool` connection after
+  every request.** Each request's handler ran on a tokio runtime made for it
+  and dropped afterwards (`async_bridge::block_on_isolated`); sqlx gives a
+  connection back to its pool from a task spawned on that runtime, which
+  never ran, so the connection was closed: a reconnect per request for
+  PostgreSQL/MySQL, and `DbPool::memory()` lost its database between
+  requests. This was every request to an async route — the async servers
+  never awaited the handler directly — and `McpServer::async_tool` calls.
+  Handlers now run on long-lived runtimes: the async servers await them
+  through `Application::execute_async` (now offered for matching routes) on
+  the connection's runtime, or on a process-wide `rws-async` runtime under
+  per-core runtimes; synchronous callers (behind a middleware layer, the
+  HTTP/1.1-only build, `TestClient::send`) wait while it runs on
+  `rws-async`. Also no thread and runtime built per request, and requests no
+  async route matches go to the fallback `App` without any runtime. The
+  caller's span, `Identity` and early-hints destination stay current in the
+  handler. See [Where handlers run](https://rws8.tech/building-apps/async-handlers/#where-handlers-run).
 
 - **MCP: `tools/call` read the tool's name from its arguments** when an
   argument was called `name` and the client sent `arguments` before `name`

@@ -103,7 +103,7 @@ pub async fn scope<F: std::future::Future>(sink: Option<Arc<Sink>>, future: F) -
     TASK.scope(sink, future).await
 }
 
-fn current() -> Option<Arc<Sink>> {
+pub(crate) fn current() -> Option<Arc<Sink>> {
     #[cfg(feature = "http2")]
     if let Ok(Some(sink)) = TASK.try_with(|s| s.clone()) {
         return Some(sink);
