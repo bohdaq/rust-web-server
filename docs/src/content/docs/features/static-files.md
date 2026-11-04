@@ -207,4 +207,29 @@ curl http://localhost:7878/api/users/999   # 404 — excluded prefix, not rewrit
 curl http://localhost:7878/settings/theme  # 200 — served index.html
 ```
 
-Both env vars are read fresh on every request, so they can be changed via `rws.config.toml` + `SIGHUP` without a restart — see [Hot Config Reload](/features/hot-reload/).
+### Several apps on one server
+
+`RWS_CONFIG_SPA_FALLBACK` is one file for the whole server. When a site also hosts single-page apps under
+their own paths — a marketing site with a console at `/cloud` and an admin UI at `/admin` — give each its
+own fallback with `RWS_CONFIG_SPA_FALLBACK_ROUTES`, comma-separated `prefix=file` pairs. Everything else
+keeps its real `404`:
+
+```toml
+# rws.config.toml
+spa_fallback_routes = ["/cloud=cloud/index.html", "/admin=admin/index.html"]
+spa_fallback_exclude_prefixes = ["/cloud/api"]
+```
+
+```bash
+curl http://localhost:7878/cloud/orgs/acme/plan  # 200 — cloud/index.html
+curl http://localhost:7878/admin/users           # 200 — admin/index.html
+curl http://localhost:7878/pricing/old-page      # 404 — under no prefix
+curl http://localhost:7878/cloudy                # 404 — /cloudy isn't under /cloud
+```
+
+A path matches a prefix when it is the prefix or below it, and the longest matching prefix wins. Paths
+under no prefix use `RWS_CONFIG_SPA_FALLBACK` if it is set. The same rules as above still apply: files that
+exist are served as themselves, a last segment with a `.` still `404`s, excluded prefixes are never
+rewritten, and a missing file is a no-op (`rws --check` warns about it).
+
+The settings are read fresh on every request, so they can be changed via `rws.config.toml` + `SIGHUP` without a restart — see [Hot Config Reload](/features/hot-reload/).

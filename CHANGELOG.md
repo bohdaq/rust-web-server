@@ -9,6 +9,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **SPA fallback per path prefix**: `spa_fallback_routes = ["/cloud=cloud/index.html"]`
+  (`RWS_CONFIG_SPA_FALLBACK_ROUTES`) gives each single-page app on a server its own fallback file,
+  so a site can host apps under `/cloud` or `/admin` while its other misses stay `404`. Longest
+  prefix wins; `spa_fallback` still covers paths under no prefix; `rws --check` reports missing
+  files and malformed entries. See
+  [Several apps on one server](https://rws8.tech/features/static-files/#several-apps-on-one-server).
 - **ORM, part 1** (roadmap #90; rws-macros 17.31.0): see
   [Keys, timestamps, soft delete and locking](https://rws8.tech/database/conventions/).
   - Keys beyond `i64`: `ModelRepository<T, ID>` implements `Repository` for

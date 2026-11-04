@@ -37,7 +37,10 @@ window_secs  = 60
 ```
 
 Requests that match no route — the app's files and its client-side routes —
-fall through to the static server. Same origin, so no CORS settings are
+fall through to the static server. For an app under a path of a bigger site
+(`/cloud/` beside ordinary pages), use `spa_fallback_routes =
+["/cloud=cloud/index.html"]` instead, so the site's other misses keep their
+404s ([Several apps on one server](/features/static-files/#several-apps-on-one-server)). Same origin, so no CORS settings are
 needed. When the API lives on another host (`api.example.com`), allow the
 app's origin there instead:
 

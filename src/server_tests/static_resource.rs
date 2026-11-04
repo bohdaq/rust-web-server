@@ -790,6 +790,64 @@ fn spa_fallback_still_serves_a_real_file_directly_when_one_exists() {
     std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
 }
 
+fn spa_body(path: &str) -> Option<Vec<u8>> {
+    let (request, connection_info) = spa_request(path);
+    if !StaticResourceController::is_matching(&request, &connection_info) {
+        return None;
+    }
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+    Some(response.content_range_list.get(0).unwrap().body.to_vec())
+}
+
+fn static_file(parts: &[&str]) -> Vec<u8> {
+    FileExt::read_file(FileExt::build_path(parts).as_str()).unwrap()
+}
+
+#[test]
+fn spa_fallback_routes_serve_each_prefix_its_own_file() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK_ROUTES", "/app=static/index.html, /app/admin=static/file.html");
+
+    let index = static_file(&["static", "index.html"]);
+    let admin = static_file(&["static", "file.html"]);
+    assert_eq!(spa_body("/app"), Some(index.clone()), "the prefix itself");
+    assert_eq!(spa_body("/app/orgs/acme/plan"), Some(index));
+    assert_eq!(spa_body("/app/admin/users"), Some(admin), "the longest prefix wins");
+    assert_eq!(spa_body("/apples"), None, "a sibling path isn't under /app");
+    assert_eq!(spa_body("/elsewhere/page"), None, "no server-wide fallback: other misses stay 404");
+    assert_eq!(spa_body("/app/missing.js"), None, "a missed asset still 404s");
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_ROUTES");
+}
+
+#[test]
+fn spa_fallback_routes_come_before_the_server_wide_fallback_and_respect_exclusions() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK_ROUTES", "/portal=static/file.html");
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES", "/portal/api");
+
+    assert_eq!(spa_body("/portal/members"), Some(static_file(&["static", "file.html"])));
+    assert_eq!(spa_body("/dashboard"), Some(static_file(&["static", "index.html"])));
+    assert_eq!(spa_body("/portal/api/v1/orgs"), None, "excluded prefixes keep their 404s");
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_ROUTES");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+}
+
+#[test]
+fn spa_fallback_routes_skip_a_file_that_does_not_exist() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK_ROUTES", "/app=static/nope.html");
+    assert_eq!(spa_body("/app/page"), None);
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_ROUTES");
+}
+
 #[test]
 fn stale_etag_returns_200_with_body() {
     let connection_info = ConnectionInfo {
