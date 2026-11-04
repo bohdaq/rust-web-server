@@ -91,7 +91,10 @@ pass "proxy route: the backend's 103 is passed on over h2c"
 out=$(curl -sv --http1.1 http://127.0.0.1:18520/page 2>&1)
 echo "$out" | grep -q "103" && fail "a 103 over HTTP/1.1 with early_hints_http1 off: $out"
 pass "HTTP/1.1 gets no 103 by default"
-curl -s http://127.0.0.1:18520/metrics | grep -q 'rws_early_hints_total{source="upstream"} [1-9]' || fail "upstream hints not counted"
+# Captured first: with pipefail, `curl | grep -q` fails when grep exits on the
+# match before curl has written the rest of /metrics (SIGPIPE).
+metrics=$(curl -s http://127.0.0.1:18520/metrics)
+grep -q 'rws_early_hints_total{source="upstream"} [1-9]' <<<"$metrics" || fail "upstream hints not counted: $(grep early_hints <<<"$metrics")"
 pass "rws_early_hints_total counts them"
 stop
 
