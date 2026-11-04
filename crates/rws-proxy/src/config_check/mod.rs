@@ -373,6 +373,24 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
         }
     }
 
+    // spa_fallback_routes: "prefix=file" pairs; each file must exist, like spa_fallback's.
+    if let Some(routes) = get(Config::RWS_CONFIG_SPA_FALLBACK_ROUTES).filter(|v| !v.is_empty()) {
+        for entry in routes.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+            match entry.split_once('=').map(|(p, f)| (p.trim(), f.trim())) {
+                Some((prefix, file)) if prefix.starts_with('/') && !file.is_empty() => {
+                    if !offline() && !std::path::Path::new(file).is_file() {
+                        report.warn(format!(
+                            "spa_fallback_routes: {file:?} for {prefix:?} does not exist in the working directory, so client-side routes under it would 404"
+                        ));
+                    }
+                }
+                _ => report.error(format!(
+                    "spa_fallback_routes: {entry:?} is not \"/prefix=file\" (the prefix starts with /, the file is a path relative to the working directory)"
+                )),
+            }
+        }
+    }
+
     // [cors] allow_origins must match what the browser sends in Origin:
     // scheme://host[:port], no trailing slash, no path.
     if let Some(origins) = get(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS) {

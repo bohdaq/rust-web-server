@@ -9,35 +9,6 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
-- **ORM, part 1** (roadmap #90; rws-macros 17.31.0): see
-  [Keys, timestamps, soft delete and locking](https://rws8.tech/database/conventions/).
-  - Keys beyond `i64`: `ModelRepository<T, ID>` implements `Repository` for
-    `i32`, `String` and `model::Uuid` too (`PrimaryKey`). For a key that
-    isn't auto-increment, `save` inserts when the key isn't in the table
-    and updates otherwise; a `Uuid::NIL` key gets a fresh `Uuid::now_v7()`;
-    `repo.insert(&entity)` always inserts. `T::repository(&pool)` is keyed
-    by the key's type for `String`/`Uuid` keys (still `i64` for integers).
-    `Uuid` is rws's own (v4, v7, parse, `serde`), stored as text.
-  - `#[timestamps]`: `save` writes `created_at` (insert only) and
-    `updated_at` (`model::Timestamp`, UTC, microseconds) — `TEXT` on SQLite,
-    `TIMESTAMPTZ` on PostgreSQL, `DATETIME(6)` on MySQL.
-  - `#[soft_delete]` (`deleted_at: Option<Timestamp>`): `delete_by_id` and
-    `QueryBuilder::delete` set it; the repository, the query builder and
-    relations skip such rows unless `with_deleted()` / `only_deleted()`;
-    `restore`, `force_delete_by_id` / `force_delete`,
-    `find_by_id_with_deleted`.
-  - `#[version]`: optimistic locking — `save` of a stale copy changes
-    nothing and fails with `DbErrorKind::StaleVersion` (`DbError::kind()`,
-    `is_stale_version()`; also `NotFound`).
-  - `DbPool::seed(dir)` and `DbPool::connect(url)`; `FromColumn for Value`.
-  - PostgreSQL `TIMESTAMPTZ`/`TIMESTAMP`/`DATE`/`UUID` and MySQL
-    `DATETIME`/`TIMESTAMP`/`DATE` columns read as text (they were `NULL`).
-- **`rws db migrate|rollback [N]|status|seed`** (roadmap #91): the
-  project's migrations (`rws.app.toml`'s path) and seeds (`seeds/` beside
-  them) from the command line, on `--database-url`, `DATABASE_URL` or
-  `RWS_DB_*`; `--json` (the `status` JSON is the dev MCP server's
-  `migrations` answer), exit codes 0/1/2. Needs a `rws` built with a
-  `model-*` feature. See [`rws db`](https://rws8.tech/database/migrations/#from-the-command-line-rws-db).
 - **ORM, part 2** (roadmap #90):
   - Eager loading: `Post::query(&pool).with(Post::comments()).with(Post::author()).fetch_all()`
     loads each relation for the whole result set in one more query
@@ -76,6 +47,46 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
     tool's `timestamps` / `soft_delete`): `#[timestamps]` with
     `created_at` / `updated_at`, `#[soft_delete]` with `deleted_at`, the
     columns in the migration; `Generate::Model` has the two new fields.
+
+## 18.30.0 — 2026-11-04
+
+### Added
+
+- **SPA fallback per path prefix**: `spa_fallback_routes = ["/cloud=cloud/index.html"]`
+  (`RWS_CONFIG_SPA_FALLBACK_ROUTES`) gives each single-page app on a server its own fallback file,
+  so a site can host apps under `/cloud` or `/admin` while its other misses stay `404`. Longest
+  prefix wins; `spa_fallback` still covers paths under no prefix; `rws --check` reports missing
+  files and malformed entries. See
+  [Several apps on one server](https://rws8.tech/features/static-files/#several-apps-on-one-server).
+- **ORM, part 1** (roadmap #90; rws-macros 17.31.0): see
+  [Keys, timestamps, soft delete and locking](https://rws8.tech/database/conventions/).
+  - Keys beyond `i64`: `ModelRepository<T, ID>` implements `Repository` for
+    `i32`, `String` and `model::Uuid` too (`PrimaryKey`). For a key that
+    isn't auto-increment, `save` inserts when the key isn't in the table
+    and updates otherwise; a `Uuid::NIL` key gets a fresh `Uuid::now_v7()`;
+    `repo.insert(&entity)` always inserts. `T::repository(&pool)` is keyed
+    by the key's type for `String`/`Uuid` keys (still `i64` for integers).
+    `Uuid` is rws's own (v4, v7, parse, `serde`), stored as text.
+  - `#[timestamps]`: `save` writes `created_at` (insert only) and
+    `updated_at` (`model::Timestamp`, UTC, microseconds) — `TEXT` on SQLite,
+    `TIMESTAMPTZ` on PostgreSQL, `DATETIME(6)` on MySQL.
+  - `#[soft_delete]` (`deleted_at: Option<Timestamp>`): `delete_by_id` and
+    `QueryBuilder::delete` set it; the repository, the query builder and
+    relations skip such rows unless `with_deleted()` / `only_deleted()`;
+    `restore`, `force_delete_by_id` / `force_delete`,
+    `find_by_id_with_deleted`.
+  - `#[version]`: optimistic locking — `save` of a stale copy changes
+    nothing and fails with `DbErrorKind::StaleVersion` (`DbError::kind()`,
+    `is_stale_version()`; also `NotFound`).
+  - `DbPool::seed(dir)` and `DbPool::connect(url)`; `FromColumn for Value`.
+  - PostgreSQL `TIMESTAMPTZ`/`TIMESTAMP`/`DATE`/`UUID` and MySQL
+    `DATETIME`/`TIMESTAMP`/`DATE` columns read as text (they were `NULL`).
+- **`rws db migrate|rollback [N]|status|seed`** (roadmap #91): the
+  project's migrations (`rws.app.toml`'s path) and seeds (`seeds/` beside
+  them) from the command line, on `--database-url`, `DATABASE_URL` or
+  `RWS_DB_*`; `--json` (the `status` JSON is the dev MCP server's
+  `migrations` answer), exit codes 0/1/2. Needs a `rws` built with a
+  `model-*` feature. See [`rws db`](https://rws8.tech/database/migrations/#from-the-command-line-rws-db).
 - **CI runs the model, `TestDb` and `rws db` tests on PostgreSQL 16 and
   MySQL 8.4** (job `model-databases`), as well as SQLite.
 - **rws-macros 17.31.0** must be published before rust-web-server.

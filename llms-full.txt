@@ -5,7 +5,7 @@
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.29.0
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.30.0
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
@@ -1089,7 +1089,10 @@ window_secs  = 60
 ```
 
 Requests that match no route — the app's files and its client-side routes —
-fall through to the static server. Same origin, so no CORS settings are
+fall through to the static server. For an app under a path of a bigger site
+(`/cloud/` beside ordinary pages), use `spa_fallback_routes =
+["/cloud=cloud/index.html"]` instead, so the site's other misses keep their
+404s ([Several apps on one server](/features/static-files/#several-apps-on-one-server)). Same origin, so no CORS settings are
 needed. When the API lives on another host (`api.example.com`), allow the
 app's origin there instead:
 
@@ -1756,6 +1759,7 @@ order.
 | `RWS_CONFIG_NANOS_HEADERS` | `false` | boolean | Send `Date-Unix-Epoch-Nanos` on every response and `Last-Modified-Unix-Epoch-Nanos` on static files (always sent before 18.0.0). |
 | `RWS_CONFIG_SPA_FALLBACK` | `` (empty) | path | File (e.g. `index.html`) served for a `GET`/`HEAD` that matches no file or directory, instead of `404` — for client-side routers. Paths whose last segment contains a `.` still get `404`. Empty disables it. |
 | `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` | `` (empty) | string | Comma-separated path prefixes (e.g. `/api,/healthz`) that never get the SPA fallback. |
+| `RWS_CONFIG_SPA_FALLBACK_ROUTES` | `` (empty) | string | SPA fallbacks per path prefix, comma-separated `prefix=file` pairs (e.g. `/cloud=cloud/index.html,/admin=admin/index.html`). The longest matching prefix wins; other paths use `RWS_CONFIG_SPA_FALLBACK`. See [Static files](/features/static-files/#several-apps-on-one-server). |
 | `RWS_CONFIG_FILE` | `rws.config.toml` | path | Config file to load (settings and proxy routes) instead of `./rws.config.toml`. |
 
 :::note[Thread count and the async build]
@@ -2298,6 +2302,7 @@ template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
 serve_dotfiles          = false        # RWS_CONFIG_SERVE_DOTFILES: serve .git/, .env, … (.well-known/ always)
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
+spa_fallback_routes     = ["/cloud=cloud/index.html"]   # RWS_CONFIG_SPA_FALLBACK_ROUTES: a fallback per path prefix
 
 [fleet]                              # RWS_CONFIG_FLEET_*: pull a signed config (18.23.0)
 source        = "https://config.example.com/rws/{node}.toml"
@@ -7342,7 +7347,32 @@ curl http://localhost:7878/api/users/999   # 404 — excluded prefix, not rewrit
 curl http://localhost:7878/settings/theme  # 200 — served index.html
 ```
 
-Both env vars are read fresh on every request, so they can be changed via `rws.config.toml` + `SIGHUP` without a restart — see [Hot Config Reload](/features/hot-reload/).
+### Several apps on one server
+
+`RWS_CONFIG_SPA_FALLBACK` is one file for the whole server. When a site also hosts single-page apps under
+their own paths — a marketing site with a console at `/cloud` and an admin UI at `/admin` — give each its
+own fallback with `RWS_CONFIG_SPA_FALLBACK_ROUTES`, comma-separated `prefix=file` pairs. Everything else
+keeps its real `404`:
+
+```toml
+# rws.config.toml
+spa_fallback_routes = ["/cloud=cloud/index.html", "/admin=admin/index.html"]
+spa_fallback_exclude_prefixes = ["/cloud/api"]
+```
+
+```bash
+curl http://localhost:7878/cloud/orgs/acme/plan  # 200 — cloud/index.html
+curl http://localhost:7878/admin/users           # 200 — admin/index.html
+curl http://localhost:7878/pricing/old-page      # 404 — under no prefix
+curl http://localhost:7878/cloudy                # 404 — /cloudy isn't under /cloud
+```
+
+A path matches a prefix when it is the prefix or below it, and the longest matching prefix wins. Paths
+under no prefix use `RWS_CONFIG_SPA_FALLBACK` if it is set. The same rules as above still apply: files that
+exist are served as themselves, a last segment with a `.` still `404`s, excluded prefixes are never
+rewritten, and a missing file is a no-op (`rws --check` warns about it).
+
+The settings are read fresh on every request, so they can be changed via `rws.config.toml` + `SIGHUP` without a restart — see [Hot Config Reload](/features/hot-reload/).
 
 ---
 

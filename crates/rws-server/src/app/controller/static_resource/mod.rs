@@ -877,6 +877,13 @@ impl StaticResourceController {
 /// distinguishing a client-side route (`/dashboard/settings`, no extension)
 /// from a missed static asset (`/logo.png`, has one), so the SPA fallback
 /// doesn't silently swallow the latter's real 404.
+/// `path` is `prefix` itself or below it (`/cloud`, `/cloud/orgs`; not `/cloudy`).
+fn path_is_under(path: &str, prefix: &str) -> bool {
+    prefix == "/"
+        || path == prefix
+        || (path.starts_with(prefix) && path.as_bytes().get(prefix.len()) == Some(&b'/'))
+}
+
 fn path_has_extension(path: &str) -> bool {
     path.rsplit('/').next().unwrap_or("").contains('.')
 }
@@ -894,12 +901,21 @@ fn spa_fallback_url_path(url_path: &str) -> Option<String> {
         return None;
     }
 
-    let fallback_name = crate::entry_point::get_spa_fallback()?;
-
     let exclude_prefixes = crate::entry_point::get_spa_fallback_exclude_prefixes();
     if exclude_prefixes.iter().any(|prefix| url_path.starts_with(prefix.as_str())) {
         return None;
     }
+
+    // A per-prefix fallback (RWS_CONFIG_SPA_FALLBACK_ROUTES) first, longest prefix first;
+    // then the server-wide one.
+    let routed = crate::entry_point::get_spa_fallback_routes()
+        .into_iter()
+        .find(|(prefix, _)| path_is_under(url_path, prefix))
+        .map(|(_, file)| file);
+    let fallback_name = match routed {
+        Some(file) => file,
+        None => crate::entry_point::get_spa_fallback()?,
+    };
 
     let separator = FileExt::get_path_separator();
     let normalized_name = fallback_name.trim_start_matches('/').replace('/', &separator);

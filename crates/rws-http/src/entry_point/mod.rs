@@ -97,6 +97,15 @@ impl Config {
     pub const RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES: &'static str = "RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES";
     pub const RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES_DEFAULT_VALUE: &'static str = "";
 
+    /// SPA fallbacks per path prefix, comma-separated `prefix=file` pairs
+    /// (`"/cloud=cloud/index.html,/admin=admin/index.html"`): an unknown path at or under
+    /// a prefix gets that prefix's file, so several single-page apps can share one server
+    /// beside ordinary pages whose misses stay `404`. The longest matching prefix wins;
+    /// paths under no prefix fall back to `RWS_CONFIG_SPA_FALLBACK` (if set). Excluded
+    /// prefixes and paths that look like a missed asset are never rewritten.
+    pub const RWS_CONFIG_SPA_FALLBACK_ROUTES: &'static str = "RWS_CONFIG_SPA_FALLBACK_ROUTES";
+    pub const RWS_CONFIG_SPA_FALLBACK_ROUTES_DEFAULT_VALUE: &'static str = "";
+
     pub const RWS_CONFIG_TLS_CERT_FILE: &'static str = "RWS_CONFIG_TLS_CERT_FILE";
     pub const RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE: &'static str = "";
 
@@ -473,6 +482,36 @@ pub fn get_max_body_size() -> u64 {
 /// without a restart, the same as [`get_max_body_size`].
 pub fn get_spa_fallback() -> Option<String> {
     env::var(Config::RWS_CONFIG_SPA_FALLBACK).ok().filter(|v| !v.is_empty())
+}
+
+/// The per-prefix SPA fallbacks (`RWS_CONFIG_SPA_FALLBACK_ROUTES`) as `(prefix, file)`
+/// pairs, longest prefix first. Malformed entries (no `=`, a prefix not starting with
+/// `/`, an empty file) are skipped; `rws --check` reports them. A trailing `/` on a prefix is
+/// dropped, so `/cloud/` and `/cloud` are the same. Read fresh on every call, like
+/// [`get_spa_fallback`].
+pub fn get_spa_fallback_routes() -> Vec<(String, String)> {
+    let Ok(value) = env::var(Config::RWS_CONFIG_SPA_FALLBACK_ROUTES) else { return vec![] };
+    parse_spa_fallback_routes(&value)
+}
+
+/// Parses `prefix=file,prefix=file` (see [`get_spa_fallback_routes`]).
+#[doc(hidden)]
+pub fn parse_spa_fallback_routes(value: &str) -> Vec<(String, String)> {
+    let mut routes: Vec<(String, String)> = value
+        .split(',')
+        .filter_map(|entry| {
+            let (prefix, file) = entry.split_once('=')?;
+            let prefix = prefix.trim();
+            let file = file.trim();
+            if !prefix.starts_with('/') || file.is_empty() {
+                return None;
+            }
+            let prefix = prefix.trim_end_matches('/');
+            Some((if prefix.is_empty() { "/".to_string() } else { prefix.to_string() }, file.to_string()))
+        })
+        .collect();
+    routes.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    routes
 }
 
 /// Path prefixes that never receive the SPA fallback (`RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`,

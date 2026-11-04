@@ -47,6 +47,7 @@ order.
 | `RWS_CONFIG_NANOS_HEADERS` | `false` | boolean | Send `Date-Unix-Epoch-Nanos` on every response and `Last-Modified-Unix-Epoch-Nanos` on static files (always sent before 18.0.0). |
 | `RWS_CONFIG_SPA_FALLBACK` | `` (empty) | path | File (e.g. `index.html`) served for a `GET`/`HEAD` that matches no file or directory, instead of `404` — for client-side routers. Paths whose last segment contains a `.` still get `404`. Empty disables it. |
 | `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` | `` (empty) | string | Comma-separated path prefixes (e.g. `/api,/healthz`) that never get the SPA fallback. |
+| `RWS_CONFIG_SPA_FALLBACK_ROUTES` | `` (empty) | string | SPA fallbacks per path prefix, comma-separated `prefix=file` pairs (e.g. `/cloud=cloud/index.html,/admin=admin/index.html`). The longest matching prefix wins; other paths use `RWS_CONFIG_SPA_FALLBACK`. See [Static files](/features/static-files/#several-apps-on-one-server). |
 | `RWS_CONFIG_FILE` | `rws.config.toml` | path | Config file to load (settings and proxy routes) instead of `./rws.config.toml`. |
 
 :::note[Thread count and the async build]

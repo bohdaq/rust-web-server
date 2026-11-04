@@ -288,6 +288,7 @@ template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
 serve_dotfiles          = false        # RWS_CONFIG_SERVE_DOTFILES: serve .git/, .env, … (.well-known/ always)
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
+spa_fallback_routes     = ["/cloud=cloud/index.html"]   # RWS_CONFIG_SPA_FALLBACK_ROUTES: a fallback per path prefix
 
 [fleet]                              # RWS_CONFIG_FLEET_*: pull a signed config (18.23.0)
 source        = "https://config.example.com/rws/{node}.toml"
