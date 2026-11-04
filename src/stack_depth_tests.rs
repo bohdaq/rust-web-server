@@ -288,3 +288,22 @@ fn app_manifest_with_thousands_of_lines() {
         assert!(manifest.warnings.len() > 1000);
     });
 }
+
+#[test]
+fn generator_scanners_on_deep_nesting_and_many_lines() {
+    on_small_stack(|| {
+        // `rws gen` reads lib.rs, mod.rs, Cargo.toml, routes and tests: loops
+        // only, whatever the nesting.
+        let mut text = String::from("pub fn app() -> AppWithState<");
+        text.push_str(&"Vec<".repeat(50_000));
+        text.push_str(&">".repeat(50_000));
+        text.push_str("> {\n    routes::todos::register(");
+        text.push_str(&"(".repeat(100_000));
+        text.push_str(&")".repeat(100_000));
+        text.push_str(")\n}\n");
+        for _ in 0..20_000 {
+            text.push_str("pub mod m;\n#[get(\"/x\")]\nrust-web-server = { features = [[[[ }\n");
+        }
+        crate::generator::fuzz(&text);
+    });
+}

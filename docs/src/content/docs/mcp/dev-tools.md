@@ -70,6 +70,7 @@ claude mcp add --transport http my-app http://localhost:7878/mcp
 | `migrations` | With `DevTools::migrations(dir)` too: each migration file, whether it is applied and whether it has a `.down.sql` |
 | `migrations_run` | Apply the pending migrations; answers the status afterwards |
 | `migrations_rollback_last` | Undo the last applied migration; answers which (`null` when none) |
+| `gen_model`, `gen_route`, `gen_migration`, `gen_test` | The [generators](#generators): write a model, routes, a migration or a test into the project, or with `dry_run` answer the plan |
 
 The middleware listed is the stack around the app's routes (each layer's
 `Middleware::layer_name()`, by default its type name); rws has no per-route
@@ -107,6 +108,35 @@ let tools = DevTools::new()
 `missing_columns` is what a migration has yet to add. The same description
 is `model::ModelInfo::of::<T>()` in code.
 
+## Generators
+
+`gen_model`, `gen_route`, `gen_migration` and `gen_test` are
+[`rws gen`](/building-apps/generators/) as tools (18.29.0): the agent asks
+for a model, a resource's routes, a migration or a test and gets code pinned
+to the release's API, written into the project `layout` reports (the
+`app_dir`). They change files, so `.read_only()` leaves them out, as it does
+`migrations_run`.
+
+| Tool | Arguments |
+|---|---|
+| `gen_model` | `name` (`Post`), `fields` (`["title:String", "views:i64", "note:Option<String>"]`), `db` (`sqlite`, `postgres`, `mysql`; default from `Cargo.toml`), `dry_run` |
+| `gen_route` | `resource` (`posts`), `fields`, `methods` (`["list", "show", "create", "update", "remove"]`, default all), `prefix` (`/api`), `dry_run` |
+| `gen_migration` | `name` (`add_index_to_posts`), `dry_run` |
+| `gen_test` | `resource`, `app_expr` (`app(Store::memory())` when `app` takes arguments), `dry_run` |
+
+Each answers the plan as JSON — the same as `rws gen --json`:
+
+```json
+{"command":"rws gen migration add_index","status":"written","written":true,
+ "changes":[{"path":"migrations/0001_add_index.sql","action":"create","diff":"--- /dev/null\n+++ b/migrations/0001_add_index.sql\n…"}],
+ "notes":[]}
+```
+
+`dry_run: true` answers `"status":"planned"` and writes nothing. Nothing is
+overwritten: a file in the way makes the call a tool error whose text is the
+same JSON with `"status":"conflict"` and the diff; a bad name or type is a
+tool error with `"status":"usage"`.
+
 ## Choosing what is mounted
 
 `dev_mcp_with(DevTools)` takes the options:
@@ -133,7 +163,7 @@ let app = routes
 | `.app_dir(dir)` | The project root `layout` reads (default: the working directory) |
 | `.with_ops()` | The [operations tools](/mcp/operate/#the-tools) as well: metrics, rate limits, maintenance mode, the IP blocklist, feature flags, authorization, traffic, config reload |
 | `.cache(layer)` | The `cache_stats` / `cache_clear` operations tools for this response cache (a clone of the layer the app wraps); implies `.with_ops()` |
-| `.read_only()` | Leaves out every tool that changes something (`migrations_run`, `migrations_rollback_last` and the operations tools in `dev_mcp::OPS_WRITE_TOOLS`) |
+| `.read_only()` | Leaves out every tool that changes something (`migrations_run`, `migrations_rollback_last`, the generators in `dev_mcp::GEN_TOOLS` and the operations tools in `dev_mcp::OPS_WRITE_TOOLS`) |
 | `.token(t)` / `.token_env(name)` | The bearer token, or the variable it is read from (default `MCP_TOKEN`) |
 | `.env(RwsEnv::Dev)` | Decide as if `RWS_ENV` were this (tests) |
 | `.at("/_dev/mcp")` | Another path, for an app that serves its own MCP server at `/mcp` |
@@ -163,7 +193,8 @@ assert!(res.body_text().contains("/api/items/:id"));
 
 Each [starter](/getting-started/ai-agents/) has a `tests/dev_mcp.rs` that
 calls `initialize`, `tools/list` and then every listed tool, failing on any
-JSON-RPC or tool error; CI runs it for every starter.
+JSON-RPC or tool error (the generators with `dry_run`, since they need
+arguments); CI runs it for every starter.
 
 ## Not yet
 

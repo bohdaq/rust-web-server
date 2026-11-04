@@ -298,7 +298,8 @@ fn tool_names(list: &str) -> Vec<String> {
 fn every_listed_tool_answers<A: Application>(client: &TestClient<A>) -> Vec<String> {
     let names = tool_names(&tools_list(client, None));
     assert!(names.len() >= 5, "{names:?}");
-    for name in &names {
+    // The generators need a name and write files: `generators_*` below.
+    for name in names.iter().filter(|n| !n.starts_with("gen_")) {
         let body = call(client, name, "{}");
         assert!(!body.contains(r#""isError":true"#) && !body.contains(r#""error":{"#), "{name}: {body}");
     }
@@ -311,6 +312,67 @@ fn every_dev_tool_answers() {
     for tool in ["routes", "config", "layout", "recent_requests", "recent_errors"] {
         assert!(names.iter().any(|n| n == tool), "{tool}: {names:?}");
     }
+}
+
+// ── generators ───────────────────────────────────────────────────────────────
+
+/// A project in the conventional layout: `app()` in `src/lib.rs`.
+fn gen_project(name: &str) -> crate::test_env::TempPath {
+    let dir = crate::test_env::TempPath::new(name);
+    let _ = std::fs::remove_dir_all(&*dir);
+    std::fs::create_dir_all(dir.join("src/routes")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"blog\"\n\n[dependencies]\nrust-web-server = { version = \"18\", features = [\"macros\"] }\n").unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "pub mod routes;\n\npub fn app() -> AppWithState<()> {\n    routes::todos::register(App::with_state(()))\n}\n").unwrap();
+    std::fs::write(dir.join("src/routes/mod.rs"), "pub mod todos;\n").unwrap();
+    dir
+}
+
+#[test]
+fn generators_are_listed_unless_read_only() {
+    let list = tools_list(&TestClient::new(app().dev_mcp_with(dev())), None);
+    for tool in GEN_TOOLS {
+        assert!(listed(&list, tool), "{tool}: {list}");
+    }
+    let list = tools_list(&TestClient::new(app().dev_mcp_with(dev().read_only())), None);
+    for tool in GEN_TOOLS {
+        assert!(!listed(&list, tool), "{tool}: {list}");
+    }
+}
+
+#[test]
+fn generators_plan_write_and_refuse_to_overwrite() {
+    let dir = gen_project("dev_mcp_gen");
+    let client = TestClient::new(app().dev_mcp_with(dev().app_dir(&*dir)));
+
+    // A dry run answers the plan and writes nothing.
+    let body = call(&client, "gen_route", r#"{"resource":"posts","fields":["title:String"],"methods":["list","show"],"prefix":"/api","dry_run":true}"#);
+    assert!(body.contains(r#""status":"planned","written":false"#) && body.contains(r#""path":"src/routes/posts.rs","action":"create""#), "{body}");
+    assert!(body.contains("/api/posts/{id}") && !body.contains("#[post("), "{body}");
+    assert!(!dir.join("src/routes/posts.rs").exists());
+
+    // Written; the name argument sent first is not the tool's name.
+    let (status, body) = rpc(&client, None, r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"arguments":{"name":"add_index"},"name":"gen_migration"}}"#);
+    assert_eq!(200, status, "{body}");
+    assert!(body.contains(r#""status":"written","written":true"#), "{body}");
+    assert!(dir.join("migrations/0001_add_index.sql").is_file());
+    let body = call(&client, "gen_migration", r#"{"name":"add_index"}"#);
+    assert!(body.contains(r#""status":"unchanged""#), "{body}");
+
+    // A file in the way: a tool error with the diff, the file kept.
+    std::fs::write(dir.join("migrations/0001_add_index.sql"), "CREATE TABLE mine (id INTEGER);\n").unwrap();
+    let body = call(&client, "gen_migration", r#"{"name":"add_index"}"#);
+    assert!(body.contains(r#""isError":true"#) && body.contains(r#""status":"conflict""#) && body.contains("-CREATE TABLE mine"), "{body}");
+    assert_eq!("CREATE TABLE mine (id INTEGER);\n", std::fs::read_to_string(dir.join("migrations/0001_add_index.sql")).unwrap());
+
+    // Bad input is a tool error naming the problem.
+    let body = call(&client, "gen_model", r#"{"name":"Post","fields":["title:u8"]}"#);
+    assert!(body.contains(r#""isError":true"#) && body.contains(r#""status":"usage""#) && body.contains("unknown type"), "{body}");
+    let body = call(&client, "gen_test", "{}");
+    assert!(body.contains(r#""isError":true"#) && body.contains("resource"), "the schema says it is required: {body}");
+    let body = call(&client, "gen_model", r#"{"name":"Post","fields":["title:String"],"db":"oracle"}"#);
+    assert!(body.contains("db `oracle`"), "{body}");
+    let body = call(&client, "gen_model", r#"{"name":"Post","fields":["title:String","views:i64"],"dry_run":true}"#);
+    assert!(body.contains(r#""path":"src/models/post.rs","action":"create""#) && body.contains("views"), "{body}");
 }
 
 // ── database (model-sqlite) ─────────────────────────────────────────────────

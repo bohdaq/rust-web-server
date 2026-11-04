@@ -3,7 +3,9 @@
 //! around them, its effective configuration (secrets hidden), its layout
 //! and `rws.app.toml` ([`crate::app_manifest`]), the last requests and
 //! errors, and with a `model-*` feature its models, database schema and
-//! migrations. Since 18.28.0 (roadmap #85, #87).
+//! migrations. Since 18.28.0 (roadmap #85, #87). Since 18.29.0 (#88) it
+//! also writes code: `gen_model`, `gen_route`, `gen_migration`,
+//! `gen_test` ([`GEN_TOOLS`], [`crate::generator`]), unless read-only.
 //!
 //! Off unless the process runs with `RWS_ENV=dev` ([`RwsEnv`]) or a bearer
 //! token is configured (`MCP_TOKEN` by default, [`DevTools::token`]): in
@@ -42,6 +44,7 @@ pub use crate::entry_point::RwsEnv;
 
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
 mod db;
+mod generate;
 mod layout;
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
 mod models;
@@ -49,6 +52,7 @@ mod ops;
 #[cfg(test)]
 mod tests;
 
+pub use generate::GEN_TOOLS;
 pub use ops::{ops_tools, OPS_WRITE_TOOLS};
 
 /// The tools that change something, besides [`OPS_WRITE_TOOLS`]: the
@@ -166,7 +170,8 @@ impl DevTools {
     }
 
     /// Leave out every tool that changes something ([`OPS_WRITE_TOOLS`],
-    /// [`DEV_WRITE_TOOLS`]): the agent can look, not act.
+    /// [`DEV_WRITE_TOOLS`], the generators [`GEN_TOOLS`]): the agent can
+    /// look, not act.
     pub fn read_only(mut self) -> Self {
         self.writes = false;
         self
@@ -273,7 +278,8 @@ impl DevTools {
     }
 
     /// Register the tools on `mcp`, ungated: `routes`, `config`, `layout`,
-    /// `recent_requests`, `recent_errors`, with a `model-*` feature
+    /// `recent_requests`, `recent_errors`, the generators ([`GEN_TOOLS`],
+    /// unless [`Self::read_only`]), with a `model-*` feature
     /// `models`, with a database `db_schema`,
     /// with migrations `migrations` (and `migrations_run`,
     /// `migrations_rollback_last` unless [`Self::read_only`]), and the
@@ -297,7 +303,10 @@ impl DevTools {
             move |_| Ok(McpContent::json(config_json(env))),
         );
         let dir = self.app_dir.clone().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
-        mcp = layout::install(mcp, dir);
+        mcp = layout::install(mcp, dir.clone());
+        if self.writes {
+            mcp = generate::install(mcp, dir);
+        }
         #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
         {
             mcp = models::install(mcp, self.models.clone(), self.database.clone());
@@ -342,7 +351,7 @@ impl DevTools {
         };
         let mcp = self.install(mcp, routes, middleware);
         // Changes made through the tools land in the admin audit log.
-        let audited = crate::admin::access::McpAuditLayer::new(OPS_WRITE_TOOLS.iter().chain(DEV_WRITE_TOOLS.iter()).copied());
+        let audited = crate::admin::access::McpAuditLayer::new(OPS_WRITE_TOOLS.iter().chain(DEV_WRITE_TOOLS.iter()).chain(GEN_TOOLS.iter()).copied());
         DevMcp::On(WithMiddleware::new(mcp).wrap(audited))
     }
 }

@@ -77,7 +77,9 @@ fn answer_every_tool<A: Application>(client: &TestClient<A>) -> Vec<String> {
         .iter()
         .map(|tool| tool["name"].as_str().unwrap_or_default().to_string())
         .collect();
-    for (i, name) in names.iter().enumerate() {
+    // The generators write files: `generators_plan_without_writing` calls
+    // them with `dry_run`.
+    for (i, name) in names.iter().enumerate().filter(|(_, n)| !n.starts_with("gen_")) {
         call(client, &session, 10 + i, name);
     }
     names
@@ -132,4 +134,26 @@ fn off_in_production_without_a_token() {
     let served = app(Store::memory()).dev_mcp_with(tools);
     assert!(!served.is_mounted());
     assert_ne!(200, TestClient::new(served).post(PATH).body_json("{}").send().status());
+}
+
+/// The generators (`rws gen` as tools) with `dry_run`: a plan, no files.
+#[test]
+fn generators_plan_without_writing() {
+    let client = client();
+    let session = start(&client);
+    let plan = |id: usize, name: &str, arguments: Value| {
+        let request = json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": {"name": name, "arguments": arguments}});
+        let (status, answer, _) = rpc(&client, Some(&session), request);
+        assert_eq!(200, status, "{name}: {answer}");
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap_or("null");
+        (answer["result"]["isError"] == json!(true), serde_json::from_str::<Value>(text).unwrap_or(Value::Null))
+    };
+    let (failed, migration) = plan(2, "gen_migration", json!({"name": "probe_generators", "dry_run": true}));
+    assert!(!failed && migration["status"] == "planned", "{migration}");
+    let (failed, route) = plan(3, "gen_route", json!({"resource": "probes", "fields": ["title:String"], "dry_run": true}));
+    assert!(!failed && route["status"] == "planned", "{route}");
+    let (failed, bad) = plan(4, "gen_model", json!({"name": "Probe", "fields": ["title:u8"], "dry_run": true}));
+    assert!(failed && bad["status"] == "usage", "{bad}");
+    let dir = env!("CARGO_MANIFEST_DIR");
+    assert!(!std::path::Path::new(&format!("{dir}/src/routes/probes.rs")).exists(), "a dry run writes nothing");
 }

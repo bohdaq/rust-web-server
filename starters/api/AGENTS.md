@@ -28,6 +28,14 @@ The conventional rws layout, named in `rws.app.toml` (the dev endpoint's
   `#[derive(Model)]` types, jobs, SQL migrations, Tera templates and static
   files go when the app gets them.
 
+New code of those kinds comes from `rws gen` (the `rws` binary of the same
+release, `cargo install rust-web-server`): `rws gen route posts
+title:String`, `rws gen test posts`, `rws gen model Post title:String`
+(adds the `model-sqlite` feature), `rws gen migration <name>`. It writes
+against this release's API, registers the routes in `app()`, and never
+overwrites a file; `--dry-run` shows the plan. Add the new routes to
+`openapi()` by hand. https://rws8.tech/building-apps/generators/
+
 ## rws, in brief
 
 Docs for this version: https://rws8.tech, one file:

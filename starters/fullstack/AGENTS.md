@@ -23,6 +23,13 @@ endpoint's `layout` tool reads it). Put new code where it says:
   dialect, `$1` placeholders). Never rename an applied file.
 - `tests/`: integration tests against `app()`; `tests/dev_mcp.rs` checks
   every dev MCP tool answers (CI runs it).
+
+  New models, routes, migrations and tests come from `rws gen` (the `rws`
+  binary of the same release): `rws gen model Post title:String` (a
+  PostgreSQL migration, from the `model-postgres` feature), `rws gen route
+  posts --prefix /api`, `rws gen test posts`, `rws gen migration <name>`.
+  It writes against this release's API and never overwrites a file;
+  `--dry-run` shows the plan. https://rws8.tech/building-apps/generators/
 - `frontend/`: lit 3 + `@lit-material` components, built by Vite into
   `frontend/dist`, which rws serves as static files.
 - `Dockerfile`: frontend → API → distroless image on port 7878.

@@ -323,3 +323,10 @@ path = "fuzz_targets/app_manifest.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "generator"
+path = "fuzz_targets/generator.rs"
+test = false
+doc = false
+bench = false

@@ -394,9 +394,9 @@ jobs:
         run: |
           cargo build --locked --example realtime
           ci/e2e/realtime.sh target/debug/examples/realtime
-      - name: Starters build and pass their own tests against this checkout
+      - name: Starters build and pass their own tests against this checkout, then with rws gen output
         if: matrix.check == 'starters'
-        run: ci/e2e/starters.sh
+        run: RWS_BIN=target/debug/rws ci/e2e/starters.sh
       - name: Tower interop — tonic-health over h2c (grpcurl) and a tower-http layer
         if: matrix.check == 'tower'
         env:

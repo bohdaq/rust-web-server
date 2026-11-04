@@ -59,6 +59,8 @@ fn help_text() -> String {
     text.push_str("                                               system trust store, or take it out\n");
     text.push_str("      ctl <command>                            Drive a running server's admin API\n");
     text.push_str("                                               (rws ctl help; also installed as rwsctl)\n");
+    text.push_str("      gen model|route|migration|test <name>    Generate code into the project in the working\n");
+    text.push_str("                                               directory (rws gen --help)\n");
     text.push_str("  -V, --version                                Print version and exit\n");
     text.push_str("      --help                                   Print this help and exit\n");
     text.push_str("      --windows-service=<dir>                  (Windows) Run as a service serving <dir>\n\n");

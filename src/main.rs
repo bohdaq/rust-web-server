@@ -299,6 +299,11 @@ fn exit_if_informational_flag() {
     if let Some(ctl_args) = rust_web_server::ctl::requested(&args) {
         std::process::exit(rust_web_server::ctl::run(ctl_args, &mut std::io::stdout(), &mut std::io::stderr()));
     }
+    // `rws gen …`: code generators for the project in the working directory.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(gen_args) = rust_web_server::generator::requested(&args) {
+        std::process::exit(rust_web_server::generator::run(gen_args, &mut std::io::stdout(), &mut std::io::stderr()));
+    }
     if let Some(output) = rust_web_server::entry_point::command_line_args::informational_flag_output(&args) {
         print!("{output}");
         std::process::exit(0);
