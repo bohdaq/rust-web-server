@@ -1902,6 +1902,10 @@ namespace — they use a shorter `RWS_DB_*` prefix.
 | `RWS_DB_PASSWORD` | `` (empty) | Database password. |
 | `RWS_DB_NAME` | `` (required) | Database name. No default — the server will fail to start if this is unset when the model feature is active. |
 | `RWS_DB_POOL_SIZE` | `10` | Number of connections to pre-create in the connection pool at startup. |
+| `RWS_DB_SSL_MODE` | `prefer` | TLS to PostgreSQL / MySQL: `disable`, `prefer`, `require`, `verify-ca`, `verify-full`. See [Database TLS](/database/overview/#tls). |
+| `RWS_DB_SSL_ROOT_CERT` | — | PEM CA certificates the server's certificate is checked against (`verify-ca`, `verify-full`). |
+| `RWS_DB_SSL_CLIENT_CERT` | — | PEM client certificate; with `RWS_DB_SSL_CLIENT_KEY`. |
+| `RWS_DB_SSL_CLIENT_KEY` | — | Private key of `RWS_DB_SSL_CLIENT_CERT`. |
 
 :::caution[SQLite path]
 For `model-sqlite`, `RWS_DB_NAME` is the file path of the SQLite database, for
@@ -5687,7 +5691,7 @@ fn fetch_user(id: u64) -> Result {
 }
 ```
 
-`Client::new()` uses a 30-second timeout and follows up to 10 redirects; change them with `Client::new().timeout_ms(ms)` and `.max_redirects(n)`, or per request with `RequestBuilder::timeout_ms`. `send()` blocks the calling thread — in the async servers a synchronous handler already runs on the blocking pool, so that is fine; inside an `async` handler use `AsyncClient` instead.
+`Client::new()` uses a 30-second timeout and follows up to 10 redirects; change them with `Client::new().timeout_ms(ms)` and `.max_redirects(n)`, or per request with `RequestBuilder::timeout_ms`. `https://` URLs are checked against the public roots; for a server whose certificate a private CA signed, `Client::new().ca_file("/etc/internal-ca.pem")?` trusts that CA instead (the sync `Client`, 18.28.0). `send()` blocks the calling thread — in the async servers a synchronous handler already runs on the blocking pool, so that is fine; inside an `async` handler use `AsyncClient` instead.
 
 ## Request bodies
 
@@ -10692,6 +10696,7 @@ let public_url = store.url(&key);
 | `RWS_S3_ACCESS_KEY` | optional — falls back to workload identity (below) when unset |
 | `RWS_S3_SECRET_KEY` | optional — falls back to workload identity (below) when unset |
 | `RWS_S3_ENDPOINT` | `https://s3.{region}.amazonaws.com` |
+| `RWS_S3_CA_FILE` | — (the public roots) |
 
 Point `RWS_S3_ENDPOINT` at a custom host to use a non-AWS provider:
 
@@ -10701,7 +10706,16 @@ RWS_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 
 # MinIO (local development)
 RWS_S3_ENDPOINT=http://localhost:9000
+
+# Ceph RGW inside a Kubernetes cluster (plain HTTP on the cluster network)
+RWS_S3_ENDPOINT=http://rook-ceph-rgw-my-store.rook-ceph.svc
 ```
+
+An endpoint whose certificate a private CA signed needs that CA:
+`RWS_S3_CA_FILE=/etc/s3/ca.pem` (PEM), or `S3Storage::new(config).with_ca_file(path)?`.
+Endpoints on a port other than the scheme's default (`:9000`) work since
+18.28.0; before, the signature left the port out and every request was
+refused.
 
 Or construct `S3Config` directly instead of reading the environment:
 
@@ -16253,6 +16267,30 @@ Unlike most feature pairs in this crate, `model-sqlite`, `model-postgres`, and `
 | `RWS_DB_PASSWORD` | — | Ignored for SQLite |
 | `RWS_DB_NAME` | **required** | File path for SQLite; use `:memory:` for in-memory |
 | `RWS_DB_POOL_SIZE` | `10` | Maximum number of connections in the pool |
+
+### TLS
+
+`DbPool::from_env()` also reads how PostgreSQL and MySQL connections use
+TLS (`DbTls::from_env()`; SQLite ignores it). A managed database usually
+requires TLS with a certificate from its own CA: give rws that CA and
+`verify-full`.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RWS_DB_SSL_MODE` | `prefer` | `disable`, `prefer` (TLS if the server offers it, certificate not checked), `require` (always TLS, not checked), `verify-ca` (signed by a trusted CA), `verify-full` (and names the host). MySQL's spellings (`required`, `verify_identity`) work too |
+| `RWS_DB_SSL_ROOT_CERT` | the system's roots | PEM file with the CA certificates that sign the server's certificate |
+| `RWS_DB_SSL_CLIENT_CERT` | — | PEM client certificate, for servers that require one; needs `RWS_DB_SSL_CLIENT_KEY` |
+| `RWS_DB_SSL_CLIENT_KEY` | — | Its private key |
+
+```bash
+RWS_DB_HOST=app-db.shop.svc RWS_DB_NAME=app RWS_DB_USER=owner RWS_DB_PASSWORD=… \
+RWS_DB_SSL_MODE=verify-full RWS_DB_SSL_ROOT_CERT=/etc/db/ca.crt ./app
+```
+
+In code, `DbPool::new_with_tls(config, DbTls { mode: DbSslMode::VerifyFull, root_cert: Some("/etc/db/ca.crt".into()), ..DbTls::default() })`.
+`DbPool::new(config)` keeps the default, `prefer`. User and password go to
+the driver as they are, so they may hold any character (`@`, `:`, `/` broke
+the connection URL before 18.28.0).
 
 ## Quick start
 
@@ -22793,6 +22831,7 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | Type / Trait | Module | Description |
 |---|---|---|
 | `DbPool` | `model` | Async `sqlx` pool, one variant per compiled-in backend: `new(DbConfig)`, `from_env()`, `memory()` (SQLite `:memory:`); `execute`, `query`, `begin`, `transaction`, `migrate`. See [Database](/database/overview/) |
+| `DbTls` / `DbSslMode` | `model` | TLS for PostgreSQL / MySQL pools: mode (`disable` … `verify-full`), CA file, client certificate; `DbTls::from_env()` reads `RWS_DB_SSL_*`; used by `DbPool::new_with_tls` and `DbPool::from_env`. See [Database TLS](/database/overview/#tls) |
 | `DbTransaction` | `model` | Open transaction from `DbPool::begin`; `commit` / `rollback` |
 | `DbConfig` | `model` | Connection settings; `from_env()` reads `RWS_DB_*` |
 | `Backend` | `model` | `Sqlite`, `Postgres`, `MySql` (compiled-in only); `Backend::parse`; pick it explicitly only with several backends compiled in |

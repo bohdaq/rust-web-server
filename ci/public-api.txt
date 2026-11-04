@@ -297,6 +297,8 @@ impl core::clone::Clone for rust_web_server::model::ModelRow
 impl core::clone::Clone for rust_web_server::model::Value
 impl core::clone::Clone for rust_web_server::model::backend::Backend
 impl core::clone::Clone for rust_web_server::model::connection::DbConfig
+impl core::clone::Clone for rust_web_server::model::connection::DbSslMode
+impl core::clone::Clone for rust_web_server::model::connection::DbTls
 impl core::clone::Clone for rust_web_server::model::migration::MigrationStatus
 impl core::clone::Clone for rust_web_server::model::pool::DbPool
 impl core::clone::Clone for rust_web_server::model::query::Order
@@ -457,6 +459,7 @@ impl core::cmp::Eq for rust_web_server::mcp::TaskError
 impl core::cmp::Eq for rust_web_server::mcp::ToolCallOutcome
 impl core::cmp::Eq for rust_web_server::mcp::openapi_tools::Location
 impl core::cmp::Eq for rust_web_server::model::backend::Backend
+impl core::cmp::Eq for rust_web_server::model::connection::DbSslMode
 impl core::cmp::Eq for rust_web_server::model::query::Order
 impl core::cmp::Eq for rust_web_server::otel::SpanKind
 impl core::cmp::Eq for rust_web_server::otel::TraceContext
@@ -640,6 +643,8 @@ impl core::cmp::PartialEq for rust_web_server::mcp::openapi_tools::Location
 impl core::cmp::PartialEq for rust_web_server::mcp::openapi_tools::ToolRequest
 impl core::cmp::PartialEq for rust_web_server::model::Value
 impl core::cmp::PartialEq for rust_web_server::model::backend::Backend
+impl core::cmp::PartialEq for rust_web_server::model::connection::DbSslMode
+impl core::cmp::PartialEq for rust_web_server::model::connection::DbTls
 impl core::cmp::PartialEq for rust_web_server::model::query::Order
 impl core::cmp::PartialEq for rust_web_server::null::Null
 impl core::cmp::PartialEq for rust_web_server::otel::AttributeValue
@@ -828,6 +833,8 @@ impl core::default::Default for rust_web_server::mcp::InputRequired
 impl core::default::Default for rust_web_server::mcp::McpContext
 impl core::default::Default for rust_web_server::mcp::ToolAnnotations
 impl core::default::Default for rust_web_server::mcp::openapi_tools::ToolOptions
+impl core::default::Default for rust_web_server::model::connection::DbSslMode
+impl core::default::Default for rust_web_server::model::connection::DbTls
 impl core::default::Default for rust_web_server::openapi::Operation
 impl core::default::Default for rust_web_server::otel::CapturingExporter
 impl core::default::Default for rust_web_server::otel::Context
@@ -1068,6 +1075,8 @@ impl core::fmt::Debug for rust_web_server::model::ModelRow
 impl core::fmt::Debug for rust_web_server::model::Value
 impl core::fmt::Debug for rust_web_server::model::backend::Backend
 impl core::fmt::Debug for rust_web_server::model::connection::DbConfig
+impl core::fmt::Debug for rust_web_server::model::connection::DbSslMode
+impl core::fmt::Debug for rust_web_server::model::connection::DbTls
 impl core::fmt::Debug for rust_web_server::model::migration::MigrationStatus
 impl core::fmt::Debug for rust_web_server::model::pool::DbPool
 impl core::fmt::Debug for rust_web_server::model::query::Order
@@ -1209,6 +1218,7 @@ impl core::marker::Copy for rust_web_server::mcp::ToolAnnotations
 impl core::marker::Copy for rust_web_server::mcp::ToolCallOutcome
 impl core::marker::Copy for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::Copy for rust_web_server::model::backend::Backend
+impl core::marker::Copy for rust_web_server::model::connection::DbSslMode
 impl core::marker::Copy for rust_web_server::model::query::Order
 impl core::marker::Copy for rust_web_server::otel::SpanKind
 impl core::marker::Copy for rust_web_server::otel::TraceContext
@@ -1495,6 +1505,8 @@ impl core::marker::Freeze for rust_web_server::model::ModelRow
 impl core::marker::Freeze for rust_web_server::model::Value
 impl core::marker::Freeze for rust_web_server::model::backend::Backend
 impl core::marker::Freeze for rust_web_server::model::connection::DbConfig
+impl core::marker::Freeze for rust_web_server::model::connection::DbSslMode
+impl core::marker::Freeze for rust_web_server::model::connection::DbTls
 impl core::marker::Freeze for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Freeze for rust_web_server::model::pool::DbPool
 impl core::marker::Freeze for rust_web_server::model::pool::DbTransaction
@@ -1938,6 +1950,8 @@ impl core::marker::Send for rust_web_server::model::ModelRow
 impl core::marker::Send for rust_web_server::model::Value
 impl core::marker::Send for rust_web_server::model::backend::Backend
 impl core::marker::Send for rust_web_server::model::connection::DbConfig
+impl core::marker::Send for rust_web_server::model::connection::DbSslMode
+impl core::marker::Send for rust_web_server::model::connection::DbTls
 impl core::marker::Send for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Send for rust_web_server::model::pool::DbPool
 impl core::marker::Send for rust_web_server::model::pool::DbTransaction
@@ -2257,6 +2271,8 @@ impl core::marker::StructuralPartialEq for rust_web_server::mcp::openapi_tools::
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::openapi_tools::ToolRequest
 impl core::marker::StructuralPartialEq for rust_web_server::model::Value
 impl core::marker::StructuralPartialEq for rust_web_server::model::backend::Backend
+impl core::marker::StructuralPartialEq for rust_web_server::model::connection::DbSslMode
+impl core::marker::StructuralPartialEq for rust_web_server::model::connection::DbTls
 impl core::marker::StructuralPartialEq for rust_web_server::model::query::Order
 impl core::marker::StructuralPartialEq for rust_web_server::otel::AttributeValue
 impl core::marker::StructuralPartialEq for rust_web_server::otel::SpanKind
@@ -2595,6 +2611,8 @@ impl core::marker::Sync for rust_web_server::model::ModelRow
 impl core::marker::Sync for rust_web_server::model::Value
 impl core::marker::Sync for rust_web_server::model::backend::Backend
 impl core::marker::Sync for rust_web_server::model::connection::DbConfig
+impl core::marker::Sync for rust_web_server::model::connection::DbSslMode
+impl core::marker::Sync for rust_web_server::model::connection::DbTls
 impl core::marker::Sync for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Sync for rust_web_server::model::pool::DbPool
 impl core::marker::Sync for rust_web_server::model::pool::DbTransaction
@@ -3049,6 +3067,8 @@ impl core::marker::Unpin for rust_web_server::model::ModelRow
 impl core::marker::Unpin for rust_web_server::model::Value
 impl core::marker::Unpin for rust_web_server::model::backend::Backend
 impl core::marker::Unpin for rust_web_server::model::connection::DbConfig
+impl core::marker::Unpin for rust_web_server::model::connection::DbSslMode
+impl core::marker::Unpin for rust_web_server::model::connection::DbTls
 impl core::marker::Unpin for rust_web_server::model::migration::MigrationStatus
 impl core::marker::Unpin for rust_web_server::model::pool::DbPool
 impl core::marker::Unpin for rust_web_server::model::pool::DbTransaction
@@ -3507,6 +3527,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::model::ModelRow
 impl core::marker::UnsafeUnpin for rust_web_server::model::Value
 impl core::marker::UnsafeUnpin for rust_web_server::model::backend::Backend
 impl core::marker::UnsafeUnpin for rust_web_server::model::connection::DbConfig
+impl core::marker::UnsafeUnpin for rust_web_server::model::connection::DbSslMode
+impl core::marker::UnsafeUnpin for rust_web_server::model::connection::DbTls
 impl core::marker::UnsafeUnpin for rust_web_server::model::migration::MigrationStatus
 impl core::marker::UnsafeUnpin for rust_web_server::model::pool::DbPool
 impl core::marker::UnsafeUnpin for rust_web_server::model::pool::DbTransaction
@@ -3944,6 +3966,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::ModelRo
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::Value
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::backend::Backend
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::connection::DbConfig
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::connection::DbSslMode
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::connection::DbTls
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::migration::MigrationStatus
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::query::Order
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::null::Null
@@ -4363,6 +4387,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::ModelRow
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::Value
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::backend::Backend
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::connection::DbConfig
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::connection::DbSslMode
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::connection::DbTls
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::migration::MigrationStatus
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::query::Order
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::null::Null
@@ -4784,6 +4810,8 @@ impl rust_web_server::model::ToColumn for u32
 impl rust_web_server::model::ToColumn for u64
 impl rust_web_server::model::backend::Backend
 impl rust_web_server::model::connection::DbConfig
+impl rust_web_server::model::connection::DbSslMode
+impl rust_web_server::model::connection::DbTls
 impl rust_web_server::model::pool::DbPool
 impl rust_web_server::model::pool::DbTransaction
 impl rust_web_server::openapi::OpenApiConfig
@@ -5367,6 +5395,7 @@ pub async fn rust_web_server::model::pool::DbPool::memory() -> core::result::Res
 pub async fn rust_web_server::model::pool::DbPool::migrate(&self, &str) -> core::result::Result<(), rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::migration_status(&self, &str) -> core::result::Result<alloc::vec::Vec<rust_web_server::model::migration::MigrationStatus>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::new(rust_web_server::model::connection::DbConfig) -> core::result::Result<Self, rust_web_server::model::DbError>
+pub async fn rust_web_server::model::pool::DbPool::new_with_tls(rust_web_server::model::connection::DbConfig, rust_web_server::model::connection::DbTls) -> core::result::Result<Self, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::query<T: rust_web_server::model::Model>(&self, &str, &[rust_web_server::model::Value]) -> core::result::Result<alloc::vec::Vec<T>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::query_raw(&self, &str, &[rust_web_server::model::Value]) -> core::result::Result<alloc::vec::Vec<rust_web_server::model::ModelRow>, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::pool::DbPool::query_rows(&self, &str, &[rust_web_server::model::Value]) -> core::result::Result<alloc::vec::Vec<rust_web_server::model::ModelRow>, rust_web_server::model::DbError>
@@ -6264,10 +6293,12 @@ pub enum rust_web_server::mcp::ToolCallOutcome
 pub enum rust_web_server::mcp::openapi_tools::Location
 pub enum rust_web_server::model::Backend
 pub enum rust_web_server::model::DbPool
+pub enum rust_web_server::model::DbSslMode
 pub enum rust_web_server::model::DbTransaction
 pub enum rust_web_server::model::Order
 pub enum rust_web_server::model::Value
 pub enum rust_web_server::model::backend::Backend
+pub enum rust_web_server::model::connection::DbSslMode
 pub enum rust_web_server::model::pool::DbPool
 pub enum rust_web_server::model::pool::DbTransaction
 pub enum rust_web_server::model::query::Order
@@ -7589,6 +7620,7 @@ pub fn rust_web_server::http_client::AsyncRequestBuilder<'a>::body_text(self, &s
 pub fn rust_web_server::http_client::AsyncRequestBuilder<'a>::form(self, &[(&str, &str)]) -> Self
 pub fn rust_web_server::http_client::AsyncRequestBuilder<'a>::header(self, &str, &str) -> Self
 pub fn rust_web_server::http_client::AsyncRequestBuilder<'a>::timeout_ms(self, u64) -> Self
+pub fn rust_web_server::http_client::Client::ca_file(self, &str) -> core::result::Result<Self, rust_web_server::http_client::HttpClientError>
 pub fn rust_web_server::http_client::Client::default() -> Self
 pub fn rust_web_server::http_client::Client::delete(&self, &str) -> rust_web_server::http_client::RequestBuilder<'_>
 pub fn rust_web_server::http_client::Client::get(&self, &str) -> rust_web_server::http_client::RequestBuilder<'_>
@@ -8002,6 +8034,16 @@ pub fn rust_web_server::model::backend::Backend::parse(&str) -> core::result::Re
 pub fn rust_web_server::model::connection::DbConfig::clone(&self) -> Self
 pub fn rust_web_server::model::connection::DbConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::connection::DbConfig::from_env() -> core::result::Result<Self, rust_web_server::model::DbError>
+pub fn rust_web_server::model::connection::DbSslMode::clone(&self) -> Self
+pub fn rust_web_server::model::connection::DbSslMode::default() -> Self
+pub fn rust_web_server::model::connection::DbSslMode::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::connection::DbSslMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::connection::DbSslMode::parse(&str) -> core::result::Result<rust_web_server::model::connection::DbSslMode, rust_web_server::model::DbError>
+pub fn rust_web_server::model::connection::DbTls::clone(&self) -> Self
+pub fn rust_web_server::model::connection::DbTls::default() -> Self
+pub fn rust_web_server::model::connection::DbTls::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::connection::DbTls::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::connection::DbTls::from_env() -> core::result::Result<rust_web_server::model::connection::DbTls, rust_web_server::model::DbError>
 pub fn rust_web_server::model::migration::MigrationStatus::clone(&self) -> Self
 pub fn rust_web_server::model::migration::MigrationStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::pool::DbPool::backend(&self) -> rust_web_server::model::backend::Backend
@@ -8798,6 +8840,7 @@ pub fn rust_web_server::storage::S3Config::fmt(&self, &mut core::fmt::Formatter<
 pub fn rust_web_server::storage::S3Config::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::S3Storage::from_env() -> core::result::Result<Self, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::S3Storage::new(rust_web_server::storage::S3Config) -> Self
+pub fn rust_web_server::storage::S3Storage::with_ca_file(self, &str) -> core::result::Result<Self, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::Storage::delete(&self, &str) -> core::result::Result<(), rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::Storage::get(&self, &str) -> core::result::Result<alloc::vec::Vec<u8>, rust_web_server::storage::StorageError>
 pub fn rust_web_server::storage::Storage::put(&self, &str, &[u8], &str) -> core::result::Result<alloc::string::String, rust_web_server::storage::StorageError>
@@ -9985,6 +10028,15 @@ pub rust_web_server::model::DbConfig::pool_size: u32
 pub rust_web_server::model::DbConfig::port: u16
 pub rust_web_server::model::DbConfig::user: alloc::string::String
 pub rust_web_server::model::DbPool::Sqlite(sqlx_core::pool::Pool<sqlx_sqlite::database::Sqlite>)
+pub rust_web_server::model::DbSslMode::Disable
+pub rust_web_server::model::DbSslMode::Prefer
+pub rust_web_server::model::DbSslMode::Require
+pub rust_web_server::model::DbSslMode::VerifyCa
+pub rust_web_server::model::DbSslMode::VerifyFull
+pub rust_web_server::model::DbTls::client_cert: core::option::Option<alloc::string::String>
+pub rust_web_server::model::DbTls::client_key: core::option::Option<alloc::string::String>
+pub rust_web_server::model::DbTls::mode: rust_web_server::model::connection::DbSslMode
+pub rust_web_server::model::DbTls::root_cert: core::option::Option<alloc::string::String>
 pub rust_web_server::model::DbTransaction::Sqlite(sqlx_core::transaction::Transaction<'static, sqlx_sqlite::database::Sqlite>)
 pub rust_web_server::model::MigrationStatus::applied: bool
 pub rust_web_server::model::MigrationStatus::has_down: bool
@@ -10005,6 +10057,15 @@ pub rust_web_server::model::connection::DbConfig::password: alloc::string::Strin
 pub rust_web_server::model::connection::DbConfig::pool_size: u32
 pub rust_web_server::model::connection::DbConfig::port: u16
 pub rust_web_server::model::connection::DbConfig::user: alloc::string::String
+pub rust_web_server::model::connection::DbSslMode::Disable
+pub rust_web_server::model::connection::DbSslMode::Prefer
+pub rust_web_server::model::connection::DbSslMode::Require
+pub rust_web_server::model::connection::DbSslMode::VerifyCa
+pub rust_web_server::model::connection::DbSslMode::VerifyFull
+pub rust_web_server::model::connection::DbTls::client_cert: core::option::Option<alloc::string::String>
+pub rust_web_server::model::connection::DbTls::client_key: core::option::Option<alloc::string::String>
+pub rust_web_server::model::connection::DbTls::mode: rust_web_server::model::connection::DbSslMode
+pub rust_web_server::model::connection::DbTls::root_cert: core::option::Option<alloc::string::String>
 pub rust_web_server::model::migration::MigrationStatus::applied: bool
 pub rust_web_server::model::migration::MigrationStatus::has_down: bool
 pub rust_web_server::model::migration::MigrationStatus::version: alloc::string::String
@@ -10984,6 +11045,7 @@ pub struct rust_web_server::mime_type::MimeType
 pub struct rust_web_server::model::BelongsTo<O: rust_web_server::model::Model>
 pub struct rust_web_server::model::DbConfig
 pub struct rust_web_server::model::DbError(pub alloc::string::String)
+pub struct rust_web_server::model::DbTls
 pub struct rust_web_server::model::HasMany<T: rust_web_server::model::Model>
 pub struct rust_web_server::model::HasOne<O: rust_web_server::model::Model>
 pub struct rust_web_server::model::MigrationStatus
@@ -10991,6 +11053,7 @@ pub struct rust_web_server::model::ModelRepository<'a, T: rust_web_server::model
 pub struct rust_web_server::model::ModelRow
 pub struct rust_web_server::model::QueryBuilder<'a, T: rust_web_server::model::Model>
 pub struct rust_web_server::model::connection::DbConfig
+pub struct rust_web_server::model::connection::DbTls
 pub struct rust_web_server::model::migration::MigrationStatus
 pub struct rust_web_server::model::query::QueryBuilder<'a, T: rust_web_server::model::Model>
 pub struct rust_web_server::model::relation::BelongsTo<O: rust_web_server::model::Model>
