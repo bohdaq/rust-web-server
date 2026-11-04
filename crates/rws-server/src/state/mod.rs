@@ -242,12 +242,43 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
     ///     .stream_body("PUT", "/upload/:name");
     /// ```
     pub fn stream_body(mut self, method: &str, pattern: &str) -> Self {
-        self.streaming = self.streaming.add(method, pattern, |_, _, _| Response::new());
+        self.streaming = self.streaming.add_unchecked(method, pattern, |_, _, _| Response::new());
         self
     }
 
     pub fn route_entries(&self) -> Vec<crate::router::RouteInfo> {
         self.router.route_entries()
+    }
+
+    /// Register a typed handler (18.28.0): a function with extractor
+    /// arguments annotated `#[get("/path")]` & co. The method and pattern
+    /// come from the attribute, which checked the pattern's parameters
+    /// against the function's `Path` argument at compile time.
+    ///
+    /// ```rust,ignore
+    /// use rust_web_server::handler::{Json, Path, State};
+    ///
+    /// #[get("/posts/{id}")]
+    /// fn show_post(Path(id): Path<u64>, State(db): State<Db>) -> Result<Json<Post>, AppError> {
+    ///     db.find(id).map(Json).ok_or_else(|| AppError::NotFound(format!("post {id}")))
+    /// }
+    ///
+    /// let app = App::with_state(db).route(show_post);
+    /// ```
+    pub fn route<H: crate::handler::Handler<S>>(mut self, handler: H) -> Self {
+        let state = Arc::clone(&self.state);
+        self.router = self.router.add(H::METHOD, H::PATTERN, move |request, params, connection| {
+            handler.handle(request, params, connection, &state)
+        });
+        self
+    }
+
+    /// Routes that never run because an earlier one with the same method
+    /// matches every path they do (18.28.0). See
+    /// [`Router::route_conflicts`](crate::router::Router::route_conflicts);
+    /// each is also printed once to stderr when it's registered.
+    pub fn route_conflicts(&self) -> Vec<crate::router::RouteConflict> {
+        self.router.route_conflicts()
     }
 
     /// Attach an MCP server to this application. Requests that do not match

@@ -1,0 +1,5 @@
+error: `post_id` is not a parameter of route `GET /posts/{id}` (its parameter: `id`)
+ --> tests/ui/wrong_param_name.rs:5:19
+  |
+5 | fn show_post(Path(post_id): Path<u64>) -> String {
+  |                   ^^^^^^^

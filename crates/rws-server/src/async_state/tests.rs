@@ -356,3 +356,16 @@ mod openapi_tests {
         assert_eq!("users", body);
     }
 }
+
+#[test]
+fn async_route_conflicts_are_reported() {
+    use crate::router::RouteConflictKind;
+    let app = AsyncAppWithState::new(())
+        .get("/items/{id}", |_, _, _, _| async { Response::new() })
+        .get("/items/:item", |_, _, _, _| async { Response::new() })
+        .delete("/items/:id", |_, _, _, _| async { Response::new() });
+    let conflicts = app.route_conflicts();
+    assert_eq!(1, conflicts.len());
+    assert_eq!(RouteConflictKind::Duplicate, conflicts[0].kind);
+    assert_eq!("GET", conflicts[0].method);
+}

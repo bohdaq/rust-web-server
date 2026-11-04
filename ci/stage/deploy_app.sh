@@ -39,7 +39,7 @@ YAML
 esac
 
 APP_DIR="$REPORT/app"; mkdir -p "$APP_DIR"; chmod 700 "$APP_DIR"
-rand() { head -c 24 /dev/urandom | base64 | tr -d '/+='; }
+rand() { head -c 24 /dev/urandom | base64 | tr -d '/+=\n'; }
 
 # ── registry ─────────────────────────────────────────────────────────────────
 REG_PASS=$(rand)

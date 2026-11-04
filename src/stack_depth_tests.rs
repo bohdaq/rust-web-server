@@ -261,3 +261,17 @@ fn fleet_signature_on_long_input() {
         assert!(crate::fleet::verify(b"x", sig.as_bytes(), &[7u8; 32]).is_err());
     });
 }
+
+#[cfg(feature = "serde")]
+#[test]
+fn urlencoded_with_tens_of_thousands_of_pairs() {
+    on_small_stack(|| {
+        // Distinct keys, one repeated key, and pairs without values.
+        let distinct: String = (0..50_000).map(|i| format!("k{i}=v&")).collect();
+        let repeated = "tag=a&".repeat(50_000);
+        let bare = "&=&x".repeat(50_000);
+        for input in [distinct, repeated, bare] {
+            crate::handler::__private::fuzz_urlencoded(&input);
+        }
+    });
+}

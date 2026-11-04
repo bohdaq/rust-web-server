@@ -13,7 +13,7 @@ code_flow() {
   l=$(redirect_of "$l")                                      # → IdP /login (no session there)
   l=$(redirect_of -c "$3" "$l&user=$1")                      # → /oauth/authorize, now signed in
   l=$(redirect_of -b "$3" "$l")                              # → SP callback with the code
-  CALLBACK=$l
+  echo "$l" >"$REPORT/S4.callback"   # a file: this runs in $(…)
   redirect_of -b "$2" -c "$2" "$l" >/dev/null                # the SP takes the code
   curl -sS --max-time 20 -b "$2" "$SP_URL/sp/me"
 }
@@ -29,9 +29,9 @@ sp_two_replicas_ok() { # the SP's session is a signed cookie: both replicas know
 }
 app_check S4.2 "the SP session holds on both SP replicas" sp_two_replicas_ok
 replay_ok() { # the code from S4.1 was used: the SP's callback with it again fails
-  [ -n "${CALLBACK:-}" ] || return 1
-  local jar="$REPORT/S4.3.sp" code state
-  code=$(sed -n 's/.*[?&]code=\([^&]*\).*/\1/p' <<<"$CALLBACK")
+  local code
+  code=$(sed -n 's/.*[?&]code=\([^&]*\).*/\1/p' "$REPORT/S4.callback" 2>/dev/null)
+  [ -n "$code" ] || return 1
   # Straight at the token endpoint: a used code is refused.
   local out; out=$(curl -sS --max-time 20 "$IDP_URL/oauth/token" -d grant_type=authorization_code -d "code=$code" \
     -d client_id=e2e-sp -d "client_secret=$(app_secret oidc-secret)" --data-urlencode "redirect_uri=$SP_URL/auth/callback" -w '\n%{http_code}')

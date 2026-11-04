@@ -196,3 +196,16 @@ metadata:
 spec:
   selector: {app: e2e-sp}
   ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+# The app's MCP server keeps sessions in memory per replica (rws McpServer):
+# rws's MCP gateway reaches it through this Service, which keeps each
+# caller (each rws pod) on one app pod. See STAGE_E2E_FINDINGS "S7 MCP
+# sessions per replica".
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-mcp
+spec:
+  selector: {app: e2e-app}
+  sessionAffinity: ClientIP
+  ports: [{port: 8080, targetPort: 8080, name: http}]

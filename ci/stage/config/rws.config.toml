@@ -383,7 +383,7 @@ refresh_secs = 60
 audit_log    = true
 [[route.action.mcp.upstream]]
 prefix      = "app"
-url         = "http://app:8080/mcp"
+url         = "http://app-mcp:8080/mcp"   # session affinity: MCP sessions are per replica
 headers_env = { Authorization = "E2E_APP_MCP_AUTH" }
 [[route.action.mcp.caller]]
 identity  = "e2e"

@@ -51,7 +51,7 @@ pub use rws_server::app;
 pub use rws_server::auth;
 
 #[cfg(feature = "macros")]
-pub use rws_macros::{delete, get, patch, post, put, route, Config, FromRequest, JsonSchema, Validate};
+pub use rws_macros::{delete, get, patch, post, put, route, Config, FromPath, FromRequest, JsonSchema, Validate};
 #[cfg(all(feature = "macros", any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
 pub use rws_macros::Model;
 #[cfg(feature = "http2")]
@@ -109,6 +109,7 @@ pub use rws_acme::acme;
 pub use rws_server::middleware;
 pub use rws_server::rate_limit;
 pub use rws_server::router;
+pub use rws_server::handler;
 pub use rws_server::schema;
 pub use rws_server::state;
 pub use rws_server::test_client;

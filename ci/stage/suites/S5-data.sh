@@ -15,7 +15,9 @@ app_check S5.1 "ORM on managed PostgreSQL over verified TLS: create, read, delet
 pg_tls_ok() { # every app pod connected with verify-full (no 'retrying' left in the log)
   local pod
   for pod in $(k get pods -l app=e2e-app -o name); do
-    k logs "$pod" 2>/dev/null | grep -qi 'database.*unavailable\|certificate' && { echo "    $pod: $(k logs "$pod" | grep -i 'database\|certificate' | tail -1)" >&2; return 1; }
+    # The app's own lines ([e2e] …): a failed connect, TLS refused, unavailable.
+    k logs "$pod" 2>/dev/null | grep -i '^\[e2e\].*database' | grep -qiv 'database ready' &&
+      { echo "    $pod: $(k logs "$pod" | grep -i '^\[e2e\].*database' | grep -iv 'database ready' | tail -1)" >&2; return 1; }
   done
   return 0
 }

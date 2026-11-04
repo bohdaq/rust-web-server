@@ -61,6 +61,12 @@ async fn main() {
 - Handlers are **synchronous** (`Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response`)
   and run on a blocking pool, so blocking I/O is fine. `App::with_async_state`
   takes `async fn` handlers (for `DbPool`, `AsyncClient`).
+- Since 18.28 (`macros` feature), typed handlers: extractors as arguments,
+  any `IntoResponse` back, registered with `.route(f)`; the route's
+  parameters are checked against `Path` at compile time:
+  `#[get("/items/{id}")] fn item(Path(id): Path<u64>, State(s): State<AppState>) -> Result<Json<Item>, AppError>`
+  (`rust_web_server::handler::{Path, Query, Form, Json, State}`).
+  `app.route_conflicts()` lists routes an earlier one hides — assert it's empty in a test.
 - State is cloned per server worker: shared mutable data goes behind
   `Arc<Mutex<…>>` inside the state.
 - Unrouted requests fall through to the built-ins: static files from the

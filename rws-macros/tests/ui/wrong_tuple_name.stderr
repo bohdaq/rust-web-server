@@ -1,0 +1,5 @@
+error: `slug` is not a parameter of route `GET /users/{user}/posts/:id` (its parameters: `user`, `id`)
+ --> tests/ui/wrong_tuple_name.rs:5:21
+  |
+5 | fn post(Path((user, slug)): Path<(String, u64)>) -> String {
+  |                     ^^^^
