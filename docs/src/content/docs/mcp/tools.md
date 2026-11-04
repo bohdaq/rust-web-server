@@ -64,7 +64,7 @@ The handler signature is `Fn(&str) -> impl Future<Output = Result<McpContent, St
 `tools/list` lists sync and async tools together, and `tools/call` dispatches to whichever collection has a matching name — from a client's point of view there is no difference between the two.
 
 :::note[How this bridges into `Application::execute`]
-`Application::execute` (and therefore `tools/call`) is a synchronous trait method. `.async_tool()`'s handler is driven to completion via `crate::async_bridge::block_on_isolated` — the same mechanism `H2ReverseProxy` and `AsyncAppWithState` already use to call async code from sync trait methods — rather than `tokio::task::block_in_place`, which only works on the `multi_thread` tokio scheduler and panics under `current_thread`. `block_on_isolated` works either way: it spawns a scoped thread with its own single-threaded runtime if already inside one, or builds a temporary runtime directly if not.
+`Application::execute` (and therefore `tools/call`) is a synchronous trait method. `.async_tool()`'s handler runs on rws's process-wide `rws-async` runtime while the calling thread waits — as [`AsyncAppWithState`](/building-apps/async-handlers/#where-handlers-run) handlers do — from any calling context, `current_thread` runtimes included. The runtime outlives the call, so tasks the handler leaves behind (a `DbPool` taking its connection back) still run.
 :::
 
 :::caution[No context or annotations support yet]

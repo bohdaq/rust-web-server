@@ -112,14 +112,20 @@ let app = AsyncAppWithState::new(Db { url: "sqlite::memory:".to_string() })
 
 Path pattern syntax is identical to the synchronous router: `:name` matches a single segment, `*name` matches the rest of the path.
 
-## How the runtime bridge works
+## Where handlers run
 
-`AsyncAppWithState` implements the synchronous `Application` trait so it fits into `Server::run_tls()` / `Server::run_quic()` alongside sync middleware. When `execute` is called:
+`AsyncAppWithState` implements `Application`, so it fits into `Server::run_tls()` / `Server::run_quic()` / `Server::run()` and behind middleware like any other app. A matching route's handler runs on a long-lived runtime in every case:
 
-- **Inside an existing tokio runtime** (HTTP/2 / HTTP/3 handlers): the async future runs in a scoped OS thread with its own single-threaded runtime to avoid blocking the event loop.
-- **Outside any runtime** (HTTP/1.1 thread-pool): a temporary single-threaded tokio runtime is created, the future is driven to completion, and the runtime is dropped.
+- **Async servers, nothing synchronous in front** (no middleware, or only layers that pass the request through): the server awaits the handler through `Application::execute_async` on the connection's own runtime — with the default shared runtime, no thread hand-off at all. Under per-core runtimes (`RWS_CONFIG_RUNTIME=per-core`, single-threaded) it runs on rws's process-wide `rws-async` runtime instead and the connection's runtime awaits it.
+- **Everything else** — a middleware layer in front (the server then calls `execute` on tokio's blocking pool), the HTTP/1.1-only build's thread pool, `TestClient::send()`, any direct `execute` call: the calling thread waits while the handler runs on `rws-async` (one worker per CPU, or `TOKIO_WORKER_THREADS`).
 
-In both cases, the call site sees a synchronous `Result<Response, String>`. You do not need to think about this bridge when writing handlers.
+Requests no route matches go to the built-in `App` without touching a runtime.
+
+Because that runtime outlives the request, tasks a handler leaves behind keep running — a `DbPool` gets its connection back (sqlx returns it from a spawned task) and reuses it on the next request. The caller's tracing span, `Identity` and early-hints destination stay current inside the handler wherever it runs.
+
+Handlers share worker threads with other requests, so they must not block: use `.await`able I/O, and `tokio::task::spawn_blocking` for blocking calls.
+
+Up to 18.28, `execute` ran each handler on a runtime made for the call and dropped after it: tasks left behind never ran, so a PostgreSQL/MySQL `DbPool` reconnected on every request and `DbPool::memory()` lost its database between requests.
 
 ## Custom `Application`s: event loop and async path
 

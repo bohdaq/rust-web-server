@@ -46,7 +46,7 @@ Limits of the transaction, the usual ones for transactional tests:
 
 ### An app on a TestDb
 
-Hand `db.pool()` to the app's state and drive it with `TestClient` as usual. For an `App::with_async_state` app use `send_async().await`, which awaits the handler on the test's runtime:
+Hand `db.pool()` to the app's state and drive it with `TestClient` as usual. From `#[tokio::test]`, an `App::with_async_state` app is best driven with `send_async().await`, which awaits the handler instead of blocking the test's thread:
 
 ```rust
 use rust_web_server::app::App;
@@ -61,7 +61,7 @@ async fn counts_notes() {
 }
 ```
 
-`send()` would run the async handler on a runtime made for that request and dropped after it, as the server's blocking pool does. Tasks the handler leaves behind never run there — sqlx returns a pool connection with such a task, so the connection is closed instead, taking a `TestDb`'s in-memory database with it — and a single-threaded test runtime waiting in `send()` can't run its own tasks either.
+`send()` works too (the handler runs on rws's long-lived `rws-async` runtime, so the pool keeps its connection), but it blocks the test's thread while it waits: on the default single-threaded test runtime nothing else runs meanwhile, so a pool whose connections belong to that runtime — PostgreSQL and MySQL, made in the test — would wait for it forever. SQLite connections don't depend on a runtime.
 
 ## Factories
 

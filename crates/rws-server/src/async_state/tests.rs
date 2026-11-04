@@ -369,3 +369,251 @@ fn async_route_conflicts_are_reported() {
     assert_eq!(RouteConflictKind::Duplicate, conflicts[0].kind);
     assert_eq!("GET", conflicts[0].method);
 }
+
+// ── Where handlers run ────────────────────────────────────────────────────────
+
+fn body_text(response: &Response) -> String {
+    String::from_utf8(response.content_range_list[0].body.clone()).unwrap()
+}
+
+fn thread_app() -> AsyncAppWithState<()> {
+    AsyncAppWithState::new(()).get("/thread", |_, _, _, _| async {
+        tokio::task::yield_now().await;
+        ok_text(std::thread::current().name().unwrap_or(""))
+    })
+}
+
+#[test]
+fn execute_from_a_plain_thread() {
+    let response = thread_app().execute(&get("/thread"), &conn()).unwrap();
+    assert_eq!("rws-async", body_text(&response));
+}
+
+#[test]
+fn execute_inside_a_current_thread_runtime() {
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let response = runtime.block_on(async { thread_app().execute(&get("/thread"), &conn()) }).unwrap();
+    assert_eq!("rws-async", body_text(&response));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn execute_on_a_multi_thread_worker_and_its_blocking_pool() {
+    let on_worker = tokio::spawn(async { thread_app().execute(&get("/thread"), &conn()) }).await.unwrap().unwrap();
+    assert_eq!("rws-async", body_text(&on_worker));
+    // Where the async servers call `execute`.
+    let blocking = tokio::task::spawn_blocking(|| thread_app().execute(&get("/thread"), &conn())).await.unwrap().unwrap();
+    assert_eq!("rws-async", body_text(&blocking));
+}
+
+#[test]
+fn a_handler_calling_another_async_app_synchronously() {
+    let inner = thread_app();
+    let outer = AsyncAppWithState::new(inner).get("/outer", |_, _, _, inner| async move {
+        let response = inner.execute(&get("/thread"), &conn()).unwrap();
+        ok_text(&format!("outer>{}", body_text(&response)))
+    });
+    let response = outer.execute(&get("/outer"), &conn()).unwrap();
+    assert_eq!("outer>rws-async", body_text(&response));
+}
+
+#[test]
+fn execute_async_is_offered_only_for_matching_routes() {
+    let app = thread_app();
+    assert!(app.execute_async(&get("/thread"), &conn()).is_some());
+    assert!(app.execute_async(&get("/missing"), &conn()).is_none(), "the fallback App is synchronous");
+    // …and `execute` answers it without a runtime.
+    assert_eq!(404, app.execute(&get("/missing"), &conn()).unwrap().status_code);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn execute_async_on_a_multi_thread_runtime_stays_on_it() {
+    // The shared server runtime: no hand-off to `rws-async`.
+    let response = tokio::spawn(async {
+        let app = thread_app();
+        let request = get("/thread");
+        let connection = conn();
+        app.execute_async(&request, &connection).unwrap().await
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    assert_ne!("rws-async", body_text(&response));
+}
+
+#[tokio::test]
+async fn execute_async_on_a_current_thread_runtime_uses_the_shared_one() {
+    // Per-core runtimes are `current_thread`.
+    let app = thread_app();
+    let request = get("/thread");
+    let connection = conn();
+    let response = app.execute_async(&request, &connection).unwrap().await.unwrap();
+    assert_eq!("rws-async", body_text(&response));
+}
+
+#[test]
+fn tasks_a_handler_spawns_outlive_the_request() {
+    let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let app = AsyncAppWithState::new(Arc::clone(&done)).post("/later", |_, _, _, done| async move {
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            done.store(true, Ordering::SeqCst);
+        });
+        ok_text("accepted")
+    });
+    assert_eq!(200, app.execute(&post("/later", b""), &conn()).unwrap().status_code);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !done.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(done.load(Ordering::SeqCst), "the task was dropped with a per-request runtime");
+}
+
+#[test]
+fn a_panicking_handler_panics_the_caller() {
+    let app = AsyncAppWithState::new(()).get("/boom", |_, _, _, _| async { panic!("boom") });
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&get("/boom"), &conn())));
+    assert!(caught.is_err());
+}
+
+// ── A DbPool across requests on the sync path ─────────────────────────────────
+
+#[cfg(feature = "model-sqlite")]
+mod db_pool {
+    use super::*;
+    use crate::model::{DbPool, Value};
+    use std::sync::atomic::AtomicUsize;
+
+    fn notes_app(pool: DbPool) -> AsyncAppWithState<DbPool> {
+        AsyncAppWithState::new(pool)
+            .post("/setup", |_, _, _, pool| async move {
+                match pool.execute("CREATE TABLE notes (text TEXT NOT NULL)", &[]).await {
+                    Ok(_) => ok_text("created"),
+                    Err(e) => ok_text(&format!("error: {e}")),
+                }
+            })
+            .post("/notes", |req, _, _, pool| async move {
+                let text = String::from_utf8_lossy(&req.body).to_string();
+                match pool.execute("INSERT INTO notes (text) VALUES (?)", &[Value::Text(text)]).await {
+                    Ok(n) => ok_text(&n.to_string()),
+                    Err(e) => ok_text(&format!("error: {e}")),
+                }
+            })
+            .get("/notes/count", |_, _, _, pool| async move {
+                match pool.query_rows("SELECT COUNT(*) AS n FROM notes", &[]).await {
+                    Ok(rows) => ok_text(&rows[0].get::<i64>("n").unwrap().to_string()),
+                    Err(e) => ok_text(&format!("error: {e}")),
+                }
+            })
+    }
+
+    /// Regression: each sync `execute` ran the handler on a runtime made for
+    /// the call, so sqlx's task giving the connection back never ran, the
+    /// connection was closed — and `DbPool::memory()`'s database with it.
+    #[test]
+    fn an_in_memory_sqlite_pool_keeps_its_table_across_sync_requests() {
+        // Made on the app's startup runtime, which outlives the requests.
+        let startup = tokio::runtime::Runtime::new().unwrap();
+        let pool = startup.block_on(DbPool::memory()).unwrap();
+        let app = notes_app(pool);
+        // From a plain thread, as the HTTP/1.1-only build and `TestClient::send` call it.
+        assert_eq!("created", body_text(&app.execute(&post("/setup", b""), &conn()).unwrap()));
+        assert_eq!("1", body_text(&app.execute(&post("/notes", b"one"), &conn()).unwrap()));
+        // From tokio's blocking pool, as the async servers call it behind a middleware layer.
+        let blocking = {
+            let app = app.clone();
+            startup.block_on(startup.spawn_blocking(move || app.execute(&post("/notes", b"two"), &conn()))).unwrap().unwrap()
+        };
+        assert_eq!("1", body_text(&blocking));
+        assert_eq!("2", body_text(&app.execute(&get("/notes/count"), &conn()).unwrap()));
+    }
+
+    #[test]
+    fn a_pooled_connection_is_reused_across_sync_requests() {
+        let opened = Arc::new(AtomicUsize::new(0));
+        let startup = tokio::runtime::Runtime::new().unwrap();
+        let counter = Arc::clone(&opened);
+        let sqlite = startup
+            .block_on(
+                sqlx::pool::PoolOptions::<sqlx::Sqlite>::new()
+                    .max_connections(4)
+                    .after_connect(move |_, _| {
+                        counter.fetch_add(1, Ordering::SeqCst);
+                        Box::pin(async { Ok(()) })
+                    })
+                    .connect("sqlite::memory:"),
+            )
+            .unwrap();
+        // sqlx gives a connection back from a task, after the handler has
+        // returned: wait for it, or the next request opens a second one.
+        let back_in_the_pool = || {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while sqlite.num_idle() == 0 && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            (sqlite.size(), sqlite.num_idle())
+        };
+        assert_eq!((1, 1), back_in_the_pool(), "connect() checked one connection");
+        let app = notes_app(DbPool::Sqlite(sqlite.clone()));
+        assert_eq!("created", body_text(&app.execute(&post("/setup", b""), &conn()).unwrap()));
+        for _ in 0..5 {
+            assert_eq!((1, 1), back_in_the_pool());
+            assert_eq!("1", body_text(&app.execute(&post("/notes", b"n"), &conn()).unwrap()));
+        }
+        assert_eq!((1, 1), back_in_the_pool());
+        assert_eq!("5", body_text(&app.execute(&get("/notes/count"), &conn()).unwrap()));
+        assert_eq!((1, 1), back_in_the_pool());
+        assert_eq!(1, opened.load(Ordering::SeqCst), "one connection for every request");
+    }
+
+    /// Passes everything on, but isn't `is_passthrough`: the servers then
+    /// call `execute` on the blocking pool, as behind most real layers.
+    struct Synchronous;
+
+    impl crate::middleware::Middleware for Synchronous {
+        fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+            next.execute(request, connection)
+        }
+    }
+
+    async fn through_the_server(app: impl Application + Send + Clone + 'static) -> Vec<String> {
+        let mut bodies = Vec::new();
+        for request in [post("/setup", b""), post("/notes", b"a"), post("/notes", b"b"), get("/notes/count")] {
+            let (_, result) = crate::server::http1_async::execute_request(app.clone(), request, &conn(), None).await.unwrap();
+            bodies.push(body_text(&result.unwrap()));
+        }
+        bodies
+    }
+
+    /// What the async servers run per request: `execute_async` awaited on
+    /// the connection's runtime, or `execute` on the blocking pool behind a
+    /// synchronous layer — under the shared (`multi_thread`) runtime and a
+    /// per-core (`current_thread`) one.
+    #[test]
+    fn the_servers_dispatch_keeps_the_pools_connection() {
+        let expected = ["created", "1", "1", "2"];
+        for multi_thread in [true, false] {
+            let runtime = if multi_thread {
+                tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap()
+            } else {
+                tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap()
+            };
+            let pool = runtime.block_on(DbPool::memory()).unwrap();
+            assert_eq!(expected, *runtime.block_on(through_the_server(notes_app(pool))), "multi_thread: {multi_thread}");
+            let pool = runtime.block_on(DbPool::memory()).unwrap();
+            let wrapped = crate::middleware::WithMiddleware::new(notes_app(pool)).wrap(Synchronous);
+            assert_eq!(expected, *runtime.block_on(through_the_server(wrapped)), "multi_thread: {multi_thread}, behind a layer");
+        }
+    }
+
+    /// A `#[tokio::test]`'s pool, the async servers' `execute_async` path.
+    #[tokio::test]
+    async fn a_pool_made_on_a_current_thread_runtime_through_execute_async() {
+        let pool = DbPool::memory().await.unwrap();
+        let app = notes_app(pool.clone());
+        for (request, expected) in [(post("/setup", b""), "created"), (post("/notes", b"a"), "1"), (get("/notes/count"), "1")] {
+            let response = app.execute_async(&request, &conn()).unwrap().await.unwrap();
+            assert_eq!(expected, body_text(&response));
+        }
+        assert_eq!(1, pool.query_rows("SELECT * FROM notes", &[]).await.unwrap().len());
+    }
+}

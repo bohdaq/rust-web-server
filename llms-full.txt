@@ -5,7 +5,7 @@
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.28.0
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.29.0
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
@@ -842,7 +842,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 ## Proxy & Gateway
 
 - **`ReverseProxy`** — HTTP/1.1 reverse proxy middleware; round-robin backend selection
-- **`H2ReverseProxy`** — HTTP/2 upstream proxy; bridges sync middleware into async via an isolated-runtime helper (works under any tokio runtime flavor) — `http2`
+- **`H2ReverseProxy`** — HTTP/2 upstream proxy; pooled, multiplexed upstream connections on a dedicated runtime (works under any tokio runtime flavor) — `http2`
 - **`GrpcProxy`** — wraps `H2ReverseProxy`; filters on `Content-Type: application/grpc*` — `http2`
 - **`TcpProxy`** — standalone L4 TCP proxy; bidirectional `std::io::copy` relay; round-robin backends
 - **`UdpProxy`** — standalone UDP datagram proxy; per-datagram ephemeral socket; round-robin backends
@@ -6084,14 +6084,20 @@ let app = AsyncAppWithState::new(Db { url: "sqlite::memory:".to_string() })
 
 Path pattern syntax is identical to the synchronous router: `:name` matches a single segment, `*name` matches the rest of the path.
 
-## How the runtime bridge works
+## Where handlers run
 
-`AsyncAppWithState` implements the synchronous `Application` trait so it fits into `Server::run_tls()` / `Server::run_quic()` alongside sync middleware. When `execute` is called:
+`AsyncAppWithState` implements `Application`, so it fits into `Server::run_tls()` / `Server::run_quic()` / `Server::run()` and behind middleware like any other app. A matching route's handler runs on a long-lived runtime in every case:
 
-- **Inside an existing tokio runtime** (HTTP/2 / HTTP/3 handlers): the async future runs in a scoped OS thread with its own single-threaded runtime to avoid blocking the event loop.
-- **Outside any runtime** (HTTP/1.1 thread-pool): a temporary single-threaded tokio runtime is created, the future is driven to completion, and the runtime is dropped.
+- **Async servers, nothing synchronous in front** (no middleware, or only layers that pass the request through): the server awaits the handler through `Application::execute_async` on the connection's own runtime — with the default shared runtime, no thread hand-off at all. Under per-core runtimes (`RWS_CONFIG_RUNTIME=per-core`, single-threaded) it runs on rws's process-wide `rws-async` runtime instead and the connection's runtime awaits it.
+- **Everything else** — a middleware layer in front (the server then calls `execute` on tokio's blocking pool), the HTTP/1.1-only build's thread pool, `TestClient::send()`, any direct `execute` call: the calling thread waits while the handler runs on `rws-async` (one worker per CPU, or `TOKIO_WORKER_THREADS`).
 
-In both cases, the call site sees a synchronous `Result`. You do not need to think about this bridge when writing handlers.
+Requests no route matches go to the built-in `App` without touching a runtime.
+
+Because that runtime outlives the request, tasks a handler leaves behind keep running — a `DbPool` gets its connection back (sqlx returns it from a spawned task) and reuses it on the next request. The caller's tracing span, `Identity` and early-hints destination stay current inside the handler wherever it runs.
+
+Handlers share worker threads with other requests, so they must not block: use `.await`able I/O, and `tokio::task::spawn_blocking` for blocking calls.
+
+Up to 18.28, `execute` ran each handler on a runtime made for the call and dropped after it: tasks left behind never ran, so a PostgreSQL/MySQL `DbPool` reconnected on every request and `DbPool::memory()` lost its database between requests.
 
 ## Custom `Application`s: event loop and async path
 
@@ -8805,11 +8811,9 @@ let app = App::new().wrap(proxy);
 ```
 
 `H2ReverseProxy` bridges between the synchronous middleware calling
-convention and the async tokio runtime via an internal `block_on_isolated`
-helper — a scoped OS thread running its own single-threaded tokio runtime,
-rather than `tokio::task::block_in_place`. This works under any tokio
-runtime flavor (including `current_thread`, where `block_in_place` would
-panic) and even with no runtime active at all.
+convention and async I/O by running its upstream connections on a dedicated
+two-thread runtime (`rws-h2-upstream`): one pooled, multiplexed connection
+per backend, whatever runtime (or none) the request arrives on.
 
 ## Async handlers
 
@@ -19190,7 +19194,7 @@ The handler signature is `Fn(&str) -> impl Future>` — same arguments and retur
 `tools/list` lists sync and async tools together, and `tools/call` dispatches to whichever collection has a matching name — from a client's point of view there is no difference between the two.
 
 :::note[How this bridges into `Application::execute`]
-`Application::execute` (and therefore `tools/call`) is a synchronous trait method. `.async_tool()`'s handler is driven to completion via `crate::async_bridge::block_on_isolated` — the same mechanism `H2ReverseProxy` and `AsyncAppWithState` already use to call async code from sync trait methods — rather than `tokio::task::block_in_place`, which only works on the `multi_thread` tokio scheduler and panics under `current_thread`. `block_on_isolated` works either way: it spawns a scoped thread with its own single-threaded runtime if already inside one, or builds a temporary runtime directly if not.
+`Application::execute` (and therefore `tools/call`) is a synchronous trait method. `.async_tool()`'s handler runs on rws's process-wide `rws-async` runtime while the calling thread waits — as [`AsyncAppWithState`](/building-apps/async-handlers/#where-handlers-run) handlers do — from any calling context, `current_thread` runtimes included. The runtime outlives the call, so tasks the handler leaves behind (a `DbPool` taking its connection back) still run.
 :::
 
 :::caution[No context or annotations support yet]
@@ -21374,7 +21378,7 @@ resp.sse()           // TestSse — the body's Server-Sent Events
 
 ## Async apps: `send_async`
 
-An `App::with_async_state` app can be driven from `#[tokio::test]` with `.send_async().await`, which awaits the handler on the test's runtime. Prefer it whenever the handler uses a `DbPool` or anything else that leaves tasks on its runtime — see [Test databases](/testing/database/#an-app-on-a-testdb) for why `.send()` loses pool connections there.
+An `App::with_async_state` app can be driven from `#[tokio::test]` with `.send_async().await`, which awaits the handler rather than blocking the test's thread as `.send()` does. Prefer it whenever the handler uses something made on the test's runtime, such as a PostgreSQL or MySQL `DbPool` — see [Test databases](/testing/database/#an-app-on-a-testdb).
 
 ```rust
 let resp = client.get("/notes").send_async().await;
@@ -21729,7 +21733,7 @@ Limits of the transaction, the usual ones for transactional tests:
 
 ### An app on a TestDb
 
-Hand `db.pool()` to the app's state and drive it with `TestClient` as usual. For an `App::with_async_state` app use `send_async().await`, which awaits the handler on the test's runtime:
+Hand `db.pool()` to the app's state and drive it with `TestClient` as usual. From `#[tokio::test]`, an `App::with_async_state` app is best driven with `send_async().await`, which awaits the handler instead of blocking the test's thread:
 
 ```rust
 use rust_web_server::app::App;
@@ -21744,7 +21748,7 @@ async fn counts_notes() {
 }
 ```
 
-`send()` would run the async handler on a runtime made for that request and dropped after it, as the server's blocking pool does. Tasks the handler leaves behind never run there — sqlx returns a pool connection with such a task, so the connection is closed instead, taking a `TestDb`'s in-memory database with it — and a single-threaded test runtime waiting in `send()` can't run its own tasks either.
+`send()` works too (the handler runs on rws's long-lived `rws-async` runtime, so the pool keeps its connection), but it blocks the test's thread while it waits: on the default single-threaded test runtime nothing else runs meanwhile, so a pool whose connections belong to that runtime — PostgreSQL and MySQL, made in the test — would wait for it forever. SQLite connections don't depend on a runtime.
 
 ## Factories
 

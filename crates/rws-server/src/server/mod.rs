@@ -1232,6 +1232,7 @@ async fn sighup() {
         if let Ok(mut s) = tokio::signal::unix::signal(
             tokio::signal::unix::SignalKind::hangup()
         ) {
+            crate::config_reload::note_sighup_handled();
             s.recv().await;
         } else {
             std::future::pending::<()>().await

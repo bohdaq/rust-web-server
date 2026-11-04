@@ -4,12 +4,27 @@
 //! handlers are `async fn` closures that can `await` database queries, HTTP
 //! clients, or any other async I/O without blocking the OS thread.
 //!
-//! The sync [`Application`] bridge works in any calling context: when inside
-//! an existing tokio runtime (HTTP/2 / HTTP/3), it spawns a scoped OS thread
-//! with its own single-threaded runtime; when called from the HTTP/1.1
-//! thread-pool (no runtime), it creates a temporary single-threaded runtime.
+//! Where a handler runs:
 //!
-//! Unmatched routes fall through to the built-in [`App`] controller chain.
+//! - The async servers (HTTP/1.1, HTTP/2, HTTP/3) await it through
+//!   [`Application::execute_async`] when nothing synchronous wraps the app
+//!   (every middleware layer [`is_passthrough`]): on the connection's own
+//!   runtime when that's the shared `multi_thread` one, on the process-wide
+//!   `rws-async` runtime under per-core (`current_thread`) runtimes.
+//! - Otherwise — a middleware layer in front, the HTTP/1.1-only build,
+//!   [`TestClient::send`], any direct [`Application::execute`] call — the
+//!   calling thread waits while it runs on `rws-async`.
+//!
+//! Either way the runtime outlives the request, so tasks a handler leaves
+//! behind run: a `DbPool` gets its connection back (sqlx returns it from a
+//! spawned task) instead of closing it. Handlers must not block their
+//! thread — they share worker threads with other requests.
+//!
+//! Unmatched routes fall through to the built-in [`App`] controller chain,
+//! synchronously, without touching a runtime.
+//!
+//! [`is_passthrough`]: crate::middleware::Middleware::is_passthrough
+//! [`TestClient::send`]: crate::test_client::TestRequest::send
 //!
 //! # Example
 //!
@@ -277,11 +292,8 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
         })
     }
 
-    pub(crate) async fn execute_async(
-        &self,
-        request: &Request,
-        connection: &ConnectionInfo,
-    ) -> Result<Response, String> {
+    /// The matching route's handler future, or `None` when no route matches.
+    fn dispatch(&self, request: &Request, connection: &ConnectionInfo) -> Option<BoxFuture<Response>> {
         let path = request.request_uri.split('?').next().unwrap_or(&request.request_uri);
         let path_segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
@@ -291,25 +303,37 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
             }
             if let Some(params_map) = matcher::try_match(&route.segments, &path_segs) {
                 let params = PathParams::from_map(params_map);
-                let fut = (route.handler)(
-                    request.clone(),
-                    params,
-                    connection.clone(),
-                    Arc::clone(&self.state),
-                );
-                return Ok(fut.await);
+                return Some((route.handler)(request.clone(), params, connection.clone(), Arc::clone(&self.state)));
             }
         }
+        None
+    }
 
-        self.fallback_app().execute(request, connection)
+    /// Await the response on the caller's runtime (see the module docs for
+    /// where the handler runs); unmatched routes go to the fallback `App`.
+    pub(crate) async fn respond(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        match self.dispatch(request, connection) {
+            Some(handler) => Ok(crate::async_bridge::run_async(handler).await),
+            None => self.fallback_app().execute(request, connection),
+        }
     }
 }
 
 impl<S: Send + Sync + 'static> Application for AsyncAppWithState<S> {
+    /// Runs a matching handler on the shared `rws-async` runtime and waits
+    /// for it; anything else goes to the fallback `App` on this thread.
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
-        let request = request.clone();
-        let connection = connection.clone();
-        crate::async_bridge::block_on_isolated(|| self.execute_async(&request, &connection))
+        match self.dispatch(request, connection) {
+            Some(handler) => Ok(crate::async_bridge::block_on_shared(handler)),
+            None => self.fallback_app().execute(request, connection),
+        }
+    }
+
+    /// A matching route's handler, awaited by the async servers; `None` for
+    /// the fallback `App` (it's synchronous).
+    fn execute_async<'a>(&'a self, request: &'a Request, connection: &'a ConnectionInfo) -> Option<crate::application::AsyncResponse<'a>> {
+        let handler = self.dispatch(request, connection)?;
+        Some(Box::pin(async move { Ok(crate::async_bridge::run_async(handler).await) }))
     }
 
     fn registered_routes(&self) -> Vec<crate::router::RouteInfo> {

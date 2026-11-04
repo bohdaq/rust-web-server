@@ -42,6 +42,26 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   MySQL 8.4** (job `model-databases`), as well as SQLite.
 - **rws-macros 17.31.0** must be published before rust-web-server.
 
+### Fixed
+
+- **The model layer on PostgreSQL and MySQL**, found by running its tests
+  there for the first time: `INTEGER`/`SMALLINT`/`REAL` columns read as
+  `NULL` on PostgreSQL (only `BIGINT`/`DOUBLE PRECISION` decoded), and so
+  did an `INSERT … RETURNING` of a `SERIAL` key; `save` of a `None` field
+  failed on PostgreSQL ("column is of type integer but expression is of type
+  text" — NULLs are now written as literals); `QueryBuilder::count` (and so
+  `paginate`) after `order_by` failed on PostgreSQL (the `ORDER BY` is left
+  out); and migrations failed on MySQL, which can't key the
+  `_schema_migrations` table's `TEXT` column (now `VARCHAR(255)`; existing
+  tables keep working). On SQLite a column declared with a type sqlx
+  doesn't read as text (`DATETIME`, `DATE`) is read as it is stored rather
+  than as `NULL`. `save` of a missing row with a non-zero key is a
+  `DbErrorKind::NotFound` error instead of "updated row not found".
+
+## 18.29.0 — 2026-11-04
+
+### Added
+
 - **Test helpers** (roadmap #89), all in `test_client` (nothing on the
   request path changes):
   - `client.websocket(path).connect()` → `TestWebSocket`: runs a route's
@@ -68,8 +88,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
     `*_many(n)`, with per-type defaults (`name-3`, `email-3@example.com`,
     `0`, `false`, `None`). See [Test databases and factories](https://rws8.tech/testing/database/).
   - `TestRequest::send_async().await` for `App::with_async_state` apps:
-    awaits the handler on the test's runtime (`send` runs it on a
-    per-request runtime, where a `DbPool` loses the connection it used).
+    awaits the handler instead of blocking the test's thread (`send`
+    does), for pools made on a single-threaded test runtime.
 - **rws-macros 17.30.0** must be published before rust-web-server.
 
 - **`rws gen model|route|migration|test`** (roadmap #88): code generators for
@@ -92,19 +112,30 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
-- **The model layer on PostgreSQL and MySQL**, found by running its tests
-  there for the first time: `INTEGER`/`SMALLINT`/`REAL` columns read as
-  `NULL` on PostgreSQL (only `BIGINT`/`DOUBLE PRECISION` decoded), and so
-  did an `INSERT … RETURNING` of a `SERIAL` key; `save` of a `None` field
-  failed on PostgreSQL ("column is of type integer but expression is of type
-  text" — NULLs are now written as literals); `QueryBuilder::count` (and so
-  `paginate`) after `order_by` failed on PostgreSQL (the `ORDER BY` is left
-  out); and migrations failed on MySQL, which can't key the
-  `_schema_migrations` table's `TEXT` column (now `VARCHAR(255)`; existing
-  tables keep working). On SQLite a column declared with a type sqlx
-  doesn't read as text (`DATETIME`, `DATE`) is read as it is stored rather
-  than as `NULL`. `save` of a missing row with a non-zero key is a
-  `DbErrorKind::NotFound` error instead of "updated row not found".
+- **A config change before the server was up ended the process.** Fleet's
+  first pull, the config watcher and the admin API ask for a reload by
+  raising `SIGHUP`; one that came after startup marked the server ready but
+  before the accept loop had installed its handler hit the signal's default
+  action. `config_reload::request_reload` now reloads in place until a
+  handler is installed (seen in `ci/e2e/fleet.sh`'s S3 step).
+
+- **`App::with_async_state` handlers lost their `DbPool` connection after
+  every request.** Each request's handler ran on a tokio runtime made for it
+  and dropped afterwards (`async_bridge::block_on_isolated`); sqlx gives a
+  connection back to its pool from a task spawned on that runtime, which
+  never ran, so the connection was closed: a reconnect per request for
+  PostgreSQL/MySQL, and `DbPool::memory()` lost its database between
+  requests. This was every request to an async route — the async servers
+  never awaited the handler directly — and `McpServer::async_tool` calls.
+  Handlers now run on long-lived runtimes: the async servers await them
+  through `Application::execute_async` (now offered for matching routes) on
+  the connection's runtime, or on a process-wide `rws-async` runtime under
+  per-core runtimes; synchronous callers (behind a middleware layer, the
+  HTTP/1.1-only build, `TestClient::send`) wait while it runs on
+  `rws-async`. Also no thread and runtime built per request, and requests no
+  async route matches go to the fallback `App` without any runtime. The
+  caller's span, `Identity` and early-hints destination stay current in the
+  handler. See [Where handlers run](https://rws8.tech/building-apps/async-handlers/#where-handlers-run).
 
 - **MCP: `tools/call` read the tool's name from its arguments** when an
   argument was called `name` and the client sent `arguments` before `name`

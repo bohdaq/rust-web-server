@@ -278,7 +278,7 @@ Rws as a Rails/Spring-class framework built agent-first: the app explains itself
 
 **Done when:** a starter answers every `dev_mcp` tool in CI; compile-fail tests for a wrong path parameter and a duplicate route; starters on the new layout pass `ci/e2e/starters.sh`; SKILL.md and llms files updated.
 
-## 18.29.0 — Generators and test loop
+## 18.29.0 — Generators and test loop (released 2026-11-04)
 
 - **#88** ✅ *main: `rust_web_server::generator`, `rws gen`, the dev MCP `gen_*` tools; `ci/e2e/starters.sh` generates into every starter and runs the tests* **`rws gen model|route|migration|test`** — CLI and MCP tools, output pinned to the release's API. Revisits #42's "no scaffolder" in part: still no `rws new`, but generators inside a project ([AGENT_FIRST_FRAMEWORK.md](AGENT_FIRST_FRAMEWORK.md#decisions)).
 - **#89** **Test ergonomics** — `TestDb` (a transaction per test), factories, WebSocket/SSE in `TestClient`, an OpenAPI snapshot assertion.
