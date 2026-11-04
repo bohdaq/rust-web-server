@@ -138,6 +138,11 @@ impl core::clone::Clone for rust_web_server::admin::access::Principal
 impl core::clone::Clone for rust_web_server::admin::access::Role
 impl core::clone::Clone for rust_web_server::admin::access::TokenUser
 impl core::clone::Clone for rust_web_server::app::App
+impl core::clone::Clone for rust_web_server::app_manifest::AppManifest
+impl core::clone::Clone for rust_web_server::app_manifest::AppPaths
+impl core::clone::Clone for rust_web_server::app_manifest::EntryKind
+impl core::clone::Clone for rust_web_server::app_manifest::LayoutEntry
+impl core::clone::Clone for rust_web_server::app_manifest::ManifestError
 impl core::clone::Clone for rust_web_server::authz::AuthzLayer
 impl core::clone::Clone for rust_web_server::authz::Identity
 impl core::clone::Clone for rust_web_server::authz::ObjectTemplate
@@ -297,6 +302,7 @@ impl core::clone::Clone for rust_web_server::mcp::openapi_tools::Location
 impl core::clone::Clone for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::clone::Clone for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::clone::Clone for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::clone::Clone for rust_web_server::model::ModelInfo
 impl core::clone::Clone for rust_web_server::model::ModelRow
 impl core::clone::Clone for rust_web_server::model::Value
 impl core::clone::Clone for rust_web_server::model::backend::Backend
@@ -424,6 +430,11 @@ impl core::cmp::Eq for rust_web_server::a2a::Role
 impl core::cmp::Eq for rust_web_server::a2a::TaskState
 impl core::cmp::Eq for rust_web_server::acme::ChallengeType
 impl core::cmp::Eq for rust_web_server::admin::access::Role
+impl core::cmp::Eq for rust_web_server::app_manifest::AppManifest
+impl core::cmp::Eq for rust_web_server::app_manifest::AppPaths
+impl core::cmp::Eq for rust_web_server::app_manifest::EntryKind
+impl core::cmp::Eq for rust_web_server::app_manifest::LayoutEntry
+impl core::cmp::Eq for rust_web_server::app_manifest::ManifestError
 impl core::cmp::Eq for rust_web_server::authz::Identity
 impl core::cmp::Eq for rust_web_server::authz::ObjectTemplate
 impl core::cmp::Eq for rust_web_server::authz::rebac::AuthzError
@@ -465,6 +476,7 @@ impl core::cmp::Eq for rust_web_server::mcp::McpIcon
 impl core::cmp::Eq for rust_web_server::mcp::TaskError
 impl core::cmp::Eq for rust_web_server::mcp::ToolCallOutcome
 impl core::cmp::Eq for rust_web_server::mcp::openapi_tools::Location
+impl core::cmp::Eq for rust_web_server::model::ModelInfo
 impl core::cmp::Eq for rust_web_server::model::backend::Backend
 impl core::cmp::Eq for rust_web_server::model::connection::DbSslMode
 impl core::cmp::Eq for rust_web_server::model::query::Order
@@ -523,6 +535,11 @@ impl core::cmp::PartialEq for rust_web_server::admin::access::ChainReport
 impl core::cmp::PartialEq for rust_web_server::admin::access::Principal
 impl core::cmp::PartialEq for rust_web_server::admin::access::Role
 impl core::cmp::PartialEq for rust_web_server::admin::access::TokenUser
+impl core::cmp::PartialEq for rust_web_server::app_manifest::AppManifest
+impl core::cmp::PartialEq for rust_web_server::app_manifest::AppPaths
+impl core::cmp::PartialEq for rust_web_server::app_manifest::EntryKind
+impl core::cmp::PartialEq for rust_web_server::app_manifest::LayoutEntry
+impl core::cmp::PartialEq for rust_web_server::app_manifest::ManifestError
 impl core::cmp::PartialEq for rust_web_server::authz::Identity
 impl core::cmp::PartialEq for rust_web_server::authz::ObjectTemplate
 impl core::cmp::PartialEq for rust_web_server::authz::rebac::AuthzError
@@ -651,6 +668,7 @@ impl core::cmp::PartialEq for rust_web_server::mcp::TaskError
 impl core::cmp::PartialEq for rust_web_server::mcp::ToolCallOutcome
 impl core::cmp::PartialEq for rust_web_server::mcp::openapi_tools::Location
 impl core::cmp::PartialEq for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::cmp::PartialEq for rust_web_server::model::ModelInfo
 impl core::cmp::PartialEq for rust_web_server::model::Value
 impl core::cmp::PartialEq for rust_web_server::model::backend::Backend
 impl core::cmp::PartialEq for rust_web_server::model::connection::DbSslMode
@@ -752,6 +770,8 @@ impl core::convert::From<u32> for rust_web_server::otel::AttributeValue
 impl core::default::Default for rust_web_server::admin::AdminConfig
 impl core::default::Default for rust_web_server::admin::AdminOidcConfig
 impl core::default::Default for rust_web_server::admin::access::ChainReport
+impl core::default::Default for rust_web_server::app_manifest::AppManifest
+impl core::default::Default for rust_web_server::app_manifest::AppPaths
 impl core::default::Default for rust_web_server::authz::rebac::MemoryStore
 impl core::default::Default for rust_web_server::authz::rebac::Schema
 impl core::default::Default for rust_web_server::authz::rebac::TupleFilter
@@ -893,6 +913,7 @@ impl core::default::Default for rust_web_server::tower::Body
 impl core::default::Default for rust_web_server::waf::Mode
 impl core::default::Default for rust_web_server::waf::Verdict
 impl core::default::Default for rust_web_server::waf::WafConfig
+impl core::error::Error for rust_web_server::app_manifest::ManifestError
 impl core::error::Error for rust_web_server::authz::rebac::AuthzError
 impl core::error::Error for rust_web_server::core::base64::DecodeError
 impl core::error::Error for rust_web_server::http_client::HttpClientError
@@ -926,6 +947,11 @@ impl core::fmt::Debug for rust_web_server::admin::access::ChainReport
 impl core::fmt::Debug for rust_web_server::admin::access::Principal
 impl core::fmt::Debug for rust_web_server::admin::access::Role
 impl core::fmt::Debug for rust_web_server::admin::access::TokenUser
+impl core::fmt::Debug for rust_web_server::app_manifest::AppManifest
+impl core::fmt::Debug for rust_web_server::app_manifest::AppPaths
+impl core::fmt::Debug for rust_web_server::app_manifest::EntryKind
+impl core::fmt::Debug for rust_web_server::app_manifest::LayoutEntry
+impl core::fmt::Debug for rust_web_server::app_manifest::ManifestError
 impl core::fmt::Debug for rust_web_server::authz::AuthzLayer
 impl core::fmt::Debug for rust_web_server::authz::Identity
 impl core::fmt::Debug for rust_web_server::authz::ObjectTemplate
@@ -1086,6 +1112,7 @@ impl core::fmt::Debug for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::fmt::Debug for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::fmt::Debug for rust_web_server::mcp::openapi_tools::ToolRequest
 impl core::fmt::Debug for rust_web_server::model::DbError
+impl core::fmt::Debug for rust_web_server::model::ModelInfo
 impl core::fmt::Debug for rust_web_server::model::ModelRow
 impl core::fmt::Debug for rust_web_server::model::Value
 impl core::fmt::Debug for rust_web_server::model::backend::Backend
@@ -1197,6 +1224,7 @@ impl core::fmt::Debug for rust_web_server::waf::WafConfig
 impl core::fmt::Debug for rust_web_server::waf::detect::Rule
 impl core::fmt::Debug for rust_web_server::websocket::Frame
 impl core::fmt::Debug for rust_web_server::websocket::Message
+impl core::fmt::Display for rust_web_server::app_manifest::ManifestError
 impl core::fmt::Display for rust_web_server::authz::rebac::AuthzError
 impl core::fmt::Display for rust_web_server::authz::rebac::ObjectRef
 impl core::fmt::Display for rust_web_server::authz::rebac::Subject
@@ -1224,6 +1252,7 @@ impl core::marker::Copy for rust_web_server::a2a::Role
 impl core::marker::Copy for rust_web_server::a2a::TaskState
 impl core::marker::Copy for rust_web_server::acme::ChallengeType
 impl core::marker::Copy for rust_web_server::admin::access::Role
+impl core::marker::Copy for rust_web_server::app_manifest::EntryKind
 impl core::marker::Copy for rust_web_server::compression::Encoding
 impl core::marker::Copy for rust_web_server::compression::Level
 impl core::marker::Copy for rust_web_server::compression::dictionary::DictionaryEncoding
@@ -1300,6 +1329,11 @@ impl core::marker::Freeze for rust_web_server::app::controller::ready::ReadyCont
 impl core::marker::Freeze for rust_web_server::app::controller::script::ScriptController
 impl core::marker::Freeze for rust_web_server::app::controller::static_resource::StaticResourceController
 impl core::marker::Freeze for rust_web_server::app::controller::style::StyleController
+impl core::marker::Freeze for rust_web_server::app_manifest::AppManifest
+impl core::marker::Freeze for rust_web_server::app_manifest::AppPaths
+impl core::marker::Freeze for rust_web_server::app_manifest::EntryKind
+impl core::marker::Freeze for rust_web_server::app_manifest::LayoutEntry
+impl core::marker::Freeze for rust_web_server::app_manifest::ManifestError
 impl core::marker::Freeze for rust_web_server::auth::Claims
 impl core::marker::Freeze for rust_web_server::auth::JwtLayer
 impl core::marker::Freeze for rust_web_server::auth::forward::ForwardAuthLayer
@@ -1524,6 +1558,7 @@ impl core::marker::Freeze for rust_web_server::metrics::MetricsLayer
 impl core::marker::Freeze for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Freeze for rust_web_server::mime_type::MimeType
 impl core::marker::Freeze for rust_web_server::model::DbError
+impl core::marker::Freeze for rust_web_server::model::ModelInfo
 impl core::marker::Freeze for rust_web_server::model::ModelRow
 impl core::marker::Freeze for rust_web_server::model::Value
 impl core::marker::Freeze for rust_web_server::model::backend::Backend
@@ -1739,6 +1774,11 @@ impl core::marker::Send for rust_web_server::app::controller::ready::ReadyContro
 impl core::marker::Send for rust_web_server::app::controller::script::ScriptController
 impl core::marker::Send for rust_web_server::app::controller::static_resource::StaticResourceController
 impl core::marker::Send for rust_web_server::app::controller::style::StyleController
+impl core::marker::Send for rust_web_server::app_manifest::AppManifest
+impl core::marker::Send for rust_web_server::app_manifest::AppPaths
+impl core::marker::Send for rust_web_server::app_manifest::EntryKind
+impl core::marker::Send for rust_web_server::app_manifest::LayoutEntry
+impl core::marker::Send for rust_web_server::app_manifest::ManifestError
 impl core::marker::Send for rust_web_server::auth::Claims
 impl core::marker::Send for rust_web_server::auth::JwtLayer
 impl core::marker::Send for rust_web_server::auth::forward::ForwardAuthLayer
@@ -1973,6 +2013,7 @@ impl core::marker::Send for rust_web_server::metrics::MetricsLayer
 impl core::marker::Send for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Send for rust_web_server::mime_type::MimeType
 impl core::marker::Send for rust_web_server::model::DbError
+impl core::marker::Send for rust_web_server::model::ModelInfo
 impl core::marker::Send for rust_web_server::model::ModelRow
 impl core::marker::Send for rust_web_server::model::Value
 impl core::marker::Send for rust_web_server::model::backend::Backend
@@ -2172,6 +2213,11 @@ impl core::marker::StructuralPartialEq for rust_web_server::admin::access::Chain
 impl core::marker::StructuralPartialEq for rust_web_server::admin::access::Principal
 impl core::marker::StructuralPartialEq for rust_web_server::admin::access::Role
 impl core::marker::StructuralPartialEq for rust_web_server::admin::access::TokenUser
+impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::AppManifest
+impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::AppPaths
+impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::EntryKind
+impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::LayoutEntry
+impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::ManifestError
 impl core::marker::StructuralPartialEq for rust_web_server::authz::Identity
 impl core::marker::StructuralPartialEq for rust_web_server::authz::ObjectTemplate
 impl core::marker::StructuralPartialEq for rust_web_server::authz::rebac::AuthzError
@@ -2299,6 +2345,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::mcp::TaskError
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::ToolCallOutcome
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::marker::StructuralPartialEq for rust_web_server::model::ModelInfo
 impl core::marker::StructuralPartialEq for rust_web_server::model::Value
 impl core::marker::StructuralPartialEq for rust_web_server::model::backend::Backend
 impl core::marker::StructuralPartialEq for rust_web_server::model::connection::DbSslMode
@@ -2407,6 +2454,11 @@ impl core::marker::Sync for rust_web_server::app::controller::ready::ReadyContro
 impl core::marker::Sync for rust_web_server::app::controller::script::ScriptController
 impl core::marker::Sync for rust_web_server::app::controller::static_resource::StaticResourceController
 impl core::marker::Sync for rust_web_server::app::controller::style::StyleController
+impl core::marker::Sync for rust_web_server::app_manifest::AppManifest
+impl core::marker::Sync for rust_web_server::app_manifest::AppPaths
+impl core::marker::Sync for rust_web_server::app_manifest::EntryKind
+impl core::marker::Sync for rust_web_server::app_manifest::LayoutEntry
+impl core::marker::Sync for rust_web_server::app_manifest::ManifestError
 impl core::marker::Sync for rust_web_server::auth::Claims
 impl core::marker::Sync for rust_web_server::auth::JwtLayer
 impl core::marker::Sync for rust_web_server::auth::forward::ForwardAuthLayer
@@ -2641,6 +2693,7 @@ impl core::marker::Sync for rust_web_server::metrics::MetricsLayer
 impl core::marker::Sync for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Sync for rust_web_server::mime_type::MimeType
 impl core::marker::Sync for rust_web_server::model::DbError
+impl core::marker::Sync for rust_web_server::model::ModelInfo
 impl core::marker::Sync for rust_web_server::model::ModelRow
 impl core::marker::Sync for rust_web_server::model::Value
 impl core::marker::Sync for rust_web_server::model::backend::Backend
@@ -2867,6 +2920,11 @@ impl core::marker::Unpin for rust_web_server::app::controller::ready::ReadyContr
 impl core::marker::Unpin for rust_web_server::app::controller::script::ScriptController
 impl core::marker::Unpin for rust_web_server::app::controller::static_resource::StaticResourceController
 impl core::marker::Unpin for rust_web_server::app::controller::style::StyleController
+impl core::marker::Unpin for rust_web_server::app_manifest::AppManifest
+impl core::marker::Unpin for rust_web_server::app_manifest::AppPaths
+impl core::marker::Unpin for rust_web_server::app_manifest::EntryKind
+impl core::marker::Unpin for rust_web_server::app_manifest::LayoutEntry
+impl core::marker::Unpin for rust_web_server::app_manifest::ManifestError
 impl core::marker::Unpin for rust_web_server::auth::Claims
 impl core::marker::Unpin for rust_web_server::auth::JwtLayer
 impl core::marker::Unpin for rust_web_server::auth::forward::ForwardAuthLayer
@@ -3101,6 +3159,7 @@ impl core::marker::Unpin for rust_web_server::metrics::MetricsLayer
 impl core::marker::Unpin for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Unpin for rust_web_server::mime_type::MimeType
 impl core::marker::Unpin for rust_web_server::model::DbError
+impl core::marker::Unpin for rust_web_server::model::ModelInfo
 impl core::marker::Unpin for rust_web_server::model::ModelRow
 impl core::marker::Unpin for rust_web_server::model::Value
 impl core::marker::Unpin for rust_web_server::model::backend::Backend
@@ -3331,6 +3390,11 @@ impl core::marker::UnsafeUnpin for rust_web_server::app::controller::ready::Read
 impl core::marker::UnsafeUnpin for rust_web_server::app::controller::script::ScriptController
 impl core::marker::UnsafeUnpin for rust_web_server::app::controller::static_resource::StaticResourceController
 impl core::marker::UnsafeUnpin for rust_web_server::app::controller::style::StyleController
+impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::AppManifest
+impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::AppPaths
+impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::EntryKind
+impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::LayoutEntry
+impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::ManifestError
 impl core::marker::UnsafeUnpin for rust_web_server::auth::Claims
 impl core::marker::UnsafeUnpin for rust_web_server::auth::JwtLayer
 impl core::marker::UnsafeUnpin for rust_web_server::auth::forward::ForwardAuthLayer
@@ -3565,6 +3629,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::metrics::MetricsLayer
 impl core::marker::UnsafeUnpin for rust_web_server::middleware::RateLimitLayer
 impl core::marker::UnsafeUnpin for rust_web_server::mime_type::MimeType
 impl core::marker::UnsafeUnpin for rust_web_server::model::DbError
+impl core::marker::UnsafeUnpin for rust_web_server::model::ModelInfo
 impl core::marker::UnsafeUnpin for rust_web_server::model::ModelRow
 impl core::marker::UnsafeUnpin for rust_web_server::model::Value
 impl core::marker::UnsafeUnpin for rust_web_server::model::backend::Backend
@@ -3797,6 +3862,11 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app::controlle
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app::controller::script::ScriptController
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app::controller::static_resource::StaticResourceController
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app::controller::style::StyleController
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::AppManifest
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::AppPaths
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::EntryKind
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::LayoutEntry
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::ManifestError
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::auth::Claims
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::auth::JwtLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::auth::forward::ForwardAuthLayer
@@ -4007,6 +4077,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::metrics::Metri
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::middleware::RateLimitLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mime_type::MimeType
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::DbError
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::ModelInfo
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::ModelRow
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::Value
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::backend::Backend
@@ -4221,6 +4292,11 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app::controller::
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app::controller::script::ScriptController
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app::controller::static_resource::StaticResourceController
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app::controller::style::StyleController
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::AppManifest
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::AppPaths
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::EntryKind
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::LayoutEntry
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::ManifestError
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::auth::Claims
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::auth::JwtLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::auth::forward::ForwardAuthLayer
@@ -4431,6 +4507,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::metrics::MetricsL
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::middleware::RateLimitLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mime_type::MimeType
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::DbError
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::ModelInfo
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::ModelRow
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::Value
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::model::backend::Backend
@@ -4601,6 +4678,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::websocket::Messag
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::websocket::WebSocket
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::websocket::WebSocketSender
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::ws_proxy::WsProxy
+impl core::str::traits::FromStr for rust_web_server::app_manifest::AppManifest
 impl core::str::traits::FromStr for rust_web_server::null::Null
 impl http_body::Body for rust_web_server::tower::Body
 impl rust_web_server::a2a::A2aContext
@@ -4639,6 +4717,9 @@ impl rust_web_server::app::controller::ready::ReadyController
 impl rust_web_server::app::controller::script::ScriptController
 impl rust_web_server::app::controller::static_resource::StaticResourceController
 impl rust_web_server::app::controller::style::StyleController
+impl rust_web_server::app_manifest::AppManifest
+impl rust_web_server::app_manifest::AppPaths
+impl rust_web_server::app_manifest::EntryKind
 impl rust_web_server::application::Application for rust_web_server::a2a::A2aServer
 impl rust_web_server::application::Application for rust_web_server::admin::AdminApi
 impl rust_web_server::application::Application for rust_web_server::app::App
@@ -4870,6 +4951,7 @@ impl rust_web_server::model::FromColumn for i32
 impl rust_web_server::model::FromColumn for i64
 impl rust_web_server::model::FromColumn for u32
 impl rust_web_server::model::FromColumn for u64
+impl rust_web_server::model::ModelInfo
 impl rust_web_server::model::ModelRow
 impl rust_web_server::model::ToColumn for &str
 impl rust_web_server::model::ToColumn for alloc::string::String
@@ -5685,6 +5767,9 @@ pub const rust_web_server::app::controller::not_found::NotFoundController::STATI
 pub const rust_web_server::app::controller::script::ScriptController::SCRIPT_FILEPATH: &'static str
 pub const rust_web_server::app::controller::static_resource::StaticResourceController::STREAM_THRESHOLD: u64
 pub const rust_web_server::app::controller::style::StyleController::STYLE_FILEPATH: &'static str
+pub const rust_web_server::app_manifest::FILE_NAME: &str
+pub const rust_web_server::app_manifest::MAX_MANIFEST_SIZE: usize
+pub const rust_web_server::app_manifest::ROLES: [&str; 9]
 pub const rust_web_server::authz::rebac::MAX_DEPTH: usize
 pub const rust_web_server::authz::rebac::MAX_NAME: usize
 pub const rust_web_server::authz::rebac::MAX_READS: usize
@@ -6477,6 +6562,7 @@ pub enum rust_web_server::a2a::TaskState
 pub enum rust_web_server::acme::ChallengeType
 pub enum rust_web_server::acme::DnsProvider
 pub enum rust_web_server::admin::access::Role
+pub enum rust_web_server::app_manifest::EntryKind
 pub enum rust_web_server::authz::AuthzError
 pub enum rust_web_server::authz::rebac::AuthzError
 pub enum rust_web_server::authz::rebac::Term
@@ -6808,6 +6894,31 @@ pub fn rust_web_server::app::controller::static_resource::StaticResourceControll
 pub fn rust_web_server::app::controller::static_resource::StaticResourceController::render_directory_listing(&str, &str) -> alloc::string::String
 pub fn rust_web_server::app::controller::style::StyleController::is_matching_request(&rust_web_server::request::Request) -> bool
 pub fn rust_web_server::app::controller::style::StyleController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
+pub fn rust_web_server::app_manifest::AppManifest::clone(&self) -> Self
+pub fn rust_web_server::app_manifest::AppManifest::conventional(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rust_web_server::app_manifest::AppManifest::default() -> Self
+pub fn rust_web_server::app_manifest::AppManifest::eq(&self, &Self) -> bool
+pub fn rust_web_server::app_manifest::AppManifest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::app_manifest::AppManifest::from_str(&str) -> core::result::Result<Self, rust_web_server::app_manifest::ManifestError>
+pub fn rust_web_server::app_manifest::AppManifest::layout(&self, impl core::convert::AsRef<std::path::Path>) -> alloc::vec::Vec<rust_web_server::app_manifest::LayoutEntry>
+pub fn rust_web_server::app_manifest::AppManifest::load(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, rust_web_server::app_manifest::ManifestError>
+pub fn rust_web_server::app_manifest::AppManifest::parse(&str) -> core::result::Result<Self, rust_web_server::app_manifest::ManifestError>
+pub fn rust_web_server::app_manifest::AppPaths::clone(&self) -> Self
+pub fn rust_web_server::app_manifest::AppPaths::default() -> Self
+pub fn rust_web_server::app_manifest::AppPaths::entries(&self) -> [(&'static str, &str); 9]
+pub fn rust_web_server::app_manifest::AppPaths::eq(&self, &Self) -> bool
+pub fn rust_web_server::app_manifest::AppPaths::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::app_manifest::AppPaths::get(&self, &str) -> core::option::Option<&str>
+pub fn rust_web_server::app_manifest::EntryKind::as_str(self) -> &'static str
+pub fn rust_web_server::app_manifest::EntryKind::clone(&self) -> Self
+pub fn rust_web_server::app_manifest::EntryKind::eq(&self, &Self) -> bool
+pub fn rust_web_server::app_manifest::EntryKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::app_manifest::LayoutEntry::clone(&self) -> Self
+pub fn rust_web_server::app_manifest::LayoutEntry::eq(&self, &Self) -> bool
+pub fn rust_web_server::app_manifest::LayoutEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::app_manifest::ManifestError::clone(&self) -> Self
+pub fn rust_web_server::app_manifest::ManifestError::eq(&self, &Self) -> bool
+pub fn rust_web_server::app_manifest::ManifestError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::application::Application::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::application::Application::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
 pub fn rust_web_server::application::Application::middleware_names(&self) -> alloc::vec::Vec<&'static str>
@@ -7176,6 +7287,7 @@ pub fn rust_web_server::dev_mcp::DevMcp<A>::is_mounted(&self) -> bool
 pub fn rust_web_server::dev_mcp::DevMcpExt::dev_mcp(self) -> rust_web_server::dev_mcp::DevMcp<Self>
 pub fn rust_web_server::dev_mcp::DevMcpExt::dev_mcp_with(self, rust_web_server::dev_mcp::DevTools) -> rust_web_server::dev_mcp::DevMcp<Self>
 pub fn rust_web_server::dev_mcp::DevTools::allowed_origins<I, S>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
+pub fn rust_web_server::dev_mcp::DevTools::app_dir(self, impl core::convert::Into<std::path::PathBuf>) -> Self
 pub fn rust_web_server::dev_mcp::DevTools::at(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn rust_web_server::dev_mcp::DevTools::cache(self, rust_web_server::cache::CacheLayer) -> Self
 pub fn rust_web_server::dev_mcp::DevTools::clone(&self) -> Self
@@ -7184,6 +7296,7 @@ pub fn rust_web_server::dev_mcp::DevTools::default() -> Self
 pub fn rust_web_server::dev_mcp::DevTools::enabled(&self) -> bool
 pub fn rust_web_server::dev_mcp::DevTools::env(self, rust_web_server::entry_point::rws_env::RwsEnv) -> Self
 pub fn rust_web_server::dev_mcp::DevTools::migrations(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::model<T: rust_web_server::model::Model>(self) -> Self
 pub fn rust_web_server::dev_mcp::DevTools::mount<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static>(self, A) -> rust_web_server::dev_mcp::DevMcp<A>
 pub fn rust_web_server::dev_mcp::DevTools::new() -> Self
 pub fn rust_web_server::dev_mcp::DevTools::read_only(self) -> Self
@@ -8298,6 +8411,11 @@ pub fn rust_web_server::model::Model::primary_key_name() -> &'static str
 pub fn rust_web_server::model::Model::primary_key_value(&self) -> rust_web_server::model::Value
 pub fn rust_web_server::model::Model::table_name() -> &'static str
 pub fn rust_web_server::model::Model::to_values(&self) -> alloc::vec::Vec<(&'static str, rust_web_server::model::Value)>
+pub fn rust_web_server::model::ModelInfo::clone(&self) -> Self
+pub fn rust_web_server::model::ModelInfo::eq(&self, &Self) -> bool
+pub fn rust_web_server::model::ModelInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::model::ModelInfo::of<T: rust_web_server::model::Model>() -> Self
+pub fn rust_web_server::model::ModelInfo::short_name(&self) -> &'static str
 pub fn rust_web_server::model::ModelRow::clone(&self) -> Self
 pub fn rust_web_server::model::ModelRow::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::ModelRow::get<T: rust_web_server::model::FromColumn>(&self, &str) -> core::result::Result<T, rust_web_server::model::DbError>
@@ -9379,6 +9497,7 @@ pub mod rust_web_server::app::controller::ready
 pub mod rust_web_server::app::controller::script
 pub mod rust_web_server::app::controller::static_resource
 pub mod rust_web_server::app::controller::style
+pub mod rust_web_server::app_manifest
 pub mod rust_web_server::application
 pub mod rust_web_server::async_state
 pub mod rust_web_server::auth
@@ -9705,6 +9824,27 @@ pub rust_web_server::admin::access::TokenUser::token: alloc::string::String
 pub rust_web_server::app::controller::file::initiate::FileUpload::last_modified: u128
 pub rust_web_server::app::controller::file::initiate::FileUpload::name: alloc::string::String
 pub rust_web_server::app::controller::file::initiate::FileUpload::size: u128
+pub rust_web_server::app_manifest::AppManifest::file: core::option::Option<std::path::PathBuf>
+pub rust_web_server::app_manifest::AppManifest::name: alloc::string::String
+pub rust_web_server::app_manifest::AppManifest::paths: rust_web_server::app_manifest::AppPaths
+pub rust_web_server::app_manifest::AppManifest::warnings: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::app_manifest::AppPaths::jobs: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::lib: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::main: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::migrations: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::models: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::routes: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::static_files: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::templates: alloc::string::String
+pub rust_web_server::app_manifest::AppPaths::tests: alloc::string::String
+pub rust_web_server::app_manifest::EntryKind::Dir
+pub rust_web_server::app_manifest::EntryKind::File
+pub rust_web_server::app_manifest::LayoutEntry::exists: bool
+pub rust_web_server::app_manifest::LayoutEntry::kind: rust_web_server::app_manifest::EntryKind
+pub rust_web_server::app_manifest::LayoutEntry::path: alloc::string::String
+pub rust_web_server::app_manifest::LayoutEntry::role: &'static str
+pub rust_web_server::app_manifest::ManifestError::line: usize
+pub rust_web_server::app_manifest::ManifestError::message: alloc::string::String
 pub rust_web_server::auth::Claims::exp: core::option::Option<u64>
 pub rust_web_server::auth::Claims::raw: alloc::string::String
 pub rust_web_server::auth::Claims::sub: core::option::Option<alloc::string::String>
@@ -10343,6 +10483,11 @@ pub rust_web_server::model::DbTransaction::Sqlite(sqlx_core::transaction::Transa
 pub rust_web_server::model::MigrationStatus::applied: bool
 pub rust_web_server::model::MigrationStatus::has_down: bool
 pub rust_web_server::model::MigrationStatus::version: alloc::string::String
+pub rust_web_server::model::ModelInfo::auto_increment: bool
+pub rust_web_server::model::ModelInfo::columns: &'static [&'static str]
+pub rust_web_server::model::ModelInfo::primary_key: &'static str
+pub rust_web_server::model::ModelInfo::table: &'static str
+pub rust_web_server::model::ModelInfo::type_name: &'static str
 pub rust_web_server::model::Order::Asc
 pub rust_web_server::model::Order::Desc
 pub rust_web_server::model::Value::Bool(bool)
@@ -11126,6 +11271,10 @@ pub struct rust_web_server::app::controller::ready::ReadyController
 pub struct rust_web_server::app::controller::script::ScriptController
 pub struct rust_web_server::app::controller::static_resource::StaticResourceController
 pub struct rust_web_server::app::controller::style::StyleController
+pub struct rust_web_server::app_manifest::AppManifest
+pub struct rust_web_server::app_manifest::AppPaths
+pub struct rust_web_server::app_manifest::LayoutEntry
+pub struct rust_web_server::app_manifest::ManifestError
 pub struct rust_web_server::async_state::AsyncAppWithState<S>
 pub struct rust_web_server::auth::BasicAuthLayer<F>
 pub struct rust_web_server::auth::Claims
@@ -11363,6 +11512,7 @@ pub struct rust_web_server::model::DbTls
 pub struct rust_web_server::model::HasMany<T: rust_web_server::model::Model>
 pub struct rust_web_server::model::HasOne<O: rust_web_server::model::Model>
 pub struct rust_web_server::model::MigrationStatus
+pub struct rust_web_server::model::ModelInfo
 pub struct rust_web_server::model::ModelRepository<'a, T: rust_web_server::model::Model, ID>
 pub struct rust_web_server::model::ModelRow
 pub struct rust_web_server::model::QueryBuilder<'a, T: rust_web_server::model::Model>
@@ -11588,6 +11738,7 @@ pub trait rust_web_server::otel::Exporter: core::marker::Send + core::marker::Sy
 pub trait rust_web_server::schema::JsonSchema
 pub trait rust_web_server::storage::Storage: core::marker::Send + core::marker::Sync
 pub trait rust_web_server::validate::Validate
+pub type rust_web_server::app_manifest::AppManifest::Err = rust_web_server::app_manifest::ManifestError
 pub type rust_web_server::application::AsyncResponse<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<rust_web_server::response::Response, alloc::string::String>> + core::marker::Send + 'a)>>
 pub type rust_web_server::compression::dictionary::DictionaryHash = [u8; 32]
 pub type rust_web_server::gateway_api::resources::BackendTlsPolicy = kube_core::object::Object<rust_web_server::gateway_api::types::BackendTlsPolicySpec, rust_web_server::gateway_api::types::PolicyStatus>

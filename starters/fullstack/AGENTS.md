@@ -6,10 +6,23 @@ project.
 
 ## Layout
 
-- `src/main.rs`: the API (`app()`), the `Store` (PostgreSQL or in memory),
-  `main`, tests. Build the app in a function, test the function.
-- `migrations/`: SQL files applied in order at startup (`NNN_name.sql`,
-  PostgreSQL dialect, `$1` placeholders). Never rename an applied file.
+The conventional rws layout, named in `rws.app.toml` (the dev MCP
+endpoint's `layout` tool reads it). Put new code where it says:
+
+- `src/main.rs`: wiring only (store, static directory, `dev_mcp`,
+  `Server::run_tls`).
+- `src/lib.rs`: `app()` (the routes) and `dev_tools()` (what the dev MCP
+  endpoint shows; register each new model there with `.model::<T>()`).
+- `src/routes/<resource>.rs`: a resource's typed handlers and its
+  `register(app)`; a new resource is a new module, added in
+  `routes/mod.rs` and `app()`.
+- `src/models/<table>.rs`: `#[derive(Model)]` types, one per table.
+- `src/store.rs`: the `Store` (PostgreSQL or in memory).
+- `migrations/`: SQL files applied in order at startup
+  (`NNNN_name.sql`, with `NNNN_name.down.sql` to roll back; PostgreSQL
+  dialect, `$1` placeholders). Never rename an applied file.
+- `tests/`: integration tests against `app()`; `tests/dev_mcp.rs` checks
+  every dev MCP tool answers (CI runs it).
 - `frontend/`: lit 3 + `@lit-material` components, built by Vite into
   `frontend/dist`, which rws serves as static files.
 - `Dockerfile`: frontend → API → distroless image on port 7878.
@@ -26,15 +39,28 @@ project.
   `cd frontend && npm ci && npm run build`).
 - `cd frontend && npm run dev`: frontend with live reload on :5173, `/api`
   proxied to `cargo run`.
+- `RWS_ENV=dev cargo run`: also the dev MCP endpoint at `/mcp`
+  (`claude mcp add --transport http app-dev http://127.0.0.1:7878/mcp`):
+  `routes`, `models`, `layout`, `config`, `recent_errors`, and with
+  PostgreSQL `db_schema`, `migrations`, `migrations_run`,
+  `migrations_rollback_last`. Outside `RWS_ENV=dev` only with `MCP_TOKEN`
+  set (and requires it); never set `RWS_ENV=dev` in `deploy/`.
 
 ## rws in brief
 
 Docs: https://rws8.tech, one file: https://rws8.tech/llms-full.txt.
 
-- `App::with_async_state(state)` with `.get/.post/.put/.patch/.delete(pattern,
-  |request, params, conn, state| async move { … })`. Patterns `/notes/{id}`;
-  `params.get("id")`. State is `Arc`-shared and cloned per worker.
-- Responses: `Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, bytes)`.
+- Typed handlers: `#[delete("/api/notes/{id}")] async fn remove(Path(id):
+  Path<i64>, State(store): State<Store>) -> Result<Json<Value>, AppError>`,
+  registered with `App::with_async_state(store).route(remove)`. Arguments
+  are extractors (`Path`, `Json`, `Query`, `State`, …); the attribute checks
+  `{id}` against `Path` at compile time.
+- Errors: `AppError::BadRequest(msg)` & co. answer problem details
+  (`application/problem+json`, the message in `detail`, which the frontend
+  shows).
+- Models: `#[derive(Model)]` with `#[table(name = "…")]`,
+  `#[primary_key(auto_increment)]`; `Note::query(&pool)` (query builder),
+  `Note::repository(&pool)` (`save`, `find_by_id`, …).
 - Requests that match no route fall through to static files from the working
   directory, which `main` sets to `STATIC_DIR` (default `frontend/dist`) —
   never the source tree. `RWS_CONFIG_SPA_FALLBACK=index.html` serves the app

@@ -275,3 +275,16 @@ fn urlencoded_with_tens_of_thousands_of_pairs() {
         }
     });
 }
+
+#[test]
+fn app_manifest_with_thousands_of_lines() {
+    on_small_stack(|| {
+        // Up to the size limit: comments, unknown tables and keys, brackets.
+        let mut text = String::from("[paths]\n");
+        while text.len() < crate::app_manifest::MAX_MANIFEST_SIZE - 64 {
+            text.push_str("# c\n[x]\nk = \"[[v]]\"\n");
+        }
+        let manifest = crate::app_manifest::AppManifest::parse(&text).unwrap();
+        assert!(manifest.warnings.len() > 1000);
+    });
+}

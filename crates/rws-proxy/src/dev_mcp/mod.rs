@@ -1,8 +1,9 @@
 //! `app.dev_mcp()`: an MCP endpoint that lets a coding agent look inside
 //! the application it is working on — its routes and the middleware
-//! around them, its effective configuration (secrets hidden), the last
-//! requests and errors, and with a `model-*` feature its database schema
-//! and migrations. Since 18.28.0 (roadmap #85).
+//! around them, its effective configuration (secrets hidden), its layout
+//! and `rws.app.toml` ([`crate::app_manifest`]), the last requests and
+//! errors, and with a `model-*` feature its models, database schema and
+//! migrations. Since 18.28.0 (roadmap #85, #87).
 //!
 //! Off unless the process runs with `RWS_ENV=dev` ([`RwsEnv`]) or a bearer
 //! token is configured (`MCP_TOKEN` by default, [`DevTools::token`]): in
@@ -41,6 +42,9 @@ pub use crate::entry_point::RwsEnv;
 
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
 mod db;
+mod layout;
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+mod models;
 mod ops;
 #[cfg(test)]
 mod tests;
@@ -88,6 +92,9 @@ pub struct DevTools {
     database: Option<crate::model::DbPool>,
     #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
     migrations: Option<String>,
+    #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+    models: Vec<crate::model::ModelInfo>,
+    app_dir: Option<std::path::PathBuf>,
 }
 
 impl Default for DevTools {
@@ -117,6 +124,9 @@ impl DevTools {
             database: None,
             #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
             migrations: None,
+            #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+            models: Vec::new(),
+            app_dir: None,
         }
     }
 
@@ -216,6 +226,31 @@ impl DevTools {
         self
     }
 
+    /// Report the `#[derive(Model)]` type `T` in `models`: its table,
+    /// columns and primary key ([`crate::model::ModelInfo`]), compared with
+    /// the database's table when [`Self::database`] is set. Rust can't list
+    /// a program's models at run time, so each is named once; registering
+    /// one twice lists it once.
+    #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+    pub fn model<T: crate::model::Model>(mut self) -> Self {
+        let info = crate::model::ModelInfo::of::<T>();
+        if !self.models.contains(&info) {
+            self.models.push(info);
+        }
+        self
+    }
+
+    /// The project root `layout` reads `rws.app.toml` and the conventional
+    /// paths from (default: the working directory when the tools are
+    /// installed). `env!("CARGO_MANIFEST_DIR")` is the project's own root
+    /// in `cargo run` and `cargo test`, whatever the working directory —
+    /// the starters pass it, since they serve static files from another
+    /// directory.
+    pub fn app_dir(mut self, dir: impl Into<std::path::PathBuf>) -> Self {
+        self.app_dir = Some(dir.into());
+        self
+    }
+
     /// The token in effect: [`Self::token`], else the token environment
     /// variable; blank is none.
     fn effective_token(&self) -> Option<String> {
@@ -237,8 +272,9 @@ impl DevTools {
         self.effective_env().is_dev() || self.effective_token().is_some()
     }
 
-    /// Register the tools on `mcp`, ungated: `routes`, `config`,
-    /// `recent_requests`, `recent_errors`, with a database `db_schema`,
+    /// Register the tools on `mcp`, ungated: `routes`, `config`, `layout`,
+    /// `recent_requests`, `recent_errors`, with a `model-*` feature
+    /// `models`, with a database `db_schema`,
     /// with migrations `migrations` (and `migrations_run`,
     /// `migrations_rollback_last` unless [`Self::read_only`]), and the
     /// operations tools with [`Self::with_ops`]. The routes are those of
@@ -260,6 +296,12 @@ impl DevTools {
             r#"{"type":"object"}"#,
             move |_| Ok(McpContent::json(config_json(env))),
         );
+        let dir = self.app_dir.clone().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+        mcp = layout::install(mcp, dir);
+        #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+        {
+            mcp = models::install(mcp, self.models.clone(), self.database.clone());
+        }
         mcp = if self.ops {
             ops::install(mcp, routes, self.cache.clone(), self.writes)
         } else {

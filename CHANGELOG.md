@@ -29,6 +29,31 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `Application::registered_routes()` / `Application::middleware_names()` and
   `Middleware::layer_name()`, default methods that let tools describe an app;
   `WithMiddleware`, `McpServer` and `TimeoutLayer` forward them.
+- **Conventional app layout and `rws.app.toml`** (roadmap #87): one layout
+  for rws applications — `src/main.rs` (wiring only), `src/lib.rs`
+  (`app()`), `src/routes/`, `src/models/`, `src/jobs/`, `migrations/`,
+  `templates/`, `tests/`, `static/` — and a manifest at the project root
+  naming the app and any path that differs (every key optional; absent
+  means conventional). `app_manifest::AppManifest` (`load(dir)`, `parse`,
+  `layout(dir)`), `AppPaths`, `LayoutEntry`, `EntryKind`, `ManifestError`
+  (line-numbered, never a panic; unknown keys are warnings). Fuzz target
+  `app_manifest`. See
+  [Project layout](https://rws8.tech/building-apps/project-layout/).
+- `dev_mcp` tools **`layout`** (the manifest and which conventional paths
+  exist, with their files) and **`models`** (`model-*`): the types named with
+  `DevTools::model::<T>()` — table, columns, primary key — compared with the
+  database's tables when one is configured (`missing_columns`,
+  `unmapped_columns`). `DevTools::app_dir(dir)` sets the project root.
+  `model::ModelInfo::of::<T>()` describes a `Model` type.
+- **Starters on the layout**: `starters/api`, `mcp` and `fullstack` split
+  into `main.rs` + `lib.rs` + `routes/` (`tools/` for MCP) / `models/` +
+  `tests/`, ship an `rws.app.toml`, use typed handlers (`#[get]` +
+  `.route(f)`; errors as problem details), and mount `dev_mcp` under
+  `RWS_ENV=dev`. Each has a `tests/dev_mcp.rs` that calls every dev MCP
+  tool it lists; `ci/e2e/starters.sh` runs them, fills `{{crate_name}}`,
+  patches `rws-macros`, and fails on stray `{{`/`{%` text cargo-generate
+  would misread. The starters now ask for `rust-web-server` 18.28;
+  `fullstack`'s migration is `0001_create_notes.sql` with a `.down.sql`.
 
 - **Logs for security monitoring** (#102). All opt-in; with none of it set
   the access log is byte for byte what it was.

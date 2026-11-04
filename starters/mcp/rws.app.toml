@@ -1,0 +1,10 @@
+# The app manifest: the app's name, and where its parts live. Absent keys
+# are the conventional layout (src/main.rs, src/lib.rs, src/routes,
+# src/models, src/jobs, migrations, templates, tests, static); this app's
+# "routes" are its MCP tools. The dev MCP endpoint's `layout` tool reads
+# this file.
+[app]
+name = "{{project-name}}"
+
+[paths]
+routes = "src/tools"   # the MCP tools and resources, one module per subject

@@ -114,6 +114,8 @@ pub use rws_server::schema;
 pub use rws_server::state;
 pub use rws_server::test_client;
 pub use rws_server::application;
+/// `rws.app.toml` and the conventional app layout (18.28.0).
+pub use rws_http::app_manifest;
 pub use rws_http::body;
 pub use rws_http::client_hint;
 pub use rws_server::controller;

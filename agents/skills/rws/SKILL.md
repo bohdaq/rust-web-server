@@ -30,41 +30,84 @@ Features you'll want: `serde` (JSON), `macros` (`#[derive(JsonSchema)]`,
 `#[derive(Model)]`), `openapi`, `auth`, `sso`, `model-sqlite`/`-postgres`/`-mysql`,
 `tower` (tonic, tower-http).
 
+## Project layout
+
+The conventional layout (every starter uses it; `rws.app.toml` at the root
+names the app and any path that differs — absent means conventional; the
+dev MCP `layout` tool reports it). Put new code where it says:
+
+| Path | Holds |
+|---|---|
+| `src/main.rs` | wiring only: `Server::setup`, `app().dev_mcp_with(dev_tools())`, `Server::run_tls` |
+| `src/lib.rs` | `pub fn app()` (routes + middleware), the state type, `dev_tools()` |
+| `src/routes/<resource>.rs` | typed handlers + `pub fn register(app) -> app` |
+| `src/models/<table>.rs` | `#[derive(Model)]` types |
+| `src/jobs/`, `templates/`, `static/` | jobs, Tera templates, static files |
+| `migrations/` | `NNNN_name.sql` + `NNNN_name.down.sql` |
+| `tests/` | integration tests: `TestClient::new(my_app::app())` |
+
 ## The shape of an app
 
 ```rust
-use rust_web_server::prelude::*;
+// src/routes/items.rs
+use rust_web_server::error::AppError;
+use rust_web_server::get;
+use rust_web_server::handler::{Json, Path};
+use rust_web_server::state::AppWithState;
+
+use crate::Store;
+
+#[get("/items/{id}")] // {id} is checked against Path(id) at compile time
+pub fn show(Path(id): Path<u64>, store: &Store) -> Result<Json<String>, AppError> {
+    let items = store.items.lock().unwrap();
+    items.get(&id).cloned().map(Json).ok_or_else(|| AppError::NotFound(format!("no item {id}")))
+}
+
+pub fn register(app: AppWithState<Store>) -> AppWithState<Store> {
+    app.route(show)
+}
+
+// src/lib.rs
+pub mod routes;
+
+use std::{collections::HashMap, sync::{Arc, Mutex}};
+use rust_web_server::{dev_mcp::DevTools, prelude::*, state::AppWithState};
 
 #[derive(Clone, Default)]
-pub struct State; // shared data goes in here, behind Arc<Mutex<…>>
-
-pub fn app() -> rust_web_server::state::AppWithState<State> {
-    App::with_state(State::default())
-        .get("/items/{id}", |_request, params, _connection, _state| {
-            let id = params.get("id").unwrap_or_default();
-            Response::json(&STATUS_CODE_REASON_PHRASE.n200_ok, format!(r#"{{"id":"{id}"}}"#).into_bytes())
-        })
+pub struct Store {
+    pub items: Arc<Mutex<HashMap<u64, String>>>,
 }
+
+pub fn app() -> AppWithState<Store> {
+    routes::items::register(App::with_state(Store::default()))
+}
+
+pub fn dev_tools() -> DevTools {
+    DevTools::new().app_dir(env!("CARGO_MANIFEST_DIR"))
+}
+
+// src/main.rs
+use rust_web_server::{dev_mcp::DevMcpExt, server::Server};
 
 #[tokio::main]
 async fn main() {
     let (listener, pool) = Server::setup().expect("server setup");
-    Server::run_tls(listener, pool, app()).await;
+    Server::run_tls(listener, pool, my_app::app().dev_mcp_with(my_app::dev_tools())).await;
 }
 ```
 
-- Build the app in a function; serve it in `main`; test the function.
+- Typed handlers (18.28, `macros` + `serde` features): extractors as
+  arguments (`rust_web_server::handler::{Path, Query, Form, Json, State}`,
+  `&S`, `&Request`), any `IntoResponse` back (`Json(v)`, `(status, v)`,
+  `Result<_, AppError>` — errors are problem details), registered with
+  `.route(f)`. `async fn` ones go on `App::with_async_state(s)` (take
+  `State(s): State<S>`). `app.route_conflicts()` lists routes an earlier
+  one hides — assert it's empty in a test.
 - Patterns: `/items/{id}` or `/items/:id` (one segment), `/files/{*path}` or
   `/files/*path` (the rest). `params.get("id")`.
-- Handlers are **synchronous** (`Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response`)
+- Classic handlers, `.get(pattern, |request, params, connection, state| …)`, are **synchronous** (`Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response`)
   and run on a blocking pool, so blocking I/O is fine. `App::with_async_state`
   takes `async fn` handlers (for `DbPool`, `AsyncClient`).
-- Since 18.28 (`macros` feature), typed handlers: extractors as arguments,
-  any `IntoResponse` back, registered with `.route(f)`; the route's
-  parameters are checked against `Path` at compile time:
-  `#[get("/items/{id}")] fn item(Path(id): Path<u64>, State(s): State<AppState>) -> Result<Json<Item>, AppError>`
-  (`rust_web_server::handler::{Path, Query, Form, Json, State}`).
-  `app.route_conflicts()` lists routes an earlier one hides — assert it's empty in a test.
 - State is cloned per server worker: shared mutable data goes behind
   `Arc<Mutex<…>>` inside the state.
 - Unrouted requests fall through to the built-ins: static files from the
@@ -83,7 +126,7 @@ async fn main() {
 | Middleware | `app.wrap(layer)`; first wrapped = outermost. `JwtLayer`, `BasicAuthLayer`, `RateLimitLayer`, `RequestIdLayer`, `CacheLayer`, `OtelLayer`, `ReverseProxy`, … |
 | OpenAPI | `.openapi(OpenApiConfig::new(..).operation("GET", "/items/{id}", Operation::new("..").response::<Item>(200, "..")))`; types `#[derive(JsonSchema)]` |
 | MCP tools | `McpServer::new(name, v).typed_tool(name, desc, \|ctx, args: In\| -> Result<Out, String>)`; `.require_bearer(token)`; `app.mcp(name, v)` for an app + tools |
-| Let the agent inspect the app | `use rust_web_server::dev_mcp::DevMcpExt;` then `app.dev_mcp()` (18.28): `/mcp` with `routes` (+ middleware), `config` (secrets hidden), `recent_errors`, `db_schema`/`migrations` via `.dev_mcp_with(DevTools::new().database(pool).migrations("migrations"))`; run with `RWS_ENV=dev` and `claude mcp add --transport http app http://localhost:7878/mcp` |
+| Let the agent inspect the app | `use rust_web_server::dev_mcp::DevMcpExt;` then `app.dev_mcp()` (18.28): `/mcp` with `routes` (+ middleware), `config` (secrets hidden), `layout` (`rws.app.toml`), `recent_errors`, and via `.dev_mcp_with(DevTools::new().model::<Post>().database(pool).migrations("migrations"))` `models`, `db_schema`, `migrations`; run with `RWS_ENV=dev` and `claude mcp add --transport http app http://localhost:7878/mcp` |
 | Streaming response | a reader in `response.stream_pipe`; SSE: `Sse::stream()` |
 | WebSocket | `.websocket("/chat/{room}", \|ws, params, state\| …)` |
 | Database | `DbPool`, `#[derive(Model)]`, `QueryBuilder` (`model-*` features, async handlers) |

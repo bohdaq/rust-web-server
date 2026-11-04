@@ -89,7 +89,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 
 /// Run `work` on the dedicated runtime and wait for it — from any thread,
 /// inside a runtime or not.
-fn run<F>(work: F) -> Result<String, String>
+pub(super) fn run<F>(work: F) -> Result<String, String>
 where
     F: Future<Output = Result<String, DbError>> + Send + 'static,
 {
@@ -114,13 +114,13 @@ async fn status_json(pool: &DbPool, dir: &str) -> Result<String, DbError> {
 }
 
 /// One column as `db_schema` lists it.
-struct Column {
-    table: String,
-    name: String,
-    data_type: String,
-    nullable: bool,
-    default: Option<String>,
-    primary_key: bool,
+pub(super) struct Column {
+    pub(super) table: String,
+    pub(super) name: String,
+    pub(super) data_type: String,
+    pub(super) nullable: bool,
+    pub(super) default: Option<String>,
+    pub(super) primary_key: bool,
 }
 
 async fn schema_json(pool: &DbPool) -> Result<String, DbError> {
@@ -161,7 +161,7 @@ fn text(row: &ModelRow, column: &str) -> Option<String> {
 
 /// Every column of every table the app owns, by table name then position;
 /// the migrations bookkeeping table included (it is part of the schema).
-async fn columns(pool: &DbPool) -> Result<Vec<Column>, DbError> {
+pub(super) async fn columns(pool: &DbPool) -> Result<Vec<Column>, DbError> {
     match pool.backend() {
         #[cfg(feature = "model-sqlite")]
         Backend::Sqlite => {

@@ -1,0 +1,2 @@
+name = "blog"
+paths.static = 'public' # comment

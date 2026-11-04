@@ -6,25 +6,46 @@ working in this project.
 - `cargo test` runs every test without opening a socket (`TestClient`).
 - `cargo run` serves on `http://127.0.0.1:7878` (change with
   `RWS_CONFIG_PORT=8080`); `/openapi.json` and `/docs` describe the API.
-- Everything is in `src/main.rs`: types, `app()` (the routes), `openapi()`,
-  `main`, tests. Keep that shape: build the app in a function, test the
-  function.
+- `RWS_ENV=dev cargo run` also serves the dev MCP endpoint at `/mcp`:
+  `claude mcp add --transport http app-dev http://127.0.0.1:7878/mcp`, then
+  ask it for `routes`, `layout`, `config`, `recent_errors`. Outside
+  `RWS_ENV=dev` it is mounted only with `MCP_TOKEN` set (and requires it).
 
-rws, in brief (docs for this version: https://rws8.tech, one file:
-https://rws8.tech/llms-full.txt):
+## Layout
 
-- Routes: `App::with_state(state).get(pattern, handler)` (also `.post`,
-  `.put`, `.patch`, `.delete`). Patterns: `/todos/{id}` or `/todos/:id` for
-  one segment, `/files/{*path}` for the rest; `params.get("id")`.
-- A handler is a synchronous `Fn(&Request, &PathParams, &ConnectionInfo, &S)
-  -> Response` running on a blocking pool; `App::with_async_state` for
-  `async fn` handlers.
-- State is cloned per worker: keep shared data behind `Arc<Mutex<…>>`.
-- Responses: `Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, bytes)`;
-  statuses are `STATUS_CODE_REASON_PHRASE.n404_not_found` and friends.
-- Request body: `request.body` (bytes; `serde_json::from_slice`). Headers:
-  `request.header("content-type")`.
-- OpenAPI: describe each route in `openapi()` with `Operation` and
-  `#[derive(JsonSchema)]` types — the document follows serde's renames.
+The conventional rws layout, named in `rws.app.toml` (the dev endpoint's
+`layout` tool reads it). Put new code where it says:
+
+- `src/main.rs`: wiring only (setup, `dev_mcp`, `Server::run_tls`).
+- `src/lib.rs`: `app()` (the routes and OpenAPI), `Store` (the state),
+  `dev_tools()`.
+- `src/routes/<resource>.rs`: a resource's types and typed handlers, its
+  `register(app)` and `describe(openapi)`. A new resource is a new module,
+  added in `routes/mod.rs`, `app()` and `openapi()`.
+- `tests/`: integration tests against `app()`; `tests/dev_mcp.rs` checks
+  every dev MCP tool answers (CI runs it).
+- `src/models/`, `src/jobs/`, `migrations/`, `templates/`, `static/`: where
+  `#[derive(Model)]` types, jobs, SQL migrations, Tera templates and static
+  files go when the app gets them.
+
+## rws, in brief
+
+Docs for this version: https://rws8.tech, one file:
+https://rws8.tech/llms-full.txt.
+
+- Typed handlers: `#[get("/todos/{id}")] fn show(Path(id): Path<u64>, store:
+  &Store) -> Result<Json<Todo>, AppError>`, registered with `.route(show)`.
+  Arguments are extractors (`Path`, `Json`, `Query`, `Form`, `State`, `&S`,
+  `&Request`, …); the attribute checks `{id}` against `Path` at compile
+  time. Return anything `IntoResponse`: `Json(v)`, `(status, Json(v))`,
+  `Result<_, AppError>`.
+- Errors: `AppError::NotFound(msg)` & co. answer problem details
+  (`application/problem+json`, `detail` = msg); extractor rejections too.
+- State is shared behind an `Arc`; keep mutable data behind a `Mutex`.
+- `app().route_conflicts()` lists routes that never run (a test checks it
+  is empty): register `/todos/new` before `/todos/{id}`.
+- OpenAPI: describe each route in its module's `describe()` with
+  `Operation` and `#[derive(JsonSchema)]` types, using the handler's
+  `METHOD`/`PATTERN` — the document follows serde's renames.
 - Middleware: `app.wrap(layer)`; built-ins (auth, rate limits, CORS, request
   ids, …): https://rws8.tech/building-apps/middleware/.

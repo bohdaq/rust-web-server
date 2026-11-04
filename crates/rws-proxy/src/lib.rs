@@ -15,7 +15,7 @@ extern crate self as rust_web_server;
 // public (hidden) so doctests can name them as `rust_web_server::…`.
 #[allow(unused_imports)]
 #[doc(hidden)]
-pub use rws_server::{app, application, authz, blocklist, cache, config_reload, core, disk_guard, early_hints, entry_point, error, ext, feature, header, http, http_client, ip_filter, maintenance, mcp, metrics, middleware, range, rate_limit, request, request_log, response, rewrite, router, server, server_config, service_discovery, session, sse, state, url};
+pub use rws_server::{app, app_manifest, application, authz, blocklist, cache, config_reload, core, disk_guard, early_hints, entry_point, error, ext, feature, header, http, http_client, ip_filter, maintenance, mcp, metrics, middleware, range, rate_limit, request, request_log, response, rewrite, router, server, server_config, service_discovery, session, sse, state, url};
 #[cfg(feature = "auth")]
 #[doc(hidden)]
 pub use rws_server::auth;

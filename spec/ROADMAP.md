@@ -272,9 +272,9 @@ No new features: the fixes and release gating from the review of 18.20–18.23. 
 
 Rws as a Rails/Spring-class framework built agent-first: the app explains itself to agents, mistakes fail at compile time, one conventional layout. Plan, gap review and decisions: [AGENT_FIRST_FRAMEWORK.md](AGENT_FIRST_FRAMEWORK.md) (2026-11-04).
 
-- **#85** **`app.dev_mcp()`** — the binary's ops MCP tools moved into `rws-server`, plus routes with middleware, models, DB schema, migrations, config, jobs and recent errors; off unless `RWS_ENV=dev` or a token is set.
-- **#86** **Compile-checked routes** — `#[get]`/`#[post]` generate the handler adapter, extractors as arguments, path parameters checked at compile time, duplicate and shadowed routes reported when the app is built.
-- **#87** **Conventional layout and `rws.app.toml` manifest** — where routes, models, jobs, migrations, templates and tests go; the starters adopt it.
+- **#85** **`app.dev_mcp()`** — the binary's ops MCP tools moved into `rws-server`, plus routes with middleware, models, DB schema, migrations, config, jobs and recent errors; off unless `RWS_ENV=dev` or a token is set. *Shipped on main* (in `rws-proxy`; jobs and MCP resources moved to later releases).
+- **#86** **Compile-checked routes** — `#[get]`/`#[post]` generate the handler adapter, extractors as arguments, path parameters checked at compile time, duplicate and shadowed routes reported when the app is built. *Shipped on main.*
+- **#87** **Conventional layout and `rws.app.toml` manifest** — where routes, models, jobs, migrations, templates and tests go; the starters adopt it. *Shipped on main* (`app_manifest`, `dev_mcp` `layout`/`models`, the starters' `tests/dev_mcp.rs`).
 
 **Done when:** a starter answers every `dev_mcp` tool in CI; compile-fail tests for a wrong path parameter and a duplicate route; starters on the new layout pass `ci/e2e/starters.sh`; SKILL.md and llms files updated.
 

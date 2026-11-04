@@ -1,0 +1,17 @@
+# The app manifest: the app's name, and where its parts live. Every path
+# below is the conventional default (an absent key means the same); change
+# one only when the project differs. The dev MCP endpoint's `layout` tool
+# reads this file.
+[app]
+name = "{{project-name}}"
+
+[paths]
+main = "src/main.rs"        # wiring only: settings, dev_mcp, Server::run_tls
+lib = "src/lib.rs"          # app(): the routes and middleware
+routes = "src/routes"       # typed handlers, one module per resource
+models = "src/models"       # #[derive(Model)] types
+jobs = "src/jobs"           # background jobs
+migrations = "migrations"   # NNNN_name.sql (+ NNNN_name.down.sql)
+templates = "templates"     # Tera templates
+tests = "tests"             # integration tests against app()
+static = "static"           # files served as they are

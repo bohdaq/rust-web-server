@@ -316,3 +316,10 @@ path = "fuzz_targets/pkcs11_uri.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "app_manifest"
+path = "fuzz_targets/app_manifest.rs"
+test = false
+doc = false
+bench = false

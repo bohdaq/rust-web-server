@@ -290,3 +290,47 @@ pub trait Model: Sized + Send + Sync {
     /// Excludes `#[ignore]` fields.
     fn to_values(&self) -> Vec<(&'static str, Value)>;
 }
+
+/// What a [`Model`] type maps to, read from its trait implementation: the
+/// type, its table, its columns and primary key (18.28.0). Rust can't list
+/// the `#[derive(Model)]` types of a program at run time, so whatever
+/// reports models (the dev MCP server's `models` tool,
+/// `DevTools::model::<T>()`) is given each type once.
+///
+/// ```rust,ignore
+/// let info = ModelInfo::of::<User>();
+/// assert_eq!(info.table, "users");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelInfo {
+    /// The Rust type, as [`std::any::type_name`] spells it.
+    pub type_name: &'static str,
+    /// [`Model::table_name`].
+    pub table: &'static str,
+    /// [`Model::column_names`], `#[ignore]` fields left out.
+    pub columns: &'static [&'static str],
+    /// [`Model::primary_key_name`].
+    pub primary_key: &'static str,
+    /// [`Model::primary_key_auto_increment`].
+    pub auto_increment: bool,
+}
+
+impl ModelInfo {
+    /// The mapping of `T`.
+    pub fn of<T: Model>() -> Self {
+        ModelInfo {
+            type_name: std::any::type_name::<T>(),
+            table: T::table_name(),
+            columns: T::column_names(),
+            primary_key: T::primary_key_name(),
+            auto_increment: T::primary_key_auto_increment(),
+        }
+    }
+
+    /// The type's name without its module path (`User` for
+    /// `app::models::User`, `Page` for `app::Page<u8>`).
+    pub fn short_name(&self) -> &'static str {
+        let base = self.type_name.split('<').next().unwrap_or(self.type_name);
+        base.rsplit("::").next().unwrap_or(base)
+    }
+}

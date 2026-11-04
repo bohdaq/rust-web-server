@@ -110,6 +110,19 @@ mod model_tests {
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
+    #[test]
+    fn model_info_reads_the_mapping() {
+        let info = crate::model::ModelInfo::of::<User>();
+        assert_eq!(info.table, "users");
+        assert_eq!(info.columns, &["id", "name", "email", "age"]);
+        assert_eq!((info.primary_key, info.auto_increment), ("id", true));
+        assert!(info.type_name.ends_with("::User"), "{}", info.type_name);
+        assert_eq!(info.short_name(), "User");
+        let generic = crate::model::ModelInfo { type_name: "app::Page<app::models::Post>", ..info.clone() };
+        assert_eq!(generic.short_name(), "Page");
+        assert_ne!(info, crate::model::ModelInfo::of::<Post>());
+    }
+
     #[tokio::test]
     async fn test_01_create_table_via_raw_sql() {
         let pool = test_pool().await;
