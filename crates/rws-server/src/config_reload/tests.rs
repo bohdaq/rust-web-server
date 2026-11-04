@@ -152,3 +152,14 @@ fn reload_runs_registered_hooks() {
     super::reload();
     assert!(calls.load(Ordering::SeqCst) >= 1);
 }
+
+#[test]
+fn request_reload_without_a_handler_reloads_in_place() {
+    // Before a server installs its SIGHUP handler the signal would end the
+    // process (fleet's first pull did, in ci/e2e/fleet.sh), so it reloads here.
+    let _g = crate::test_env::lock();
+    let (before, _) = super::last_reload();
+    assert!(!super::signal_or_reload(false));
+    let (after, _) = super::last_reload();
+    assert!(after > before, "reload count {before} -> {after}");
+}

@@ -172,14 +172,38 @@ pub fn current() -> ConfigSnapshot {
 /// calls [`reload`]. Setting [`RELOAD_REQUESTED`] alone only reaches the
 /// HTTP/1.1-only server's accept loop — the async servers never read it, so
 /// the MCP `reload_config` tool did nothing in them.
+///
+/// Until a server has installed its `SIGHUP` handler (the async servers do
+/// it in their accept loops, after `main` has started fleet, the config
+/// watcher and the admin API), the signal's default action would end the
+/// process, so this calls [`reload`] directly instead.
 pub fn request_reload() {
+    signal_or_reload(SIGHUP_HANDLED.load(Ordering::SeqCst));
+}
+
+/// Set once a `SIGHUP` handler is in place: [`install_sighup_handler`], or
+/// the async servers' first `tokio::signal` registration (tokio keeps its
+/// handler for the life of the process).
+static SIGHUP_HANDLED: AtomicBool = AtomicBool::new(false);
+
+#[cfg_attr(not(any(feature = "http2", all(unix, feature = "http1"))), allow(dead_code))]
+pub(crate) fn note_sighup_handled() {
+    SIGHUP_HANDLED.store(true, Ordering::SeqCst);
+}
+
+/// `true` when it raised `SIGHUP`, `false` when it reloaded in place.
+fn signal_or_reload(handled: bool) -> bool {
     #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
-    // SAFETY: kill(2) on our own pid with a signal both servers handle.
-    unsafe {
-        libc::kill(libc::getpid(), libc::SIGHUP);
+    if handled {
+        // SAFETY: kill(2) on our own pid with a signal a handler is installed for.
+        unsafe {
+            libc::kill(libc::getpid(), libc::SIGHUP);
+        }
+        return true;
     }
-    #[cfg(not(all(unix, any(feature = "http1", feature = "http2"))))]
+    let _ = handled;
     reload();
+    false
 }
 
 /// Re-read `rws.config.toml` and apply all hot-reloadable changes in-place.
@@ -263,6 +287,8 @@ pub fn install_sighup_handler() {
     unsafe {
         libc::signal(libc::SIGHUP, sighup_handler as *const () as libc::sighandler_t);
     }
+    #[cfg(all(unix, feature = "http1"))]
+    note_sighup_handled();
 }
 
 #[cfg(all(unix, feature = "http1"))]
