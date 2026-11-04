@@ -277,6 +277,8 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: expected \"off\", \"truncate\" or \"hash\""));
                 }
             }
+            // The log module (and syslog) isn't built for wasm32.
+            #[cfg(not(target_arch = "wasm32"))]
             "RWS_CONFIG_ACCESS_LOG_SYSLOG" => {
                 if !value.trim().is_empty() {
                     if let Err(e) = crate::log::syslog::Target::parse(value) {
@@ -284,6 +286,7 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     }
                 }
             }
+            #[cfg(not(target_arch = "wasm32"))]
             "RWS_CONFIG_ACCESS_LOG_SYSLOG_FACILITY" => {
                 if let Err(e) = crate::log::syslog::parse_facility(value) {
                     report.error(format!("{key}: {e}"));
