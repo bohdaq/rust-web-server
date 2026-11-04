@@ -59,6 +59,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- **A config change before the server was up ended the process.** Fleet's
+  first pull, the config watcher and the admin API ask for a reload by
+  raising `SIGHUP`; one that came after startup marked the server ready but
+  before the accept loop had installed its handler hit the signal's default
+  action. `config_reload::request_reload` now reloads in place until a
+  handler is installed (seen in `ci/e2e/fleet.sh`'s S3 step).
+
 - **`App::with_async_state` handlers lost their `DbPool` connection after
   every request.** Each request's handler ran on a tokio runtime made for it
   and dropped afterwards (`async_bridge::block_on_isolated`); sqlx gives a
