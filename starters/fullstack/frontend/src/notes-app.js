@@ -66,7 +66,8 @@ export class NotesApp extends LitElement {
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || response.statusText);
+    // Errors are problem details (RFC 9457): the reason is in `detail`.
+    if (!response.ok) throw new Error(data.detail || data.title || response.statusText);
     return data;
   }
 

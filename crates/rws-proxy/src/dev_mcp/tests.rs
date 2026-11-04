@@ -121,7 +121,7 @@ fn dev_without_a_token_is_open() {
     assert_eq!(status, 200, "{body}");
     assert!(body.contains(r#""name":"rws-dev""#), "{body}");
     let list = tools_list(&client, None);
-    for tool in ["routes", "config", "recent_requests", "recent_errors"] {
+    for tool in ["routes", "config", "layout", "recent_requests", "recent_errors"] {
         assert!(listed(&list, tool), "{tool}: {list}");
     }
     assert!(!listed(&list, "server_metrics"), "operations tools only with with_ops(): {list}");
@@ -252,6 +252,67 @@ fn another_path_for_an_app_with_its_own_mcp() {
     assert!(resp.body_text().contains("\"routes\""));
 }
 
+#[test]
+fn layout_reads_the_manifest_and_the_paths_that_exist() {
+    let dir = crate::test_env::TempPath::new("dev_mcp_layout");
+    std::fs::create_dir_all(dir.join("src/routes")).unwrap();
+    std::fs::create_dir_all(dir.join("public")).unwrap();
+    std::fs::write(dir.join("src/main.rs"), "fn main() {}").unwrap();
+    std::fs::write(dir.join("src/routes/todos.rs"), "").unwrap();
+    std::fs::write(dir.join("rws.app.toml"), "[app]\nname = \"todos\"\n[paths]\nstatic = \"public\"\nextra = \"x\"\n").unwrap();
+    let client = TestClient::new(app().dev_mcp_with(dev().app_dir(&*dir)));
+    let body = call(&client, "layout", "{}");
+    assert!(body.contains(r#""manifest":"rws.app.toml","name":"todos","error":null"#), "{body}");
+    assert!(body.contains(r#"{"role":"main","path":"src/main.rs","kind":"file","exists":true}"#), "{body}");
+    assert!(body.contains(r#"{"role":"routes","path":"src/routes","kind":"dir","exists":true,"entries":["todos.rs"]}"#), "{body}");
+    assert!(body.contains(r#"{"role":"models","path":"src/models","kind":"dir","exists":false}"#), "{body}");
+    assert!(body.contains(r#"{"role":"static","path":"public","kind":"dir","exists":true,"entries":[]}"#), "{body}");
+    assert!(body.contains("unknown key `extra`"), "warnings reported: {body}");
+
+    // Edits show on the next call; a broken manifest is reported, not fatal.
+    std::fs::write(dir.join("rws.app.toml"), "[paths]\nroutes = \"/etc\"\n").unwrap();
+    let body = call(&client, "layout", "{}");
+    assert!(!body.contains(r#""isError":true"#), "{body}");
+    assert!(body.contains("rws.app.toml line 2:") && body.contains("absolute"), "{body}");
+    assert!(body.contains(r#""path":"src/routes""#), "the conventional paths beside the error: {body}");
+}
+
+#[test]
+fn layout_without_a_manifest_is_the_convention() {
+    let dir = crate::test_env::TempPath::new("dev_mcp_layout_none");
+    std::fs::create_dir_all(&*dir).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"blog\"\n").unwrap();
+    let body = call(&TestClient::new(app().dev_mcp_with(dev().app_dir(&*dir))), "layout", "{}");
+    assert!(body.contains(r#""manifest":null,"name":"blog","error":null"#), "{body}");
+    assert_eq!(body.matches(r#""exists":false"#).count(), 9, "{body}");
+}
+
+/// The names `tools/list` lists.
+fn tool_names(list: &str) -> Vec<String> {
+    list.split(r#"{"name":""#).skip(1).filter_map(|rest| rest.split('"').next()).map(str::to_string).collect()
+}
+
+/// Every tool the endpoint lists answers a call without arguments, and
+/// none with an error — the 18.28 "done when" check on this crate's side
+/// (`ci/e2e/starters.sh` runs the same against each starter).
+fn every_listed_tool_answers<A: Application>(client: &TestClient<A>) -> Vec<String> {
+    let names = tool_names(&tools_list(client, None));
+    assert!(names.len() >= 5, "{names:?}");
+    for name in &names {
+        let body = call(client, name, "{}");
+        assert!(!body.contains(r#""isError":true"#) && !body.contains(r#""error":{"#), "{name}: {body}");
+    }
+    names
+}
+
+#[test]
+fn every_dev_tool_answers() {
+    let names = every_listed_tool_answers(&TestClient::new(app().dev_mcp_with(dev())));
+    for tool in ["routes", "config", "layout", "recent_requests", "recent_errors"] {
+        assert!(names.iter().any(|n| n == tool), "{tool}: {names:?}");
+    }
+}
+
 // ── database (model-sqlite) ─────────────────────────────────────────────────
 
 #[cfg(feature = "model-sqlite")]
@@ -321,6 +382,71 @@ mod db {
         let client = TestClient::new(app().dev_mcp_with(dev().database(pool(&rt)).migrations("/nonexistent/rws-dev-mcp")));
         let body = call(&client, "migrations", "{}");
         assert!(body.contains(r#""isError":true"#), "{body}");
+    }
+
+    struct Account;
+
+    impl crate::model::Model for Account {
+        fn table_name() -> &'static str { "users" }
+        fn column_names() -> &'static [&'static str] { &["id", "email", "age"] }
+        fn primary_key_name() -> &'static str { "id" }
+        fn primary_key_value(&self) -> crate::model::Value { crate::model::Value::Int(0) }
+        fn primary_key_auto_increment() -> bool { true }
+        fn from_row(_: &crate::model::ModelRow) -> Result<Self, crate::model::DbError> { Ok(Account) }
+        fn to_values(&self) -> Vec<(&'static str, crate::model::Value)> { Vec::new() }
+    }
+
+    struct Invoice;
+
+    impl crate::model::Model for Invoice {
+        fn table_name() -> &'static str { "invoices" }
+        fn column_names() -> &'static [&'static str] { &["number"] }
+        fn primary_key_name() -> &'static str { "number" }
+        fn primary_key_value(&self) -> crate::model::Value { crate::model::Value::Int(0) }
+        fn from_row(_: &crate::model::ModelRow) -> Result<Self, crate::model::DbError> { Ok(Invoice) }
+        fn to_values(&self) -> Vec<(&'static str, crate::model::Value)> { Vec::new() }
+    }
+
+    #[test]
+    fn models_without_a_database_report_the_mapping() {
+        let client = TestClient::new(app().dev_mcp_with(dev().model::<Account>().model::<Account>()));
+        let body = call(&client, "models", "{}");
+        assert!(body.contains(r#""database":false"#), "{body}");
+        assert!(body.contains(r#""name":"Account","table":"users","primary_key":"id","auto_increment":true"#), "{body}");
+        assert!(body.contains(r#""columns":[{"name":"id","primary_key":true},{"name":"email","primary_key":false},{"name":"age","primary_key":false}]"#), "{body}");
+        assert_eq!(body.matches(r#""table":"users""#).count(), 1, "registered twice, listed once: {body}");
+        assert!(!body.contains("missing_columns"), "nothing to compare with: {body}");
+    }
+
+    #[test]
+    fn models_with_none_registered_say_how() {
+        let body = call(&TestClient::new(app().dev_mcp_with(dev())), "models", "{}");
+        assert!(body.contains(r#""models":[]"#) && body.contains("DevTools::new().model::<YourModel>()"), "{body}");
+    }
+
+    #[test]
+    fn models_with_a_database_compare_with_the_tables() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let client = TestClient::new(app().dev_mcp_with(dev().database(pool(&rt)).model::<Account>().model::<Invoice>()));
+        let body = call(&client, "models", "{}");
+        assert!(body.contains(r#""database":true"#), "{body}");
+        assert!(body.contains(r#"{"name":"id","primary_key":true,"db":{"type":"INTEGER","nullable":true,"primary_key":true}}"#), "{body}");
+        assert!(body.contains(r#"{"name":"age","primary_key":false,"db":null}"#), "{body}");
+        assert!(body.contains(r#""table_exists":true,"missing_columns":["age"],"unmapped_columns":["name"]"#), "{body}");
+        assert!(body.contains(r#""table":"invoices""#) && body.contains(r#""table_exists":false,"missing_columns":["number"],"unmapped_columns":[]"#), "{body}");
+    }
+
+    #[test]
+    fn every_tool_answers_with_a_database_models_and_migrations() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let dir = migrations_dir("dev_mcp_every_tool");
+        let app_dir = crate::test_env::TempPath::new("dev_mcp_every_tool_app");
+        std::fs::create_dir_all(&*app_dir).unwrap();
+        let tools = dev().database(pool(&rt)).migrations(dir.as_str()).model::<Account>().app_dir(&*app_dir);
+        let names = every_listed_tool_answers(&TestClient::new(app().dev_mcp_with(tools)));
+        for tool in ["layout", "models", "db_schema", "migrations", "migrations_run", "migrations_rollback_last"] {
+            assert!(names.iter().any(|n| n == tool), "{tool}: {names:?}");
+        }
     }
 
     #[test]

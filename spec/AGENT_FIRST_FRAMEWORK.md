@@ -53,7 +53,7 @@ sessions, CSRF, Argon2id (`crypto`), JWT/OIDC/SAML/`AuthServer`, ReBAC
 | Introspection for library apps | ops tools in `src/main.rs` only; `route_entries()`, OpenAPI | dev MCP server in `rws-server`: routes + middleware, models, DB schema, migration status/run, config, jobs, recent errors | M |
 | Handlers | one signature `fn(&Request, &PathParams, &ConnectionInfo, &S)`; `#[get]`/`#[route]` only add a doc comment (`rws-macros/src/lib.rs` `annotate`) | extractors as fn args (`Path<T>`, `Query<T>`, `Form<T>`, `Json<T>`, `State<S>`, `Identity`); `#[get("/posts/{id}")]` that generates the adapter and checks `{id}` against the arguments; duplicate/shadowed route detection | M |
 | Routing | verbs, `{param}`, `with_host` | `resource("/posts", …)`, `nest`/`group` with shared middleware, route guards (`before_action`), typed URL builders | M |
-| Layout | each starter is one `src/main.rs` | conventional layout + app manifest | S |
+| Layout | each starter is one `src/main.rs` (done on main: #87) | conventional layout + app manifest | S |
 | Generators | none (18.7.0: "no `rws new` / `cargo-rws`") | `rws gen model|route|migration|test`, also as MCP tools | M |
 | Forms / views | raw form maps; Tera | `Form<T>` binding, flash messages (none exist), view helpers (CSRF tag, form, URL), Vite manifest helper | S–M |
 | ORM | i64 keys only (`Repository<T, i64>`), explicit `.load()` | generic/UUID keys, timestamps, eager `with()`, many-to-many, scopes, soft delete, optimistic locking, seeds, read replicas, `rws db migrate|rollback|status|seed`, schema dump as JSON | L |
@@ -102,19 +102,24 @@ extensions.
   `jobs`, `recent_errors`; also as MCP resources. Off unless `RWS_ENV=dev` or a
   bearer token is set. Covers the IDEAS item "MCP tools generated from routes,
   ORM models or jobs".
-  *Status (2026-11-04):* landed in `rws-proxy` (`dev_mcp`), not `rws-server`
+  *Shipped on main (2026-11-04):* in `rws-proxy` (`dev_mcp`), not `rws-server`
   — the ops tools call `admin::ops`, which needs `cluster`, `traffic` and
   `proxy_config`, all in `rws-proxy`; the facade re-exports it as
   `rust_web_server::dev_mcp`. Done: `routes` (the middleware is the app's
   stack, `Middleware::layer_name()`; rws has no per-route middleware),
   `config`, `recent_requests`/`recent_errors`, `db_schema`, `migrations`,
   `migrations_run`, `migrations_rollback_last`, `RWS_ENV`, the ops tools
-  (`ops_tools`, used by the binary). Open: `models` (needs a model
-  registry — with #87's manifest), `jobs`, MCP resources, a starter
-  answering every tool in CI.
+  (`ops_tools`, used by the binary); with #87 `layout` and `models` — an
+  explicit registry, `DevTools::model::<T>()` (`model::ModelInfo`), since
+  Rust can't enumerate `#[derive(Model)]` types, compared with the
+  database's tables when one is configured — and every starter's
+  `tests/dev_mcp.rs` answering every listed tool, run by
+  `ci/e2e/starters.sh`. Open (moved to later releases): `jobs`, the same
+  data as MCP resources.
 - **#86 Compile-checked routes** — `#[get]`/`#[post]`/… generate the adapter;
   extractors as arguments; path parameters checked at compile time; duplicate
-  and shadowed routes reported when the app is built. *Done (unreleased):*
+  and shadowed routes reported when the app is built. *Shipped on main
+  (unreleased):*
   the attribute turns a typed function into a unit struct implementing
   `handler::Handler`/`AsyncHandler`, registered with `.route(f)` (actix's
   shape, so the pattern served is the one checked); conflicts are a one-time
@@ -125,7 +130,19 @@ extensions.
   report, since routes are registered at run time.
 - **#87 Conventional layout + `rws.app.toml` manifest** — `src/routes/`,
   `src/models/`, `src/jobs/`, `migrations/`, `templates/`, `tests/`; starters
-  adopt it; `dev_mcp` and `rws gen` read it.
+  adopt it; `dev_mcp` and `rws gen` read it. *Shipped on main (unreleased):*
+  the layout adds `src/lib.rs` (`app()`) beside a wiring-only `src/main.rs`
+  — `tests/` can't reach a binary-only crate — and `static/`. The manifest
+  (`[app] name`, `[paths] main|lib|routes|models|jobs|migrations|templates|tests|static`,
+  every key optional, absent file = conventional) is parsed by
+  `app_manifest::AppManifest` in `rws-http` (the lowest crate with the
+  TOML string helpers): line-based, 64 KiB cap, paths kept inside the
+  project, unknown keys as warnings; fuzz target and stack-depth case. It
+  describes the project — nothing is moved or routed by it. `dev_mcp`'s
+  `layout` reads it on every call; `rws gen` (#88) will. The starters
+  split into `main.rs` + `lib.rs` + `routes/` (`tools/` for the MCP
+  starter, said in its manifest) + `models/` + `tests/`, use `#[get]` +
+  `.route(f)`, mount `dev_mcp` under `RWS_ENV=dev`, and ask for 18.28.
 
 Done when: a starter app answers every `dev_mcp` tool in a CI test; a wrong
 `{id}` and a duplicate route fail a compile-fail (trybuild) test; the starters

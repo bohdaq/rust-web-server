@@ -104,6 +104,10 @@
         "link": "/building-apps/overview/"
       },
       {
+        "label": "Project Layout",
+        "link": "/building-apps/project-layout/"
+      },
+      {
         "label": "Controllers",
         "link": "/building-apps/controllers/"
       },

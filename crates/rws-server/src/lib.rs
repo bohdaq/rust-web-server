@@ -22,7 +22,7 @@ pub use rws_base::{core, dns, ext, http, mime_type, null, symbol, url};
 // Not every module is used in every feature set.
 #[allow(unused_imports)]
 #[doc(hidden)]
-pub use rws_http::{body, client_hint, compression, cors, entry_point, error, extract, header, json, range, request, response, server_config, virtual_host};
+pub use rws_http::{app_manifest, body, client_hint, compression, cors, entry_point, error, extract, header, json, range, request, response, server_config, virtual_host};
 
 pub mod app;
 #[cfg(feature = "auth")]

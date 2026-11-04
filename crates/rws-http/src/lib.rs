@@ -11,6 +11,7 @@
 // The base layer, under the paths the moved code uses (`crate::core`, …).
 pub(crate) use rws_base::{core, ext, http, mime_type, null, symbol, url};
 
+pub mod app_manifest;
 pub mod body;
 pub mod client_hint;
 pub mod compression;

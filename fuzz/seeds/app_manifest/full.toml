@@ -1,0 +1,14 @@
+# rws.app.toml
+[app]
+name = "todos"
+
+[paths]
+main = "src/main.rs"
+lib = "src/lib.rs"
+routes = "src/routes"
+models = "src/models"
+jobs = "src/jobs"
+migrations = "migrations"
+templates = "templates"
+tests = "tests"
+static = "frontend/dist"

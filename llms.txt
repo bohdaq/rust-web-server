@@ -52,6 +52,7 @@ Use it as:
 ## Building Apps
 
 - [Building Apps Overview](https://rws8.tech/building-apps/overview/): Three ways to add routes to rust-web-server and how a request flows from the TCP socket to your handler.
+- [Project layout and rws.app.toml](https://rws8.tech/building-apps/project-layout/): The conventional layout of an rws application — where routes, models, jobs, migrations, templates and tests go — and the rws.app.toml manifest that names the app and any path that differs.
 - [Controllers](https://rws8.tech/building-apps/controllers/): The Controller trait is the lowest-level way to handle HTTP requests in rust-web-server.
 - [Routing](https://rws8.tech/building-apps/routing/): Path-based routing with named parameters, wildcards, and virtual-host scoping using Router and the routes! macro.
 - [Request & Response](https://rws8.tech/building-apps/request-response/): The Request and Response types, status code constants, MIME type constants, and how to build response bodies.

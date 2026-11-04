@@ -62,8 +62,10 @@ claude mcp add --transport http my-app http://localhost:7878/mcp
 |---|---|
 | `routes` | Each route's method and pattern, in registration order, and the middleware layers around them in the order a request passes them: `{"routes":[{"method":"GET","pattern":"/api/items/:id"}],"middleware":["CsrfLayer"]}` |
 | `config` | `RWS_ENV`, the compiled-in features and every `RWS_*`, `OTEL_*` and `MCP_*` setting in effect (config file and flags included). Values of settings named `*SECRET*`, `*PASSWORD*`, `*TOKEN*`, PKCS#11 PINs and passwords inside URLs (`postgres://app:(hidden)@db/app`) are hidden |
+| `layout` | The app's name, its [`rws.app.toml`](/building-apps/project-layout/) (`"manifest":null` without one — the conventional layout), and for each part (`main`, `lib`, `routes`, `models`, `jobs`, `migrations`, `templates`, `tests`, `static`) its path, whether it exists and the names in it; a manifest that doesn't parse is reported in `error`. Read on every call, so new files show at once |
 | `recent_requests` `{"n": 50}` | The last requests (at most 100): method, path, status, client IP, latency |
 | `recent_errors` `{"n": 50}` | The last 4xx/5xx |
+| `models` | With a `model-*` feature: each type registered with `DevTools::model::<T>()` — type, table, columns, primary key; with `DevTools::database(pool)` also each column's type there, `table_exists`, `missing_columns` (model columns the table lacks) and `unmapped_columns` (table columns no field maps) |
 | `db_schema` | With `DevTools::database(pool)`: every table and its columns (name, type, nullable, default, primary key) — SQLite, PostgreSQL (the current schema) and MySQL (the current database) |
 | `migrations` | With `DevTools::migrations(dir)` too: each migration file, whether it is applied and whether it has a `.down.sql` |
 | `migrations_run` | Apply the pending migrations; answers the status afterwards |
@@ -78,6 +80,32 @@ aren't listed.
 `dev_mcp()` records the app's requests for `recent_requests` itself. If the
 app already has a `LogLayer`, pass `.record_requests(false)` so each request
 is listed once.
+
+`layout` reads the working directory unless `DevTools::app_dir(dir)` names
+the project root; pass `env!("CARGO_MANIFEST_DIR")` when the app serves
+static files from another directory (it is the project root in `cargo run`
+and `cargo test`).
+
+Rust can't list a program's `#[derive(Model)]` types at run time, so
+`models` reports the ones you name:
+
+```rust
+let tools = DevTools::new()
+    .model::<User>()
+    .model::<Post>()
+    .database(pool.clone()); // compare each with its table
+```
+
+```json
+{"database":true,"models":[{"type":"app::models::User","name":"User","table":"users",
+  "primary_key":"id","auto_increment":true,
+  "columns":[{"name":"id","primary_key":true,"db":{"type":"INTEGER","nullable":false,"primary_key":true}},
+             {"name":"email","primary_key":false,"db":null}],
+  "table_exists":true,"missing_columns":["email"],"unmapped_columns":[]}],"hint":null}
+```
+
+`missing_columns` is what a migration has yet to add. The same description
+is `model::ModelInfo::of::<T>()` in code.
 
 ## Choosing what is mounted
 
@@ -101,6 +129,8 @@ let app = routes
 | Method | Does |
 |---|---|
 | `.database(pool)` / `.migrations(dir)` | The database tools (`model-sqlite`, `model-postgres` or `model-mysql`) |
+| `.model::<T>()` | List the `#[derive(Model)]` type `T` in `models` (once per type) |
+| `.app_dir(dir)` | The project root `layout` reads (default: the working directory) |
 | `.with_ops()` | The [operations tools](/mcp/operate/#the-tools) as well: metrics, rate limits, maintenance mode, the IP blocklist, feature flags, authorization, traffic, config reload |
 | `.cache(layer)` | The `cache_stats` / `cache_clear` operations tools for this response cache (a clone of the layer the app wraps); implies `.with_ops()` |
 | `.read_only()` | Leaves out every tool that changes something (`migrations_run`, `migrations_rollback_last` and the operations tools in `dev_mcp::OPS_WRITE_TOOLS`) |
@@ -131,8 +161,10 @@ let res = client
 assert!(res.body_text().contains("/api/items/:id"));
 ```
 
+Each [starter](/getting-started/ai-agents/) has a `tests/dev_mcp.rs` that
+calls `initialize`, `tools/list` and then every listed tool, failing on any
+JSON-RPC or tool error; CI runs it for every starter.
+
 ## Not yet
 
-Models (no registry of `#[derive(Model)]` types exists at run time), jobs,
-and the same data as MCP resources are planned with the conventional app
-layout (roadmap #87).
+Jobs, and the same data as MCP resources, are planned.

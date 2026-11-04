@@ -20,6 +20,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Middleware` | `middleware` | Layer trait: `handle(request, connection, next)`. `runs_inline` / `is_passthrough` (default `false`) declare a layer non-blocking or a no-op for a request. `layer_name()` (default: the type's name, 18.28.0) is how tools list it. See [Middleware](/building-apps/middleware/) |
 | `WithMiddleware<A>` | `middleware` | Wraps any `Application` with a layer stack; `app.wrap(layer)`, first-pushed is outermost |
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::<T>`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
+| `AppManifest` | `app_manifest` | `rws.app.toml`, parsed: `name`, `paths`, `file`, `warnings`; `load(dir)` (conventional when absent; name from `Cargo.toml`), `parse(text)` / `FromStr`, `conventional(name)`, `layout(dir)` (18.28.0). See [Project layout](/building-apps/project-layout/) |
+| `AppPaths` / `LayoutEntry` / `EntryKind` / `ManifestError` | `app_manifest` | Where each part lives (`main`, `lib`, `routes`, `models`, `jobs`, `migrations`, `templates`, `tests`, `static_files`; `Default` = the conventional layout; `entries()`, `get(role)`); one role as found on disk (`role`, `path`, `kind` file/dir, `exists`); a parse error (`line`, `message`) |
 | `TeraEngine` | `template` (`tera`) | Jinja2-style templates: `from_dir`, `from_raw`; global `template::init(dir)` / `template::render(name, &ctx)` / `template::reload()` (also run on `SIGHUP`). See [Templates](/building-apps/templates/) |
 
 ## Macros
@@ -83,7 +85,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `RequestHeaders` | `extract` | All request headers with case-insensitive `.get(name)` |
 | `RequestId` | `extract` / `request_id` | The ID `RequestIdLayer` put on the request; empty string without it (never fails) |
 | `openapi_tools::tools` | `mcp` | OpenAPI 3.0/3.1 operations as MCP tools (`OpenApiTool`: schemas, annotations, `request(arguments)` → `ToolRequest`); `ToolOptions` (prefix, include, exclude); `McpServer::openapi_tools(app, spec, options)` runs them in-process against an `Application`; `AppWithState::openapi_spec` (`openapi`) gives the document. See [Tools from OpenAPI](/mcp/openapi-tools/) |
-| `DevTools` / `DevMcp` / `DevMcpExt` | `dev_mcp` | `app.dev_mcp()` / `.dev_mcp_with(DevTools)`: an MCP endpoint for a coding agent — `routes` (with middleware), `config` (secrets hidden), `recent_requests` / `recent_errors`, `db_schema` and migrations (`model-*`); only with `RWS_ENV=dev` or a token. `ops_tools(server, routes, cache)`: the `rws` binary's 25 operations tools (18.28.0). See [Let a coding agent inspect your app](/mcp/dev-tools/) |
+| `DevTools` / `DevMcp` / `DevMcpExt` | `dev_mcp` | `app.dev_mcp()` / `.dev_mcp_with(DevTools)`: an MCP endpoint for a coding agent — `routes` (with middleware), `config` (secrets hidden), `layout` (`rws.app.toml`, `.app_dir(dir)`), `recent_requests` / `recent_errors`, `models` (`.model::<T>()`), `db_schema` and migrations (`model-*`); only with `RWS_ENV=dev` or a token. `ops_tools(server, routes, cache)`: the `rws` binary's 25 operations tools (18.28.0). See [Let a coding agent inspect your app](/mcp/dev-tools/) |
 | `RwsEnv` | `entry_point` (also `dev_mcp`) | `RWS_ENV`: `Dev`, `Test` or `Prod` (default); `RwsEnv::current()`, `parse`, `as_str` (18.28.0). See [environment variables](/configuration/env-vars/#environment-kind) |
 | `A2aServer` | `a2a` | A2A 1.0 agent (JSON-RPC): Agent Card, `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`; `on_message`, `at`, `wrap`. See [A2A agents](/mcp/a2a/) |
 | `AgentCard` / `Skill` | `a2a` | The agent's card at `/.well-known/agent-card.json` and the skills on it |
@@ -329,6 +331,7 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `QueryBuilder<T>` | `model` | Fluent query builder: `where_eq`, `filter`, `order_by`, `limit`, `fetch_all`, `count`, `paginate`, `paginate_after`. See [Query builder](/database/query-builder/) |
 | `HasMany<T>` / `HasOne<T>` / `BelongsTo<O>` | `model` | Explicit-load relations with `.load(&pool).await` — no hidden N+1. See [Relations](/database/relations/) |
 | `MigrationStatus` | `model` | Applied/pending state from `DbPool::migration_status`. See [Migrations](/database/migrations/) |
+| `ModelInfo` | `model` | What a `Model` type maps to — `type_name`, `table`, `columns`, `primary_key`, `auto_increment`; `ModelInfo::of::<T>()`, `short_name()` (18.28.0). What `DevTools::model::<T>()` reports. See [dev tools](/mcp/dev-tools/) |
 | `Page<T>` | `pagination` (re-exported from `model`) | Offset page: totals, `has_next`/`has_prev`, `.map(f)`, `.link_header(base_url)`; usable without the model layer. See [Pagination](/database/pagination/) |
 | `CursorPage<T>` | `pagination` (re-exported from `model`) | Keyset page with `next_cursor`, `.link_header(base_url, cursor_param)` |
 

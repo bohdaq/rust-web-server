@@ -15,7 +15,9 @@ cargo generate --git https://github.com/bohdaq/rust-web-server starters/mcp   # 
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/fullstack   # lit frontend + API + PostgreSQL, Dockerfile, GitHub Actions deploy to kube-dc with PR previews
 ```
 
-([cargo-generate](https://github.com/cargo-generate/cargo-generate): `cargo install cargo-generate`.) Without it, copy the directory and replace `{{project-name}}` in `Cargo.toml`.
+([cargo-generate](https://github.com/cargo-generate/cargo-generate): `cargo install cargo-generate`.) Without it, copy the directory and replace `{{project-name}}` (and `{{crate_name}}`, the same name with `_` for `-`).
+
+Every starter uses the [conventional layout](/building-apps/project-layout/) with an `rws.app.toml`, and mounts the [dev MCP endpoint](/mcp/dev-tools/) under `RWS_ENV=dev`: `RWS_ENV=dev cargo run`, then `claude mcp add --transport http app-dev http://127.0.0.1:7878/mcp` (the `mcp` starter: `/_dev/mcp`, since `/mcp` is the app's).
 
 ## Give the agent the rws skill
 

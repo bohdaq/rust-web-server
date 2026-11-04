@@ -8,7 +8,12 @@ by GitHub Actions.
 (cd frontend && npm ci && npm run build)
 cargo test
 cargo run          # http://127.0.0.1:7878 — notes kept in memory without PGHOST
+RWS_ENV=dev cargo run   # plus the dev MCP endpoint for coding agents at /mcp
 ```
+
+The layout is rws's conventional one (`rws.app.toml`): `src/main.rs` serves
+the app that `src/lib.rs` builds, handlers live in `src/routes/`, models in
+`src/models/`, SQL in `migrations/`, tests in `tests/`.
 
 Frontend with live reload: `cargo run` in one terminal, `cd frontend && npm run dev`
 in another (http://127.0.0.1:5173, `/api` proxied to the app).
