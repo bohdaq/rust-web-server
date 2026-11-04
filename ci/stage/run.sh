@@ -121,7 +121,10 @@ fi
 # ── deploy ────────────────────────────────────────────────────────────────────
 # Per-run secrets for the auth routes (the suites read them from the env).
 rand() { head -c 24 /dev/urandom | base64 | tr -d '/+='; }
-export E2E_BEARER=$(rand) E2E_JWT_SECRET=$(rand) E2E_BASIC_PASS=$(rand)
+export E2E_BEARER=$(rand) E2E_JWT_SECRET=$(rand) E2E_BASIC_PASS=$(rand) E2E_ADMIN_TOKEN=$(rand)
+# The rws-alt Service's gateway hostname, for the host route (checked below).
+export ALT_HOST="rws-alt-$NS.stage.kube-dc.com"
+sed "s|@ALT_HOST@|$ALT_HOST|" "$STAGE_DIR/config/rws.config.toml" >"$REPORT/rws.config.toml"
 
 log "fixtures and backends"
 "$STAGE_DIR/deploy.sh"
@@ -132,12 +135,22 @@ log "rws (helm)"
 helm_args=(--namespace "$NS" --set replicaCount=3 --set tls.enabled=false --set quic.enabled=false
   --set podDisruptionBudget.enabled=false
   --set-string 'service.annotations.service\.nlb\.kube-dc\.com/expose-route=https'
-  --set-file configFile="$STAGE_DIR/config/rws.config.toml"
+  --set-file configFile="$REPORT/rws.config.toml"
   --set 'extraVolumes[0].name=www' --set 'extraVolumes[0].configMap.name=rws-e2e-www'
   --set 'extraVolumeMounts[0].name=www' --set 'extraVolumeMounts[0].mountPath=/srv'
   --set 'extraVolumeMounts[0].readOnly=true'
   --set 'extraVolumes[1].name=auth' --set 'extraVolumes[1].secret.secretName=rws-e2e-auth'
   --set 'extraVolumeMounts[1].name=auth' --set 'extraVolumeMounts[1].mountPath=/etc/rws-e2e'
+  --set 'extraVolumes[2].name=wasm' --set 'extraVolumes[2].configMap.name=rws-e2e-wasm'
+  --set 'extraVolumeMounts[2].name=wasm' --set 'extraVolumeMounts[2].mountPath=/etc/rws-wasm'
+  --set 'extraVolumes[3].name=php' --set 'extraVolumes[3].configMap.name=rws-e2e-php'
+  --set 'extraVolumes[3].configMap.items[0].key=app.php' --set 'extraVolumes[3].configMap.items[0].path=app.php'
+  --set 'extraVolumes[3].configMap.items[1].key=info.php' --set 'extraVolumes[3].configMap.items[1].path=info.php'
+  --set 'extraVolumes[3].configMap.items[2].key=site.css' --set 'extraVolumes[3].configMap.items[2].path=site.css'
+  --set 'extraVolumes[3].configMap.items[3].key=evil.jpg' --set 'extraVolumes[3].configMap.items[3].path=uploads/evil.jpg'
+  --set 'extraVolumeMounts[3].name=php' --set 'extraVolumeMounts[3].mountPath=/var/www/e2e/php'
+  --set 'extraVolumeMounts[3].readOnly=true'
+  --set-string env.RWS_ADMIN_TOKEN="$E2E_ADMIN_TOKEN"
   --set-string env.E2E_BEARER="$E2E_BEARER" --set-string env.E2E_JWT_SECRET="$E2E_JWT_SECRET")
 [ -n "$IMAGE_TAG" ] && helm_args+=(--set image.tag="$IMAGE_TAG")
 helm upgrade --install rws "$ROOT/helm/rws" "${helm_args[@]}" >/dev/null
@@ -159,6 +172,16 @@ if eventually 300 sh -c "curl -fsS --max-time 10 $RWS_URL/healthz >/dev/null"; t
   pass S0.2 "reachable through the gateway at $RWS_URL"
 else
   blocked S0.2 "$RWS_URL/healthz not reachable through the gateway"; exit 1
+fi
+
+# The other two Services' hostnames.
+route_host() { k get svc "$1" -o jsonpath='{.metadata.annotations.service\.nlb\.kube-dc\.com/route-hostname-status}'; }
+if eventually 300 sh -c "kubectl -n $NS get svc rws-alt rws-admin -o jsonpath='{.items[*].metadata.annotations.service\.nlb\.kube-dc\.com/route-hostname-status}' | grep -q '\..* .*\.'"; then
+  [ "$(route_host rws-alt)" = "$ALT_HOST" ] || log "WARNING: rws-alt is $(route_host rws-alt), the config names $ALT_HOST"
+  export ALT_URL="https://$(route_host rws-alt)" ADMIN_URL="https://$(route_host rws-admin)"
+  eventually 300 sh -c "curl -fsS --max-time 10 $ALT_URL/healthz >/dev/null && curl -sS --max-time 10 -o /dev/null $ADMIN_URL/" || log "WARNING: rws-alt or rws-admin not reachable yet"
+else
+  log "WARNING: rws-alt / rws-admin got no hostname"; export ALT_URL="" ADMIN_URL=""
 fi
 
 # ── suites ────────────────────────────────────────────────────────────────────

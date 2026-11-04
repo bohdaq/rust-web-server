@@ -1,0 +1,238 @@
+# What the phase 2 suites need besides the whoami backends: Redis for
+# [cluster] (valkey), a WebSocket echo backend, php-fpm for the FastCGI
+# route, an OpenTelemetry Collector for OTLP, a curl pod for in-cluster
+# checks, and two more Services on the rws pods (a second gateway hostname
+# for host routing, and the admin listener).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: valkey}
+  template:
+    metadata:
+      labels: {app: valkey}
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:8.1.4-alpine
+          args: ["--save", "", "--appendonly", "no"]
+          ports: [{containerPort: 6379, name: redis}]
+          readinessProbe:
+            tcpSocket: {port: 6379}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+spec:
+  selector: {app: valkey}
+  ports: [{port: 6379, targetPort: 6379, name: redis}]
+---
+# Echoes WebSocket messages (and plain HTTP requests) on any path.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: echo}
+  template:
+    metadata:
+      labels: {app: echo}
+    spec:
+      containers:
+        - name: echo
+          image: jmalloc/echo-server:v0.3.7
+          env: [{name: PORT, value: "8080"}]
+          ports: [{containerPort: 8080, name: http}]
+          readinessProbe:
+            tcpSocket: {port: 8080}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo
+spec:
+  selector: {app: echo}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+# PHP scripts: rws and php-fpm both mount them at /var/www/e2e/php (rws
+# serves the non-PHP files itself and needs the same paths).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rws-e2e-php
+data:
+  app.php: |
+    <?php
+    header('Content-Type: application/json');
+    echo json_encode([
+      'script' => $_SERVER['SCRIPT_NAME'],
+      'uri' => $_SERVER['REQUEST_URI'],
+      'get' => $_GET,
+      'post' => $_POST,
+      'https' => $_SERVER['HTTPS'] ?? '',
+      'remote' => $_SERVER['REMOTE_ADDR'],
+      'env' => $_SERVER['APP_ENV'] ?? '',
+      'proxy' => getenv('HTTP_PROXY') ?: '',
+    ]);
+  info.php: |
+    <?php echo "info:" . ($_SERVER["PATH_INFO"] ?? "");
+  site.css: "body{color:red}\n"
+  evil.jpg: |
+    <?php echo "PWNED";
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: php}
+  template:
+    metadata:
+      labels: {app: php}
+    spec:
+      containers:
+        - name: php
+          image: php:8.3.14-fpm-alpine
+          ports: [{containerPort: 9000, name: fastcgi}]
+          readinessProbe:
+            tcpSocket: {port: 9000}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: php, mountPath: /var/www/e2e/php, readOnly: true}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+      volumes:
+        - name: php
+          configMap:
+            name: rws-e2e-php
+            items:
+              - {key: app.php, path: app.php}
+              - {key: info.php, path: info.php}
+              - {key: site.css, path: site.css}
+              - {key: evil.jpg, path: uploads/evil.jpg}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: php
+spec:
+  selector: {app: php}
+  ports: [{port: 9000, targetPort: 9000, name: fastcgi}]
+---
+# OTLP/HTTP in, spans and metrics printed to the log (the suite greps it).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otelcol
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+    exporters:
+      debug:
+        verbosity: detailed
+    service:
+      pipelines:
+        traces: {receivers: [otlp], exporters: [debug]}
+        metrics: {receivers: [otlp], exporters: [debug]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otelcol
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: otelcol}
+  template:
+    metadata:
+      labels: {app: otelcol}
+    spec:
+      containers:
+        - name: otelcol
+          image: otel/opentelemetry-collector-contrib:0.116.1
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports: [{containerPort: 4318, name: otlp-http}]
+          readinessProbe:
+            tcpSocket: {port: 4318}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: config, mountPath: /etc/otelcol}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 300m, memory: 256Mi}
+      volumes:
+        - name: config
+          configMap: {name: otelcol}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otelcol
+spec:
+  selector: {app: otelcol}
+  ports: [{port: 4318, targetPort: 4318, name: otlp-http}]
+---
+# In-cluster checks (`k exec runner -- curl …`).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: runner}
+  template:
+    metadata:
+      labels: {app: runner}
+    spec:
+      containers:
+        - name: curl
+          image: curlimages/curl:8.11.1
+          command: ["sleep", "infinity"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 64Mi}
+---
+# The rws pods under a second gateway hostname: [route.match] host.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rws-alt
+  annotations:
+    service.nlb.kube-dc.com/expose-route: https
+spec:
+  selector: {app.kubernetes.io/name: rws}
+  ports: [{port: 7878, targetPort: 7878, name: http}]
+---
+# The admin listener ([admin] listen = 0.0.0.0:9901) through the gateway,
+# with the per-run token.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rws-admin
+  annotations:
+    service.nlb.kube-dc.com/expose-route: https
+spec:
+  selector: {app.kubernetes.io/name: rws}
+  ports: [{port: 9901, targetPort: 9901, name: admin}]

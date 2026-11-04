@@ -20,6 +20,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   features it needs (`[package.metadata.docs.rs]` with `--cfg docsrs` and
   `doc_cfg`, in the facade and every crate under `crates/`).
 
+### Fixed
+
+- FastCGI: `SCRIPT_FILENAME` and `DOCUMENT_ROOT` are the paths under the
+  configured `root`, with symlinks left in (nginx's
+  `$document_root$fastcgi_script_name`), not resolved. php-fpm in another
+  container, with the same files mounted at the same path, answered
+  `File not found.` for every script when symlink targets differed there,
+  as in a Kubernetes ConfigMap volume. Found by the stage suite (S9.4).
+  Symlinked deploy directories (`current` → `releases/N`) now show PHP the
+  `current` path.
+
 ## 18.27.2 — 2026-11-03
 
 ### Fixed

@@ -1268,6 +1268,15 @@ rws itself; only PHP scripts reach php-fpm, and an upload can never be run
 as PHP. php-fpm must be able to read the files: run its pool as the user
 that owns them, and give rws read access too.
 
+php-fpm is told each script's path under `root` as written in the config
+(`SCRIPT_FILENAME` = root + script name, `DOCUMENT_ROOT` = root), with
+symlinks left in, like nginx's `$document_root$fastcgi_script_name`. So
+php-fpm in another container (a second container in the pod, or its own
+Deployment) only needs the files mounted at the same path: a ConfigMap or
+volume whose symlinks point somewhere else in each container works. rws
+itself still resolves symlinks to check that a script is under the root.
+Up to 18.27.2 the path was sent with symlinks resolved.
+
 WordPress, with the admin area limited to the office and logins rate
 limited:
 
