@@ -173,6 +173,16 @@ impl<A: Application + Send + Sync + ?Sized + 'static> Application for TimeoutLay
             None => Ok(timeout_response()),
         }
     }
+
+    fn registered_routes(&self) -> Vec<crate::router::RouteInfo> {
+        self.inner.registered_routes()
+    }
+
+    fn middleware_names(&self) -> Vec<&'static str> {
+        let mut names = vec!["TimeoutLayer"];
+        names.extend(self.inner.middleware_names());
+        names
+    }
 }
 
 #[cfg(feature = "http2")]

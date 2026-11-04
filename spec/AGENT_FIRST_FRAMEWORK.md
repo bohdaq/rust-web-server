@@ -102,6 +102,16 @@ extensions.
   `jobs`, `recent_errors`; also as MCP resources. Off unless `RWS_ENV=dev` or a
   bearer token is set. Covers the IDEAS item "MCP tools generated from routes,
   ORM models or jobs".
+  *Status (2026-11-04):* landed in `rws-proxy` (`dev_mcp`), not `rws-server`
+  — the ops tools call `admin::ops`, which needs `cluster`, `traffic` and
+  `proxy_config`, all in `rws-proxy`; the facade re-exports it as
+  `rust_web_server::dev_mcp`. Done: `routes` (the middleware is the app's
+  stack, `Middleware::layer_name()`; rws has no per-route middleware),
+  `config`, `recent_requests`/`recent_errors`, `db_schema`, `migrations`,
+  `migrations_run`, `migrations_rollback_last`, `RWS_ENV`, the ops tools
+  (`ops_tools`, used by the binary). Open: `models` (needs a model
+  registry — with #87's manifest), `jobs`, MCP resources, a starter
+  answering every tool in CI.
 - **#86 Compile-checked routes** — `#[get]`/`#[post]`/… generate the adapter;
   extractors as arguments; path parameters checked at compile time; duplicate
   and shadowed routes reported when the app is built. *Done (unreleased):*

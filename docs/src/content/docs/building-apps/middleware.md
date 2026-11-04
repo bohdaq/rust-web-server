@@ -193,6 +193,20 @@ fn is_passthrough(&self, _request: &Request, _connection: &ConnectionInfo) -> bo
 Default `false`: the request then takes the usual synchronous path through
 every layer.
 
+### Naming a layer (`layer_name`)
+
+Tools that describe an app — the [dev MCP server](/mcp/dev-tools/)'s `routes`
+tool — list the layers of a `WithMiddleware` stack by `Middleware::layer_name()`
+(through `Application::middleware_names()`, since 18.28.0). The default is
+the type's name without its module path or generic parameters
+(`CsrfLayer`); override it when that says too little:
+
+```rust
+fn layer_name(&self) -> &'static str {
+    "tenant-auth"
+}
+```
+
 ### Short-circuit example
 
 Return a response without calling `next` to block the request:

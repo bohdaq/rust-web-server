@@ -35,6 +35,7 @@ impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::authz::AuthzL
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::authz::rebac::Authorizer
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::authz::sql::SqlStore
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::cluster::ClusterSync
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::dev_mcp::DevTools
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::di::Container
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fastcgi::FastCgi
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::backend_tls::BackendTls
@@ -74,6 +75,7 @@ impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::authz::AuthzLaye
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::authz::rebac::Authorizer
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::authz::sql::SqlStore
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::cluster::ClusterSync
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::dev_mcp::DevTools
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::di::Container
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::fastcgi::FastCgi
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::backend_tls::BackendTls
@@ -169,8 +171,10 @@ impl core::clone::Clone for rust_web_server::core::base64::Decoder
 impl core::clone::Clone for rust_web_server::core::x509::CertInfo
 impl core::clone::Clone for rust_web_server::core::x509::SubjectAltName
 impl core::clone::Clone for rust_web_server::cors::Cors
+impl core::clone::Clone for rust_web_server::dev_mcp::DevTools
 impl core::clone::Clone for rust_web_server::early_hints::EarlyHintsLayer
 impl core::clone::Clone for rust_web_server::entry_point::Config
+impl core::clone::Clone for rust_web_server::entry_point::RwsEnv
 impl core::clone::Clone for rust_web_server::extract::RequestId
 impl core::clone::Clone for rust_web_server::fastcgi::Address
 impl core::clone::Clone for rust_web_server::fastcgi::FastCgi
@@ -440,6 +444,7 @@ impl core::cmp::Eq for rust_web_server::core::x509::CertInfo
 impl core::cmp::Eq for rust_web_server::core::x509::SubjectAltName
 impl core::cmp::Eq for rust_web_server::cors::Cors
 impl core::cmp::Eq for rust_web_server::entry_point::Config
+impl core::cmp::Eq for rust_web_server::entry_point::RwsEnv
 impl core::cmp::Eq for rust_web_server::error::AppError
 impl core::cmp::Eq for rust_web_server::gateway_api::types::BackendObjectReference
 impl core::cmp::Eq for rust_web_server::gateway_api::types::BackendRef
@@ -542,6 +547,7 @@ impl core::cmp::PartialEq for rust_web_server::core::x509::CertInfo
 impl core::cmp::PartialEq for rust_web_server::core::x509::SubjectAltName
 impl core::cmp::PartialEq for rust_web_server::cors::Cors
 impl core::cmp::PartialEq for rust_web_server::entry_point::Config
+impl core::cmp::PartialEq for rust_web_server::entry_point::RwsEnv
 impl core::cmp::PartialEq for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::cmp::PartialEq for rust_web_server::error::AppError
 impl core::cmp::PartialEq for rust_web_server::fastcgi::Address
@@ -753,7 +759,9 @@ impl core::default::Default for rust_web_server::circuit_breaker::RetryLayer
 impl core::default::Default for rust_web_server::cluster::MemoryStore
 impl core::default::Default for rust_web_server::cluster::State
 impl core::default::Default for rust_web_server::config_check::ConfigReport
+impl core::default::Default for rust_web_server::dev_mcp::DevTools
 impl core::default::Default for rust_web_server::di::Container
+impl core::default::Default for rust_web_server::entry_point::RwsEnv
 impl core::default::Default for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::default::Default for rust_web_server::gateway_api::dataplane::DataPlane
 impl core::default::Default for rust_web_server::gateway_api::provision::ProvisionSettings
@@ -948,6 +956,7 @@ impl core::fmt::Debug for rust_web_server::core::x509::SubjectAltName
 impl core::fmt::Debug for rust_web_server::cors::Cors
 impl core::fmt::Debug for rust_web_server::early_hints::EarlyHintsLayer
 impl core::fmt::Debug for rust_web_server::entry_point::Config
+impl core::fmt::Debug for rust_web_server::entry_point::RwsEnv
 impl core::fmt::Debug for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::fmt::Debug for rust_web_server::error::AppError
 impl core::fmt::Debug for rust_web_server::extract::Body
@@ -1193,6 +1202,7 @@ impl core::fmt::Display for rust_web_server::authz::rebac::ObjectRef
 impl core::fmt::Display for rust_web_server::authz::rebac::Subject
 impl core::fmt::Display for rust_web_server::authz::rebac::Tuple
 impl core::fmt::Display for rust_web_server::core::base64::DecodeError
+impl core::fmt::Display for rust_web_server::entry_point::RwsEnv
 impl core::fmt::Display for rust_web_server::http_client::HttpClientError
 impl core::fmt::Display for rust_web_server::json::property::JSONValue
 impl core::fmt::Display for rust_web_server::model::DbError
@@ -1219,6 +1229,7 @@ impl core::marker::Copy for rust_web_server::compression::Level
 impl core::marker::Copy for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::marker::Copy for rust_web_server::core::base64::Alphabet
 impl core::marker::Copy for rust_web_server::core::base64::Decoder
+impl core::marker::Copy for rust_web_server::entry_point::RwsEnv
 impl core::marker::Copy for rust_web_server::ingress::PathType
 impl core::marker::Copy for rust_web_server::llm::Api
 impl core::marker::Copy for rust_web_server::llm::usage::Usage
@@ -1334,9 +1345,11 @@ impl core::marker::Freeze for rust_web_server::core::base64::Decoder
 impl core::marker::Freeze for rust_web_server::core::x509::CertInfo
 impl core::marker::Freeze for rust_web_server::core::x509::SubjectAltName
 impl core::marker::Freeze for rust_web_server::cors::Cors
+impl core::marker::Freeze for rust_web_server::dev_mcp::DevTools
 impl core::marker::Freeze for rust_web_server::di::Container
 impl core::marker::Freeze for rust_web_server::early_hints::EarlyHintsLayer
 impl core::marker::Freeze for rust_web_server::entry_point::Config
+impl core::marker::Freeze for rust_web_server::entry_point::RwsEnv
 impl core::marker::Freeze for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Freeze for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Freeze for rust_web_server::error::AppError
@@ -1778,9 +1791,11 @@ impl core::marker::Send for rust_web_server::core::base64::Decoder
 impl core::marker::Send for rust_web_server::core::x509::CertInfo
 impl core::marker::Send for rust_web_server::core::x509::SubjectAltName
 impl core::marker::Send for rust_web_server::cors::Cors
+impl core::marker::Send for rust_web_server::dev_mcp::DevTools
 impl core::marker::Send for rust_web_server::di::Container
 impl core::marker::Send for rust_web_server::early_hints::EarlyHintsLayer
 impl core::marker::Send for rust_web_server::entry_point::Config
+impl core::marker::Send for rust_web_server::entry_point::RwsEnv
 impl core::marker::Send for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Send for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Send for rust_web_server::error::AppError
@@ -2181,6 +2196,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::core::x509::CertInfo
 impl core::marker::StructuralPartialEq for rust_web_server::core::x509::SubjectAltName
 impl core::marker::StructuralPartialEq for rust_web_server::cors::Cors
 impl core::marker::StructuralPartialEq for rust_web_server::entry_point::Config
+impl core::marker::StructuralPartialEq for rust_web_server::entry_point::RwsEnv
 impl core::marker::StructuralPartialEq for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::StructuralPartialEq for rust_web_server::error::AppError
 impl core::marker::StructuralPartialEq for rust_web_server::fastcgi::Address
@@ -2443,9 +2459,11 @@ impl core::marker::Sync for rust_web_server::core::base64::Decoder
 impl core::marker::Sync for rust_web_server::core::x509::CertInfo
 impl core::marker::Sync for rust_web_server::core::x509::SubjectAltName
 impl core::marker::Sync for rust_web_server::cors::Cors
+impl core::marker::Sync for rust_web_server::dev_mcp::DevTools
 impl core::marker::Sync for rust_web_server::di::Container
 impl core::marker::Sync for rust_web_server::early_hints::EarlyHintsLayer
 impl core::marker::Sync for rust_web_server::entry_point::Config
+impl core::marker::Sync for rust_web_server::entry_point::RwsEnv
 impl core::marker::Sync for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Sync for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Sync for rust_web_server::error::AppError
@@ -2901,9 +2919,11 @@ impl core::marker::Unpin for rust_web_server::core::base64::Decoder
 impl core::marker::Unpin for rust_web_server::core::x509::CertInfo
 impl core::marker::Unpin for rust_web_server::core::x509::SubjectAltName
 impl core::marker::Unpin for rust_web_server::cors::Cors
+impl core::marker::Unpin for rust_web_server::dev_mcp::DevTools
 impl core::marker::Unpin for rust_web_server::di::Container
 impl core::marker::Unpin for rust_web_server::early_hints::EarlyHintsLayer
 impl core::marker::Unpin for rust_web_server::entry_point::Config
+impl core::marker::Unpin for rust_web_server::entry_point::RwsEnv
 impl core::marker::Unpin for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Unpin for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Unpin for rust_web_server::error::AppError
@@ -3363,9 +3383,11 @@ impl core::marker::UnsafeUnpin for rust_web_server::core::base64::Decoder
 impl core::marker::UnsafeUnpin for rust_web_server::core::x509::CertInfo
 impl core::marker::UnsafeUnpin for rust_web_server::core::x509::SubjectAltName
 impl core::marker::UnsafeUnpin for rust_web_server::cors::Cors
+impl core::marker::UnsafeUnpin for rust_web_server::dev_mcp::DevTools
 impl core::marker::UnsafeUnpin for rust_web_server::di::Container
 impl core::marker::UnsafeUnpin for rust_web_server::early_hints::EarlyHintsLayer
 impl core::marker::UnsafeUnpin for rust_web_server::entry_point::Config
+impl core::marker::UnsafeUnpin for rust_web_server::entry_point::RwsEnv
 impl core::marker::UnsafeUnpin for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::UnsafeUnpin for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::UnsafeUnpin for rust_web_server::error::AppError
@@ -3825,6 +3847,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::core::x509::Su
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::cors::Cors
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::early_hints::EarlyHintsLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::Config
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::RwsEnv
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::error::AppError
@@ -4248,6 +4271,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::core::x509::Subje
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::cors::Cors
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::early_hints::EarlyHintsLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::Config
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::RwsEnv
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::error::AppError
@@ -4705,9 +4729,11 @@ impl rust_web_server::core::New for rust_web_server::response::Response
 impl rust_web_server::core::base64::Base64
 impl rust_web_server::core::base64::Decoder
 impl rust_web_server::cors::Cors
+impl rust_web_server::dev_mcp::DevTools
 impl rust_web_server::di::Container
 impl rust_web_server::early_hints::EarlyHintsLayer
 impl rust_web_server::entry_point::Config
+impl rust_web_server::entry_point::RwsEnv
 impl rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl rust_web_server::error::IntoResponse for &'static str
 impl rust_web_server::error::IntoResponse for alloc::string::String
@@ -5208,33 +5234,43 @@ impl<A, B, C, D> rust_web_server::handler::FromPath for (A, B, C, D) where A: co
 impl<A, B, C> rust_web_server::handler::FromPath for (A, B, C) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display, B: core::str::traits::FromStr, <B as core::str::traits::FromStr>::Err: core::fmt::Display, C: core::str::traits::FromStr, <C as core::str::traits::FromStr>::Err: core::fmt::Display
 impl<A, B> rust_web_server::handler::FromPath for (A, B) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display, B: core::str::traits::FromStr, <B as core::str::traits::FromStr>::Err: core::fmt::Display
 impl<A, B> tower_service::Service<http::request::Request<B>> for rust_web_server::tower::TowerService<A> where A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static, B: http_body::Body<Data = bytes::bytes::Bytes> + core::marker::Send + 'static, <B as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>
+impl<A: core::clone::Clone> core::clone::Clone for rust_web_server::dev_mcp::DevMcp<A>
 impl<A: core::clone::Clone> core::clone::Clone for rust_web_server::middleware::WithMiddleware<A>
+impl<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static> rust_web_server::dev_mcp::DevMcpExt for A
 impl<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static> rust_web_server::timeout::TimeoutLayer<A>
 impl<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + ?core::marker::Sized + 'static> rust_web_server::application::Application for rust_web_server::timeout::TimeoutLayer<A>
 impl<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + ?core::marker::Sized + 'static> rust_web_server::timeout::TimeoutLayer<A>
 impl<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + core::clone::Clone + 'static> rust_web_server::middleware::WithMiddleware<A>
+impl<A: rust_web_server::application::Application> rust_web_server::application::Application for rust_web_server::dev_mcp::DevMcp<A>
 impl<A: rust_web_server::application::Application> rust_web_server::application::Application for rust_web_server::middleware::WithMiddleware<A>
 impl<A: rust_web_server::application::Application> rust_web_server::middleware::WithMiddleware<A>
 impl<A: rust_web_server::application::Application> rust_web_server::test_client::TestClient<A>
+impl<A> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::dev_mcp::DevMcp<A>
 impl<A> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::middleware::WithMiddleware<A>
+impl<A> !core::panic::unwind_safe::UnwindSafe for rust_web_server::dev_mcp::DevMcp<A>
 impl<A> !core::panic::unwind_safe::UnwindSafe for rust_web_server::middleware::WithMiddleware<A>
 impl<A> core::clone::Clone for rust_web_server::tower::TowerService<A>
+impl<A> core::marker::Freeze for rust_web_server::dev_mcp::DevMcp<A> where A: core::marker::Freeze
 impl<A> core::marker::Freeze for rust_web_server::middleware::WithMiddleware<A> where A: core::marker::Freeze
 impl<A> core::marker::Freeze for rust_web_server::test_client::TestClient<A> where A: core::marker::Freeze
 impl<A> core::marker::Freeze for rust_web_server::timeout::TimeoutLayer<A> where alloc::rcs::arc::Arc<A>: core::marker::Freeze, A: ?core::marker::Sized
 impl<A> core::marker::Freeze for rust_web_server::tower::TowerService<A> where alloc::rcs::arc::Arc<A>: core::marker::Freeze
+impl<A> core::marker::Send for rust_web_server::dev_mcp::DevMcp<A> where A: core::marker::Send
 impl<A> core::marker::Send for rust_web_server::middleware::WithMiddleware<A> where A: core::marker::Send
 impl<A> core::marker::Send for rust_web_server::test_client::TestClient<A> where A: core::marker::Send
 impl<A> core::marker::Send for rust_web_server::timeout::TimeoutLayer<A> where alloc::rcs::arc::Arc<A>: core::marker::Send, A: ?core::marker::Sized
 impl<A> core::marker::Send for rust_web_server::tower::TowerService<A> where alloc::rcs::arc::Arc<A>: core::marker::Send
+impl<A> core::marker::Sync for rust_web_server::dev_mcp::DevMcp<A> where A: core::marker::Sync
 impl<A> core::marker::Sync for rust_web_server::middleware::WithMiddleware<A> where A: core::marker::Sync
 impl<A> core::marker::Sync for rust_web_server::test_client::TestClient<A> where A: core::marker::Sync
 impl<A> core::marker::Sync for rust_web_server::timeout::TimeoutLayer<A> where alloc::rcs::arc::Arc<A>: core::marker::Sync, A: ?core::marker::Sized
 impl<A> core::marker::Sync for rust_web_server::tower::TowerService<A> where alloc::rcs::arc::Arc<A>: core::marker::Sync
+impl<A> core::marker::Unpin for rust_web_server::dev_mcp::DevMcp<A> where A: core::marker::Unpin
 impl<A> core::marker::Unpin for rust_web_server::middleware::WithMiddleware<A> where A: core::marker::Unpin
 impl<A> core::marker::Unpin for rust_web_server::test_client::TestClient<A> where A: core::marker::Unpin
 impl<A> core::marker::Unpin for rust_web_server::timeout::TimeoutLayer<A> where alloc::rcs::arc::Arc<A>: core::marker::Unpin, A: ?core::marker::Sized
 impl<A> core::marker::Unpin for rust_web_server::tower::TowerService<A> where alloc::rcs::arc::Arc<A>: core::marker::Unpin
+impl<A> core::marker::UnsafeUnpin for rust_web_server::dev_mcp::DevMcp<A> where A: core::marker::UnsafeUnpin
 impl<A> core::marker::UnsafeUnpin for rust_web_server::middleware::WithMiddleware<A> where A: core::marker::UnsafeUnpin
 impl<A> core::marker::UnsafeUnpin for rust_web_server::test_client::TestClient<A> where A: core::marker::UnsafeUnpin
 impl<A> core::marker::UnsafeUnpin for rust_web_server::timeout::TimeoutLayer<A> where alloc::rcs::arc::Arc<A>: core::marker::UnsafeUnpin, A: ?core::marker::Sized
@@ -5245,6 +5281,7 @@ impl<A> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::tower::Towe
 impl<A> core::panic::unwind_safe::UnwindSafe for rust_web_server::test_client::TestClient<A> where A: core::panic::unwind_safe::UnwindSafe
 impl<A> core::panic::unwind_safe::UnwindSafe for rust_web_server::timeout::TimeoutLayer<A> where alloc::rcs::arc::Arc<A>: core::panic::unwind_safe::UnwindSafe, A: ?core::marker::Sized
 impl<A> core::panic::unwind_safe::UnwindSafe for rust_web_server::tower::TowerService<A> where alloc::rcs::arc::Arc<A>: core::panic::unwind_safe::UnwindSafe
+impl<A> rust_web_server::dev_mcp::DevMcp<A>
 impl<A> rust_web_server::handler::FromPath for (A) where A: core::str::traits::FromStr, <A as core::str::traits::FromStr>::Err: core::fmt::Display
 impl<A> rust_web_server::tower::TowerService<A>
 impl<F: core::ops::function::Fn(&str, &str) -> bool + core::marker::Send + core::marker::Sync + 'static> rust_web_server::auth::BasicAuthLayer<F>
@@ -5690,6 +5727,9 @@ pub const rust_web_server::cors::Cors::MAX_AGE: &'static str
 pub const rust_web_server::ctl::EXIT_FAILED: i32
 pub const rust_web_server::ctl::EXIT_OK: i32
 pub const rust_web_server::ctl::EXIT_UNUSABLE: i32
+pub const rust_web_server::dev_mcp::DEFAULT_TOKEN_ENV: &str
+pub const rust_web_server::dev_mcp::DEV_WRITE_TOOLS: [&str; 2]
+pub const rust_web_server::dev_mcp::OPS_WRITE_TOOLS: [&str; 8]
 pub const rust_web_server::disk_guard::RECHECK: core::time::Duration
 pub const rust_web_server::disk_guard::RWS_CONFIG_MIN_FREE_DISK: &str
 pub const rust_web_server::early_hints::MAX_PER_REQUEST: usize
@@ -5780,6 +5820,7 @@ pub const rust_web_server::entry_point::Config::RWS_DEFAULT_IP: &'static str
 pub const rust_web_server::entry_point::Config::RWS_DEFAULT_PORT: &'static i32
 pub const rust_web_server::entry_point::Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES: &'static i64
 pub const rust_web_server::entry_point::Config::RWS_DEFAULT_THREAD_COUNT: &'static i32
+pub const rust_web_server::entry_point::RwsEnv::VAR: &'static str
 pub const rust_web_server::entry_point::config_file::SETTINGS_WITHOUT_FLAG: &[&str]
 pub const rust_web_server::error::problem::PROBLEM_JSON: &str
 pub const rust_web_server::fleet::RWS_CONFIG_FLEET_INSECURE: &str
@@ -6447,6 +6488,8 @@ pub enum rust_web_server::compression::Level
 pub enum rust_web_server::compression::dictionary::DictionaryEncoding
 pub enum rust_web_server::core::base64::Alphabet
 pub enum rust_web_server::core::x509::SubjectAltName
+pub enum rust_web_server::dev_mcp::DevMcp<A>
+pub enum rust_web_server::entry_point::RwsEnv
 pub enum rust_web_server::error::AppError
 pub enum rust_web_server::fastcgi::Address
 pub enum rust_web_server::fleet::Fetched
@@ -6767,6 +6810,8 @@ pub fn rust_web_server::app::controller::style::StyleController::is_matching_req
 pub fn rust_web_server::app::controller::style::StyleController::process_request(&rust_web_server::request::Request, rust_web_server::response::Response) -> rust_web_server::response::Response
 pub fn rust_web_server::application::Application::execute(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::application::Application::execute_async<'a>(&'a self, &'a rust_web_server::request::Request, &'a rust_web_server::server::ConnectionInfo) -> core::option::Option<rust_web_server::application::AsyncResponse<'a>>
+pub fn rust_web_server::application::Application::middleware_names(&self) -> alloc::vec::Vec<&'static str>
+pub fn rust_web_server::application::Application::registered_routes(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
 pub fn rust_web_server::application::Application::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::application::Application::streams_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::clone(&self) -> Self
@@ -7126,6 +7171,30 @@ pub fn rust_web_server::crypto_provider() -> rustls::crypto::CryptoProvider
 pub fn rust_web_server::ctl::invoked_as_rwsctl(&str) -> bool
 pub fn rust_web_server::ctl::requested(&[alloc::string::String]) -> core::option::Option<&[alloc::string::String]>
 pub fn rust_web_server::ctl::run(&[alloc::string::String], &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
+pub fn rust_web_server::dev_mcp::DevMcp<A>::clone(&self) -> Self
+pub fn rust_web_server::dev_mcp::DevMcp<A>::is_mounted(&self) -> bool
+pub fn rust_web_server::dev_mcp::DevMcpExt::dev_mcp(self) -> rust_web_server::dev_mcp::DevMcp<Self>
+pub fn rust_web_server::dev_mcp::DevMcpExt::dev_mcp_with(self, rust_web_server::dev_mcp::DevTools) -> rust_web_server::dev_mcp::DevMcp<Self>
+pub fn rust_web_server::dev_mcp::DevTools::allowed_origins<I, S>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
+pub fn rust_web_server::dev_mcp::DevTools::at(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::cache(self, rust_web_server::cache::CacheLayer) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::clone(&self) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::database(self, rust_web_server::model::pool::DbPool) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::default() -> Self
+pub fn rust_web_server::dev_mcp::DevTools::enabled(&self) -> bool
+pub fn rust_web_server::dev_mcp::DevTools::env(self, rust_web_server::entry_point::rws_env::RwsEnv) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::migrations(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::mount<A: rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static>(self, A) -> rust_web_server::dev_mcp::DevMcp<A>
+pub fn rust_web_server::dev_mcp::DevTools::new() -> Self
+pub fn rust_web_server::dev_mcp::DevTools::read_only(self) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::record_requests(self, bool) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::register(&self, rust_web_server::mcp::McpServer) -> rust_web_server::mcp::McpServer
+pub fn rust_web_server::dev_mcp::DevTools::server_info(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::token_env(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rust_web_server::dev_mcp::DevTools::with_ops(self) -> Self
+pub fn rust_web_server::dev_mcp::masked(&str, &str) -> alloc::string::String
+pub fn rust_web_server::dev_mcp::ops_tools(rust_web_server::mcp::McpServer, alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, core::option::Option<rust_web_server::cache::CacheLayer>) -> rust_web_server::mcp::McpServer
 pub fn rust_web_server::di::Container::contains<T: ?core::marker::Sized + 'static>(&self) -> bool
 pub fn rust_web_server::di::Container::contains_named<T: ?core::marker::Sized + 'static>(&self, &str) -> bool
 pub fn rust_web_server::di::Container::default() -> Self
@@ -7151,6 +7220,14 @@ pub fn rust_web_server::early_hints::valid(&str) -> bool
 pub fn rust_web_server::entry_point::Config::clone(&self) -> Self
 pub fn rust_web_server::entry_point::Config::eq(&self, &Self) -> bool
 pub fn rust_web_server::entry_point::Config::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::entry_point::RwsEnv::as_str(self) -> &'static str
+pub fn rust_web_server::entry_point::RwsEnv::clone(&self) -> Self
+pub fn rust_web_server::entry_point::RwsEnv::current() -> rust_web_server::entry_point::RwsEnv
+pub fn rust_web_server::entry_point::RwsEnv::default() -> Self
+pub fn rust_web_server::entry_point::RwsEnv::eq(&self, &Self) -> bool
+pub fn rust_web_server::entry_point::RwsEnv::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::entry_point::RwsEnv::is_dev(self) -> bool
+pub fn rust_web_server::entry_point::RwsEnv::parse(&str) -> core::option::Option<rust_web_server::entry_point::RwsEnv>
 pub fn rust_web_server::entry_point::bootstrap()
 pub fn rust_web_server::entry_point::command_line_args::CommandLineArgument::_parse(alloc::vec::Vec<alloc::string::String>, alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>) -> alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>
 pub fn rust_web_server::entry_point::command_line_args::CommandLineArgument::get_command_line_arg_list() -> alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>
@@ -8203,6 +8280,7 @@ pub fn rust_web_server::middleware::Middleware::accepts_streamed_body(&self, &ru
 pub fn rust_web_server::middleware::Middleware::answers_streamed_body(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::middleware::Middleware::handle(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &dyn rust_web_server::application::Application) -> core::result::Result<rust_web_server::response::Response, alloc::string::String>
 pub fn rust_web_server::middleware::Middleware::is_passthrough(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
+pub fn rust_web_server::middleware::Middleware::layer_name(&self) -> &'static str
 pub fn rust_web_server::middleware::Middleware::runs_inline(&self, &rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo) -> bool
 pub fn rust_web_server::middleware::WithMiddleware<A>::clone(&self) -> Self
 pub fn rust_web_server::middleware::WithMiddleware<A>::mcp(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rust_web_server::mcp::McpServer
@@ -9333,6 +9411,7 @@ pub mod rust_web_server::core::sha256
 pub mod rust_web_server::core::x509
 pub mod rust_web_server::cors
 pub mod rust_web_server::ctl
+pub mod rust_web_server::dev_mcp
 pub mod rust_web_server::di
 pub mod rust_web_server::disk_guard
 pub mod rust_web_server::early_hints
@@ -9746,6 +9825,11 @@ pub rust_web_server::cors::Cors::allow_methods: alloc::vec::Vec<alloc::string::S
 pub rust_web_server::cors::Cors::allow_origins: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::cors::Cors::expose_headers: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::cors::Cors::max_age: alloc::string::String
+pub rust_web_server::dev_mcp::DevMcp::Off(A)
+pub rust_web_server::dev_mcp::DevMcp::On(rust_web_server::middleware::WithMiddleware<rust_web_server::mcp::McpServer>)
+pub rust_web_server::entry_point::RwsEnv::Dev
+pub rust_web_server::entry_point::RwsEnv::Prod
+pub rust_web_server::entry_point::RwsEnv::Test
 pub rust_web_server::entry_point::command_line_args::CommandLineArgument::_hint: core::option::Option<alloc::string::String>
 pub rust_web_server::entry_point::command_line_args::CommandLineArgument::environment_variable: alloc::string::String
 pub rust_web_server::entry_point::command_line_args::CommandLineArgument::long_form: alloc::string::String
@@ -11095,6 +11179,7 @@ pub struct rust_web_server::core::base64::DecodeError
 pub struct rust_web_server::core::base64::Decoder
 pub struct rust_web_server::core::x509::CertInfo
 pub struct rust_web_server::cors::Cors
+pub struct rust_web_server::dev_mcp::DevTools
 pub struct rust_web_server::di::Container
 pub struct rust_web_server::early_hints::EarlyHintsLayer
 pub struct rust_web_server::entry_point::Config
@@ -11483,6 +11568,7 @@ pub trait rust_web_server::cluster::Store: core::marker::Send + core::marker::Sy
 pub trait rust_web_server::config_binding::FromEnvStr: core::marker::Sized
 pub trait rust_web_server::controller::Controller
 pub trait rust_web_server::core::New
+pub trait rust_web_server::dev_mcp::DevMcpExt: rust_web_server::application::Application + core::marker::Sized + core::marker::Send + core::marker::Sync + 'static
 pub trait rust_web_server::error::IntoResponse
 pub trait rust_web_server::extract::FromRequest: core::marker::Sized
 pub trait rust_web_server::handler::AsyncHandler<S>: rust_web_server::handler::RouteSpec + core::marker::Send + core::marker::Sync + 'static
@@ -11543,6 +11629,7 @@ pub use rust_web_server::JsonSchema
 pub use rust_web_server::Model
 pub use rust_web_server::Validate
 pub use rust_web_server::delete
+pub use rust_web_server::dev_mcp::RwsEnv
 pub use rust_web_server::get
 pub use rust_web_server::handler::Body
 pub use rust_web_server::handler::BodyText

@@ -81,6 +81,11 @@ The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer
 alike.
 
+An app built on the library gets the same tools from
+`rust_web_server::dev_mcp`: `ops_tools(server, routes, cache)` is what the
+binary mounts (since 18.28.0), and [`app.dev_mcp()`](/mcp/dev-tools/) adds
+them with `DevTools::with_ops()` next to tools for developing the app.
+
 A call with missing or mistyped arguments comes back as an error the model
 reads (`missing required property "ip"`), not a silent default.
 

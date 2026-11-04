@@ -80,6 +80,7 @@ async fn main() {
 | Middleware | `app.wrap(layer)`; first wrapped = outermost. `JwtLayer`, `BasicAuthLayer`, `RateLimitLayer`, `RequestIdLayer`, `CacheLayer`, `OtelLayer`, `ReverseProxy`, … |
 | OpenAPI | `.openapi(OpenApiConfig::new(..).operation("GET", "/items/{id}", Operation::new("..").response::<Item>(200, "..")))`; types `#[derive(JsonSchema)]` |
 | MCP tools | `McpServer::new(name, v).typed_tool(name, desc, \|ctx, args: In\| -> Result<Out, String>)`; `.require_bearer(token)`; `app.mcp(name, v)` for an app + tools |
+| Let the agent inspect the app | `use rust_web_server::dev_mcp::DevMcpExt;` then `app.dev_mcp()` (18.28): `/mcp` with `routes` (+ middleware), `config` (secrets hidden), `recent_errors`, `db_schema`/`migrations` via `.dev_mcp_with(DevTools::new().database(pool).migrations("migrations"))`; run with `RWS_ENV=dev` and `claude mcp add --transport http app http://localhost:7878/mcp` |
 | Streaming response | a reader in `response.stream_pipe`; SSE: `Sse::stream()` |
 | WebSocket | `.websocket("/chat/{room}", \|ws, params, state\| …)` |
 | Database | `DbPool`, `#[derive(Model)]`, `QueryBuilder` (`model-*` features, async handlers) |
@@ -105,7 +106,8 @@ reader in the test.
   file where the server runs overrides the environment, port included.
 - The default port is 7878; `RWS_CONFIG_PORT` or `--port` changes it.
 - An MCP endpoint must have a token (`.require_bearer`) or OAuth; never leave
-  `/mcp` open.
+  `/mcp` open. The one exception is `dev_mcp()` under `RWS_ENV=dev`, meant for
+  a local port; outside `dev` it mounts only with `MCP_TOKEN` set.
 - `Response` bodies are `content_range_list`; build them with
   `Response::json`/`Response::text`, not by hand.
 - Don't add hyper, axum or a JSON-RPC crate: rws has its own server, router

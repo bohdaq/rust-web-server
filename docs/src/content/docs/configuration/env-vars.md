@@ -234,6 +234,16 @@ The `gateway-api` build feature's controller (in progress, 18.8.0). Read at star
 |----------|---------|-------------|
 | `RWS_CONFIG_TEMPLATE_DIR` | `templates` | Directory containing Tera HTML templates. Only relevant when the `tera` Cargo feature is enabled. |
 
+## Environment kind
+
+`RWS_ENV` says what kind of environment the process runs in. Like the
+`RWS_DB_*` variables it is outside the `RWS_CONFIG_*` namespace, and it has no
+config-file key or flag: set it where the process starts.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RWS_ENV` | `prod` | `dev` (or `development`), `test`, or `prod` (or `production`); anything else counts as `prod`. With `dev`, [`app.dev_mcp()`](/mcp/dev-tools/) mounts its MCP endpoint without a token; otherwise only when `MCP_TOKEN` is set (since 18.28.0). Read in code with `entry_point::RwsEnv::current()`. |
+
 ## Database
 
 Database variables are only used when the `model-sqlite`, `model-postgres`, or
