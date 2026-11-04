@@ -1,0 +1,5 @@
+error: #[derive(Factory)] needs the #[primary_key] field of #[derive(Model)]
+ --> tests/ui/factory_without_primary_key.rs:5:8
+  |
+5 | struct Note {
+  |        ^^^^

@@ -1,0 +1,10 @@
+event: tick
+data: 1
+id: 7
+retry: 500
+
+: keep-alive
+
+data: a
+data: b
+

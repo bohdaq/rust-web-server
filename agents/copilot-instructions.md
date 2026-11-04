@@ -139,8 +139,26 @@ assert_eq!(201, response.status());
 let body: serde_json::Value = serde_json::from_slice(response.body_bytes()).unwrap();
 ```
 
-`TestClient` needs no socket. It doesn't drive `stream_pipe`: read the
-reader in the test.
+`TestClient` needs no socket. More in `rust_web_server::test_client` (18.29):
+
+```rust
+use std::time::Duration;
+use rust_web_server::test_client::{assert_openapi_snapshot, TestClient, TestDb};
+
+// A database per test: in-memory SQLite with the migrations applied
+// (TestDb::postgres_from_env(): a rolled-back transaction, None when unset).
+let db = TestDb::sqlite().migrations("migrations").await?;
+let note = Note::factory().with(|n| n.text = "hi".into()).create(&db).await?; // #[derive(Model, Factory)]
+let client = TestClient::new(app(db.pool()));
+let response = client.get("/notes").send_async().await; // async handlers: send_async in #[tokio::test]
+
+let mut ws = client.websocket("/chat/1").connect().expect("101"); // WebSocket, in memory
+ws.send_text("hi");
+assert_eq!("hi", ws.recv_text());
+
+let events = client.get("/events").send().sse_events(2, Duration::from_secs(5)); // SSE frames
+assert_openapi_snapshot(&client, "tests/snapshots/openapi.json"); // RWS_UPDATE_SNAPSHOTS=1 rewrites
+```
 
 ## Pitfalls
 

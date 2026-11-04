@@ -48,6 +48,11 @@
 //!
 //! Generates `fn load() -> Result<Self, String>` that reads environment variables
 //! and parses them into the annotated field types. See `rust_web_server::config_binding`.
+//!
+//! ## `#[derive(Factory)]` (17.30.0)
+//!
+//! Beside `#[derive(Model)]`: `T::factory()` for tests, building instances
+//! with default field values. See `rust_web_server::test_client::factory`.
 
 use proc_macro::TokenStream;
 use quote::quote;
@@ -965,6 +970,111 @@ fn parse_table_name(
     }
     // Default: lowercased struct name.
     Ok(struct_name.to_string().to_lowercase())
+}
+
+// ── #[derive(Factory)] ────────────────────────────────────────────────────────
+
+/// Derive `rust_web_server::test_client::factory::Factory` for a
+/// `#[derive(Model)]` struct, and an inherent `T::factory()` returning a
+/// `ModelFactory<T>` for tests (17.30.0).
+///
+/// Each field gets its type's `FactoryValue` default (numbers `0`, `bool`
+/// `false`, `Option` `None`, a `String` the field's name plus a sequence
+/// number), or `Default::default()` for a type without one and for
+/// `#[ignore]` fields. The `#[primary_key]` is `0` when it's
+/// `auto_increment`, else the sequence number. It reads the same attributes
+/// as `#[derive(Model)]` and declares none of its own.
+///
+/// ```ignore
+/// #[derive(rust_web_server::Model, rust_web_server::Factory, Debug, Clone)]
+/// #[table(name = "users")]
+/// pub struct User {
+///     #[primary_key(auto_increment)]
+///     pub id: i64,
+///     pub name: String,
+/// }
+///
+/// let user = User::factory().with(|u| u.name = "Ann".into()).create(&pool).await?;
+/// ```
+#[proc_macro_derive(Factory)]
+pub fn derive_factory(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    impl_factory(ast)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn impl_factory(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let span = input.ident.span();
+    let struct_name = &input.ident;
+    if !input.generics.params.is_empty() {
+        return Err(syn::Error::new(span, "#[derive(Factory)] doesn't support generic structs"));
+    }
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(f) => &f.named,
+            _ => return Err(syn::Error::new(span, "#[derive(Factory)] only supports structs with named fields")),
+        },
+        _ => return Err(syn::Error::new(span, "#[derive(Factory)] can only be derived on structs")),
+    };
+
+    let mut has_pk = false;
+    let mut inits: Vec<proc_macro2::TokenStream> = Vec::new();
+    for field in fields {
+        let ident = field.ident.as_ref().unwrap();
+        let ty = &field.ty;
+        let name = ident.to_string();
+        let name = name.strip_prefix("r#").unwrap_or(&name).to_string();
+        let mut is_pk = false;
+        let mut auto_increment = false;
+        let mut ignored = false;
+        for attr in &field.attrs {
+            if attr.path().is_ident("ignore") {
+                ignored = true;
+            } else if attr.path().is_ident("primary_key") {
+                is_pk = true;
+                let _ = attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("auto_increment") {
+                        auto_increment = true;
+                    }
+                    Ok(())
+                });
+            }
+        }
+        has_pk |= is_pk;
+        let probe = quote! { (&&__Probe::<#ty>(::core::marker::PhantomData)) };
+        inits.push(if ignored {
+            quote! { #ident: ::core::default::Default::default() }
+        } else if is_pk && !auto_increment {
+            quote! { #ident: #probe.make_key(#name, __seq) }
+        } else {
+            quote! { #ident: #probe.make(#name, __seq) }
+        });
+    }
+    if !has_pk {
+        return Err(syn::Error::new(span, "#[derive(Factory)] needs the #[primary_key] field of #[derive(Model)]"));
+    }
+
+    Ok(quote! {
+        impl ::rust_web_server::test_client::factory::Factory for #struct_name {
+            fn factory_default(__seq: u64) -> Self {
+                #[allow(unused_imports)]
+                use ::rust_web_server::test_client::factory::__private::{
+                    Probe as __Probe, ViaDefault as _, ViaValue as _,
+                };
+                #struct_name {
+                    #(#inits),*
+                }
+            }
+        }
+
+        impl #struct_name {
+            /// A factory building this model with default values, for tests.
+            pub fn factory() -> ::rust_web_server::test_client::factory::ModelFactory<#struct_name> {
+                ::rust_web_server::test_client::factory::ModelFactory::new()
+            }
+        }
+    })
 }
 
 // ── #[derive(JsonSchema)] ─────────────────────────────────────────────────────

@@ -16977,6 +16977,10 @@ let admins: Vec = User::query(&pool)
     .fetch_all().await?;
 ```
 
+## Factories for tests
+
+Add `#[derive(Factory)]` beside `Model` and `User::factory()` builds users with a default for every field — `User::factory().with(|u| u.active = true).create(&pool).await?` inserts one. See [Test databases and factories](/testing/database/#factories).
+
 ---
 
 # Repository
@@ -18154,6 +18158,8 @@ async fn test_example() {
     assert!(rows.is_empty());
 }
 ```
+
+For tests, `TestDb::sqlite().migrations("migrations").await` does this with the app's migrations applied (and a connection that never expires, so the database can't vanish mid-test); `TestDb` also gives PostgreSQL and MySQL tests a rolled-back transaction each, and `#[derive(Factory)]` fills tables with models — see [Test databases and factories](/testing/database/).
 
 ## Feature requirement
 
@@ -20917,7 +20923,27 @@ resp.body_text()     // &str — panics if body is not valid UTF-8
 resp.body_bytes()    // &[u8] — raw body
 resp.header("content-type")   // Option<&str> — case-insensitive lookup
 resp.headers()       // &[Header] — all response headers
+resp.is_streamed()   // bool — the body is a stream (SSE, stream_pipe), not in body_bytes()
+resp.sse()           // TestSse — the body's Server-Sent Events
 ```
+
+## Async apps: `send_async`
+
+An `App::with_async_state` app can be driven from `#[tokio::test]` with `.send_async().await`, which awaits the handler on the test's runtime. Prefer it whenever the handler uses a `DbPool` or anything else that leaves tasks on its runtime — see [Test databases](/testing/database/#an-app-on-a-testdb) for why `.send()` loses pool connections there.
+
+```rust
+let resp = client.get("/notes").send_async().await;
+```
+
+## More helpers
+
+Beside `TestClient`, the `test_client` module has:
+
+- [WebSocket and SSE](/testing/websocket-sse/) — `client.websocket(path).connect()` runs a route's upgrade handler over an in-memory connection; `resp.sse_events(n, timeout)` reads an event stream.
+- [Test databases and factories](/testing/database/) — `TestDb::sqlite().migrations("migrations")`, a transaction per test on PostgreSQL/MySQL, and `#[derive(Factory)]`.
+- [OpenAPI snapshots](/testing/snapshots/) — `assert_openapi_snapshot(&client, "tests/snapshots/openapi.json")`, `RWS_UPDATE_SNAPSHOTS=1` to rewrite.
+
+Nothing in `test_client` is on the request path. It's compiled into every build so an app's own tests reach it without a feature (`TestDb` and factories need a `model-*` feature, `#[derive(Factory)]` also `macros`).
 
 ## Testing middleware
 
@@ -21104,6 +21130,266 @@ Because `TestClient` bypasses the network stack entirely, tests do not need `#[t
 :::note[Error responses]
 If `Application::execute` returns `Err(String)`, `TestClient` converts it to a synthetic `500 Internal Server Error` response whose body is the error message. This means error paths are testable with the same `resp.status()` assertions.
 :::
+
+---
+
+# WebSocket and SSE in tests
+
+<https://rws8.tech/testing/websocket-sse/>
+
+`TestClient` drives two kinds of long-lived responses in-process (since 18.29.0): a WebSocket route's upgrade handler, over an in-memory duplex, and a `text/event-stream` body, read as it arrives. Both wait with timeouts, so a handler that never answers fails the test instead of hanging it.
+
+## WebSocket
+
+`client.websocket(path).connect()` sends the opening handshake through the app. When the route answers with `WebSocket::upgrade`'s `101`, the handler runs on a thread of its own — the same handler the server would run — and you get a `TestWebSocket`:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::test_client::TestClient;
+use rust_web_server::websocket::{Message, WebSocket};
+
+#[test]
+fn echo() {
+    let app = App::with_state(()).get("/echo", |request, _params, _conn, _state| {
+        WebSocket::upgrade(request, |mut ws| {
+            while let Ok(Some(Message::Text(text))) = ws.recv() {
+                let _ = ws.send_text(&text);
+            }
+        })
+    });
+    let client = TestClient::new(app);
+
+    let mut ws = client.websocket("/echo").connect().expect("a 101");
+    ws.send_text("hi");
+    assert_eq!("hi", ws.recv_text());
+    assert_eq!(Some(1000), ws.close(1000, "done")); // the handler's close code
+}
+```
+
+Anything but an upgrade comes back as the `Err` response, so refusals are testable too:
+
+```rust
+let refused = client.websocket("/admin/live").connect().err().expect("refused");
+assert_eq!(401, refused.status());
+```
+
+| Method | What it does |
+|---|---|
+| `.header(name, value)` | add a handshake header (`Authorization`, `Cookie`, `Sec-WebSocket-Protocol`, …) |
+| `.timeout(d)` | how long `recv`/`close` wait for the handler (default 5 s) |
+| `send_text` / `send_binary` | send a message, masked as a browser does |
+| `ping(payload)` / `send(frame)` | a ping, or any `Frame` |
+| `send_raw(bytes)` | bytes as they are, to test protocol errors (an unmasked frame gets close code 1002) |
+| `recv()` | `Ok(Some(Message))`; `Ok(None)` once the handler sent a close (answered for you); `Err` on a timeout or a handler that returned without closing. Pings are answered and skipped, fragments joined |
+| `recv_text()` / `recv_binary()` | the next message, panicking if it's anything else |
+| `recv_frame()` | the next raw frame (pings and pongs included) |
+| `close_code()` | the handler's close code, once it closed |
+| `close(code, reason)` | the closing handshake; waits for the handler to return, returns its close code |
+| `handler_finished(timeout)` | whether the handler returned |
+| `handshake()` | the `101` response and its headers |
+
+Dropping a `TestWebSocket` ends the connection: the handler's `recv` returns an error. A handler that reaches for `tokio::runtime::Handle::current()` finds the test's runtime when the test is `#[tokio::test]`.
+
+## Server-Sent Events
+
+`TestResponse::sse()` reads a `text/event-stream` body — streamed by `Sse::stream` (`stream_pipe`) as it arrives, or buffered by `Sse::into_response` at once — and parses it into `SseFrame { event, data, id, retry }`:
+
+```rust
+use std::time::Duration;
+use rust_web_server::app::App;
+use rust_web_server::sse::{Sse, SseEvent};
+use rust_web_server::test_client::TestClient;
+
+#[test]
+fn ticks() {
+    let app = App::with_state(()).get("/ticks", |_req, _params, _conn, _state| {
+        let (events, response) = Sse::stream();
+        std::thread::spawn(move || {
+            for n in 1..=3 {
+                let _ = events.send(SseEvent::data(n.to_string()).event_type("tick").id(n.to_string()));
+            }
+        });
+        response
+    });
+    let client = TestClient::new(app);
+
+    let events = client.get("/ticks").send().sse_events(3, Duration::from_secs(5));
+    assert_eq!(3, events.len());
+    assert_eq!("tick", events[0].event);
+    assert_eq!("1", events[0].data);
+    assert_eq!(Some("1"), events[0].id.as_deref());
+}
+```
+
+`sse_events(n, timeout)` returns up to `n` events within `timeout` in all — fewer when the stream ends or time runs out, so assert on the count. For finer control keep the `TestSse` from `.sse()`:
+
+| Method | What it does |
+|---|---|
+| `next_event(timeout)` | the next event, or `None` (stream ended, or timed out) |
+| `events(n, timeout)` | up to `n` events |
+| `collect_until_end(timeout)` | every event until the stream ends (waits the whole `timeout` if it never does) |
+| `is_ended()` / `error()` | whether the stream ended, and why if it was an error |
+| `comments()` | comment lines seen (keep-alives) |
+
+Parsing follows the HTML Standard's rules: lines end in CRLF, LF or CR; `data` lines join with `\n`; the event type defaults to `message`; a block without `data` isn't dispatched; `retry` must be digits. `SseParser` is the same parser on its own (`parser.feed(bytes)` returns the events those bytes completed). It refuses an event or line over 8 MiB (`sse::MAX_EVENT_BYTES`) instead of buffering without bound.
+
+A streamed body is read on a thread of its own; it ends with the stream, or at the first read after the `TestSse` is dropped (for `Sse::stream`, the next event or keep-alive comment). `TestResponse::is_streamed()` tells whether a response has a streamed body, and `take_stream()` hands you its reader for anything that isn't SSE.
+
+---
+
+# Test databases and factories
+
+<https://rws8.tech/testing/database/>
+
+Two helpers for tests that touch the database (since 18.29.0, `model-*` features): `TestDb`, a database per test that leaves nothing behind, and `#[derive(Factory)]`, which builds `#[derive(Model)]` structs with a default for every field.
+
+## TestDb
+
+```rust
+use rust_web_server::test_client::TestDb;
+
+#[tokio::test]
+async fn notes_start_empty() {
+    let db = TestDb::sqlite().migrations("migrations").await.unwrap();
+    db.execute("INSERT INTO notes (text) VALUES ('hi')", &[]).await.unwrap();
+    // db derefs to DbPool; db.pool() is a clone for the app's state
+}
+```
+
+`TestDb::sqlite()` (and the other constructors) return a builder: `.migrations(dir)` adds a directory of `*.sql` migrations (call it again for more; relative to the package root under `cargo test`), and `.await` — or `.build().await` — connects and migrates. A failing migration is the `Err`.
+
+| Backend | Constructor | How the test is isolated |
+|---|---|---|
+| SQLite | `TestDb::sqlite()` | a fresh in-memory database per `TestDb`, migrations applied; gone with the last clone of its pool. Tests run in parallel |
+| PostgreSQL | `TestDb::postgres(url)`, `TestDb::postgres_from_env()` | migrations applied for real (once per process and directory); then a pool of **one connection** that starts a transaction as it connects. Nothing is committed: `db.rollback().await` rolls it back, and dropping the `TestDb` closes the connection, which the server rolls back |
+| MySQL | `TestDb::mysql(url)`, `TestDb::mysql_from_env()` | the same as PostgreSQL |
+
+The `_from_env` forms read `RWS_TEST_POSTGRES_URL` / `RWS_TEST_MYSQL_URL` (sqlx URLs, e.g. `postgres://user:password@localhost/app_test`). When the variable isn't set they print `skipped: …` and return `None`, so a test runs where a server is available and returns early elsewhere:
+
+```rust
+#[tokio::test(flavor = "multi_thread")]
+async fn orders_against_postgres() {
+    let Some(db) = TestDb::postgres_from_env() else { return };
+    let db = db.migrations("migrations").await.unwrap();
+    // …
+}
+```
+
+Limits of the transaction, the usual ones for transactional tests:
+
+- Give tests a database of their own: the schema (migrations) persists, only data is rolled back.
+- One connection: code holding two connections at once (two transactions alive together) waits for itself. `DbPool::begin`/`transaction` do work — sqlx makes them savepoints inside the test's transaction, so their `commit` commits nothing.
+- Raw `BEGIN`/`COMMIT` statements end the test's transaction, and so does DDL on MySQL (`CREATE`, `ALTER`, `DROP`, `TRUNCATE` commit implicitly). Keep schema changes in migrations.
+- On PostgreSQL a failed statement aborts the transaction, and every later statement in the test fails; run statements that are expected to fail inside `DbPool::transaction` (a savepoint).
+
+### An app on a TestDb
+
+Hand `db.pool()` to the app's state and drive it with `TestClient` as usual. For an `App::with_async_state` app use `send_async().await`, which awaits the handler on the test's runtime:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::test_client::{TestClient, TestDb};
+
+#[tokio::test]
+async fn counts_notes() {
+    let db = TestDb::sqlite().migrations("migrations").await.unwrap();
+    let client = TestClient::new(my_app::app(db.pool()));
+    let response = client.get("/notes").send_async().await;
+    assert_eq!(200, response.status());
+}
+```
+
+`send()` would run the async handler on a runtime made for that request and dropped after it, as the server's blocking pool does. Tasks the handler leaves behind never run there — sqlx returns a pool connection with such a task, so the connection is closed instead, taking a `TestDb`'s in-memory database with it — and a single-threaded test runtime waiting in `send()` can't run its own tasks either.
+
+## Factories
+
+Add `Factory` next to `Model`:
+
+```rust
+use rust_web_server::{Factory, Model};
+
+#[derive(Model, Factory, Debug, Clone)]
+#[table(name = "users")]
+pub struct User {
+    #[primary_key(auto_increment)]
+    pub id: i64,
+    pub name: String,      // "name-1", "name-2", …
+    pub email: String,     // "email-1@example.com", …
+    pub age: Option<i32>,  // None
+    pub admin: bool,       // false
+}
+```
+
+`User::factory()` returns a `ModelFactory`:
+
+```rust
+let unsaved = User::factory().build();
+let ann = User::factory().with(|u| u.name = "Ann".into()).create(&db).await?;
+assert!(ann.id > 0); // read back after the INSERT
+let admins = User::factory().with(|u| u.admin = true).create_many(3, &db).await?;
+let five = User::factory().build_many(5);
+```
+
+| Method | What it does |
+|---|---|
+| `.with(\|m\| …)` | change each built instance (after the defaults and earlier `with`s) |
+| `.build()` / `.build_many(n)` | instances, not saved |
+| `.create(&pool).await` | one instance `INSERT`ed (whatever its key) and read back with its id |
+| `.create_many(n, &pool).await` | `n` of them |
+
+Defaults per field type: numbers `0`, `bool` `false`, `Option` `None`, `String` the field's name and a sequence number (with `@example.com` for a field whose name contains `email`), so unique columns stay unique. An `auto_increment` key is `0` (the database picks it); any other key is the sequence number. `#[ignore]` fields, and field types with no `FactoryValue` impl, get `Default::default()` — implement `test_client::factory::FactoryValue` for your own column types to choose their default.
+
+The sequence is per model type and shared by every test in the process, in whatever order they run: assert on the values a factory returns rather than on `name-1`.
+
+`#[derive(Factory)]` needs `rws-macros` 17.30 (the `macros` feature) and reads the same attributes as `#[derive(Model)]`.
+
+---
+
+# OpenAPI snapshots
+
+<https://rws8.tech/testing/snapshots/>
+
+`assert_openapi_snapshot` (since 18.29.0) compares an app's OpenAPI document with a file committed beside the tests, so a change to the API shows up in review as a change to that file:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::openapi::OpenApiConfig;
+use rust_web_server::test_client::{assert_openapi_snapshot, TestClient};
+
+#[test]
+fn api_matches_the_snapshot() {
+    let app = my_app::app().openapi(OpenApiConfig::new("Shop", "1.0.0"));
+    assert_openapi_snapshot(&TestClient::new(app), "tests/snapshots/openapi.json");
+}
+```
+
+The first argument is anything the document can be read from: a `TestClient` whose app serves `GET /openapi.json` (`AppWithState::openapi`), a `TestResponse` of it, or the JSON text itself (`app.openapi_spec(&config)`). A document that isn't JSON or has no `openapi` field fails — a `404` page is no snapshot.
+
+Both sides are normalized before comparing — parsed, object keys sorted, printed with two-space indentation — so key order and whitespace don't count. A mismatch fails with a line diff (`-` the snapshot, `+` now, three lines of context):
+
+```text
+the document differs from the snapshot tests/snapshots/openapi.json (- snapshot, + now):
+  …
+            "200": {
+-             "description": "OK"
++             "description": "Found"
+            }
+  …
+If the change is intended, run the test with RWS_UPDATE_SNAPSHOTS=1 and commit the file.
+```
+
+## Updating
+
+```bash
+RWS_UPDATE_SNAPSHOTS=1 cargo test     # write the current documents
+git diff tests/snapshots/             # review what changed, then commit
+```
+
+With `RWS_UPDATE_SNAPSHOTS` set (to anything but empty, `0` or `false`) the assertion writes the normalized document — creating the file and its directory — and passes. Without it a missing file fails with that hint, so CI never passes by writing its own snapshot. `RWS_UPDATE_SNAPSHOTS` is read by the test helpers only; it isn't a server setting.
+
+Relative paths are relative to the working directory, which under `cargo test` is the package root.
+
+`assert_json_snapshot(json, path)` does the same for any JSON document — a JSON Schema, an MCP `tools/list` result, a response body.
 
 ---
 
@@ -23082,6 +23368,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `#[derive(Validate)]` | crate root (`macros`) | Derives `Validate` from `#[validate(length, range, email, required, url)]` field annotations |
 | `#[derive(Config)]` | crate root (`macros`) | Typed env-var binding: generates `load() -> Result`; `#[config(env, default, prefix)]`. See [Config binding](/features/config-binding/) |
 | `#[derive(Model)]` | crate root (`macros` + a `model-*` feature) | Maps a struct to a table (`#[table]`, `#[primary_key(auto_increment)]`, `#[column]`, `#[ignore]`) and generates `T::repository(&pool)` / `T::query(&pool)` |
+| `#[derive(Factory)]` | crate root (`macros` + a `model-*` feature) | Beside `Model`: `test_client::factory::Factory` and `T::factory()` for tests (18.29.0, rws-macros 17.30). See [Factories](/testing/database/#factories) |
 
 ## HTTP primitives
 
@@ -23414,7 +23701,13 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `TestClient` | `test_client` | In-process test client — dispatches requests without a TCP socket. See [TestClient](/testing/test-client/) |
+| `TestClient` | `test_client` | In-process test client — dispatches requests without a TCP socket. `.send_async().await` for `AsyncAppWithState` (18.29.0). See [TestClient](/testing/test-client/) |
+| `TestRequest` / `TestResponse` | `test_client` | A request being built (`.header`, `.body_*`, `.send()`); its result (`status`, `header`, `body_text`, `is_streamed`, `take_stream`, `sse()`, `sse_events(n, timeout)` — 18.29.0) |
+| `TestWebSocketRequest` / `TestWebSocket` | `test_client` | `client.websocket(path).connect()`: the route's upgrade handler over an in-memory duplex; `send_text`, `send_binary`, `recv`, `recv_text`, `close` (18.29.0). See [WebSocket and SSE](/testing/websocket-sse/) |
+| `TestSse` / `SseFrame` / `SseParser` | `test_client` | An event stream read from a test response (`next_event`, `events(n, timeout)`); one event (`event`, `data`, `id`, `retry`); the bounded incremental parser (18.29.0) |
+| `assert_openapi_snapshot` / `assert_json_snapshot` / `OpenApiSource` | `test_client` | Compare a document with a committed file, normalized, failing with a diff; `RWS_UPDATE_SNAPSHOTS=1` rewrites it (18.29.0). See [OpenAPI snapshots](/testing/snapshots/) |
+| `TestDb` / `TestDbBuilder` | `test_client` (a `model-*` feature) | A database per test: in-memory SQLite with migrations, or a rolled-back transaction on PostgreSQL/MySQL (`postgres_from_env`, `mysql_from_env`) (18.29.0). See [Test databases](/testing/database/) |
+| `Factory` / `ModelFactory` / `FactoryValue` | `test_client::factory` (a `model-*` feature) | `T::factory()` from `#[derive(Factory)]`: `.with(…)`, `.build()`, `.create(&pool)`, `*_many`; per-type defaults (18.29.0). See [Factories](/testing/database/#factories) |
 | `OpenApiConfig` / `build_spec` | `openapi` (`openapi`) | OpenAPI 3.1 from registered routes; `AppWithState::openapi(config)` adds `/openapi.json` and `/docs`; `.operation(method, pattern, Operation)` adds bodies, responses and parameters. See [OpenAPI](/features/openapi/) |
 | `tower::mount`, `TowerApp` | `tower` (`tower`) | A Tower service (tonic, tower-http, axum) as an rws `Application`, under a path prefix or alone. See [Tower interop](/features/tower/) |
 | `TowerLayer`, `tower::Next` | `tower` (`tower`) | A Tower layer as rws middleware; `Next` is the rest of the stack it wraps |

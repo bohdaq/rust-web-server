@@ -1,4 +1,4 @@
-//! Compile-time route checks (18.28.0, #86): each `tests/ui/*.rs` must fail
+//! Compile-time checks — routes (18.28.0, #86) and derives: each `tests/ui/*.rs` must fail
 //! with the message in its `.stderr`. Regenerate with `TRYBUILD=overwrite`.
 
 #[test]

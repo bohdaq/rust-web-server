@@ -288,3 +288,15 @@ fn app_manifest_with_thousands_of_lines() {
         assert!(manifest.warnings.len() > 1000);
     });
 }
+
+#[test]
+fn test_client_sse_parser_on_hundreds_of_thousands_of_lines() {
+    on_small_stack(|| {
+        let mut parser = crate::test_client::SseParser::new();
+        let events = parser.feed("data: x\n\n".repeat(200_000).as_bytes()).unwrap();
+        assert_eq!(200_000, events.len());
+        assert!(parser.feed(": ping\r\n".repeat(200_000).as_bytes()).unwrap().is_empty());
+        let joined = parser.feed(format!("{}\n", "data: y\n".repeat(100_000)).as_bytes()).unwrap();
+        assert_eq!(1, joined.len());
+    });
+}
