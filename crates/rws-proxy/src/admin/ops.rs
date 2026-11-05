@@ -380,6 +380,16 @@ pub fn traffic_json(hours: u64, host: Option<&str>) -> Result<String, String> {
     Ok(crate::traffic::summary::json(hours, host.filter(|h| !h.is_empty()), crate::traffic::record::now()))
 }
 
+/// `GET /traffic?from=YYYY-MM-DD&to=YYYY-MM-DD`: the summary for those days
+/// (within what's kept). `Err((404|400, message))`.
+pub fn traffic_range_json(from: &str, to: &str, host: Option<&str>) -> Result<String, (u16, String)> {
+    if !crate::traffic::enabled() {
+        return Err((404, "traffic counting is off (on with the admin API unless [traffic] enabled = false)".to_string()));
+    }
+    let (hours, end) = crate::traffic::summary::day_range(from, to, crate::traffic::record::now()).map_err(|e| (400, e))?;
+    Ok(crate::traffic::summary::json(hours, host.filter(|h| !h.is_empty()), end))
+}
+
 // ── Authorization (#32) ───────────────────────────────────────────────────────
 
 fn authorizer_slot() -> &'static RwLock<Option<crate::authz::Authorizer>> {

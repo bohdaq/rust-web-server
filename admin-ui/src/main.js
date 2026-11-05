@@ -13,4 +13,5 @@ import "@lit-material/skeleton";
 import "@lit-material/snackbar";
 import "@lit-material/switch";
 import "@lit-material/text-field";
+import "./traffic.js";
 import "./app.js";

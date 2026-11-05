@@ -23441,7 +23441,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `POST /authz/tuples` `{"tuple":"doc:42#viewer@user:alice"}` | Add a tuple (checked against the schema): `{"tuple":…,"written":true}` (`false`: already there); `400` when the schema doesn't allow it |
 | `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
 | `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
-| `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
+| `GET /traffic?hours=24&host=` (or `?from=YYYY-MM-DD&to=YYYY-MM-DD`) | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
 | `GET /traffic/query?from=&to=&host=&path=&country=&channel=&utm_source=&utm_campaign=&browser=&os=&device=` | Page views from the traffic database (`[traffic] database_url_env`) for any days and filters (18.31.0, [Traffic insights](/deployment/traffic/#keeping-every-page-view-in-postgresql-optional)). `404` without a database, `400` for a bad date |
 | `GET /traffic/live?host=` | People on the site in the last 5 minutes, page views per minute for 30 minutes, current pages and countries (18.31.0). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |
@@ -23653,27 +23653,30 @@ in memory only.
 
 ## What the page shows
 
-- Visitors, page views and requests per group, with the change from the
-  period before.
-- Requests over time: per hour for a day, per day for a week or 30 days.
-- The pages people read most, the AI agents that came (with **Verified** when
-  the request came from the network its operator publishes), the pages AI
-  agents read, bots by kind, the sites people came from, and paths answered
-  `404`.
-- With more than one site (virtual hosts, `Host` names) a button per site.
-  Visitor counts are for all sites together.
-- **Right now** (since 18.31.0): people on the site in the last 5 minutes,
-  page views per minute for the last 30 and the pages being read;
-  refreshed every 10 seconds.
-- **Sessions** (since 18.31.0): sessions, bounce rate, session length and
-  pages per session, with the change from the period before; the pages
-  sessions began and ended on.
-- **Sources** (since 18.31.0): how people arrived, by channel, plus the
-  sites they came from and UTM campaigns (`utm_source`, `utm_medium`,
-  `utm_campaign`).
-- **Audience** (since 18.31.0): people's countries, browsers, operating
-  systems and devices (desktop, phone, tablet), each person counted once a
-  day.
+Since 18.32.0 the page is an overview with tabs:
+
+- **The bar at the top**: the period (*Today*, *7 days*, *30 days* or a
+  *Custom* range of whole UTC days), the site when there is more than one,
+  **Compare** (the period before, drawn grey in the chart and as the change
+  under each number), and how many people are online now.
+- **Overview**: visitors, page views, sessions, bounce rate and session
+  length — click one to chart it (per hour for *Today*, else per day) —
+  then cards of top pages, sources, countries and devices, and *Right now*.
+  A card's **All →** opens its tab.
+- **Pages**: top, entry and exit pages, and paths answered `404`.
+- **Sources**: channels, referring sites and UTM campaigns.
+- **Audience**: countries, browsers, operating systems and devices, with
+  their share.
+- **Behaviour**: what the [first-party script](#the-first-party-script-optional)
+  reports — time on page, goals, events, scroll depth, screen sizes.
+- **AI & bots**: AI agents (with **Verified** when the request came from the
+  network its operator publishes), the pages they read, and bots by kind.
+
+**Click a row to filter** the page by it: by site always; by page, country,
+channel, campaign, browser, system or device with the
+[traffic database](#keeping-every-page-view-in-postgresql-optional), which
+can answer any combination (the filters show as chips; ✕ removes one).
+Page names drop the site when only one is shown.
 
 ## The first-party script (optional)
 
@@ -23739,8 +23742,9 @@ day and at every restart. If the database is slow or down, rows queue (up
 to 20,000) and then are dropped rather than slowing requests. rws never
 deletes rows: keep or prune them as your policy says.
 
-The **Explore** section of the Traffic page then takes any dates and any
-combination of filters, and so does the API:
+The Traffic page then filters by any row you click (country, page,
+channel, campaign, device… in any combination) over any dates, and so does
+the API:
 
 `GET /admin/api/v1/traffic/query?from=2026-03-01&to=2026-05-31&country=DE&path=/docs/*&device=mobile`
 
@@ -23825,7 +23829,13 @@ most 16 sites (the rest count as `other`) and 200 entries per list per day
 ## From the API or an AI client
 
 `GET /admin/api/v1/traffic?hours=168&host=example.com` returns the page's data
-(`hours` 1–2160, default 24; `host` optional); `404` when counting is off. The
+(`hours` 1–2160, default 24; `host` optional); `404` when counting is off.
+`?from=2026-10-01&to=2026-10-07` (UTC days, inclusive; `to` defaults to
+today) asks for those days instead. Views over two days cover whole days.
+Besides the totals and lists, the answer has `series` (per hour or day:
+requests per group and people's `pages`), `previous_series` (the period
+before, at the same times) and `days` (people's visitors, sessions and
+bounces per day, and the period before's). The
 `GET /admin/api/v1/traffic/live?host=example.com` (since 18.31.0) returns
 the live view: `visitors` (people in the last 5 minutes), `views_5m`, a
 `series` of page views per minute for 30 minutes, the `pages` and

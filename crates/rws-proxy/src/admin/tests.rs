@@ -355,6 +355,11 @@ fn traffic_is_404_while_off_and_a_summary_while_on() {
     assert!(text.contains(r#""hours":168"#) && text.contains(r#""bucket":"day""#) && text.contains(r#""host":"example.com""#), "{text}");
     assert!(text.contains(r#""totals":{"people":"#), "{text}");
     assert_eq!(call(&api, "POST", "/admin/api/v1/traffic", "").0, 405);
+    let (status, text) = call(&api, "GET", "/admin/api/v1/traffic?from=2026-01-01&to=2026-01-07", "");
+    assert_eq!(status, 200, "{text}");
+    assert!(text.contains(r#""hours":168"#) && text.contains(r#""previous_series":"#) && text.contains(r#""days":"#), "{text}");
+    assert_eq!(call(&api, "GET", "/admin/api/v1/traffic?from=2026-01-07&to=2026-01-01", "").0, 400);
+    assert_eq!(call(&api, "GET", "/admin/api/v1/traffic?from=yesterday", "").0, 400);
     let (status, text) = call(&api, "GET", "/admin/api/v1/traffic/live?host=example.com", "");
     assert_eq!(status, 200, "{text}");
     assert!(text.contains(r#""visitors":"#) && text.contains(r#""host":"example.com""#), "{text}");

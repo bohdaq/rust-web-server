@@ -213,7 +213,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `POST /authz/tuples` `{"tuple":"doc:42#viewer@user:alice"}` | Add a tuple (checked against the schema): `{"tuple":…,"written":true}` (`false`: already there); `400` when the schema doesn't allow it |
 | `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
 | `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
-| `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
+| `GET /traffic?hours=24&host=` (or `?from=YYYY-MM-DD&to=YYYY-MM-DD`) | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
 | `GET /traffic/query?from=&to=&host=&path=&country=&channel=&utm_source=&utm_campaign=&browser=&os=&device=` | Page views from the traffic database (`[traffic] database_url_env`) for any days and filters (18.31.0, [Traffic insights](/deployment/traffic/#keeping-every-page-view-in-postgresql-optional)). `404` without a database, `400` for a bad date |
 | `GET /traffic/live?host=` | People on the site in the last 5 minutes, page views per minute for 30 minutes, current pages and countries (18.31.0). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |

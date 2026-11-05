@@ -7439,6 +7439,7 @@ pub fn rust_web_server::admin::ops::set_maintenance(bool) -> alloc::string::Stri
 pub fn rust_web_server::admin::ops::traffic_json(u64, core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_live_json(core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_query_json(&dyn core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<alloc::string::String, alloc::string::String>
+pub fn rust_web_server::admin::ops::traffic_range_json(&str, &str, core::option::Option<&str>) -> core::result::Result<alloc::string::String, (u16, alloc::string::String)>
 pub fn rust_web_server::admin::ops::unblock(&str) -> alloc::string::String
 pub fn rust_web_server::admin::ops::upstreams_json() -> alloc::string::String
 pub fn rust_web_server::admin::start(&rust_web_server::admin::AdminConfig) -> core::result::Result<core::option::Option<core::net::socket_addr::SocketAddr>, alloc::string::String>
@@ -10186,6 +10187,7 @@ pub fn rust_web_server::traffic::script::TrafficScriptLayer::fmt(&self, &mut cor
 pub fn rust_web_server::traffic::script::TrafficScriptLayer::from_env() -> Self
 pub fn rust_web_server::traffic::script::TrafficScriptLayer::new(bool) -> Self
 pub fn rust_web_server::traffic::start()
+pub fn rust_web_server::traffic::summary::day_range(&str, &str, u64) -> core::result::Result<(u64, u64), alloc::string::String>
 pub fn rust_web_server::traffic::summary::json(u64, core::option::Option<&str>, u64) -> alloc::string::String
 pub fn rust_web_server::traffic::summary::live_json(core::option::Option<&str>, u64) -> alloc::string::String
 pub fn rust_web_server::udp_proxy::UdpProxy::bind(self, &str) -> core::result::Result<(), alloc::string::String>

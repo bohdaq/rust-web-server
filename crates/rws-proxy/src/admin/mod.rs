@@ -577,6 +577,14 @@ impl AdminApi {
             }
             let hours = query(request, "hours").and_then(|h| h.parse().ok()).unwrap_or(24);
             let host = query(request, "host").map(|h| crate::url::URL::percent_decode(&h));
+            if let Some(from) = query(request, "from").filter(|f| !f.is_empty()) {
+                let to = query(request, "to").unwrap_or_default();
+                return match ops::traffic_range_json(&from, &to, host.as_deref()) {
+                    Ok(body) => ok(body),
+                    Err((404, e)) => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+                    Err((_, e)) => error(STATUS_CODE_REASON_PHRASE.n400_bad_request, &e),
+                };
+            }
             return match ops::traffic_json(hours, host.as_deref()) {
                 Ok(body) => ok(body),
                 Err(e) => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),

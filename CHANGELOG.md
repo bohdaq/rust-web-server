@@ -5,6 +5,23 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- **The admin UI's Traffic page, redesigned**: a sticky bar (Today / 7 days
+  / 30 days / a custom range, site, compare with the period before, people
+  online), key numbers that choose what the chart shows, cards of top
+  pages, sources, countries and devices, and tabs for Pages, Sources,
+  Audience, Behaviour and AI & bots instead of one long page. Click a row to
+  filter by it (any dimension with the traffic database). Page names drop
+  the site when there's one.
+- `GET /admin/api/v1/traffic` takes `from`/`to` days, and its answer gains
+  `pages` per bucket, `previous_series` and `days`. Views over two days now
+  cover whole UTC days (a "week" is today and the six days before), so
+  per-day counts line up with the period; the site list leaves out hosts
+  with no counted traffic.
+
 ## 18.31.0 — 2026-11-05
 
 ### Added

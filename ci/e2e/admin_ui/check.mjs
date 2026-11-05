@@ -134,20 +134,29 @@ if (!has(traffic.entry_pages, (traffic.entry_pages ?? [])[0]?.[0], 1)) fail(`ent
   console.log("ok: first-party script reports an event, goals, a route change and time on page");
 }
 await page.goto(`${admin}/admin/#/traffic`);
-await page.locator('lit-material-stat[label="People: visitors"]').waitFor({ timeout: 5000 }).catch(() => fail("no Traffic page"));
-await page.locator("lit-material-line-chart").waitFor({ timeout: 5000 }).catch(() => fail("no traffic chart"));
 const live = await api("/traffic/live");
 if (live.visitors !== 2 || live.views_5m !== 4) fail(`live: ${JSON.stringify(live)}`);
-await page.locator('lit-material-stat[label="Right now"]').waitFor({ timeout: 5000 }).catch(() => fail("no live tile"));
-await page.locator('lit-material-stat[label="Bounce rate"]').waitFor({ timeout: 5000 }).catch(() => fail("no session tiles"));
-await page.getByRole("heading", { name: "Behaviour", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Behaviour section"));
-await page.getByRole("heading", { name: "Goals", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Goals table"));
-await page.getByRole("heading", { name: "Entry pages", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no entry pages"));
-await page.getByRole("heading", { name: "Sources", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Sources section"));
-await page.getByRole("heading", { name: "Audience", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Audience section"));
-await page.locator('lit-material-bar-chart[label="Visits by channel"]').waitFor({ timeout: 5000 }).catch(() => fail("no channel chart"));
-await page.getByRole("button", { name: "Week" }).click();
-await page.getByText("Who visited in the last week").waitFor({ timeout: 5000 }).catch(() => fail("the range didn't switch"));
+const ranged = await api(`/traffic?from=${new Date().toISOString().slice(0, 10)}`);
+if (!Array.isArray(ranged.previous_series) || !Array.isArray(ranged.days)) fail(`range: ${JSON.stringify(Object.keys(ranged))}`);
+// The Traffic view (18.32 layout): key numbers, chart, cards, tabs.
+const t2 = page.locator("rws-traffic");
+await t2.locator(".t-kpi", { hasText: "Visitors" }).waitFor({ timeout: 8000 }).catch(() => fail("no Traffic key numbers"));
+await t2.locator(".t-kpi", { hasText: "Bounce rate" }).waitFor({ timeout: 5000 }).catch(() => fail("no bounce rate"));
+await t2.locator("lit-material-line-chart").waitFor({ timeout: 5000 }).catch(() => fail("no traffic chart"));
+await t2.getByRole("heading", { name: "Top pages", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Top pages card"));
+await t2.getByRole("heading", { name: "Right now", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Right now card"));
+const visitorsShown = (await t2.locator(".t-kpi", { hasText: "Visitors" }).locator(".t-kpi-value").textContent()).trim();
+if (visitorsShown !== String(live.visitors)) console.log(`(visitors tile ${visitorsShown}, live ${live.visitors})`);
+for (const [tab, heading] of [["Pages", "Entry pages"], ["Sources", "Channels"], ["Audience", "Browsers"], ["Behaviour", "Goals"], ["AI & bots", "Bots"]]) {
+  await t2.getByRole("tab", { name: tab }).click();
+  await t2.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 5000 }).catch(() => fail(`no ${heading} on the ${tab} tab`));
+}
+await t2.getByRole("tab", { name: "Overview" }).click();
+// Without a database, clicking a row explains what filtering needs.
+await t2.locator("button.t-row").first().click();
+await t2.locator(".t-notice").waitFor({ timeout: 5000 }).catch(() => fail("no notice for a filter without the database"));
+await t2.getByRole("button", { name: "30 days" }).click();
+await t2.locator('.t-seg button[aria-pressed="true"]', { hasText: "30 days" }).waitFor({ timeout: 5000 }).catch(() => fail("the period didn't switch"));
 console.log("ok: Traffic page counts a person, a spoofed GPTBot and curl");
 
 await page.goto(`${admin}/admin/#/logs`);

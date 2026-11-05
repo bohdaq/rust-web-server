@@ -196,3 +196,19 @@ a fuzz target and `stack_depth_tests` case for each new parser.
 | 4 | **done 2026-11-05**: `traffic::script` (`SCRIPT`, `TrafficScriptLayer`: `is_passthrough` for every other path, 304 by ETag, 405/413/403 cross-origin/204), `record::beacon` (top-level members only, person-only, ≤ 500 reports/session, `leave` needs a valid `ms`; `view` = a page view with a same-site Referer, so no new arrival), 7 `BEHAVIOUR` day lists (time on page as seconds + views, scroll buckets, width buckets, events, props, goals), goals per session (bitmask over ≤ 32 `[traffic] goals`, counted at close/snapshot), `[traffic] script`/`goals`, `/_rws/t` not counted as a request; wrapped in all four `main.rs` app chains. UI Behaviour section. Tests: layer (off/on, 304, 405, 413, 403, 204, passthrough), beacon (time, scroll, screens, events, props, two goals in one session, junk ignored, bots/undecided ignored, route change = page view not arrival, save/load); e2e: a real browser loads the script from `www/app.html`, sends an event, two route changes → events, props, both goals, time on page, screens. Found: headless Chromium sends unload-time beacons with its own UA (ignores the context override) — the e2e reports through route changes instead. Fuzz: `traffic_classify` also feeds `beacon` |
 | 5 | **done 2026-11-05**: `traffic::store` (`model-postgres`): `[traffic] database_url_env` → `DbPool::connect`, `CREATE TABLE IF NOT EXISTS rws_traffic_pageviews / rws_traffic_reports` + `at` indexes; `sync_channel(20_000)` queue (`try_send`, drops counted), writer thread `rws-traffic-db` (500 rows or 10 s, multi-row INSERT, `to_timestamp`, `::bigint` casts because a NULL binds as text); page views carry their session's channel/UTM (kept on `Session`), audience from the cache; no IP/UA. `Query::filter` (parameterized, `prefix*` → escaped `LIKE`), `query_json` (views, visitors per day, sessions, bounces, daily series, 9 top lists), admin `GET /traffic/query` (404 no db, 400 bad dates, 500 db error), MCP `traffic_summary` `from`/`to`/filters, `store` flag in `/traffic`, UI Explore (form + tiles + chart + tables). Release binaries + `model-postgres` (not FIPS: sqlx TLS crypto outside the validated module). CI `model-databases` runs `traffic` tests on PostgreSQL 16. Tests: SQL builder/day parser, integration against real PostgreSQL (own schema via `search_path`; rows, totals, path prefix, channel and country filters, report props, no addresses), admin 404/405, MCP; manual: binary + PostgreSQL 17 (rows written after the 10 s flush, `device=mobile` query, Explore clicked in Chromium) |
 | 6 | **released 2026-11-05 as 18.31.0** (2d54b9f6; CI and release workflow green; crates.io, GitHub release, images, chart, packages). Before it: fuzz seeds for `traffic_geo` were missing, and four admin tests wrote audit entries without the test lock |
+
+## Traffic page redesign (2026-11-05, after 18.31.0)
+
+User: the page "looks bad from UX perspective"; chose **overview + tabs**
+with click-to-filter, compare to previous, custom date range and short page
+names. Done: `admin-ui/src/traffic.js` (`<rws-traffic>`, own state and 10 s
+polling, light DOM so styles.css applies; old Traffic code removed from
+app.js), styles `t-*` in styles.css (tab bar, segmented period, KPI strip,
+ranked lists with inline bars, chips). Backend: `series[].pages`,
+`previous_series`, `days`, `from`/`to` (`summary::day_range`,
+`parse_day` moved from `store`), daily views aligned to whole UTC days,
+hosts without counted traffic left out of `hosts`. Filtering by anything
+but the site needs the database (a notice says so). Page titles aren't
+known to the server, so "short names" = paths. Verified: unit tests,
+`ci/e2e/admin_ui.sh` (tabs, KPIs, chart, cards, filter notice, period
+switch), screenshots at 1280 px and 390 px with 30 days of seeded data.

@@ -53,13 +53,19 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
     let host_index = host.and_then(|h| names.iter().position(|n| n.eq_ignore_ascii_case(h))).map(|i| i as u8);
     let wanted = |h: u8| host.is_none() || Some(h) == host_index;
     let this_hour = now / 3600;
-    let start = this_hour + 1 - hours;
+    let daily = hours > 48;
+    // Daily views cover whole UTC days (today and the days before it), so
+    // the per-day counts — visitors, sessions, lists — line up with them.
+    let hours = if daily { hours.div_ceil(24) * 24 } else { hours };
+    let start = if daily { (this_hour / 24 + 1).saturating_sub(hours / 24) * 24 } else { this_hour + 1 - hours };
     let previous_start = start.saturating_sub(hours);
 
     let mut totals = [[0u64; 2]; 3];
     let mut previous = [[0u64; 2]; 3];
-    let daily = hours > 48;
-    let mut series: BTreeMap<u64, [u64; 3]> = BTreeMap::new();
+    // Per bucket: requests per group, then people's page views.
+    let mut series: BTreeMap<u64, [u64; 4]> = BTreeMap::new();
+    // The period before, by the same bucket offsets (for comparing).
+    let mut previous_series: BTreeMap<u64, [u64; 4]> = BTreeMap::new();
     let mut first_hour = None;
     for ((hour, h), counts) in &buckets {
         if !wanted(*h) {
@@ -79,12 +85,20 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
                 t[g][1] += counts[g].pages;
             }
         }
-        if *hour >= start && *hour <= this_hour {
-            let key = if daily { hour / 24 * 24 } else { *hour };
-            let point = series.entry(key).or_default();
+        let into = if *hour >= start && *hour <= this_hour {
+            Some((&mut series, *hour))
+        } else if *hour >= previous_start && *hour < start {
+            Some((&mut previous_series, *hour + hours))
+        } else {
+            None
+        };
+        if let Some((map, at)) = into {
+            let key = if daily { at / 24 * 24 } else { at };
+            let point = map.entry(key).or_default();
             for g in 0..3 {
                 point[g] += counts[g].requests;
             }
+            point[3] += counts[0].pages;
         }
     }
     // Every bucket of the period, empty ones included.
@@ -92,8 +106,10 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
     let mut t = if daily { start / 24 * 24 } else { start };
     while t <= this_hour {
         series.entry(t).or_default();
+        previous_series.entry(t).or_default();
         t += step;
     }
+    previous_series.retain(|k, _| series.contains_key(k));
 
     let start_day = start / 24;
     let previous_day = previous_start / 24;
@@ -109,7 +125,22 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
             }
         }
     };
+    // People's visitors and sessions per day (current and previous period,
+    // the previous keyed by the matching current day).
+    let mut per_day: BTreeMap<u64, [u64; 6]> = BTreeMap::new();
+    let period_days = hours.div_ceil(24).max(1);
+    for day in start_day..=this_hour / 24 {
+        per_day.entry(day).or_default();
+    }
     for (day, d) in &days {
+        let mut s = Sessions::default();
+        host_sessions(d, &mut s);
+        let (key, offset) = if *day >= start_day { (*day, 0) } else { (*day + period_days, 3) };
+        if let Some(row) = per_day.get_mut(&key) {
+            row[offset] += d.visitors[0];
+            row[offset + 1] += s.sessions;
+            row[offset + 2] += s.bounces;
+        }
         if *day >= start_day {
             host_sessions(d, &mut sessions);
         } else if *day >= previous_day {
@@ -129,7 +160,13 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
 
     let group = |t: &[[u64; 2]; 3], v: &[u64; 3], g: usize| format!(r#"{{"requests":{},"pages":{},"visitors":{}}}"#, t[g][0], t[g][1], v[g]);
     let groups = |t: &[[u64; 2]; 3], v: &[u64; 3]| format!(r#"{{"people":{},"ai":{},"bots":{}}}"#, group(t, v, 0), group(t, v, 1), group(t, v, 2));
-    let points: Vec<String> = series.iter().map(|(t, p)| format!(r#"{{"t":{},"people":{},"ai":{},"bots":{}}}"#, t * 3600, p[0], p[1], p[2])).collect();
+    let point = |(t, p): (&u64, &[u64; 4])| format!(r#"{{"t":{},"people":{},"ai":{},"bots":{},"pages":{}}}"#, t * 3600, p[0], p[1], p[2], p[3]);
+    let points: Vec<String> = series.iter().map(point).collect();
+    let previous_points: Vec<String> = previous_series.iter().map(point).collect();
+    let day_points: Vec<String> = per_day
+        .iter()
+        .map(|(d, r)| format!(r#"{{"t":{},"visitors":{},"sessions":{},"bounces":{},"previous_visitors":{},"previous_sessions":{},"previous_bounces":{}}}"#, d * 86_400, r[0], r[1], r[2], r[3], r[4], r[5]))
+        .collect();
     let agents: Vec<String> = lists
         .ai_agents
         .sorted(25)
@@ -169,10 +206,18 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
     let session_json = |s: &Sessions| format!(r#"{{"sessions":{},"bounces":{},"duration":{},"pages":{}}}"#, s.sessions, s.bounces, s.duration, s.pages);
     let geo = super::geo::table().map_or("null".to_string(), |t| quote(&t.source));
     format!(
-        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{},"script":{},"store":{},"time_on_page":[{}],{}}}"#,
+        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{},"previous_series":[{}],"days":[{}],"script":{},"store":{},"time_on_page":[{}],{}}}"#,
         if daily { "day" } else { "hour" },
         first_hour.map_or("null".to_string(), |h| (h * 3600).to_string()),
-        names.iter().map(|n| quote(n)).collect::<Vec<_>>().join(","),
+        // Only sites with counted traffic (this machine's own calls, which
+        // aren't counted, still register their Host).
+        names
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| buckets.iter().any(|((_, h), c)| *h as usize == *i && c.iter().any(|g| g.requests > 0)))
+            .map(|(_, n)| quote(n))
+            .collect::<Vec<_>>()
+            .join(","),
         host.map_or("null".to_string(), quote),
         groups(&totals, &visitors),
         groups(&previous, &previous_visitors),
@@ -188,6 +233,8 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         session_json(&previous_sessions),
         pairs(&lists.entry_pages, 25, host),
         pairs(&lists.exit_pages, 25, host),
+        previous_points.join(","),
+        day_points.join(","),
         super::config::script(),
         store_on(),
         on_page.join(","),
@@ -241,4 +288,37 @@ fn store_on() -> bool {
     return super::store::enabled();
     #[cfg(not(feature = "model-postgres"))]
     false
+}
+
+/// Days since the epoch of `YYYY-MM-DD`.
+#[doc(hidden)]
+pub fn parse_day(text: &str) -> Option<u64> {
+    let mut parts = text.trim().splitn(3, '-');
+    let (y, m, d): (i64, i64, i64) = (parts.next()?.parse().ok()?, parts.next()?.parse().ok()?, parts.next()?.parse().ok()?);
+    if !(1970..=9999).contains(&y) || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    // Howard Hinnant's days_from_civil.
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    (days >= 0).then_some(days as u64)
+}
+
+/// The `hours` and `now` for the summary of days `from`..=`to` (UTC, as
+/// `YYYY-MM-DD`): the period ends with `to`, or now if `to` is today.
+pub fn day_range(from: &str, to: &str, now: u64) -> Result<(u64, u64), String> {
+    let today = now / 86_400;
+    let to = if to.is_empty() { today } else { parse_day(to).ok_or(format!("to: expected YYYY-MM-DD, got {to:?}"))? };
+    let from = parse_day(from).ok_or(format!("from: expected YYYY-MM-DD, got {from:?}"))?;
+    if from > to {
+        return Err("from must be on or before to".to_string());
+    }
+    let end = if to >= today { now } else { (to + 1) * 86_400 - 1 };
+    let hours = (end / 3600 + 1).saturating_sub(from * 24).clamp(1, 24 * 90);
+    Ok((hours, end))
 }

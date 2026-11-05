@@ -316,24 +316,8 @@ pub struct Query {
     pub device: Option<String>,
 }
 
-/// Days since the epoch of `YYYY-MM-DD`.
 #[doc(hidden)]
-pub fn parse_day(text: &str) -> Option<u64> {
-    let mut parts = text.trim().splitn(3, '-');
-    let (y, m, d): (i64, i64, i64) = (parts.next()?.parse().ok()?, parts.next()?.parse().ok()?, parts.next()?.parse().ok()?);
-    if !(1970..=9999).contains(&y) || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
-        return None;
-    }
-    // Howard Hinnant's days_from_civil.
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = (m + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146_097 + doe - 719_468;
-    (days >= 0).then_some(days as u64)
-}
+pub use super::summary::parse_day;
 
 impl Query {
     /// The WHERE clause and its parameters (starting at `$1`).

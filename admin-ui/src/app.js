@@ -81,9 +81,6 @@ export class RwsAdmin extends LitElement {
     paused: { state: true },
     filter: { state: true },
     busy: { state: true },
-    trafficHours: { state: true },
-    trafficHost: { state: true },
-    trafficQuery: { state: true },
     me: { state: true },
     sso: { state: true },
   };
@@ -96,8 +93,6 @@ export class RwsAdmin extends LitElement {
     this.samples = [];
     this.paused = false;
     this.filter = "";
-    this.trafficHours = 24;
-    this.trafficHost = "";
     this.busy = "";
     this.lastTotal = null;
     this.me = null;
@@ -192,7 +187,7 @@ export class RwsAdmin extends LitElement {
     this.view = view;
     if (location.hash !== `#/${view}`) history.replaceState(null, "", `#/${view}`);
     this.error = "";
-    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, traffic: 10000, audit: 10000 }[view];
+    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, audit: 10000 }[view];
     this.load(view);
     if (every) this.timer = setInterval(() => this.load(view), every);
     if (view === "logs") this.updateComplete.then(() => this.follow());
@@ -232,8 +227,6 @@ export class RwsAdmin extends LitElement {
       await get("certificates", "/certificates");
     } else if (view === "controls") {
       await Promise.all([get("maintenance", "/maintenance"), get("blocklist", "/blocklist"), get("flags", "/flags"), get("rateLimit", "/rate-limit"), get("caches", "/caches"), this.loadAuthz()]);
-    } else if (view === "traffic") {
-      await this.loadTraffic();
     } else if (view === "config") {
       await get("config", "/config");
     } else if (view === "audit") {
@@ -288,50 +281,12 @@ export class RwsAdmin extends LitElement {
     });
   }
 
-  // Counting can be off: a 404 shows an explanation, not an error.
-  async loadTraffic() {
-    const host = this.trafficHost ? `&host=${encodeURIComponent(this.trafficHost)}` : "";
-    try {
-      const [traffic, live] = await Promise.all([
-        api(`/traffic?hours=${this.trafficHours}${host}`),
-        api(`/traffic/live?${host.slice(1)}`).catch(() => null),
-      ]);
-      this.data = { ...this.data, traffic, trafficLive: live };
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) this.data = { ...this.data, traffic: null };
-    }
-  }
-
-  setTraffic(hours, host) {
-    this.trafficHours = hours;
-    this.trafficHost = host;
-    this.data = { ...this.data, traffic: undefined };
-    this.loadTraffic();
-  }
-
-  // Authorization is optional: a 404 hides its section instead of showing an error.
   async loadAuthz() {
     try {
       const [schema, list] = await Promise.all([api("/authz"), api("/authz/tuples?limit=200")]);
       this.data = { ...this.data, authz: { schema, tuples: list.tuples } };
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) this.data = { ...this.data, authz: null };
-    }
-  }
-
-  // Explore (the traffic database): any date range and filter combination.
-  async exploreTraffic(event) {
-    event.preventDefault();
-    const params = new URLSearchParams();
-    for (const key of ["from", "to", "host", "path", "country", "channel", "utm_campaign", "device"]) {
-      const value = (this.querySelector(`#explore-${key}`)?.value ?? "").trim();
-      if (value) params.set(key, value);
-    }
-    this.trafficQuery = { busy: true };
-    try {
-      this.trafficQuery = { result: await api(`/traffic/query?${params}`) };
-    } catch (e) {
-      this.trafficQuery = { error: e.message ?? String(e) };
     }
   }
 
@@ -415,7 +370,7 @@ export class RwsAdmin extends LitElement {
       case "upstreams": return this.renderUpstreams();
       case "certificates": return this.renderCertificates();
       case "controls": return this.renderControls();
-      case "traffic": return this.renderTraffic();
+      case "traffic": return html`<rws-traffic></rws-traffic>`;
       case "config": return this.renderConfig();
       case "logs": return this.renderLogs();
       case "audit": return this.renderAudit();
@@ -589,300 +544,6 @@ export class RwsAdmin extends LitElement {
           : html`<lit-material-table caption="Feature flags" caption-hidden density="compact" .columns=${flagColumns} .rows=${d.flags}></lit-material-table>`}
       </section>
     `;
-  }
-
-  renderTraffic() {
-    const t = this.data.traffic;
-    if (t === null) {
-      return html`<h1>Traffic</h1><lit-material-empty-state headline="Traffic counting is off">It's on whenever the admin API is, unless <code>[traffic] enabled = false</code>.</lit-material-empty-state>`;
-    }
-    if (!t) return html`<h1>Traffic</h1>${this.skeleton(4)}`;
-    const ranges = [[24, "Day"], [168, "Week"], [720, "30 days"]];
-    const period = { 24: "day", 168: "week", 720: "30 days" }[t.hours] ?? `${t.hours} hours`;
-    const change = (now, before) => (before ? `${now >= before ? "+" : "−"}${Math.abs(Math.round(((now - before) / before) * 100))}% vs the previous ${period}.` : "");
-    const groups = [
-      ["people", "People", "Browsers that loaded the page's styles or scripts"],
-      ["ai", "AI agents", "AI crawlers, AI search and assistants fetching for someone"],
-      ["bots", "Bots", "Search engines, SEO tools, monitors, previews, scanners and the like"],
-    ];
-    const series = groups.map(([key, name]) => ({ name, points: t.series.map((p) => ({ x: p.t * 1000, y: p[key] })) }));
-    const pairs = (rows) => rows.map(([key, count]) => ({ key, count }));
-    const countColumn = { key: "count", label: "Requests", numeric: true, render: (r) => r.count.toLocaleString() };
-    const kindLabel = (k) => k.replaceAll("-", " ");
-    const table = (title, caption, rows, columns) => html`
-      <section class="section" aria-label=${title}>
-        <h2>${title}</h2>
-        ${rows.length === 0
-          ? html`<p class="lede">Nothing in this ${period}.</p>`
-          : html`<lit-material-table caption=${caption} caption-hidden density="compact" .columns=${columns} .rows=${rows}></lit-material-table>`}
-      </section>`;
-    return html`
-      <h1>Traffic</h1>
-      ${this.renderTrafficLive(this.data.trafficLive)}
-      <p class="lede">Who visited in the last ${period}. People are browsers that load the page's styles or scripts; AI agents and bots are known by name, published network or behaviour. No IP addresses or User-Agents are kept.</p>
-      <div class="row" style="margin-bottom: var(--space-300)">
-        ${ranges.map(([hours, label]) => html`<lit-material-button variant=${t.hours === hours ? "tonal" : "text"} @click=${() => this.setTraffic(hours, this.trafficHost)}>${label}</lit-material-button>`)}
-        ${t.hosts.length > 1
-          ? html`<span style="width: var(--space-300)"></span>
-              <lit-material-button variant=${!t.host ? "tonal" : "text"} @click=${() => this.setTraffic(this.trafficHours, "")}>All sites</lit-material-button>
-              ${t.hosts.map((h) => html`<lit-material-button variant=${t.host === h ? "tonal" : "text"} @click=${() => this.setTraffic(this.trafficHours, h)}>${h}</lit-material-button>`)}`
-          : nothing}
-      </div>
-      <div class="grid">
-        ${groups.map(([key, label, hint]) => html`
-          <lit-material-stat label=${`${label}: visitors`} value=${t.totals[key].visitors.toLocaleString()}
-            caption=${`${t.totals[key].pages.toLocaleString()} page views, ${t.totals[key].requests.toLocaleString()} requests. ${change(t.totals[key].requests, t.previous[key].requests)}`} title=${hint}>
-            <lit-material-sparkline slot="caption" label=${`${label}: requests per ${t.bucket}`} .values=${t.series.map((p) => p[key])}></lit-material-sparkline>
-          </lit-material-stat>`)}
-      </div>
-      <section class="section" aria-label="Requests over time">
-        <lit-material-line-chart label=${`Requests per ${t.bucket}`} unit="requests" height="240" .series=${series}
-          .formatX=${(x) => (t.bucket === "hour" ? new Date(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(x).toLocaleDateString())}></lit-material-line-chart>
-        ${t.host ? html`<p class="lede">Visitors are counted for all sites together.</p>` : nothing}
-      </section>
-      ${this.renderTrafficSessions(t, period)}
-      ${table("Most read pages (people)", "Pages people read", pairs(t.people_pages), [{ key: "key", label: "Page", mono: true }, { ...countColumn, label: "Views" }])}
-      ${(t.entry_pages ?? []).length
-        ? html`<div class="grid">
-            ${table("Entry pages", "Pages sessions began on", pairs(t.entry_pages), [{ key: "key", label: "Page", mono: true }, { ...countColumn, label: "Sessions" }])}
-            ${table("Exit pages", "Pages sessions ended on", pairs(t.exit_pages ?? []), [{ key: "key", label: "Page", mono: true }, { ...countColumn, label: "Sessions" }])}
-          </div>`
-        : nothing}
-      ${table("AI agents", "AI agents", t.ai_agents, [
-        { key: "name", label: "Agent" },
-        { key: "operator", label: "Operator" },
-        { key: "kind", label: "Kind", render: (r) => kindLabel(r.kind) },
-        { key: "verified", label: "Network", render: (r) => (r.verified ? status("ok", "Verified") : status("neutral", "Unverified")) },
-        { key: "requests", label: "Requests", numeric: true, render: (r) => r.requests.toLocaleString() },
-      ])}
-      ${table("Pages AI agents read", "Pages AI agents read", pairs(t.ai_pages), [{ key: "key", label: "Page", mono: true }, countColumn])}
-      ${table("Bots", "Bots by kind", t.bots, [
-        { key: "kind", label: "Kind", render: (r) => kindLabel(r.kind) },
-        { key: "name", label: "Name", render: (r) => r.name || "—" },
-        { key: "requests", label: "Requests", numeric: true, render: (r) => r.requests.toLocaleString() },
-      ])}
-      ${this.renderTrafficSources(t, table, pairs, countColumn)}
-      ${this.renderTrafficAudience(t, table)}
-      ${this.renderTrafficBehaviour(t, table)}
-      ${this.renderTrafficExplore(t, table)}
-      ${table("Not found", "Paths answered 404", pairs(t.not_found), [{ key: "key", label: "Path", mono: true }, countColumn])}
-    `;
-  }
-
-  /** Who is on the site now: the last 5 minutes, views per minute for 30. */
-  renderTrafficLive(live) {
-    if (!live) return nothing;
-    const top = live.pages.slice(0, 5);
-    return html`
-      <section class="section" aria-label="Right now">
-        <div class="grid">
-          <lit-material-stat label="Right now" value=${live.visitors.toLocaleString()}
-            caption=${`${live.visitors === 1 ? "person" : "people"} in the last 5 minutes, ${live.views_5m.toLocaleString()} page view${live.views_5m === 1 ? "" : "s"}.`}>
-            <lit-material-sparkline slot="caption" label="Page views per minute, last 30 minutes" .values=${live.series.map((p) => p.views)}></lit-material-sparkline>
-          </lit-material-stat>
-          ${top.length
-            ? html`<lit-material-table caption="Pages being read now" density="compact"
-                .columns=${[{ key: "key", label: "Being read now", mono: true }, { key: "count", label: "Views", numeric: true }]}
-                .rows=${top.map(([key, count]) => ({ key, count }))}></lit-material-table>`
-            : nothing}
-        </div>
-      </section>`;
-  }
-
-  /** Explore: page views from the traffic database, any range and filters. */
-  renderTrafficExplore(t, table) {
-    if (!t.store) return nothing;
-    const q = this.trafficQuery ?? {};
-    const r = q.result;
-    const field = (key, label, hint) => html`<lit-material-text-field id=${`explore-${key}`} variant="outlined" label=${label} supporting-text=${hint}></lit-material-text-field>`;
-    const rows = (list) => (list ?? []).map(([key, count]) => ({ key, count }));
-    const views = { key: "count", label: "Views", numeric: true, render: (x) => x.count.toLocaleString() };
-    return html`
-      <section class="section" aria-labelledby="traffic-explore">
-        <h2 id="traffic-explore">Explore</h2>
-        <p class="lede">Every page view people made, from the traffic database (PostgreSQL): any dates, any combination of filters.</p>
-        <form class="row" style="flex-wrap: wrap" @submit=${(e) => this.exploreTraffic(e)} novalidate>
-          ${field("from", "From", "YYYY-MM-DD (default: 30 days ago)")}
-          ${field("to", "To", "YYYY-MM-DD, inclusive")}
-          ${field("host", "Site", "example.com")}
-          ${field("path", "Page", "/docs/ or /docs/*")}
-          ${field("country", "Country", "DE")}
-          ${field("channel", "Channel", "search, social, campaign…")}
-          ${field("utm_campaign", "Campaign", "utm_campaign")}
-          ${field("device", "Device", "desktop, mobile, tablet")}
-          <lit-material-button type="submit" variant="tonal" ?disabled=${q.busy}>Explore</lit-material-button>
-        </form>
-        ${q.error ? html`<lit-material-alert variant="error">${q.error}</lit-material-alert>` : nothing}
-      </section>
-      ${r
-        ? html`
-          <div class="grid" id="explore-result">
-            <lit-material-stat label="Page views" value=${r.views.toLocaleString()}></lit-material-stat>
-            <lit-material-stat label="Visitors" value=${r.visitors.toLocaleString()} caption="Counted once a day."></lit-material-stat>
-            <lit-material-stat label="Sessions" value=${r.sessions.toLocaleString()}></lit-material-stat>
-            <lit-material-stat label="Bounce rate" value=${r.sessions ? `${Math.round((r.bounces / r.sessions) * 100)}%` : "—"}></lit-material-stat>
-          </div>
-          ${r.series.length > 1
-            ? html`<lit-material-line-chart label="Page views per day" unit="views" height="200"
-                .series=${[{ name: "Page views", points: r.series.map((p) => ({ x: p.t * 1000, y: p.views })) }]}
-                .formatX=${(x) => new Date(x).toLocaleDateString()}></lit-material-line-chart>`
-            : nothing}
-          <div class="grid">
-            ${table("Pages", "Pages in the result", rows(r.pages), [{ key: "key", label: "Page", mono: true }, views])}
-            ${table("Channels", "Channels in the result", rows(r.channels), [{ key: "key", label: "Channel" }, views])}
-            ${table("Countries", "Countries in the result", rows(r.countries), [{ key: "key", label: "Country" }, views])}
-          </div>`
-        : nothing}`;
-  }
-
-  /** What the first-party script reports: time on page, scroll, screens, events, goals. */
-  renderTrafficBehaviour(t, table) {
-    const any = ["time_on_page", "scroll", "screens", "events", "goals"].some((k) => (t[k] ?? []).length);
-    if (!t.script && !any) return nothing;
-    const sessions = t.sessions?.sessions ?? 0;
-    const views = { key: "count", label: "Count", numeric: true, render: (r) => r.count.toLocaleString() };
-    const rows = (list) => (list ?? []).map(([key, count]) => ({ key, count }));
-    const screens = { phone: "Phone (< 600 px)", tablet: "Tablet (600–1023 px)", laptop: "Laptop (1024–1439 px)", wide: "Wide (≥ 1440 px)", "(unknown)": "Unknown" };
-    const props = (t.event_props ?? []).map(([key, count]) => {
-      const [event, prop] = key.split("\t");
-      return { event, prop: prop ?? "", count };
-    });
-    return html`
-      <section class="section" aria-labelledby="traffic-behaviour">
-        <h2 id="traffic-behaviour">Behaviour</h2>
-        <p class="lede">From the first-party script (<code>[traffic] script = true</code>, then
-          <code>&lt;script defer src="/_rws/t.js"&gt;&lt;/script&gt;</code> on your pages). It reports to this server only and stores nothing in the browser.</p>
-        ${!any ? html`<p class="lede">No reports yet in this period.</p>` : nothing}
-      </section>
-      ${any
-        ? html`
-          ${table("Time on page", "Average time on page", (t.time_on_page ?? []).map(([key, avg, n]) => ({ key, avg, n })), [
-            { key: "key", label: "Page", mono: true },
-            { key: "avg", label: "Average time", numeric: true, render: (r) => duration(r.avg) },
-            { key: "n", label: "Views reported", numeric: true, render: (r) => r.n.toLocaleString() },
-          ])}
-          <div class="grid">
-            <section class="section" aria-label="Scroll depth">
-              <h2>Scroll depth</h2>
-              ${(t.scroll ?? []).length
-                ? html`<lit-material-bar-chart label="Page views by how far they were scrolled"
-                    .format=${(n) => `${n.toLocaleString()} view${n === 1 ? "" : "s"}`}
-                    .data=${["25", "50", "75", "100"].map((b) => ({ name: `up to ${b}%`, value: (t.scroll.find(([k]) => k === b) ?? [b, 0])[1] }))}></lit-material-bar-chart>`
-                : html`<p class="lede">Nothing yet.</p>`}
-            </section>
-            ${table("Screen sizes", "Page views by screen width", rows(t.screens).map((r) => ({ ...r, key: screens[r.key] ?? r.key })), [{ key: "key", label: "Width" }, views])}
-          </div>
-          <div class="grid">
-            ${table("Events", "Events sent with rws.track()", rows(t.events), [{ key: "key", label: "Event", mono: true }, views])}
-            ${table("Event properties", "Event properties", props, [
-              { key: "event", label: "Event", mono: true },
-              { key: "prop", label: "Property", mono: true },
-              views,
-            ])}
-          </div>
-          ${table("Goals", "Sessions that reached each goal", rows(t.goals), [
-            { key: "key", label: "Goal", mono: true },
-            { key: "count", label: "Conversions", numeric: true, render: (r) => r.count.toLocaleString() },
-            { key: "rate", label: "Conversion rate", numeric: true, render: (r) => (sessions ? `${((r.count / sessions) * 100).toFixed(1)}%` : "—") },
-          ])}`
-        : nothing}`;
-  }
-
-  /** People's sessions: count, bounce rate, length, pages per session. */
-  renderTrafficSessions(t, period) {
-    const s = t.sessions;
-    if (!s || !s.sessions) return nothing;
-    const p = t.previous_sessions ?? { sessions: 0, bounces: 0, duration: 0, pages: 0 };
-    const rate = (x) => (x.sessions ? x.bounces / x.sessions : 0);
-    const avg = (x) => (x.sessions ? x.duration / x.sessions : 0);
-    const perSession = (x) => (x.sessions ? x.pages / x.sessions : 0);
-    const delta = (now, before, unit = "%") => {
-      if (!p.sessions) return "";
-      if (unit === "pt") return ` ${now >= before ? "+" : "−"}${Math.abs(Math.round((now - before) * 100))} points vs the previous ${period}.`;
-      return before ? ` ${now >= before ? "+" : "−"}${Math.abs(Math.round(((now - before) / before) * 100))}% vs the previous ${period}.` : "";
-    };
-    const tiles = [
-      ["Sessions", s.sessions.toLocaleString(), `Page views 30 minutes or less apart.${delta(s.sessions, p.sessions)}`],
-      ["Bounce rate", `${Math.round(rate(s) * 100)}%`, `Sessions of one page view.${delta(rate(s), rate(p), "pt")}`],
-      ["Session length", s.duration ? duration(Math.round(avg(s))) : "0s", `On average, first page view to last.${delta(avg(s), avg(p))}`],
-      ["Pages per session", perSession(s).toFixed(1), `On average.${delta(perSession(s), perSession(p))}`],
-    ];
-    return html`
-      <section class="section" aria-label="Sessions">
-        <div class="grid">
-          ${tiles.map(([label, value, caption]) => html`<lit-material-stat label=${label} value=${value} caption=${caption}></lit-material-stat>`)}
-        </div>
-      </section>`;
-  }
-
-  /** Where people's visits came from: channels, referrers, UTM campaigns. */
-  renderTrafficSources(t, table, pairs, countColumn) {
-    const channels = { direct: "Direct", search: "Search", social: "Social", ai: "AI assistants", referral: "Other sites", campaign: "Campaigns (UTM)" };
-    const visits = { ...countColumn, label: "Visits" };
-    const utm = (rows) => pairs(rows ?? []);
-    return html`
-      <section class="section" aria-labelledby="traffic-sources">
-        <h2 id="traffic-sources">Sources</h2>
-        <p class="lede">How people arrived: a page view from outside the site. Moving between the site's own pages isn't counted here.</p>
-        ${(t.channels ?? []).length === 0
-          ? html`<p class="lede">Nothing in this period.</p>`
-          : html`<lit-material-bar-chart label="Visits by channel" sort="desc" .format=${(n) => `${n.toLocaleString()} visit${n === 1 ? "" : "s"}`}
-              .data=${t.channels.map(([key, value]) => ({ name: channels[key] ?? key, value }))}></lit-material-bar-chart>`}
-      </section>
-      ${table("Referrers (people)", "Sites people came from", pairs(t.referrers), [{ key: "key", label: "Site", mono: true }, visits])}
-      ${(t.utm_source ?? []).length || (t.utm_campaign ?? []).length
-        ? html`<div class="grid">
-            ${table("Campaign sources", "utm_source", utm(t.utm_source), [{ key: "key", label: "utm_source", mono: true }, visits])}
-            ${table("Campaign media", "utm_medium", utm(t.utm_medium), [{ key: "key", label: "utm_medium", mono: true }, visits])}
-            ${table("Campaigns", "utm_campaign", utm(t.utm_campaign), [{ key: "key", label: "utm_campaign", mono: true }, visits])}
-          </div>`
-        : nothing}`;
-  }
-
-  /** Who the people are: countries, browsers, systems, devices. */
-  renderTrafficAudience(t, table) {
-    let regions = null;
-    try {
-      regions = new Intl.DisplayNames([navigator.language || "en"], { type: "region" });
-    } catch {
-      /* older browsers: show the codes */
-    }
-    const countryName = (code) => {
-      if (code === "(unknown)" || code === "(other)") return code === "(other)" ? "Other" : "Unknown";
-      try {
-        return regions?.of(code) ?? code;
-      } catch {
-        return code;
-      }
-    };
-    const total = (rows) => rows.reduce((sum, [, n]) => sum + n, 0);
-    const share = (rows) => {
-      const all = total(rows) || 1;
-      return rows.map(([key, n]) => ({ key, count: n, share: n / all }));
-    };
-    const columns = (label, render = (r) => r.key) => [
-      { key: "key", label, render },
-      { key: "count", label: "Visitors", numeric: true, render: (r) => r.count.toLocaleString() },
-      { key: "share", label: "Share", numeric: true, render: (r) => `${Math.round(r.share * 100)}%` },
-    ];
-    const devices = { desktop: "Desktop", mobile: "Phone", tablet: "Tablet" };
-    return html`
-      <section class="section" aria-labelledby="traffic-audience">
-        <h2 id="traffic-audience">Audience</h2>
-        <p class="lede">People only, each counted once a day.
-          ${t.geo_source
-            ? html`Countries from the built-in <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a> table (${t.geo_source}, CC BY 4.0), looked up on this server.`
-            : html`No country table is loaded (built without the <code>geo</code> feature).`}</p>
-        ${(t.devices ?? []).length
-          ? html`<lit-material-bar-chart label="Visitors by device" sort="desc" .format=${(n) => `${n.toLocaleString()} visitor${n === 1 ? "" : "s"}`}
-              .data=${t.devices.map(([key, value]) => ({ name: devices[key] ?? key, value }))}></lit-material-bar-chart>`
-          : nothing}
-      </section>
-      ${table("Countries", "Visitors by country", share(t.countries ?? []), columns("Country", (r) => html`${countryName(r.key)} <span class="lede">${r.key.length === 2 ? r.key : ""}</span>`))}
-      <div class="grid">
-        ${table("Browsers", "Visitors by browser", share(t.browsers ?? []), columns("Browser"))}
-        ${table("Operating systems", "Visitors by operating system", share(t.os ?? []), columns("System"))}
-      </div>`;
   }
 
   renderAuthz(authz, check) {

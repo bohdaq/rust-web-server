@@ -681,6 +681,51 @@ fn store_writes_rows_and_answers_queries() {
     run(format!("DROP SCHEMA {schema} CASCADE"));
 }
 
+// ── Traffic page redesign (18.32) ─────────────────────────────────────────────
+
+#[test]
+fn day_ranges_and_the_comparison_series() {
+    use super::summary::day_range;
+    let now = T0 + 5 * 3600 + 30; // 5:00 into a day (T0 is an hour boundary)
+    let today = now / 86_400;
+    let date = |d: u64| {
+        // back to YYYY-MM-DD (the inverse of parse_day) for the test
+        let z = d as i64 + 719_468;
+        let era = z.div_euclid(146_097);
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let dd = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = yoe + era * 400 + (m <= 2) as i64;
+        format!("{y:04}-{m:02}-{dd:02}")
+    };
+    assert_eq!(super::summary::parse_day(&date(today)), Some(today));
+    // Today only: from midnight to now.
+    let (hours, end) = day_range(&date(today), "", now).unwrap();
+    assert_eq!((hours, end), ((now / 3600) - today * 24 + 1, now));
+    // Two past days: 48 hours ending at the second's last second.
+    let (hours, end) = day_range(&date(today - 3), &date(today - 2), now).unwrap();
+    assert_eq!((hours, end), (48, (today - 1) * 86_400 - 1));
+    assert!(day_range(&date(today), &date(today - 1), now).is_err());
+    assert!(day_range("nope", "", now).is_err());
+
+    let _g = fresh();
+    // A page view now and one at the same time a week ago (a week view
+    // compares day by day).
+    record(&hit("8.8.8.8", CHROME, "/a/", now - 7 * 86_400));
+    record(&hit("8.8.8.8", CHROME, "/x.css", now - 7 * 86_400));
+    record(&hit("1.1.1.1", CHROME, "/b/", now));
+    record(&hit("1.1.1.1", CHROME, "/x.css", now));
+    let json = summary(168, None, now + 1);
+    let last = |key: &str| crate::mcp::json_rpc::split_array_elements(&crate::mcp::json_rpc::extract_raw(&json, key).unwrap()).last().unwrap().clone();
+    assert!(last("series").contains(r#""pages":1"#), "{json}");
+    assert!(last("previous_series").contains(r#""pages":1"#), "the same day last week: {json}");
+    assert_eq!(last("series").split(',').next(), last("previous_series").split(',').next(), "same bucket times");
+    assert!(last("days").contains(r#""visitors":1"#) && last("days").contains(r#""previous_visitors":1"#), "{json}");
+}
+
 #[test]
 #[ignore]
 fn zz_cost_per_request() {
