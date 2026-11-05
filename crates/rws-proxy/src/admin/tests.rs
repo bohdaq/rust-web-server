@@ -355,6 +355,11 @@ fn traffic_is_404_while_off_and_a_summary_while_on() {
     assert_eq!(status, 200, "{text}");
     assert!(text.contains(r#""visitors":"#) && text.contains(r#""host":"example.com""#), "{text}");
     assert_eq!(call(&api, "POST", "/admin/api/v1/traffic/live", "").0, 405);
+    // No traffic database here: 404 (405 for other methods).
+    let (status, text) = call(&api, "GET", "/admin/api/v1/traffic/query?from=2026-11-01&to=2026-11-05", "");
+    assert_eq!(status, 404, "{text}");
+    assert!(text.contains("no traffic database"), "{text}");
+    assert_eq!(call(&api, "POST", "/admin/api/v1/traffic/query", "").0, 405);
     crate::traffic::record::disable_for_tests();
     assert_eq!(call(&api, "GET", "/admin/api/v1/traffic/live", "").0, 404);
 }

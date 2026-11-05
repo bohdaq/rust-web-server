@@ -323,6 +323,48 @@ pub fn purge_cache(name: &str, path: Option<&str>, prefix: Option<&str>) -> Opti
 
 /// Who visited in the last `hours` (1–2160), optionally for one host: the
 /// Traffic page's JSON. `Err` when counting is off.
+/// `GET /traffic/query`: page views from the traffic database for a date
+/// range (`from`, `to`: `YYYY-MM-DD`, inclusive; default the last 30 days)
+/// and any filters; `Err` (404) without a database.
+pub fn traffic_query_json(arg: &dyn Fn(&str) -> Option<String>) -> Result<String, String> {
+    #[cfg(feature = "model-postgres")]
+    {
+        use crate::traffic::store::{parse_day, query_json, Query};
+        if !crate::traffic::store::enabled() {
+            return Err("no traffic database: set [traffic] database_url_env".to_string());
+        }
+        let today = crate::traffic::record::now() / 86_400;
+        let day = |key: &str, default: u64| match arg(key) {
+            Some(v) if !v.is_empty() => parse_day(&v).ok_or(format!("{key}: expected YYYY-MM-DD, got {v:?}")),
+            _ => Ok(default),
+        };
+        let to = day("to", today)?;
+        let from = day("from", to.saturating_sub(29))?;
+        if from > to || to - from > 3660 {
+            return Err("from must be on or before to, at most ten years apart".to_string());
+        }
+        let q = Query {
+            from: from * 86_400,
+            to: (to + 1) * 86_400,
+            host: arg("host"),
+            path: arg("path"),
+            country: arg("country"),
+            channel: arg("channel"),
+            utm_source: arg("utm_source"),
+            utm_campaign: arg("utm_campaign"),
+            browser: arg("browser"),
+            os: arg("os"),
+            device: arg("device"),
+        };
+        query_json(&q)
+    }
+    #[cfg(not(feature = "model-postgres"))]
+    {
+        let _ = arg;
+        Err("no traffic database: this rws is built without the model-postgres feature".to_string())
+    }
+}
+
 /// `GET /traffic/live`: who is on the site now.
 pub fn traffic_live_json(host: Option<&str>) -> Result<String, String> {
     if !crate::traffic::enabled() {

@@ -43,6 +43,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   conversions per session. `TrafficScriptLayer` is wrapped into the
   binary's static and proxy apps and passes other requests through (proxy
   routes keep the async forwarder). `/_rws/` is reserved.
+- **Traffic database (PostgreSQL, opt-in)** (tranche 5): `[traffic]
+  database_url_env` names the variable holding a `postgres://` URL; rws
+  creates `rws_traffic_pageviews` and `rws_traffic_reports` and writes every
+  person's page view and script report there in batches (no IP or
+  User-Agent; bounded queue, dropped rather than blocking). `GET
+  /admin/api/v1/traffic/query` (and MCP `traffic_summary` with `from`/`to`)
+  answers any date range and filter combination; the Traffic page gets an
+  Explore section. **Release binaries now include `model-postgres`** (sqlx),
+  except the FIPS build.
 
 - **ORM, part 2** (roadmap #90):
   - Eager loading: `Post::query(&pool).with(Post::comments()).with(Post::author()).fetch_all()`

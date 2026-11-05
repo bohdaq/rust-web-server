@@ -24,6 +24,8 @@ pub mod geo;
 pub mod persist;
 pub mod record;
 pub mod script;
+#[cfg(feature = "model-postgres")]
+pub mod store;
 pub mod summary;
 
 pub use classify::{classify, Class, Group, Kind};
@@ -69,6 +71,7 @@ pub fn start() {
     let _ = std::thread::Builder::new().name("rws-traffic-geo".to_string()).spawn(|| {
         geo::table();
     });
+    start_store();
     let Some(path) = config::persist_path() else { return };
     persist::load(&path);
     let _ = std::thread::Builder::new().name("rws-traffic".to_string()).spawn(move || loop {
@@ -79,8 +82,25 @@ pub fn start() {
     });
 }
 
+/// Connect to `[traffic] database_url_env`'s PostgreSQL, when set.
+fn start_store() {
+    let Some(url) = config::database_url() else { return };
+    #[cfg(feature = "model-postgres")]
+    match store::start(&url) {
+        Ok(()) => println!("traffic: writing page views to PostgreSQL."),
+        Err(e) => eprintln!("traffic: can't use the traffic database: {e}; counting without it"),
+    }
+    #[cfg(not(feature = "model-postgres"))]
+    {
+        let _ = url;
+        eprintln!("traffic: [traffic] database_url_env is set, but this rws is built without the model-postgres feature; counting without it");
+    }
+}
+
 /// Save the counts now (at shutdown).
 pub fn save() {
+    #[cfg(feature = "model-postgres")]
+    store::stop();
     if let (true, Some(path)) = (enabled(), config::persist_path()) {
         if let Err(e) = persist::save(&path) {
             eprintln!("traffic: can't save {}: {e}", path.display());

@@ -7087,6 +7087,7 @@ pub const rust_web_server::test_client::snapshot::UPDATE_VARIABLE: &str
 pub const rust_web_server::test_client::sse::MAX_EVENT_BYTES: usize
 pub const rust_web_server::test_client::websocket::DEFAULT_TIMEOUT: core::time::Duration
 pub const rust_web_server::traffic::config::MAX_GOALS: usize
+pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_ENABLED: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_EXCLUDE: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_GEO_DB: &str
@@ -7437,6 +7438,7 @@ pub fn rust_web_server::admin::ops::set_flag(&str, bool) -> alloc::string::Strin
 pub fn rust_web_server::admin::ops::set_maintenance(bool) -> alloc::string::String
 pub fn rust_web_server::admin::ops::traffic_json(u64, core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_live_json(core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
+pub fn rust_web_server::admin::ops::traffic_query_json(&dyn core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::unblock(&str) -> alloc::string::String
 pub fn rust_web_server::admin::ops::upstreams_json() -> alloc::string::String
 pub fn rust_web_server::admin::start(&rust_web_server::admin::AdminConfig) -> core::result::Result<core::option::Option<core::net::socket_addr::SocketAddr>, alloc::string::String>
@@ -10157,6 +10159,7 @@ pub fn rust_web_server::traffic::Kind::hash<__H: core::hash::Hasher>(&self, &mut
 pub fn rust_web_server::traffic::Kind::label(self) -> &'static str
 pub fn rust_web_server::traffic::Kind::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 pub fn rust_web_server::traffic::classify(core::net::ip_addr::IpAddr, core::option::Option<&str>, &str) -> rust_web_server::traffic::Class
+pub fn rust_web_server::traffic::config::database_url() -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::traffic::config::enabled_setting() -> core::option::Option<bool>
 pub fn rust_web_server::traffic::config::exclude() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::geo_db() -> core::option::Option<std::path::PathBuf>

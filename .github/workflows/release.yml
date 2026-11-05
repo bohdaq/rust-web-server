@@ -226,15 +226,17 @@ jobs:
           # Linux builds (the binaries and the container image) also carry the
           # Kubernetes Gateway API controller, off unless enabled (it doubles
           # the binary, so not on macOS/Windows; user's call for 18.8.0).
-          - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest,    features: "acme auth sso mimalloc gateway-api wasm-plugins storage-s3" }
-          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, features: "acme auth sso mimalloc gateway-api wasm-plugins storage-s3" }
+          - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest,    features: "acme auth sso mimalloc gateway-api wasm-plugins storage-s3 model-postgres" }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, features: "acme auth sso mimalloc gateway-api wasm-plugins storage-s3 model-postgres" }
           # pkcs11 loads the token's module at runtime: not in static musl
           # binaries (no dlopen), in the macOS, Windows and glibc FIPS ones.
-          - { target: x86_64-apple-darwin,        os: macos-latest,     features: "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3" }
-          - { target: aarch64-apple-darwin,       os: macos-latest,     features: "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3" }
-          - { target: x86_64-pc-windows-msvc,     os: windows-latest,   features: "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3" }
+          - { target: x86_64-apple-darwin,        os: macos-latest,     features: "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3 model-postgres" }
+          - { target: aarch64-apple-darwin,       os: macos-latest,     features: "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3 model-postgres" }
+          - { target: x86_64-pc-windows-msvc,     os: windows-latest,   features: "acme auth sso mimalloc wasm-plugins pkcs11 storage-s3 model-postgres" }
           # FIPS 140-3 build (18.23.0): aws-lc's validated module, glibc (it
           # doesn't build for musl), TLS limited to FIPS-approved algorithms.
+          # No model-postgres (the traffic database, 18.31.0) here: sqlx's TLS
+          # brings its own crypto, outside the validated module.
           - { target: x86_64-unknown-linux-gnu,   os: ubuntu-latest,    features: "fips acme auth sso mimalloc pkcs11 storage-s3", suffix: "-fips" }
     steps:
       - uses: actions/checkout@v4

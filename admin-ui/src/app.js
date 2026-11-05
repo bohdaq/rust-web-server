@@ -83,6 +83,7 @@ export class RwsAdmin extends LitElement {
     busy: { state: true },
     trafficHours: { state: true },
     trafficHost: { state: true },
+    trafficQuery: { state: true },
     me: { state: true },
     sso: { state: true },
   };
@@ -315,6 +316,22 @@ export class RwsAdmin extends LitElement {
       this.data = { ...this.data, authz: { schema, tuples: list.tuples } };
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) this.data = { ...this.data, authz: null };
+    }
+  }
+
+  // Explore (the traffic database): any date range and filter combination.
+  async exploreTraffic(event) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    for (const key of ["from", "to", "host", "path", "country", "channel", "utm_campaign", "device"]) {
+      const value = (this.querySelector(`#explore-${key}`)?.value ?? "").trim();
+      if (value) params.set(key, value);
+    }
+    this.trafficQuery = { busy: true };
+    try {
+      this.trafficQuery = { result: await api(`/traffic/query?${params}`) };
+    } catch (e) {
+      this.trafficQuery = { error: e.message ?? String(e) };
     }
   }
 
@@ -647,6 +664,7 @@ export class RwsAdmin extends LitElement {
       ${this.renderTrafficSources(t, table, pairs, countColumn)}
       ${this.renderTrafficAudience(t, table)}
       ${this.renderTrafficBehaviour(t, table)}
+      ${this.renderTrafficExplore(t, table)}
       ${table("Not found", "Paths answered 404", pairs(t.not_found), [{ key: "key", label: "Path", mono: true }, countColumn])}
     `;
   }
@@ -669,6 +687,52 @@ export class RwsAdmin extends LitElement {
             : nothing}
         </div>
       </section>`;
+  }
+
+  /** Explore: page views from the traffic database, any range and filters. */
+  renderTrafficExplore(t, table) {
+    if (!t.store) return nothing;
+    const q = this.trafficQuery ?? {};
+    const r = q.result;
+    const field = (key, label, hint) => html`<lit-material-text-field id=${`explore-${key}`} variant="outlined" label=${label} supporting-text=${hint}></lit-material-text-field>`;
+    const rows = (list) => (list ?? []).map(([key, count]) => ({ key, count }));
+    const views = { key: "count", label: "Views", numeric: true, render: (x) => x.count.toLocaleString() };
+    return html`
+      <section class="section" aria-labelledby="traffic-explore">
+        <h2 id="traffic-explore">Explore</h2>
+        <p class="lede">Every page view people made, from the traffic database (PostgreSQL): any dates, any combination of filters.</p>
+        <form class="row" style="flex-wrap: wrap" @submit=${(e) => this.exploreTraffic(e)} novalidate>
+          ${field("from", "From", "YYYY-MM-DD (default: 30 days ago)")}
+          ${field("to", "To", "YYYY-MM-DD, inclusive")}
+          ${field("host", "Site", "example.com")}
+          ${field("path", "Page", "/docs/ or /docs/*")}
+          ${field("country", "Country", "DE")}
+          ${field("channel", "Channel", "search, social, campaign…")}
+          ${field("utm_campaign", "Campaign", "utm_campaign")}
+          ${field("device", "Device", "desktop, mobile, tablet")}
+          <lit-material-button type="submit" variant="tonal" ?disabled=${q.busy}>Explore</lit-material-button>
+        </form>
+        ${q.error ? html`<lit-material-alert variant="error">${q.error}</lit-material-alert>` : nothing}
+      </section>
+      ${r
+        ? html`
+          <div class="grid" id="explore-result">
+            <lit-material-stat label="Page views" value=${r.views.toLocaleString()}></lit-material-stat>
+            <lit-material-stat label="Visitors" value=${r.visitors.toLocaleString()} caption="Counted once a day."></lit-material-stat>
+            <lit-material-stat label="Sessions" value=${r.sessions.toLocaleString()}></lit-material-stat>
+            <lit-material-stat label="Bounce rate" value=${r.sessions ? `${Math.round((r.bounces / r.sessions) * 100)}%` : "—"}></lit-material-stat>
+          </div>
+          ${r.series.length > 1
+            ? html`<lit-material-line-chart label="Page views per day" unit="views" height="200"
+                .series=${[{ name: "Page views", points: r.series.map((p) => ({ x: p.t * 1000, y: p.views })) }]}
+                .formatX=${(x) => new Date(x).toLocaleDateString()}></lit-material-line-chart>`
+            : nothing}
+          <div class="grid">
+            ${table("Pages", "Pages in the result", rows(r.pages), [{ key: "key", label: "Page", mono: true }, views])}
+            ${table("Channels", "Channels in the result", rows(r.channels), [{ key: "key", label: "Channel" }, views])}
+            ${table("Countries", "Countries in the result", rows(r.countries), [{ key: "key", label: "Country" }, views])}
+          </div>`
+        : nothing}`;
   }
 
   /** What the first-party script reports: time on page, scroll, screens, events, goals. */

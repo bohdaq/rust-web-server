@@ -248,6 +248,9 @@ struct Session {
     exit: String,
     /// Goals reached, by index into the configured goals.
     goals: u32,
+    /// How the session arrived (for the database's rows).
+    channel: Option<&'static str>,
+    utm: [Option<String>; 3],
     /// Script reports so far.
     reports: u32,
 }
@@ -764,6 +767,28 @@ impl Shard {
         self.hours.retain(|(h, _), _| *h / 24 >= oldest_day);
     }
 
+    /// A person's page view as a database row.
+    #[cfg(feature = "model-postgres")]
+    fn store_view(&self, visitor: u64, at: u64, page: &str, referrer: Option<&str>) {
+        let (host, path) = page.find('/').map_or((page, "/"), |i| (&page[..i], &page[i..]));
+        let session = self.open.get(&visitor);
+        let audience = self.cache.get(&visitor).and_then(|c| c.audience.as_ref());
+        super::store::enqueue(super::store::Row::PageView(super::store::PageView {
+            at,
+            host: host.to_string(),
+            path: path.to_string(),
+            visitor,
+            session_start: session.map_or(at, |s| s.start),
+            referrer_host: referrer.map(str::to_string),
+            channel: session.and_then(|s| s.channel),
+            utm: session.map(|s| s.utm.clone()).unwrap_or_default(),
+            country: audience.and_then(|a| a.country).map(|c| String::from_utf8_lossy(&c).into_owned()),
+            browser: audience.map(|a| a.device.browser),
+            os: audience.map(|a| a.device.os),
+            device: audience.map(|a| a.device.class),
+        }));
+    }
+
     /// A new person's country, browser, OS and device class.
     fn count_audience(&mut self, day: u64, host: &str, audience: &Audience) {
         let day = self.day(day);
@@ -811,7 +836,7 @@ impl Shard {
             }
         }
         self.day(at / 86_400).entry_pages.add(page, 1);
-        self.open.insert(visitor, Session { start: at, last: at, pages: 1, exit: page.to_string(), goals: 0, reports: 0 });
+        self.open.insert(visitor, Session { start: at, last: at, pages: 1, exit: page.to_string(), goals: 0, reports: 0, channel: None, utm: Default::default() });
         if let Some(session) = self.open.get_mut(&visitor) {
             session.goals |= page_goals(page);
         }
@@ -832,6 +857,14 @@ impl Shard {
             self.recent.push_back(Recent { at, visitor, page: page.clone(), country });
         }
         let arrival = arrival.filter(|_| started);
+        if let (Some(arrival), Some(session)) = (&arrival, self.open.get_mut(&visitor)) {
+            session.channel = Some(arrival.channel);
+            session.utm = arrival.utm.clone();
+        }
+        #[cfg(feature = "model-postgres")]
+        if let (true, Some(page)) = (super::store::enabled(), &page) {
+            self.store_view(visitor, at, page, referrer.as_deref());
+        }
         let counts = &mut self.hours.entry((hour, host)).or_default()[PEOPLE];
         counts.requests += 1;
         counts.pages += page.is_some() as u64;
@@ -1073,6 +1106,18 @@ pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, 
                 51..=75 => "75",
                 _ => "100",
             };
+            #[cfg(feature = "model-postgres")]
+            super::store::enqueue(super::store::Row::Report(super::store::Report {
+                at: now,
+                host: host_name.clone(),
+                path: path.clone(),
+                visitor,
+                kind: "leave",
+                secs: Some(secs),
+                scroll: Some(depth),
+                width: Some(width),
+                ..Default::default()
+            }));
             let d = shard.day(day);
             d.behaviour[ENGAGED_SECS].add(&page, secs);
             d.behaviour[ENGAGED_VIEWS].add(&page, 1);
@@ -1096,6 +1141,17 @@ pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, 
                     session.goals |= reached;
                 }
             }
+            #[cfg(feature = "model-postgres")]
+            super::store::enqueue(super::store::Row::Report(super::store::Report {
+                at: now,
+                host: host_name.clone(),
+                path: path.clone(),
+                visitor,
+                kind: "event",
+                name: Some(name.clone()),
+                props: (!props.is_empty()).then(|| props.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&")),
+                ..Default::default()
+            }));
             let d = shard.day(day);
             d.behaviour[EVENTS].add_capped(&format!("{host_name}\t{name}"), 1, DIM_TOP);
             for (k, v) in props {

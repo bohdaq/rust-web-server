@@ -574,6 +574,108 @@ fn script_reports_add_time_scroll_screens_events_and_goals() {
     assert_eq!(summary(24, None, T0 + 4 * 3600), json);
 }
 
+// ── PostgreSQL store (18.31, tranche 5) ───────────────────────────────────────
+
+#[cfg(feature = "model-postgres")]
+#[test]
+fn store_sql_is_parameterized() {
+    use super::store::{insert_sql, parse_day, Query};
+    assert_eq!(parse_day("1970-01-01"), Some(0));
+    assert_eq!(parse_day("2026-11-05"), Some(20762));
+    assert_eq!(parse_day("2024-02-29"), Some(19782));
+    for bad in ["", "2026-13-01", "2026-1", "x-y-z", "1969-12-31", "2026-11-05T00"] {
+        assert_eq!(parse_day(bad), None, "{bad}");
+    }
+    assert_eq!(insert_sql("t", &["at", "a", "b"], 2, &[0], &[2]), "INSERT INTO t (at, a, b) VALUES (to_timestamp($1), $2, $3::bigint), (to_timestamp($4), $5, $6::bigint)");
+    let q = Query { from: 10, to: 20, host: Some("Example.COM".into()), path: Some("/docs/100%_*".into()), country: Some("de".into()), channel: Some("".into()), ..Default::default() };
+    let (sql, params) = q.filter();
+    assert_eq!(sql, "at >= to_timestamp($1) AND at < to_timestamp($2) AND host = $3 AND path LIKE $4 AND country = $5");
+    use crate::model::Value;
+    assert_eq!(params, vec![Value::Int(10), Value::Int(20), Value::Text("example.com".into()), Value::Text("/docs/100\\%\\_%".into()), Value::Text("DE".into())]);
+    let (sql, _) = Query { path: Some("/exact".into()), ..Default::default() }.filter();
+    assert!(sql.ends_with("path = $3"), "{sql}");
+}
+
+/// Against a real server: `RWS_TEST_POSTGRES_URL` (CI's model-databases
+/// job); skipped without it unless `RWS_TEST_REQUIRE_BACKENDS` names postgres.
+#[cfg(feature = "model-postgres")]
+#[test]
+fn store_writes_rows_and_answers_queries() {
+    let Ok(url) = std::env::var("RWS_TEST_POSTGRES_URL") else {
+        assert!(!std::env::var("RWS_TEST_REQUIRE_BACKENDS").unwrap_or_default().contains("postgres"), "RWS_TEST_POSTGRES_URL is required");
+        return;
+    };
+    let _g = fresh();
+    use crate::model::DbPool;
+    // A schema of this test's own, dropped at the end.
+    let schema = format!("rws_traffic_test_{}", std::process::id());
+    let admin = rws_server::async_bridge::block_on_shared({
+        let url = url.clone();
+        async move { DbPool::connect(&url).await.unwrap() }
+    });
+    let run = |sql: String| {
+        let admin = admin.clone();
+        rws_server::async_bridge::block_on_shared(async move { admin.execute(&sql, &[]).await.unwrap() })
+    };
+    run(format!("DROP SCHEMA IF EXISTS {schema} CASCADE"));
+    run(format!("CREATE SCHEMA {schema}"));
+    let sep = if url.contains('?') { '&' } else { '?' };
+    super::store::start(&format!("{url}{sep}options=-c%20search_path%3D{schema}")).unwrap();
+    let (written_before, _, _) = super::store::stats();
+
+    // Two people, one from a campaign on another host, and a script report.
+    super::record::set_goals_for_tests(&[]);
+    record(&hit("8.8.8.8", CHROME, "/docs/", T0));
+    record(&hit("8.8.8.8", CHROME, "/a.css", T0 + 1));
+    record(&hit("8.8.8.8", CHROME, "/docs/intro/", T0 + 60));
+    let mut shop = hit("193.0.6.139", CHROME, "/?utm_source=newsletter&utm_campaign=launch", T0 + 5);
+    shop.host = "shop.example";
+    shop.content_type = Some("text/html");
+    record(&shop);
+    let mut css = hit("193.0.6.139", CHROME, "/a.css", T0 + 6);
+    css.host = "shop.example";
+    record(&css);
+    super::record::beacon("8.8.8.8".parse().unwrap(), "example.com", Some(CHROME), r#"{"t":"event","p":"/docs/intro/","n":"signup","q":{"plan":"pro"}}"#, T0 + 70);
+    super::store::stop();
+    assert!(super::store::wait_written(written_before + 4, std::time::Duration::from_secs(15)), "rows written: {:?}", super::store::stats());
+
+    let q = |extra: super::store::Query| {
+        super::store::query_json(&super::store::Query { from: T0 / 86_400 * 86_400, to: (T0 / 86_400 + 1) * 86_400, ..extra }).unwrap()
+    };
+    let all = q(Default::default());
+    assert!(all.contains(r#""views":3,"visitors":2,"sessions":2,"bounces":1"#), "{all}");
+    assert!(all.contains(r#""pages":[["example.com/docs/",1],["example.com/docs/intro/",1],["shop.example/",1]]"#), "{all}");
+    assert!(all.contains(r#""utm_campaign":[["launch",1]]"#), "{all}");
+    #[cfg(feature = "geo")]
+    assert!(all.contains(r#""countries":[["US",2],["NL",1]]"#), "{all}");
+    assert!(all.contains(r#""channels":[["direct",2],["campaign",1]]"#), "each page view carries its session's channel: {all}");
+    let docs = q(super::store::Query { path: Some("/docs/*".into()), host: Some("example.com".into()), ..Default::default() });
+    assert!(docs.contains(r#""views":2,"visitors":1,"sessions":1,"bounces":0"#), "{docs}");
+    let campaign = q(super::store::Query { channel: Some("campaign".into()), ..Default::default() });
+    assert!(campaign.contains(r#""views":1,"visitors":1"#), "the campaign session only: {campaign}");
+    let none = q(super::store::Query { country: Some("FR".into()), ..Default::default() });
+    assert!(none.contains(r#""views":0,"visitors":0,"sessions":0"#), "{none}");
+
+    let rows = {
+        let admin = admin.clone();
+        let schema = schema.clone();
+        rws_server::async_bridge::block_on_shared(async move {
+            admin.query_rows(&format!("SELECT kind, name, props FROM {schema}.rws_traffic_reports"), &[]).await.unwrap()
+        })
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<String>("props").unwrap(), "plan=pro");
+    let addresses = {
+        let admin = admin.clone();
+        let schema = schema.clone();
+        rws_server::async_bridge::block_on_shared(async move {
+            admin.query_rows(&format!("SELECT count(*)::bigint AS n FROM {schema}.rws_traffic_pageviews WHERE path LIKE '%8.8.8.8%' OR host LIKE '%Mozilla%'"), &[]).await.unwrap()
+        })
+    };
+    assert_eq!(addresses[0].get::<i64>("n").unwrap(), 0, "no addresses or user agents in the rows");
+    run(format!("DROP SCHEMA {schema} CASCADE"));
+}
+
 #[test]
 #[ignore]
 fn zz_cost_per_request() {

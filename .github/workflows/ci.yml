@@ -99,8 +99,8 @@ jobs:
           key: model-databases
       - name: model and TestDb tests on SQLite, PostgreSQL and MySQL
         run: cargo test --locked -p rws-server --features "http2 test-support macros serde model-sqlite model-postgres model-mysql" --lib -- model test_client
-      - name: rws db on SQLite, PostgreSQL and MySQL
-        run: cargo test --locked -p rws-proxy --features "http2 serde model-sqlite model-postgres model-mysql" --lib -- db_cli dev_mcp
+      - name: rws db and the traffic database on SQLite, PostgreSQL and MySQL
+        run: cargo test --locked -p rws-proxy --features "http2 serde model-sqlite model-postgres model-mysql" --lib -- db_cli dev_mcp traffic
       - name: what ran
         if: always()
         run: |

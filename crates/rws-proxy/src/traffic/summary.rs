@@ -169,7 +169,7 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
     let session_json = |s: &Sessions| format!(r#"{{"sessions":{},"bounces":{},"duration":{},"pages":{}}}"#, s.sessions, s.bounces, s.duration, s.pages);
     let geo = super::geo::table().map_or("null".to_string(), |t| quote(&t.source));
     format!(
-        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{},"script":{},"time_on_page":[{}],{}}}"#,
+        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{},"script":{},"store":{},"time_on_page":[{}],{}}}"#,
         if daily { "day" } else { "hour" },
         first_hour.map_or("null".to_string(), |h| (h * 3600).to_string()),
         names.iter().map(|n| quote(n)).collect::<Vec<_>>().join(","),
@@ -189,6 +189,7 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         pairs(&lists.entry_pages, 25, host),
         pairs(&lists.exit_pages, 25, host),
         super::config::script(),
+        store_on(),
         on_page.join(","),
         behaviour.join(","),
     )
@@ -233,4 +234,11 @@ pub fn live_json(host: Option<&str>, now: u64) -> String {
         pairs(&pages, 10, None),
         pairs(&by_country, 10, None),
     )
+}
+
+fn store_on() -> bool {
+    #[cfg(feature = "model-postgres")]
+    return super::store::enabled();
+    #[cfg(not(feature = "model-postgres"))]
+    false
 }

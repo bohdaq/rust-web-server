@@ -203,9 +203,12 @@ pub(super) fn install(mcp: McpServer, routes: Vec<(String, String)>, cache: Opti
         .tool(
             "traffic_summary",
             "Who visited the site: people, AI agents (by name and operator) and bots (by kind), with top pages, referrers, 404s, sessions and bounce rate, sources (channels, UTM) and audience (countries, browsers, devices), for the last N hours; with live=true, who is on the site now instead",
-            r#"{"type":"object","properties":{"hours":{"type":"integer","default":24,"description":"24 = a day, 168 = a week, 720 = 30 days"},"host":{"type":"string","description":"only this site (Host header)"},"live":{"type":"boolean","default":false,"description":"people in the last 5 minutes, views per minute for the last 30, current pages"}}}"#,
+            r#"{"type":"object","properties":{"hours":{"type":"integer","default":24,"description":"24 = a day, 168 = a week, 720 = 30 days"},"host":{"type":"string","description":"only this site (Host header)"},"live":{"type":"boolean","default":false,"description":"people in the last 5 minutes, views per minute for the last 30, current pages"},"from":{"type":"string","description":"YYYY-MM-DD: query the traffic database (needs [traffic] database_url_env) from this day"},"to":{"type":"string","description":"YYYY-MM-DD, inclusive; with the database"},"path":{"type":"string","description":"with the database: a path, or a prefix ending in *"},"country":{"type":"string","description":"with the database: two-letter code"},"channel":{"type":"string","description":"with the database: direct, search, social, ai, referral or campaign"},"utm_source":{"type":"string"},"utm_campaign":{"type":"string"},"browser":{"type":"string"},"os":{"type":"string"},"device":{"type":"string","description":"desktop, mobile or tablet"}}}"#,
             |args| {
                 let host = extract_arg(args, "host");
+                if extract_arg(args, "from").is_some() || extract_arg(args, "to").is_some() {
+                    return crate::admin::ops::traffic_query_json(&|key| extract_arg(args, key)).map(McpContent::json);
+                }
                 if extract_arg(args, "live").is_some_and(|v| v == "true") {
                     return crate::admin::ops::traffic_live_json(host.as_deref()).map(McpContent::json);
                 }

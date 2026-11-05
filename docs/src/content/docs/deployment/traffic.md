@@ -97,6 +97,50 @@ depth (up to 25/50/75/100 %), screen widths, events and their properties,
 and goals. Browsers driven by automation (`navigator.webdriver`) don't
 report.
 
+## Keeping every page view in PostgreSQL (optional)
+
+The page's counts are kept small on purpose: hourly totals and the top
+entries of each list, for `retention_days`. To keep every page view — for
+longer history, or filters the counts can't answer ("visitors from Germany
+who read `/docs/*` on a phone, from the spring campaign") — give rws a
+PostgreSQL database (since 18.31.0):
+
+```toml
+[traffic]
+database_url_env = "TRAFFIC_DATABASE_URL"   # the variable holding the URL
+```
+
+```sh
+TRAFFIC_DATABASE_URL=postgres://rws:secret@db.internal/analytics rws
+```
+
+rws creates two tables if they're missing, `rws_traffic_pageviews` (one row
+per person's page view: time, site, path, the day's visitor hash, session
+start, referring site, channel, UTM values, country, browser family, OS,
+device class) and `rws_traffic_reports` (the script's reports), and writes
+them in batches from a background thread — every 10 seconds or 500 rows.
+Rows hold no IP address and no `User-Agent`; the visitor hash changes every
+day and at every restart. If the database is slow or down, rows queue (up
+to 20,000) and then are dropped rather than slowing requests. rws never
+deletes rows: keep or prune them as your policy says.
+
+The **Explore** section of the Traffic page then takes any dates and any
+combination of filters, and so does the API:
+
+`GET /admin/api/v1/traffic/query?from=2026-03-01&to=2026-05-31&country=DE&path=/docs/*&device=mobile`
+
+Filters: `host`, `path` (exact, or a prefix ending in `*`), `country`,
+`channel`, `utm_source`, `utm_campaign`, `browser`, `os`, `device`; `from`
+and `to` are UTC days, inclusive (default: the last 30 days). The answer
+has page views, visitors (per day), sessions, bounces, page views per day
+and the top pages, countries, channels, referrers, campaigns, browsers,
+systems and devices. `404` without a database. The tables are plain SQL, so
+any other tool can read them too.
+
+The release binaries include PostgreSQL support (the `model-postgres`
+feature), except the FIPS build: the database client's TLS brings crypto
+outside the validated module.
+
 ## Sessions
 
 A person's page views 30 minutes or less apart are one **session**; a
@@ -174,4 +218,5 @@ the live view: `visitors` (people in the last 5 minutes), `views_5m`, a
 
 MCP tool `traffic_summary` `{"hours": 24}` answers the same, so an AI client
 connected to the server can tell you who has been visiting; `{"live": true}`
-gives the live view.
+gives the live view, and `{"from": "2026-03-01", "country": "DE", …}` a
+database query.

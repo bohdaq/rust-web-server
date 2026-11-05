@@ -549,6 +549,18 @@ impl AdminApi {
                 _ => wrong_method("DELETE"),
             };
         }
+        if route == "/traffic/query" {
+            if method != "GET" {
+                return wrong_method("GET");
+            }
+            let arg = |key: &str| query(request, key).map(|v| crate::url::URL::percent_decode(&v));
+            return match ops::traffic_query_json(&arg) {
+                Ok(body) => ok(body),
+                Err(e) if e.starts_with("no traffic database") => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+                Err(e) if e.starts_with("database: ") => error(STATUS_CODE_REASON_PHRASE.n500_internal_server_error, &e),
+                Err(e) => error(STATUS_CODE_REASON_PHRASE.n400_bad_request, &e),
+            };
+        }
         if route == "/traffic/live" {
             if method != "GET" {
                 return wrong_method("GET");

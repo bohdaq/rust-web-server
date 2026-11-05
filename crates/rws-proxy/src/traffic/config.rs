@@ -9,6 +9,7 @@ pub const RWS_CONFIG_TRAFFIC_EXCLUDE: &str = "RWS_CONFIG_TRAFFIC_EXCLUDE";
 pub const RWS_CONFIG_TRAFFIC_GEO_DB: &str = "RWS_CONFIG_TRAFFIC_GEO_DB";
 pub const RWS_CONFIG_TRAFFIC_SCRIPT: &str = "RWS_CONFIG_TRAFFIC_SCRIPT";
 pub const RWS_CONFIG_TRAFFIC_GOALS: &str = "RWS_CONFIG_TRAFFIC_GOALS";
+pub const RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV: &str = "RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV";
 
 fn read(key: &str) -> String {
     std::env::var(key).unwrap_or_default().trim().to_string()
@@ -79,4 +80,16 @@ pub const MAX_GOALS: usize = 32;
 /// comma-separated; at most [`MAX_GOALS`].
 pub fn goals() -> Vec<String> {
     read(RWS_CONFIG_TRAFFIC_GOALS).split(',').map(str::trim).filter(|g| !g.is_empty()).take(MAX_GOALS).map(str::to_string).collect()
+}
+
+/// `database_url_env`: the environment variable holding a `postgres://` URL
+/// to write page views and script reports to (the URL itself stays out of
+/// the config file and the admin API). `None` when unset or the variable is
+/// empty.
+pub fn database_url() -> Option<String> {
+    let name = read(RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV);
+    if name.is_empty() {
+        return None;
+    }
+    std::env::var(&name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }

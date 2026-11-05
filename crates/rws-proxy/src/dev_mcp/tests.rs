@@ -245,6 +245,8 @@ fn traffic_summary_answers_the_period_or_now() {
     assert!(period.contains(r#""totals":"#) && period.contains(r#""sessions":"#), "{period}");
     let live = call(&mcp, "traffic_summary", r#"{"live":true,"host":"example.com"}"#);
     assert!(live.contains(r#""views_5m":"#) && live.contains(r#""host":"example.com""#), "{live}");
+    let query = call(&mcp, "traffic_summary", r#"{"from":"2026-11-01"}"#);
+    assert!(query.contains("no traffic database"), "{query}");
 }
 
 #[test]

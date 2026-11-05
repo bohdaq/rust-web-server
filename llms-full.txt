@@ -1923,6 +1923,7 @@ don't use them.
 | `RWS_CONFIG_TRAFFIC_EXCLUDE` | `/healthz,/readyz,/metrics` | paths | Exact paths not counted. |
 | `RWS_CONFIG_TRAFFIC_SCRIPT` | `false` | boolean | Serve the first-party traffic script at `/_rws/t.js` and take its reports at `/_rws/t` (since 18.31.0). See [The first-party script](/deployment/traffic/#the-first-party-script-optional). |
 | `RWS_CONFIG_TRAFFIC_GOALS` | (none) | comma list | Conversions to count: page paths (`/thanks/`, prefix `/docs/*`) or script events (`event:signup`); at most 32 (since 18.31.0). |
+| `RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV` | (none) | variable name | The environment variable holding a `postgres://` URL to keep every page view in (since 18.31.0; needs the `model-postgres` feature, in the release binaries but the FIPS one). See [Keeping every page view](/deployment/traffic/#keeping-every-page-view-in-postgresql-optional). |
 | `RWS_CONFIG_TRAFFIC_GEO_DB` | the built-in table | path | A country table in `ci/gen_geo.py`'s format to use instead of the built-in one (since 18.31.0). Unreadable: the built-in one, with a warning. |
 | `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
 
@@ -2263,6 +2264,7 @@ retention_days   = 30                        # 1–90
 # geo_db         = "/var/lib/rws/geo.bin"    # a newer country table (ci/gen_geo.py); default: the built-in one
 # script         = true                      # serve /_rws/t.js and take its reports at /_rws/t (default false)
 # goals          = ["/thanks/", "event:signup"]  # conversions: paths (prefix with *) or script events
+# database_url_env = "TRAFFIC_DATABASE_URL"  # keep every page view in PostgreSQL (the variable holding the URL)
 ```
 ## Other settings
 
@@ -20759,7 +20761,7 @@ client that asks before acting asks for those.
 | `feature_flags`, `feature_list` | |
 | `authz_check` `{"subject": "user:alice", "relation": "viewer", "object": "doc:42"}` — allowed, and why | `authz_write` / `authz_delete` `{"tuple": "doc:42#viewer@user:alice"}` |
 | `authz_tuples` `{"object": "doc", "subject": "user:alice"}` — relationship tuples | |
-| `traffic_summary` `{"hours": 24, "host": "example.com"}` (or `{"live": true}`, who is on the site now) — who visited: people, AI agents, bots; sessions and bounce rate; where people came from and their countries, browsers and devices | |
+| `traffic_summary` `{"hours": 24, "host": "example.com"}` (or `{"live": true}`, who is on the site now; `{"from": "2026-03-01", "country": "DE"}`, the traffic database) — who visited: people, AI agents, bots; sessions and bounce rate; where people came from and their countries, browsers and devices | |
 
 The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer
@@ -23440,6 +23442,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
 | `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
 | `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
+| `GET /traffic/query?from=&to=&host=&path=&country=&channel=&utm_source=&utm_campaign=&browser=&os=&device=` | Page views from the traffic database (`[traffic] database_url_env`) for any days and filters (18.31.0, [Traffic insights](/deployment/traffic/#keeping-every-page-view-in-postgresql-optional)). `404` without a database, `400` for a bad date |
 | `GET /traffic/live?host=` | People on the site in the last 5 minutes, page views per minute for 30 minutes, current pages and countries (18.31.0). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
@@ -23709,6 +23712,50 @@ depth (up to 25/50/75/100 %), screen widths, events and their properties,
 and goals. Browsers driven by automation (`navigator.webdriver`) don't
 report.
 
+## Keeping every page view in PostgreSQL (optional)
+
+The page's counts are kept small on purpose: hourly totals and the top
+entries of each list, for `retention_days`. To keep every page view — for
+longer history, or filters the counts can't answer ("visitors from Germany
+who read `/docs/*` on a phone, from the spring campaign") — give rws a
+PostgreSQL database (since 18.31.0):
+
+```toml
+[traffic]
+database_url_env = "TRAFFIC_DATABASE_URL"   # the variable holding the URL
+```
+
+```sh
+TRAFFIC_DATABASE_URL=postgres://rws:secret@db.internal/analytics rws
+```
+
+rws creates two tables if they're missing, `rws_traffic_pageviews` (one row
+per person's page view: time, site, path, the day's visitor hash, session
+start, referring site, channel, UTM values, country, browser family, OS,
+device class) and `rws_traffic_reports` (the script's reports), and writes
+them in batches from a background thread — every 10 seconds or 500 rows.
+Rows hold no IP address and no `User-Agent`; the visitor hash changes every
+day and at every restart. If the database is slow or down, rows queue (up
+to 20,000) and then are dropped rather than slowing requests. rws never
+deletes rows: keep or prune them as your policy says.
+
+The **Explore** section of the Traffic page then takes any dates and any
+combination of filters, and so does the API:
+
+`GET /admin/api/v1/traffic/query?from=2026-03-01&to=2026-05-31&country=DE&path=/docs/*&device=mobile`
+
+Filters: `host`, `path` (exact, or a prefix ending in `*`), `country`,
+`channel`, `utm_source`, `utm_campaign`, `browser`, `os`, `device`; `from`
+and `to` are UTC days, inclusive (default: the last 30 days). The answer
+has page views, visitors (per day), sessions, bounces, page views per day
+and the top pages, countries, channels, referrers, campaigns, browsers,
+systems and devices. `404` without a database. The tables are plain SQL, so
+any other tool can read them too.
+
+The release binaries include PostgreSQL support (the `model-postgres`
+feature), except the FIPS build: the database client's TLS brings crypto
+outside the validated module.
+
 ## Sessions
 
 A person's page views 30 minutes or less apart are one **session**; a
@@ -23786,7 +23833,8 @@ the live view: `visitors` (people in the last 5 minutes), `views_5m`, a
 
 MCP tool `traffic_summary` `{"hours": 24}` answers the same, so an AI client
 connected to the server can tell you who has been visiting; `{"live": true}`
-gives the live view.
+gives the live view, and `{"from": "2026-03-01", "country": "DE", …}` a
+database query.
 
 ---
 
