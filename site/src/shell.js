@@ -84,6 +84,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : ""}
 ${jsonLd.map((d) => `<script type="application/ld+json">${JSON.stringify(d).replace(/</g, "\\u003c")}</script>`).join("")}
 ${css}
 <script type="module" src="${assets.js}"></script>
+<script defer src="/_rws/t.js"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
