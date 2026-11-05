@@ -96,6 +96,12 @@ it counts `sessions`, `bounces` (1 page), `duration` (last − first view),
 old day before clearing it. Hourly buckets gain `sessions` and `bounces` for
 people; the summary adds bounce rate, pages/session, average duration.
 
+Implementation notes from tranche 1: `Deferred` keeps the hour only —
+sessions need each deferred request's `now`, and a session starts at the
+earliest deferred request, not at the asset that decided the person;
+`persist::from_json` takes `hours` rows of exactly 8 numbers, so adding
+session counts must accept both lengths to keep old files loadable.
+
 ### Real-time (tranche 3)
 
 A per-shard ring of the last 5 minutes' people page views (visitor hash,
