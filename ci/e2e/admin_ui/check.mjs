@@ -153,7 +153,10 @@ for (const [tab, heading] of [["Pages", "Entry pages"], ["Sources", "Channels"],
 }
 await t2.getByRole("tab", { name: "Overview" }).click();
 if ((await t2.locator(".t-map svg path").count()) < 150) fail("no world map");
-if ((await t2.locator(".t-map path.on").count()) < 1) fail("the map shows no country");
+// A country is shaded only when the visitors' address has one (a CI runner
+// reaches itself over a private address: no country).
+const known = (ranged.countries ?? []).some(([code]) => /^[A-Z]{2}$/.test(code));
+if (known && (await t2.locator(".t-map path.on").count()) < 1) fail("the map shows no country");
 // Humans / AI agents / Bots / All.
 for (const [group, heading] of [["AI agents", "AI agents"], ["Bots", "By kind"], ["All", "Share of requests"]]) {
   await t2.locator(".t-seg button", { hasText: group }).click();
