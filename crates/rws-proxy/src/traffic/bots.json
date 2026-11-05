@@ -167,6 +167,11 @@
 "AI Assistants"
 ],
 [
+"Claude-Agent",
+"Unclear at this time.",
+"AI Agents"
+],
+[
 "Claude-Code",
 "Unclear at this time.",
 "AI Coding Agents"
@@ -852,6 +857,11 @@
 "AI Search Crawlers"
 ],
 [
+"__usage_ai-training",
+"Not applicable.",
+"AI Data Scrapers"
+],
+[
 "aiHitBot",
 "[aiHit](https://www.aihitdata.com/about)",
 "A massive, artificial intelligence/machine learning, automated system."
@@ -1013,7 +1023,7 @@
 ]
 ],
 "license": "MIT",
-"source": "https://github.com/ai-robots-txt/ai.robots.txt @ d8e8b77ca6f04ee132fd5dec0ce842b5d45e85da"
+"source": "https://github.com/ai-robots-txt/ai.robots.txt @ 04e0048d7bf9c709c5abe64a577aba2e2f8ccd16"
 },
 "crawlers": {
 "license": "MIT",
@@ -7041,7 +7051,7 @@
 ],
 "source": "https://github.com/monperrus/crawler-user-agents @ db662d2787f984ed4fe3043744a12eb067b89218"
 },
-"generated": "2026-10-31",
+"generated": "2026-11-05",
 "ranges": [
 {
 "group": "bot",

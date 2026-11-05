@@ -5,9 +5,12 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
+## 18.31.0 — 2026-11-05
 
 ### Added
+
+- **Bundled traffic tables refreshed**: AI agents and crawlers
+  (`ci/gen_bot_lists.py --update`) and DB-IP Lite countries 2026-11.
 
 - **Traffic page: sources and audience** (`spec/TRAFFIC_ANALYTICS.md`,
   tranche 1): how people arrived (direct, search, social, AI assistants,
