@@ -18,6 +18,8 @@
 mod classify;
 pub mod config;
 mod data;
+pub mod device;
+pub mod geo;
 #[doc(hidden)]
 pub mod persist;
 pub mod record;
@@ -48,6 +50,7 @@ pub fn observe(request: &crate::request::Request, response: &crate::response::Re
         path: &request.request_uri,
         status: response.status_code,
         content_type,
+        headers: &request.headers,
         now: record::now(),
     });
 }
@@ -60,6 +63,10 @@ pub fn start() {
         return;
     }
     enable();
+    // Decode the country table now rather than on the first visitor's request.
+    let _ = std::thread::Builder::new().name("rws-traffic-geo".to_string()).spawn(|| {
+        geo::table();
+    });
     let Some(path) = config::persist_path() else { return };
     persist::load(&path);
     let _ = std::thread::Builder::new().name("rws-traffic".to_string()).spawn(move || loop {

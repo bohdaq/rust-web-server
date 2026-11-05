@@ -508,6 +508,19 @@ pub mod fuzz_api {
         let ip = std::net::IpAddr::from([data.first().copied().unwrap_or(1), 2, 3, 4]);
         let class = crate::traffic::classify(ip, Some(ua), path);
         let _ = (class.group(), class.kind.label());
+        // The audience and source parsers (18.31) see the same input.
+        let _ = crate::traffic::device::parse(ua, Some(path), Some(ua));
+        let _ = crate::traffic::record::utm(path);
+        let _ = crate::traffic::record::channel_of(ua);
+    }
+
+    /// A country table as `[traffic] geo_db` loads it (18.31): inflated and
+    /// raw. Must never panic, nor allocate without bound.
+    pub fn traffic_geo(data: &[u8]) {
+        for table in [crate::traffic::geo::Table::parse(data), crate::traffic::geo::Table::decode(data)].into_iter().flatten() {
+            let _ = table.country(std::net::IpAddr::from([data.first().copied().unwrap_or(1), 2, 3, 4]));
+            let _ = table.country("2001:db8::1".parse().unwrap());
+        }
     }
 
     /// Authorization text as the admin API and config file read it (#32):

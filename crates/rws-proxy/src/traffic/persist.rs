@@ -5,8 +5,12 @@
 //! ```text
 //! {"version":1,"hosts":["example.com"],
 //!  "hours":[[hour, host, people req, people pages, ai req, ai pages, bot req, bot pages], …],
-//!  "days":[{"day":N,"visitors":[p,a,b],"people_pages":[["example.com/",12],…],…}, …]}
+//!  "days":[{"day":N,"visitors":[p,a,b],"people_pages":[["example.com/",12],…],…,
+//!           "countries":[["example.com\tDE",3],…],…}, …]}
 //! ```
+//!
+//! The audience and source lists (`countries` … `utm_campaign`, 18.31) are
+//! additive: older files load without them, older rws ignores them.
 //!
 //! Unique-visitor keys are never saved: a restart within a day can count a
 //! returning visitor once more.
@@ -14,7 +18,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use super::record::{Counts, Day, Top, TOP_SAVED};
+use super::record::{Counts, Day, Top, DIMS, DIM_SAVED, TOP_SAVED};
 use crate::mcp::json_rpc::{extract_raw, extract_str, split_array_elements};
 
 const LISTS: [&str; 6] = ["people_pages", "ai_pages", "ai_agents", "bots", "referrers", "not_found"];
@@ -37,6 +41,9 @@ fn quote(s: &str) -> String {
 }
 
 fn list<'a>(day: &'a Day, name: &str) -> &'a Top {
+    if let Some(i) = DIMS.iter().position(|d| *d == name) {
+        return &day.dims[i];
+    }
     match name {
         "people_pages" => &day.people_pages,
         "ai_pages" => &day.ai_pages,
@@ -48,6 +55,9 @@ fn list<'a>(day: &'a Day, name: &str) -> &'a Top {
 }
 
 fn list_mut<'a>(day: &'a mut Day, name: &str) -> &'a mut Top {
+    if let Some(i) = DIMS.iter().position(|d| *d == name) {
+        return &mut day.dims[i];
+    }
     match name {
         "people_pages" => &mut day.people_pages,
         "ai_pages" => &mut day.ai_pages,
@@ -75,8 +85,10 @@ pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; 3]>, days:
         .map(|(n, day)| {
             let lists: Vec<String> = LISTS
                 .iter()
+                .chain(DIMS.iter())
                 .map(|name| {
-                    let entries: Vec<String> = list(day, name).sorted(TOP_SAVED).iter().map(|(k, v)| format!("[{},{v}]", quote(k))).collect();
+                    let keep = if DIMS.contains(name) { DIM_SAVED } else { TOP_SAVED };
+                    let entries: Vec<String> = list(day, name).sorted(keep).iter().map(|(k, v)| format!("[{},{v}]", quote(k))).collect();
                     format!("{}:[{}]", quote(name), entries.join(","))
                 })
                 .collect();
@@ -121,7 +133,7 @@ pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts
         for (g, v) in visitors.iter().take(3).enumerate() {
             day.visitors[g] = *v;
         }
-        for name in LISTS {
+        for name in LISTS.iter().chain(DIMS.iter()) {
             let raw = extract_raw(&object, name).unwrap_or_default();
             for pair in split_array_elements(&raw) {
                 let parts = split_array_elements(&pair);

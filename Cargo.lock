@@ -3594,6 +3594,7 @@ version = "18.30.0"
 dependencies = [
  "aws-lc-rs",
  "bytes",
+ "flate2",
  "h2",
  "h3",
  "h3-quinn",

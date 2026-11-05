@@ -169,6 +169,7 @@ KMS; see [PKCS#11](/features/https-tls/#keys-in-an-hsm-or-cloud-kms-pkcs11).
 | `http1` | Synchronous thread-pool server, no async runtime, no TLS | `ctrlc`, `libc` |
 | `http2` | tokio runtime, TLS via rustls (aws-lc-rs), HTTP/2 via ALPN | `h2`, `rustls`, `tokio`, `tokio-rustls`, … |
 | `http3` *(default)* | QUIC transport and HTTP/3 on top of `http2` | `quinn`, `h3`, `h3-quinn` |
+| `geo` *(default)* | The country table of the admin UI's Traffic page (DB-IP Lite, CC BY 4.0, ~700 KB), since 18.31.0 | `flate2` |
 | `http-client` | HTTPS support in the outbound `Client` | `rustls`, `webpki-roots` |
 | `serde` | JSON serialization/deserialization via serde | `serde`, `serde_json` |
 | `auth` | `BasicAuthLayer`, `JwtLayer` (HS256), `ForwardAuthLayer`, JWT helpers | `hmac`, `sha2` |

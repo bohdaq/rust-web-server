@@ -234,6 +234,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "traffic_geo"
+path = "fuzz_targets/traffic_geo.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "authz_parse"
 path = "fuzz_targets/authz_parse.rs"
 test = false

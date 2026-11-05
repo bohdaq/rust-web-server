@@ -9,6 +9,19 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **Traffic page: sources and audience** (`spec/TRAFFIC_ANALYTICS.md`,
+  tranche 1): how people arrived (direct, search, social, AI assistants,
+  other sites, UTM campaigns with `utm_source`/`utm_medium`/`utm_campaign`
+  tables) and who they are (country, browser, operating system, device
+  class), each person counted once a day — in the admin UI, `GET
+  /admin/api/v1/traffic` (`channels`, `countries`, `browsers`, `os`,
+  `devices`, `utm_*`, `geo_source`) and the saved file. Countries come from
+  a DB-IP Lite table built in (new default feature `geo`, ~700 KB;
+  `ci/gen_geo.py`; `[traffic] geo_db` for a newer one); the lookup stays on
+  the server and no address is kept. Chromium client hints are preferred
+  to the `User-Agent`. No cookies or browser storage. Same per-request cost
+  as before (A/B ~165 ns). Fuzz target `traffic_geo`.
+
 - **ORM, part 2** (roadmap #90):
   - Eager loading: `Post::query(&pool).with(Post::comments()).with(Post::author()).fetch_all()`
     loads each relation for the whole result set in one more query

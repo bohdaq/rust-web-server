@@ -555,6 +555,7 @@ KMS; see [PKCS#11](/features/https-tls/#keys-in-an-hsm-or-cloud-kms-pkcs11).
 | `http1` | Synchronous thread-pool server, no async runtime, no TLS | `ctrlc`, `libc` |
 | `http2` | tokio runtime, TLS via rustls (aws-lc-rs), HTTP/2 via ALPN | `h2`, `rustls`, `tokio`, `tokio-rustls`, … |
 | `http3` *(default)* | QUIC transport and HTTP/3 on top of `http2` | `quinn`, `h3`, `h3-quinn` |
+| `geo` *(default)* | The country table of the admin UI's Traffic page (DB-IP Lite, CC BY 4.0, ~700 KB), since 18.31.0 | `flate2` |
 | `http-client` | HTTPS support in the outbound `Client` | `rustls`, `webpki-roots` |
 | `serde` | JSON serialization/deserialization via serde | `serde`, `serde_json` |
 | `auth` | `BasicAuthLayer`, `JwtLayer` (HS256), `ForwardAuthLayer`, JWT helpers | `hmac`, `sha2` |
@@ -1920,6 +1921,7 @@ don't use them.
 | `RWS_CONFIG_TRAFFIC_RETENTION_DAYS` | `30` | 1–90 | Days of traffic counts kept. |
 | `RWS_CONFIG_TRAFFIC_PERSIST` | `traffic.json` beside the certificate | path or `off` | Where the counts are saved (every 5 minutes and at shutdown) so restarts keep them; unset with no certificate configured: not saved. |
 | `RWS_CONFIG_TRAFFIC_EXCLUDE` | `/healthz,/readyz,/metrics` | paths | Exact paths not counted. |
+| `RWS_CONFIG_TRAFFIC_GEO_DB` | the built-in table | path | A country table in `ci/gen_geo.py`'s format to use instead of the built-in one (since 18.31.0). Unreadable: the built-in one, with a warning. |
 | `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
 
 The log format is hot-reloadable.
@@ -2256,6 +2258,7 @@ User-Agents are kept.
 retention_days   = 30                        # 1–90
 # persist        = "/var/lib/rws/traffic.json"  # default: traffic.json beside the certificate; "off"
 # exclude        = ["/healthz", "/readyz", "/metrics"]
+# geo_db         = "/var/lib/rws/geo.bin"    # a newer country table (ci/gen_geo.py); default: the built-in one
 ```
 ## Other settings
 
@@ -20752,7 +20755,7 @@ client that asks before acting asks for those.
 | `feature_flags`, `feature_list` | |
 | `authz_check` `{"subject": "user:alice", "relation": "viewer", "object": "doc:42"}` — allowed, and why | `authz_write` / `authz_delete` `{"tuple": "doc:42#viewer@user:alice"}` |
 | `authz_tuples` `{"object": "doc", "subject": "user:alice"}` — relationship tuples | |
-| `traffic_summary` `{"hours": 24, "host": "example.com"}` — who visited: people, AI agents, bots | |
+| `traffic_summary` `{"hours": 24, "host": "example.com"}` — who visited: people, AI agents, bots; where people came from and their countries, browsers and devices | |
 
 The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer
@@ -23651,6 +23654,40 @@ in memory only.
   `404`.
 - With more than one site (virtual hosts, `Host` names) a button per site.
   Visitor counts are for all sites together.
+- **Sources** (since 18.31.0): how people arrived, by channel, plus the
+  sites they came from and UTM campaigns (`utm_source`, `utm_medium`,
+  `utm_campaign`).
+- **Audience** (since 18.31.0): people's countries, browsers, operating
+  systems and devices (desktop, phone, tablet), each person counted once a
+  day.
+
+## Sources and audience
+
+A page view **arrives from outside** when it has no `Referer` (*direct*),
+a `Referer` from another site, or UTM tags; moving between the site's own
+pages isn't counted as an arrival. The channel is *campaign* when the URL
+has `utm_*` values, else from the referring site: *search* (Google, Bing,
+DuckDuckGo, …), *social* (X, Facebook, LinkedIn, Reddit, Hacker News, …),
+*AI assistants* (ChatGPT, Perplexity, Claude, Gemini, Copilot, …) or
+*other sites*.
+
+Browser, system and device come from the `User-Agent`, and from the
+`Sec-CH-UA-Platform` / `Sec-CH-UA-Mobile` client hints Chromium browsers
+send, which win. Only the family is kept (Chrome, not Chrome 141). iPad
+Safari presents itself as a Mac, so it counts as desktop.
+
+The country comes from a table built into the binary, **IP Geolocation by
+[DB-IP](https://db-ip.com)** ("IP to Country Lite", CC BY 4.0, ~700 KB,
+refreshed each release): the lookup happens on the server, nothing is sent
+anywhere, and only the country is counted — the address isn't kept.
+Private and reserved addresses are *Unknown*. To use a newer table, build
+one with `ci/gen_geo.py --update` and point `[traffic] geo_db` at it.
+Building without the `geo` feature (on by default) leaves the table out;
+countries are then *Unknown*.
+
+Nothing is stored in the visitor's browser — no cookie, no local storage —
+so no consent banner is needed for these counts. The cost is that a
+person who comes back the next day is a new visitor.
 
 ## How visitors are told apart
 
@@ -23674,7 +23711,8 @@ and the `User-Agent`. The secret and the hashes are never saved: no addresses
 or `User-Agent`s are kept, in memory or in the file. A restart within a day
 can count a returning visitor once more.
 
-Counting costs about 160 ns per request. Memory and the file are bounded: at
+Counting costs about 160 ns per request; the country and device are worked
+out once per visitor per day. Memory and the file are bounded: at
 most 16 sites (the rest count as `other`) and 200 entries per list per day
 (the rest as `(other)`; 100 are saved).
 
@@ -24187,6 +24225,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `LogLayer` | `request_log` | Records each request into `RequestLog` |
 | `EarlyHintsLayer` / `early_hints::send` | `early_hints` | `103 Early Hints` with `Link` values before the response, on HTTP/2 and HTTP/3 (HTTP/1.1 opt-in) (18.12.0). See [Early Hints](/features/early-hints/) |
 | `traffic::classify` / `Class` / `Kind` / `Group` | `traffic` | Who a client is from its address, User-Agent and path: person (browser), AI (training, search, assistant), bot (search engine, SEO, monitoring, preview, scanner, spoofed crawler, tool); crawler networks verified by their published IP ranges (18.15.0) |
+| `traffic::device::parse` / `Device` | `traffic` | A browser's family, operating system and device class from its `User-Agent` and client hints (18.31.0) |
+| `traffic::geo::country` | `traffic` | The country of an address from the built-in DB-IP Lite table (`geo` feature) or `[traffic] geo_db` (18.31.0) |
 | `RequestIdLayer` | `request_id` | Correlation-ID middleware — echoes or generates `X-Request-Id` (`generate_request_id()`, UUID-v4-shaped, not crypto-random). See [Request ID](/features/request-id/) |
 | `CsrfLayer` | `csrf` (`csrf`) | Double-submit cookie CSRF protection; 403 on mismatch. See [CSRF](/features/csrf/) |
 | `CsrfToken` | `csrf` (`csrf`) | Extractor for the current token in a GET handler; implements `Display` |

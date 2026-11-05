@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::record::{snapshot, Day, Top};
+use super::record::{snapshot, Day, Top, DIMS};
 
 fn quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -28,6 +28,20 @@ fn pairs(top: &Top, n: usize, host: Option<&str>) -> String {
         }
     }
     let rows: Vec<String> = filtered.sorted(n).iter().map(|(k, v)| format!("[{},{v}]", quote(k))).collect();
+    format!("[{}]", rows.join(","))
+}
+
+/// An audience/source list (`host\tvalue` keys) as `[[value, n], …]`: one
+/// host's, or all hosts' added up.
+fn dim(top: &Top, n: usize, host: Option<&str>) -> String {
+    let mut merged = Top::default();
+    for (key, count) in &top.0 {
+        let (h, value) = key.split_once('\t').unwrap_or(("", key.as_str()));
+        if host.is_none_or(|wanted| h.eq_ignore_ascii_case(wanted)) || key == "(other)" {
+            *merged.0.entry(value.to_string()).or_default() += count;
+        }
+    }
+    let rows: Vec<String> = merged.sorted(n).iter().map(|(k, v)| format!("[{},{v}]", quote(k))).collect();
     format!("[{}]", rows.join(","))
 }
 
@@ -121,8 +135,10 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
             format!(r#"{{"kind":{},"name":{},"requests":{n}}}"#, quote(kind), quote(name))
         })
         .collect();
+    let dims: Vec<String> = DIMS.iter().enumerate().map(|(i, name)| format!("{}:{}", quote(name), dim(&lists.dims[i], if i == 0 { 50 } else { 25 }, host))).collect();
+    let geo = super::geo::table().map_or("null".to_string(), |t| quote(&t.source));
     format!(
-        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{}}}"#,
+        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo}}}"#,
         if daily { "day" } else { "hour" },
         first_hour.map_or("null".to_string(), |h| (h * 3600).to_string()),
         names.iter().map(|n| quote(n)).collect::<Vec<_>>().join(","),
@@ -136,5 +152,6 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         bots.join(","),
         pairs(&lists.referrers, 25, None),
         pairs(&lists.not_found, 25, host),
+        dims.join(","),
     )
 }

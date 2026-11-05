@@ -85,8 +85,9 @@ console.log("ok: authorization tuple added and checked from the UI");
 // Visitors from outside: a person (a page and its stylesheet), an AI agent
 // claiming GPTBot (not from OpenAI's network: spoofed), and curl.
 const browserUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
-const visit = (path, ua) => fetch(`${externalUrl}${path}`, { headers: { "User-Agent": ua } });
-await visit("", browserUA);
+const visit = (path, ua, headers = {}) => fetch(`${externalUrl}${path}`, { headers: { "User-Agent": ua, ...headers } });
+// Arrives from a search engine with campaign tags (18.31 sources/audience).
+await visit("?utm_source=newsletter&utm_campaign=launch", browserUA, { Referer: "https://www.google.com/", "Sec-CH-UA-Platform": '"Linux"', "Sec-CH-UA-Mobile": "?0" });
 await visit("site.css", browserUA);
 await visit("", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.3; +https://openai.com/gptbot)");
 await visit("", "curl/8.5.0");
@@ -94,9 +95,16 @@ const traffic = await api("/traffic?hours=24");
 if (traffic.totals.people.visitors !== 1 || traffic.totals.people.pages !== 1) fail(`people: ${JSON.stringify(traffic.totals.people)}`);
 if (!traffic.bots.some((b) => b.kind === "spoofed" && b.name === "GPTBot")) fail(`spoofed GPTBot not counted: ${JSON.stringify(traffic.bots)}`);
 if (!traffic.bots.some((b) => b.kind === "tool")) fail(`curl not counted: ${JSON.stringify(traffic.bots)}`);
+const has = (list, key, n) => (list ?? []).some(([k, v]) => k === key && v === n);
+if (!has(traffic.browsers, "Chrome", 1) || !has(traffic.os, "Linux", 1) || !has(traffic.devices, "desktop", 1)) fail(`audience: ${JSON.stringify([traffic.browsers, traffic.os, traffic.devices])}`);
+if (!has(traffic.channels, "campaign", 1) || !has(traffic.utm_source, "newsletter", 1) || !has(traffic.utm_campaign, "launch", 1)) fail(`sources: ${JSON.stringify([traffic.channels, traffic.utm_source, traffic.utm_campaign])}`);
+if ((traffic.countries ?? []).length !== 1) fail(`countries: ${JSON.stringify(traffic.countries)}`);
 await page.goto(`${admin}/admin/#/traffic`);
 await page.locator('lit-material-stat[label="People: visitors"]').waitFor({ timeout: 5000 }).catch(() => fail("no Traffic page"));
 await page.locator("lit-material-line-chart").waitFor({ timeout: 5000 }).catch(() => fail("no traffic chart"));
+await page.getByRole("heading", { name: "Sources", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Sources section"));
+await page.getByRole("heading", { name: "Audience", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Audience section"));
+await page.locator('lit-material-bar-chart[label="Visits by channel"]').waitFor({ timeout: 5000 }).catch(() => fail("no channel chart"));
 await page.getByRole("button", { name: "Week" }).click();
 await page.getByText("Who visited in the last week").waitFor({ timeout: 5000 }).catch(() => fail("the range didn't switch"));
 console.log("ok: Traffic page counts a person, a spoofed GPTBot and curl");

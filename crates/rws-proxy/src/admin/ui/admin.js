@@ -3194,9 +3194,34 @@ var e=globalThis,t=e.ShadowRoot&&(e.ShadyCSS===void 0||e.ShadyCSS.nativeShadow)&
       ${l(`AI agents`,`AI agents`,e.ai_agents,[{key:`name`,label:`Agent`},{key:`operator`,label:`Operator`},{key:`kind`,label:`Kind`,render:e=>c(e.kind)},{key:`verified`,label:`Network`,render:e=>e.verified?$(`ok`,`Verified`):$(`neutral`,`Unverified`)},{key:`requests`,label:`Requests`,numeric:!0,render:e=>e.requests.toLocaleString()}])}
       ${l(`Pages AI agents read`,`Pages AI agents read`,o(e.ai_pages),[{key:`key`,label:`Page`,mono:!0},s])}
       ${l(`Bots`,`Bots by kind`,e.bots,[{key:`kind`,label:`Kind`,render:e=>c(e.kind)},{key:`name`,label:`Name`,render:e=>e.name||`—`},{key:`requests`,label:`Requests`,numeric:!0,render:e=>e.requests.toLocaleString()}])}
-      ${l(`Referrers (people)`,`Sites people came from`,o(e.referrers),[{key:`key`,label:`Site`,mono:!0},{...s,label:`Visits`}])}
+      ${this.renderTrafficSources(e,l,o,s)}
+      ${this.renderTrafficAudience(e,l)}
       ${l(`Not found`,`Paths answered 404`,o(e.not_found),[{key:`key`,label:`Path`,mono:!0},s])}
-    `}renderAuthz(e,t){return b`
+    `}renderTrafficSources(e,t,n,r){let i={direct:`Direct`,search:`Search`,social:`Social`,ai:`AI assistants`,referral:`Other sites`,campaign:`Campaigns (UTM)`},a={...r,label:`Visits`},o=e=>n(e??[]);return b`
+      <section class="section" aria-labelledby="traffic-sources">
+        <h2 id="traffic-sources">Sources</h2>
+        <p class="lede">How people arrived: a page view from outside the site. Moving between the site's own pages isn't counted here.</p>
+        ${(e.channels??[]).length===0?b`<p class="lede">Nothing in this period.</p>`:b`<lit-material-bar-chart label="Visits by channel" sort="desc" .format=${e=>`${e.toLocaleString()} visit${e===1?``:`s`}`}
+              .data=${e.channels.map(([e,t])=>({name:i[e]??e,value:t}))}></lit-material-bar-chart>`}
+      </section>
+      ${t(`Referrers (people)`,`Sites people came from`,n(e.referrers),[{key:`key`,label:`Site`,mono:!0},a])}
+      ${(e.utm_source??[]).length||(e.utm_campaign??[]).length?b`<div class="grid">
+            ${t(`Campaign sources`,`utm_source`,o(e.utm_source),[{key:`key`,label:`utm_source`,mono:!0},a])}
+            ${t(`Campaign media`,`utm_medium`,o(e.utm_medium),[{key:`key`,label:`utm_medium`,mono:!0},a])}
+            ${t(`Campaigns`,`utm_campaign`,o(e.utm_campaign),[{key:`key`,label:`utm_campaign`,mono:!0},a])}
+          </div>`:C}`}renderTrafficAudience(e,t){let n=null;try{n=new Intl.DisplayNames([navigator.language||`en`],{type:`region`})}catch{}let r=e=>{if(e===`(unknown)`||e===`(other)`)return e===`(other)`?`Other`:`Unknown`;try{return n?.of(e)??e}catch{return e}},i=e=>e.reduce((e,[,t])=>e+t,0),a=e=>{let t=i(e)||1;return e.map(([e,n])=>({key:e,count:n,share:n/t}))},o=(e,t=e=>e.key)=>[{key:`key`,label:e,render:t},{key:`count`,label:`Visitors`,numeric:!0,render:e=>e.count.toLocaleString()},{key:`share`,label:`Share`,numeric:!0,render:e=>`${Math.round(e.share*100)}%`}],s={desktop:`Desktop`,mobile:`Phone`,tablet:`Tablet`};return b`
+      <section class="section" aria-labelledby="traffic-audience">
+        <h2 id="traffic-audience">Audience</h2>
+        <p class="lede">People only, each counted once a day.
+          ${e.geo_source?b`Countries from the built-in <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a> table (${e.geo_source}, CC BY 4.0), looked up on this server.`:b`No country table is loaded (built without the <code>geo</code> feature).`}</p>
+        ${(e.devices??[]).length?b`<lit-material-bar-chart label="Visitors by device" sort="desc" .format=${e=>`${e.toLocaleString()} visitor${e===1?``:`s`}`}
+              .data=${e.devices.map(([e,t])=>({name:s[e]??e,value:t}))}></lit-material-bar-chart>`:C}
+      </section>
+      ${t(`Countries`,`Visitors by country`,a(e.countries??[]),o(`Country`,e=>b`${r(e.key)} <span class="lede">${e.key.length===2?e.key:``}</span>`))}
+      <div class="grid">
+        ${t(`Browsers`,`Visitors by browser`,a(e.browsers??[]),o(`Browser`))}
+        ${t(`Operating systems`,`Visitors by operating system`,a(e.os??[]),o(`System`))}
+      </div>`}renderAuthz(e,t){return b`
       <section class="section" aria-labelledby="authz-title">
         <h2 id="authz-title">Authorization</h2>
         <p class="lede">Relationship tuples, object#relation@subject. Schema: ${Object.entries(e.schema.types).filter(([,e])=>e.length).map(([e,t])=>`${e}: ${t.join(`, `)}`).join(` · `)}.</p>

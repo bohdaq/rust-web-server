@@ -632,9 +632,80 @@ export class RwsAdmin extends LitElement {
         { key: "name", label: "Name", render: (r) => r.name || "—" },
         { key: "requests", label: "Requests", numeric: true, render: (r) => r.requests.toLocaleString() },
       ])}
-      ${table("Referrers (people)", "Sites people came from", pairs(t.referrers), [{ key: "key", label: "Site", mono: true }, { ...countColumn, label: "Visits" }])}
+      ${this.renderTrafficSources(t, table, pairs, countColumn)}
+      ${this.renderTrafficAudience(t, table)}
       ${table("Not found", "Paths answered 404", pairs(t.not_found), [{ key: "key", label: "Path", mono: true }, countColumn])}
     `;
+  }
+
+  /** Where people's visits came from: channels, referrers, UTM campaigns. */
+  renderTrafficSources(t, table, pairs, countColumn) {
+    const channels = { direct: "Direct", search: "Search", social: "Social", ai: "AI assistants", referral: "Other sites", campaign: "Campaigns (UTM)" };
+    const visits = { ...countColumn, label: "Visits" };
+    const utm = (rows) => pairs(rows ?? []);
+    return html`
+      <section class="section" aria-labelledby="traffic-sources">
+        <h2 id="traffic-sources">Sources</h2>
+        <p class="lede">How people arrived: a page view from outside the site. Moving between the site's own pages isn't counted here.</p>
+        ${(t.channels ?? []).length === 0
+          ? html`<p class="lede">Nothing in this period.</p>`
+          : html`<lit-material-bar-chart label="Visits by channel" sort="desc" .format=${(n) => `${n.toLocaleString()} visit${n === 1 ? "" : "s"}`}
+              .data=${t.channels.map(([key, value]) => ({ name: channels[key] ?? key, value }))}></lit-material-bar-chart>`}
+      </section>
+      ${table("Referrers (people)", "Sites people came from", pairs(t.referrers), [{ key: "key", label: "Site", mono: true }, visits])}
+      ${(t.utm_source ?? []).length || (t.utm_campaign ?? []).length
+        ? html`<div class="grid">
+            ${table("Campaign sources", "utm_source", utm(t.utm_source), [{ key: "key", label: "utm_source", mono: true }, visits])}
+            ${table("Campaign media", "utm_medium", utm(t.utm_medium), [{ key: "key", label: "utm_medium", mono: true }, visits])}
+            ${table("Campaigns", "utm_campaign", utm(t.utm_campaign), [{ key: "key", label: "utm_campaign", mono: true }, visits])}
+          </div>`
+        : nothing}`;
+  }
+
+  /** Who the people are: countries, browsers, systems, devices. */
+  renderTrafficAudience(t, table) {
+    let regions = null;
+    try {
+      regions = new Intl.DisplayNames([navigator.language || "en"], { type: "region" });
+    } catch {
+      /* older browsers: show the codes */
+    }
+    const countryName = (code) => {
+      if (code === "(unknown)" || code === "(other)") return code === "(other)" ? "Other" : "Unknown";
+      try {
+        return regions?.of(code) ?? code;
+      } catch {
+        return code;
+      }
+    };
+    const total = (rows) => rows.reduce((sum, [, n]) => sum + n, 0);
+    const share = (rows) => {
+      const all = total(rows) || 1;
+      return rows.map(([key, n]) => ({ key, count: n, share: n / all }));
+    };
+    const columns = (label, render = (r) => r.key) => [
+      { key: "key", label, render },
+      { key: "count", label: "Visitors", numeric: true, render: (r) => r.count.toLocaleString() },
+      { key: "share", label: "Share", numeric: true, render: (r) => `${Math.round(r.share * 100)}%` },
+    ];
+    const devices = { desktop: "Desktop", mobile: "Phone", tablet: "Tablet" };
+    return html`
+      <section class="section" aria-labelledby="traffic-audience">
+        <h2 id="traffic-audience">Audience</h2>
+        <p class="lede">People only, each counted once a day.
+          ${t.geo_source
+            ? html`Countries from the built-in <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a> table (${t.geo_source}, CC BY 4.0), looked up on this server.`
+            : html`No country table is loaded (built without the <code>geo</code> feature).`}</p>
+        ${(t.devices ?? []).length
+          ? html`<lit-material-bar-chart label="Visitors by device" sort="desc" .format=${(n) => `${n.toLocaleString()} visitor${n === 1 ? "" : "s"}`}
+              .data=${t.devices.map(([key, value]) => ({ name: devices[key] ?? key, value }))}></lit-material-bar-chart>`
+          : nothing}
+      </section>
+      ${table("Countries", "Visitors by country", share(t.countries ?? []), columns("Country", (r) => html`${countryName(r.key)} <span class="lede">${r.key.length === 2 ? r.key : ""}</span>`))}
+      <div class="grid">
+        ${table("Browsers", "Visitors by browser", share(t.browsers ?? []), columns("Browser"))}
+        ${table("Operating systems", "Visitors by operating system", share(t.os ?? []), columns("System"))}
+      </div>`;
   }
 
   renderAuthz(authz, check) {

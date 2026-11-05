@@ -75,7 +75,7 @@ client that asks before acting asks for those.
 | `feature_flags`, `feature_list` | |
 | `authz_check` `{"subject": "user:alice", "relation": "viewer", "object": "doc:42"}` — allowed, and why | `authz_write` / `authz_delete` `{"tuple": "doc:42#viewer@user:alice"}` |
 | `authz_tuples` `{"object": "doc", "subject": "user:alice"}` — relationship tuples | |
-| `traffic_summary` `{"hours": 24, "host": "example.com"}` — who visited: people, AI agents, bots | |
+| `traffic_summary` `{"hours": 24, "host": "example.com"}` — who visited: people, AI agents, bots; where people came from and their countries, browsers and devices | |
 
 The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer

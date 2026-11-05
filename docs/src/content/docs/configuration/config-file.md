@@ -242,6 +242,7 @@ User-Agents are kept.
 retention_days   = 30                        # 1–90
 # persist        = "/var/lib/rws/traffic.json"  # default: traffic.json beside the certificate; "off"
 # exclude        = ["/healthz", "/readyz", "/metrics"]
+# geo_db         = "/var/lib/rws/geo.bin"    # a newer country table (ci/gen_geo.py); default: the built-in one
 ```
 ## Other settings
 

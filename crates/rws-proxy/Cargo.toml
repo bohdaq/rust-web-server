@@ -17,7 +17,7 @@ unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)', 'cfg(docsrs)'] 
 # `fips` (needs CMake and Go; no items) and `test-support` (test helpers, not
 # API).
 [package.metadata.docs.rs]
-features = ["http1", "acme", "auth", "gateway-api", "http-client", "http2", "http3", "model-mysql", "model-postgres", "model-sqlite", "serde", "sso", "storage-s3", "wasm-plugins", "brotli", "macros", "zstd", "mimalloc", "tower", "openapi", "sso-saml", "sso-server"]
+features = ["http1", "acme", "auth", "gateway-api", "http-client", "http2", "http3", "model-mysql", "model-postgres", "model-sqlite", "serde", "sso", "storage-s3", "wasm-plugins", "brotli", "macros", "zstd", "mimalloc", "tower", "openapi", "sso-saml", "sso-server", "geo"]
 rustdoc-args = ["--cfg", "docsrs"]
 targets = ["x86_64-unknown-linux-gnu"]
 
@@ -52,9 +52,12 @@ fips = ["rws-server/fips"]
 openapi = ["rws-server/openapi"]
 sso-saml = ["sso", "rws-server/sso-saml"]
 sso-server = ["sso", "auth", "rws-server/sso-server"]
+# Traffic analytics: the country table (DB-IP Lite, ~700 KB) compiled in.
+geo = ["dep:flate2"]
 
 [dependencies]
 rws-server.workspace = true
+flate2 = { version = "1", optional = true }
 rws-acme = { workspace = true, optional = true }
 rws-storage = { workspace = true, optional = true }
 rws-wasm-plugin = { workspace = true, optional = true }

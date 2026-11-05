@@ -6,6 +6,7 @@ pub const RWS_CONFIG_TRAFFIC_ENABLED: &str = "RWS_CONFIG_TRAFFIC_ENABLED";
 pub const RWS_CONFIG_TRAFFIC_RETENTION_DAYS: &str = "RWS_CONFIG_TRAFFIC_RETENTION_DAYS";
 pub const RWS_CONFIG_TRAFFIC_PERSIST: &str = "RWS_CONFIG_TRAFFIC_PERSIST";
 pub const RWS_CONFIG_TRAFFIC_EXCLUDE: &str = "RWS_CONFIG_TRAFFIC_EXCLUDE";
+pub const RWS_CONFIG_TRAFFIC_GEO_DB: &str = "RWS_CONFIG_TRAFFIC_GEO_DB";
 
 fn read(key: &str) -> String {
     std::env::var(key).unwrap_or_default().trim().to_string()
@@ -53,4 +54,11 @@ pub fn persist_path() -> Option<PathBuf> {
         .map(|key| read(key))
         .find(|path| !path.is_empty())
         .and_then(|cert| PathBuf::from(cert).parent().map(|dir| dir.join("traffic.json")))
+}
+
+/// `geo_db`: a country table (`ci/gen_geo.py`'s format) to use instead of
+/// the built-in one; unset: the built-in one.
+pub fn geo_db() -> Option<PathBuf> {
+    let value = read(RWS_CONFIG_TRAFFIC_GEO_DB);
+    (!value.is_empty()).then(|| PathBuf::from(value))
 }

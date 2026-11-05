@@ -152,7 +152,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [features]
-default = ["http3", "brotli", "zstd"]
+default = ["http3", "brotli", "zstd", "geo"]
 http1 = ["dep:ctrlc", "dep:libc", "rws-server/http1", "rws-proxy/http1"]
 http2 = ["dep:rcgen", "dep:aws-lc-rs", "dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc", "rws-server/http2", "rws-tower?/http2", "rws-acme?/http2", "rws-proxy/http2", "rws-gateway-api?/http2"]
 http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn", "rws-server/http3", "rws-proxy/http3"]
@@ -200,6 +200,7 @@ gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-uti
 # the release binaries enable it.
 wasm-plugins = ["dep:wasmtime", "dep:rws-wasm-plugin", "rws-wasm-plugin?/wasm-plugins", "rws-proxy/wasm-plugins"]
 openapi = ["rws-server/openapi", "rws-proxy/openapi"]  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
+geo = ["rws-proxy/geo"]  # traffic analytics: country of each visitor from a built-in DB-IP Lite table (~700 KB); no lookups leave the machine
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 rewrite-regex = ["dep:regex", "rws-server/rewrite-regex"]  # RewriteLayer::request_uri_regex_rewrite
 secrets = ["dep:hmac", "dep:sha2", "http-client", "rws-server/secrets"]  # secrets::resolve(): vault:// / aws-sm:// / azkv:// reference resolution (Vault, AWS Secrets Manager, Azure Key Vault); reuses storage-s3's SigV4 signer/credential chain and storage-azure's Managed Identity token fetch

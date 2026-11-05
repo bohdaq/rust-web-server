@@ -72,7 +72,39 @@ pub struct Hit<'a> {
     pub status: i16,
     /// The response's media type, when known.
     pub content_type: Option<&'a str>,
+    /// The request's headers: read (for the `Sec-CH-UA-Platform` and
+    /// `Sec-CH-UA-Mobile` client hints) only when a visitor is first seen,
+    /// so other requests don't pay for the lookup.
+    pub headers: &'a [crate::header::Header],
     pub now: u64,
+}
+
+/// The per-day lists of people's audience and sources, keyed
+/// `host\tvalue`: countries, browsers, OSes and device classes count
+/// visitors; channels and UTM values count visits (page views arriving
+/// from outside the site).
+pub const DIMS: [&str; 8] = ["countries", "browsers", "os", "devices", "channels", "utm_source", "utm_medium", "utm_campaign"];
+const COUNTRIES: usize = 0;
+const CHANNELS: usize = 4;
+const UTM: usize = 5;
+/// Entries a day's audience/source list keeps (all hosts together).
+pub const DIM_TOP: usize = 400;
+/// Entries of each audience/source list kept on disk.
+pub const DIM_SAVED: usize = 300;
+
+/// A person's country and device, worked out once a day.
+#[derive(Clone, Debug)]
+struct Audience {
+    country: Option<[u8; 2]>,
+    device: super::device::Device,
+}
+
+/// How a visit arrived, for a page view from outside the site.
+#[derive(Clone, Debug, Default)]
+struct Arrival {
+    channel: &'static str,
+    /// `utm_source`, `utm_medium`, `utm_campaign`.
+    utm: [Option<String>; 3],
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -89,9 +121,13 @@ pub struct Top(pub HashMap<String, u64>);
 
 impl Top {
     fn add(&mut self, key: &str, n: u64) {
+        self.add_capped(key, n, TOP);
+    }
+
+    fn add_capped(&mut self, key: &str, n: u64, cap: usize) {
         if let Some(count) = self.0.get_mut(key) {
             *count += n;
-        } else if self.0.len() < TOP {
+        } else if self.0.len() < cap {
             self.0.insert(key.chars().take(300).collect(), n);
         } else {
             *self.0.entry("(other)".to_string()).or_default() += n;
@@ -127,6 +163,8 @@ pub struct Day {
     pub bots: Top,
     pub referrers: Top,
     pub not_found: Top,
+    /// The [`DIMS`] lists, in that order.
+    pub dims: [Top; 8],
 }
 
 impl Day {
@@ -134,6 +172,9 @@ impl Day {
     pub fn merge(&mut self, other: &Day) {
         for g in 0..3 {
             self.visitors[g] += other.visitors[g];
+        }
+        for (mine, theirs) in self.dims.iter_mut().zip(&other.dims) {
+            mine.merge(theirs);
         }
         self.people_pages.merge(&other.people_pages);
         self.ai_pages.merge(&other.ai_pages);
@@ -156,6 +197,14 @@ struct Deferred {
     page: Option<String>,
     referrer: Option<String>,
     not_found: Option<String>,
+    arrival: Option<Arrival>,
+}
+
+/// A visitor's classification, and for browsers their audience.
+#[derive(Clone)]
+struct Cached {
+    class: Class,
+    audience: Option<Audience>,
 }
 
 #[derive(Default)]
@@ -166,7 +215,7 @@ struct Shard {
     /// Today's visitors and the group each was counted in.
     seen: HashMap<u64, Group>,
     pending: HashMap<u64, Pending>,
-    cache: HashMap<u64, Class>,
+    cache: HashMap<u64, Cached>,
     today: u64,
 }
 
@@ -307,6 +356,89 @@ fn referrer_host(referer: Option<&str>, host: &str) -> Option<String> {
     (!other.is_empty() && other != normalize_host(host)).then_some(other)
 }
 
+/// The channel a referring site belongs to.
+#[doc(hidden)]
+pub fn channel_of(referrer_host: &str) -> &'static str {
+    let h = referrer_host.strip_prefix("www.").unwrap_or(referrer_host);
+    let is = |d: &str| h == d || h.ends_with(&format!(".{d}"));
+    const AI: &[&str] = &["chatgpt.com", "chat.openai.com", "perplexity.ai", "claude.ai", "gemini.google.com", "copilot.microsoft.com", "chat.deepseek.com", "chat.mistral.ai", "you.com", "phind.com", "kagi.com"];
+    const SEARCH: &[&str] = &["bing.com", "duckduckgo.com", "search.yahoo.com", "yandex.ru", "yandex.com", "baidu.com", "ecosia.org", "search.brave.com", "startpage.com", "qwant.com", "naver.com", "seznam.cz"];
+    const SOCIAL: &[&str] = &[
+        "facebook.com", "m.facebook.com", "l.facebook.com", "lm.facebook.com", "t.co", "twitter.com", "x.com", "linkedin.com", "lnkd.in", "reddit.com", "instagram.com",
+        "youtube.com", "tiktok.com", "pinterest.com", "news.ycombinator.com", "mastodon.social", "bsky.app", "threads.net", "vk.com", "telegram.org", "t.me", "discord.com",
+        "whatsapp.com", "lobste.rs",
+    ];
+    if AI.iter().any(|d| is(d)) {
+        "ai"
+    } else if SEARCH.iter().any(|d| is(d)) || h.starts_with("google.") || h.contains(".google.") {
+        "search"
+    } else if SOCIAL.iter().any(|d| is(d)) {
+        "social"
+    } else {
+        "referral"
+    }
+}
+
+/// `%XX` and `+` decoded, at most 100 characters; `None` when empty.
+fn query_value(raw: &str) -> Option<String> {
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len().min(300));
+    let mut i = 0;
+    while i < bytes.len() && out.len() < 300 {
+        match bytes[i] {
+            b'+' => out.push(b' '),
+            b'%' if i + 2 < bytes.len() => {
+                match std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                    Some(b) => {
+                        out.push(b);
+                        i += 2;
+                    }
+                    None => out.push(b'%'),
+                }
+            }
+            b => out.push(b),
+        }
+        i += 1;
+    }
+    let value: String = String::from_utf8_lossy(&out).trim().chars().filter(|c| !c.is_control()).take(100).collect();
+    (!value.is_empty()).then_some(value)
+}
+
+/// `utm_source`, `utm_medium` and `utm_campaign` from a request target.
+#[doc(hidden)]
+pub fn utm(target: &str) -> [Option<String>; 3] {
+    let mut out: [Option<String>; 3] = Default::default();
+    let Some(query) = target.split_once('?').map(|(_, q)| q.split('#').next().unwrap_or(q)) else { return out };
+    for pair in query.split('&') {
+        let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+        let slot = match name {
+            "utm_source" => 0,
+            "utm_medium" => 1,
+            "utm_campaign" => 2,
+            _ => continue,
+        };
+        if out[slot].is_none() {
+            out[slot] = query_value(value);
+        }
+    }
+    out
+}
+
+/// How a page view arrived: `None` for navigation within the site (a
+/// same-site `Referer`), else the channel and any UTM values.
+fn arrival(hit: &Hit<'_>) -> Option<Arrival> {
+    let utm = utm(hit.path);
+    let channel = if utm[0].is_some() || utm[1].is_some() || utm[2].is_some() {
+        "campaign"
+    } else {
+        match hit.referer {
+            None => "direct",
+            Some(_) => channel_of(&referrer_host(hit.referer, hit.host)?),
+        }
+    };
+    Some(Arrival { channel, utm })
+}
+
 /// Requests of visitors already decided, counted by the thread that served
 /// them (merged by readers): most requests are assets and repeats, and they
 /// then cost no shared lock. Pages, 404s and undecided browsers take the
@@ -406,29 +538,41 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
     let mut shard = recorder.shards[(visitor % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
     shard.roll(day, recorder.retention_days);
 
-    let class = match shard.cache.get(&visitor) {
-        Some(class) => class.clone(),
+    let cached = match shard.cache.get(&visitor) {
+        Some(cached) => cached.clone(),
         None => {
             let class = classify(hit.ip, hit.user_agent, "/");
+            // Country and device only for browsers: they're shown for people.
+            let audience = (class.kind == Kind::Browser).then(|| Audience {
+                country: super::geo::country(hit.ip),
+                device: {
+                    let hint = |name: &str| hit.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name)).map(|h| h.value.as_ref());
+                    super::device::parse(hit.user_agent.unwrap_or(""), hint("sec-ch-ua-platform"), hint("sec-ch-ua-mobile"))
+                },
+            });
+            let cached = Cached { class, audience };
             if shard.cache.len() >= MAX_CACHE {
                 shard.cache.clear();
             }
-            shard.cache.insert(visitor, class.clone());
-            class
+            shard.cache.insert(visitor, cached.clone());
+            cached
         }
     };
+    let class = cached.class;
     let scanner = super::classify::scanner_path(hit.path) && matches!(class.kind, Kind::Browser | Kind::Tool | Kind::NoUserAgent);
     let class = if scanner { Class { kind: Kind::Scanner, name: "", operator: "", verified: false } } else { class };
     let page = is_page(hit).then(|| page_key(hit.host, path));
     let not_found = (hit.status == 404).then(|| page_key(hit.host, path));
     let referrer = referrer_host(hit.referer, hit.host);
+    // Where a person's page view came from (only browsers become people).
+    let arrival = if page.is_some() && class.kind == Kind::Browser { arrival(hit) } else { None };
 
     let decided = match class.group() {
         Group::Internal => None,
         Group::Person => {
             match shard.seen.get(&visitor).copied() {
                 Some(Group::Person) => {
-                    shard.count_person(hour, host, page, referrer, not_found);
+                    shard.count_person(hour, host, page, referrer, not_found, arrival);
                     Some(PEOPLE)
                 }
                 Some(_) => {
@@ -438,12 +582,15 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                 None if is_asset(path) => {
                     shard.seen.insert(visitor, Group::Person);
                     shard.day(day).visitors[PEOPLE] += 1;
+                    if let Some(audience) = &cached.audience {
+                        shard.count_audience(day, &normalize_host(hit.host), audience);
+                    }
                     if let Some(pending) = shard.pending.remove(&visitor) {
                         for d in pending.requests {
-                            shard.count_person(d.hour, d.host, d.page, d.referrer, d.not_found);
+                            shard.count_person(d.hour, d.host, d.page, d.referrer, d.not_found, d.arrival);
                         }
                     }
-                    shard.count_person(hour, host, page, referrer, not_found);
+                    shard.count_person(hour, host, page, referrer, not_found, arrival);
                     Some(PEOPLE)
                 }
                 None => {
@@ -456,7 +603,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                     } else {
                         let pending = shard.pending.entry(visitor).or_insert(Pending { last: hit.now, requests: Vec::new() });
                         pending.last = hit.now;
-                        pending.requests.push(Deferred { hour, host, page, referrer, not_found });
+                        pending.requests.push(Deferred { hour, host, page, referrer, not_found, arrival });
                         if pending.requests.len() < MAX_PENDING_REQUESTS {
                             None
                         } else {
@@ -509,11 +656,32 @@ impl Shard {
         self.hours.retain(|(h, _), _| *h / 24 >= oldest_day);
     }
 
-    fn count_person(&mut self, hour: u64, host: u8, page: Option<String>, referrer: Option<String>, not_found: Option<String>) {
+    /// A new person's country, browser, OS and device class.
+    fn count_audience(&mut self, day: u64, host: &str, audience: &Audience) {
+        let day = self.day(day);
+        let country = audience.country.map(|c| String::from_utf8_lossy(&c).into_owned());
+        let values = [country.as_deref().unwrap_or("(unknown)"), audience.device.browser, audience.device.os, audience.device.class];
+        for (i, value) in values.iter().enumerate() {
+            day.dims[COUNTRIES + i].add_capped(&format!("{host}\t{value}"), 1, DIM_TOP);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn count_person(&mut self, hour: u64, host: u8, page: Option<String>, referrer: Option<String>, not_found: Option<String>, arrival: Option<Arrival>) {
         let counts = &mut self.hours.entry((hour, host)).or_default()[PEOPLE];
         counts.requests += 1;
         counts.pages += page.is_some() as u64;
         let day = self.day(hour / 24);
+        if let (Some(arrival), Some(page)) = (arrival, &page) {
+            // The page key starts with the host.
+            let host = page.split('/').next().unwrap_or("");
+            day.dims[CHANNELS].add_capped(&format!("{host}\t{}", arrival.channel), 1, DIM_TOP);
+            for (i, value) in arrival.utm.iter().enumerate() {
+                if let Some(value) = value {
+                    day.dims[UTM + i].add_capped(&format!("{host}\t{value}"), 1, DIM_TOP);
+                }
+            }
+        }
         if let Some(page) = page {
             day.people_pages.add(&page, 1);
             if let Some(referrer) = referrer {

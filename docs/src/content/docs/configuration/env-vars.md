@@ -208,6 +208,7 @@ don't use them.
 | `RWS_CONFIG_TRAFFIC_RETENTION_DAYS` | `30` | 1–90 | Days of traffic counts kept. |
 | `RWS_CONFIG_TRAFFIC_PERSIST` | `traffic.json` beside the certificate | path or `off` | Where the counts are saved (every 5 minutes and at shutdown) so restarts keep them; unset with no certificate configured: not saved. |
 | `RWS_CONFIG_TRAFFIC_EXCLUDE` | `/healthz,/readyz,/metrics` | paths | Exact paths not counted. |
+| `RWS_CONFIG_TRAFFIC_GEO_DB` | the built-in table | path | A country table in `ci/gen_geo.py`'s format to use instead of the built-in one (since 18.31.0). Unreadable: the built-in one, with a warning. |
 | `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
 
 The log format is hot-reloadable.

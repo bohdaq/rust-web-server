@@ -96,6 +96,7 @@ fn hit<'a>(ip: &str, ua: &'a str, path: &'a str, now: u64) -> Hit<'a> {
         path,
         status: 200,
         content_type: if path.ends_with('/') { Some("text/html; charset=utf-8") } else { None },
+        headers: &[],
         now,
     }
 }
@@ -221,13 +222,167 @@ fn counts_survive_a_save_and_load() {
     }
     let text = std::fs::read_to_string(&*file).unwrap();
     assert!(text.starts_with(r#"{"version":1,"hosts":["example.com"],"hours":[["#), "{text}");
-    assert!(!text.contains("203.0.113") && !text.contains("Chrome"), "no addresses or user agents saved");
+    assert!(!text.contains("203.0.113") && !text.contains(CHROME), "no addresses or user agents saved (browser families are)");
     reset_for_tests();
     assert_eq!(totals(&summary(24, None, T0 + 60), "people").0, 0);
     super::persist::load(&file);
     assert_eq!(summary(24, None, T0 + 60), before);
     std::fs::write(&*file, "not json").unwrap();
     super::persist::load(&file); // reported, ignored
+}
+
+// ── audience and sources (18.31) ──────────────────────────────────────────────
+
+#[cfg(feature = "geo")]
+#[test]
+fn the_built_in_table_knows_countries() {
+    let table = super::geo::table().expect("built in");
+    assert!(table.source.starts_with("dbip-country-lite-"), "{}", table.source);
+    let c = |ip: &str| table.country(ip.parse().unwrap()).map(|c| String::from_utf8(c.to_vec()).unwrap());
+    assert_eq!(c("8.8.8.8").as_deref(), Some("US"));
+    assert_eq!(c("1.1.1.1").as_deref(), Some("AU"));
+    assert_eq!(c("5.172.33.9").as_deref(), Some("PL"));
+    assert_eq!(c("193.0.6.139").as_deref(), Some("NL"));
+    assert_eq!(c("2a00:1450:4001:80b::200e").as_deref(), Some("DE"));
+    assert_eq!(c("::ffff:8.8.8.8").as_deref(), Some("US"), "IPv4-mapped looks up the IPv4 table");
+    for private in ["10.1.2.3", "127.0.0.1", "0.0.0.0", "255.255.255.255", "::1", "fd00::1"] {
+        assert_eq!(c(private), None, "{private}");
+    }
+}
+
+#[test]
+fn a_damaged_geo_table_is_refused_not_trusted() {
+    use super::geo::Table;
+    assert!(Table::parse(b"").is_err());
+    assert!(Table::parse(b"RWSGEO1 x").is_err(), "no header end");
+    // one country, one range each: a valid minimal table…
+    let ok = b"RWSGEO1 t\n\x01DE\x01\x01\x00\x00\x00\x00".to_vec();
+    let table = Table::parse(&ok).unwrap();
+    assert_eq!(table.country("9.9.9.9".parse().unwrap()), Some(*b"DE"));
+    assert_eq!(table.len(), (1, 1));
+    // …and broken ones.
+    let mut bad_index = ok.clone();
+    *bad_index.last_mut().unwrap() = 7;
+    assert!(Table::parse(&bad_index).is_err(), "country index past the list");
+    assert!(Table::parse(&ok[..ok.len() - 1]).is_err(), "truncated");
+    let mut trailing = ok.clone();
+    trailing.push(0);
+    assert!(Table::parse(&trailing).is_err());
+    assert!(Table::parse(b"RWSGEO1 t\n\x01DE\x01\x01\x05\x00\x00\x00").is_err(), "first range must start at 0");
+    assert!(Table::parse(b"RWSGEO1 t\n\x01DE\xff\xff\xff\xff\x0f\x01").is_err(), "absurd range count");
+    assert!(Table::parse(b"RWSGEO1 t\n\x01DE\x02\x01\x00\x00\x00\x00\x00").is_err(), "repeated start");
+    assert!(Table::decode(b"not deflated").is_err());
+}
+
+#[test]
+fn devices_from_user_agents_and_client_hints() {
+    use super::device::parse;
+    let d = |ua: &str| {
+        let d = parse(ua, None, None);
+        (d.browser, d.os, d.class)
+    };
+    assert_eq!(d(CHROME), ("Chrome", "macOS", "desktop"));
+    assert_eq!(d("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0"), ("Edge", "Windows", "desktop"));
+    assert_eq!(d("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:144.0) Gecko/20100101 Firefox/144.0"), ("Firefox", "macOS", "desktop"));
+    assert_eq!(d("Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1"), ("Safari", "iOS", "mobile"));
+    assert_eq!(d("Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/141.0 Mobile/15E148 Safari/604.1"), ("Chrome", "iOS", "tablet"));
+    assert_eq!(d("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/28.0 Chrome/130.0.0.0 Mobile Safari/537.36"), ("Samsung Internet", "Android", "mobile"));
+    assert_eq!(d("Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"), ("Chrome", "Android", "tablet"));
+    assert_eq!(d("Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 OPR/120.0"), ("Opera", "ChromeOS", "desktop"));
+    assert_eq!(d(""), ("Other", "Other", "desktop"));
+    // Chromium's frozen UA says "Android 10; K"; the hints say what it is.
+    let hinted = parse(CHROME, Some("\"Windows\""), Some("?0"));
+    assert_eq!((hinted.os, hinted.class), ("Windows", "desktop"));
+    let phone = parse(CHROME, Some("\"Android\""), Some("?1"));
+    assert_eq!((phone.os, phone.class), ("Android", "mobile"));
+    assert_eq!(parse(CHROME, Some("\"\""), None).os, "macOS", "an empty hint falls back to the UA");
+}
+
+#[test]
+fn utm_values_and_channels() {
+    use super::record::{channel_of, utm};
+    assert_eq!(utm("/p/?utm_source=news%20letter&utm_medium=email&utm_campaign=fall+sale&x=1"), [Some("news letter".into()), Some("email".into()), Some("fall sale".into())]);
+    assert_eq!(utm("/p/?utm_source=&utm_medium=%zz"), [None, Some("%zz".into()), None], "empty is none; bad escapes kept");
+    assert_eq!(utm("/p/#utm_source=x"), [None, None, None]);
+    assert_eq!(utm("/?utm_source=a&utm_source=b"), [Some("a".into()), None, None], "the first wins");
+    let long = format!("/?utm_campaign={}", "x".repeat(5000));
+    assert_eq!(utm(&long)[2].as_ref().unwrap().len(), 100);
+    assert_eq!(channel_of("www.google.com"), "search");
+    assert_eq!(channel_of("google.co.uk"), "search");
+    assert_eq!(channel_of("duckduckgo.com"), "search");
+    assert_eq!(channel_of("t.co"), "social");
+    assert_eq!(channel_of("old.reddit.com"), "social");
+    assert_eq!(channel_of("chatgpt.com"), "ai");
+    assert_eq!(channel_of("www.perplexity.ai"), "ai");
+    assert_eq!(channel_of("blog.example.org"), "referral");
+    assert_eq!(channel_of("notgoogle.com"), "referral");
+}
+
+fn dim(json: &str, name: &str) -> String {
+    crate::mcp::json_rpc::extract_raw(json, name).unwrap()
+}
+
+#[test]
+fn people_get_an_audience_and_sources_bots_dont() {
+    let _g = fresh();
+    let iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
+    // A person from a search engine…
+    let mut first = hit("8.8.8.8", iphone, "/docs/", T0);
+    first.referer = Some("https://www.google.com/");
+    record(&first);
+    record(&hit("8.8.8.8", iphone, "/site.css", T0 + 1));
+    // …who then navigates within the site (not a new arrival).
+    let mut inside = hit("8.8.8.8", iphone, "/why/", T0 + 20);
+    inside.referer = Some("https://example.com/docs/");
+    record(&inside);
+    // A person from a campaign, on another host.
+    let mut campaign = hit("193.0.6.139", CHROME, "/?utm_source=newsletter&utm_medium=email&utm_campaign=launch", T0 + 2);
+    campaign.host = "shop.example";
+    campaign.content_type = Some("text/html");
+    record(&campaign);
+    let mut asset = hit("193.0.6.139", CHROME, "/app.js", T0 + 3);
+    asset.host = "shop.example";
+    record(&asset);
+    // A browser that never loads assets: no audience, no sources.
+    record(&hit("1.1.1.1", CHROME, "/docs/", T0 + 4));
+
+    let json = summary(24, None, T0 + 10 + UNDECIDED.as_secs());
+    assert_eq!(totals(&json, "people").2, 2, "{json}");
+    #[cfg(feature = "geo")]
+    assert_eq!(dim(&json, "countries"), r#"[["NL",1],["US",1]]"#, "the no-assets browser (AU) isn't a person: {json}");
+    #[cfg(not(feature = "geo"))]
+    assert_eq!(dim(&json, "countries"), r#"[["(unknown)",2]]"#, "no table: {json}");
+    assert_eq!(dim(&json, "browsers"), r#"[["Chrome",1],["Safari",1]]"#);
+    assert_eq!(dim(&json, "os"), r#"[["iOS",1],["macOS",1]]"#);
+    assert_eq!(dim(&json, "devices"), r#"[["desktop",1],["mobile",1]]"#);
+    assert_eq!(dim(&json, "channels"), r#"[["campaign",1],["search",1]]"#, "in-site navigation isn't an arrival: {json}");
+    assert_eq!(dim(&json, "utm_source"), r#"[["newsletter",1]]"#);
+    assert_eq!(dim(&json, "utm_medium"), r#"[["email",1]]"#);
+    assert_eq!(dim(&json, "utm_campaign"), r#"[["launch",1]]"#);
+    #[cfg(feature = "geo")]
+    assert!(json.contains(r#""geo_source":"dbip-country-lite-"#), "{json}");
+
+    let shop = summary(24, Some("shop.example"), T0 + 10 + UNDECIDED.as_secs());
+    #[cfg(feature = "geo")]
+    assert_eq!(dim(&shop, "countries"), r#"[["NL",1]]"#, "{shop}");
+    assert_eq!(dim(&shop, "channels"), r#"[["campaign",1]]"#);
+
+    // Saved and loaded with the rest.
+    let file = crate::test_env::TempPath::new("traffic_audience.json");
+    super::persist::save(&file).unwrap();
+    let before = summary(24, None, T0 + 10 + UNDECIDED.as_secs());
+    reset_for_tests();
+    super::persist::load(&file);
+    assert_eq!(summary(24, None, T0 + 10 + UNDECIDED.as_secs()), before);
+}
+
+#[test]
+fn a_direct_visit_has_no_referer() {
+    let _g = fresh();
+    record(&hit("8.8.8.8", CHROME, "/", T0));
+    record(&hit("8.8.8.8", CHROME, "/a.css", T0 + 1));
+    let json = summary(24, None, T0 + 5);
+    assert_eq!(dim(&json, "channels"), r#"[["direct",1]]"#, "{json}");
 }
 
 #[test]
