@@ -272,6 +272,11 @@ fn a_damaged_geo_table_is_refused_not_trusted() {
     assert!(Table::parse(b"RWSGEO1 t\n\x01DE\xff\xff\xff\xff\x0f\x01").is_err(), "absurd range count");
     assert!(Table::parse(b"RWSGEO1 t\n\x01DE\x02\x01\x00\x00\x00\x00\x00").is_err(), "repeated start");
     assert!(Table::decode(b"not deflated").is_err());
+    // fuzz/seeds/traffic_geo/minimal.raw: two IPv4 ranges (DE, then none from 1.0.0.0).
+    let seed = Table::parse(b"RWSGEO1 seed\n\x02DE--\x02\x01\x00\x80\x80\x80\x08\x00\x00\x01\x00").unwrap();
+    assert_eq!(seed.country("0.255.0.1".parse().unwrap()), Some(*b"DE"));
+    assert_eq!(seed.country("1.0.0.0".parse().unwrap()), None);
+    assert_eq!(seed.country("::1".parse().unwrap()), Some(*b"DE"));
 }
 
 #[test]
