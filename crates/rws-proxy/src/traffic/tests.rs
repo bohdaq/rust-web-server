@@ -385,6 +385,70 @@ fn a_direct_visit_has_no_referer() {
     assert_eq!(dim(&json, "channels"), r#"[["direct",1]]"#, "{json}");
 }
 
+// ── sessions (18.31, tranche 2) ───────────────────────────────────────────────
+
+fn sessions(json: &str, key: &str) -> (u64, u64, u64, u64) {
+    let s = crate::mcp::json_rpc::extract_raw(json, key).unwrap();
+    let n = |k: &str| crate::mcp::json_rpc::extract_raw(&s, k).unwrap().trim().parse::<u64>().unwrap();
+    (n("sessions"), n("bounces"), n("duration"), n("pages"))
+}
+
+#[test]
+fn sessions_bounces_duration_entry_and_exit() {
+    let _g = fresh();
+    use super::record::SESSION_GAP;
+    // Person A: three pages over 10 minutes (one session), the first two
+    // waiting until the stylesheet decides them.
+    record(&hit("8.8.8.8", CHROME, "/docs/", T0));
+    record(&hit("8.8.8.8", CHROME, "/why/", T0 + 60));
+    record(&hit("8.8.8.8", CHROME, "/a.css", T0 + 61));
+    record(&hit("8.8.8.8", CHROME, "/pricing/", T0 + 600));
+    // …then back after more than 30 minutes: a second, one-page session.
+    record(&hit("8.8.8.8", CHROME, "/blog/", T0 + 600 + SESSION_GAP + 1));
+    // Person B: one page, a bounce.
+    record(&hit("1.1.1.1", CHROME, "/", T0 + 5));
+    record(&hit("1.1.1.1", CHROME, "/a.css", T0 + 6));
+    // A bot's pages make no sessions.
+    record(&hit("132.196.86.7", GPTBOT, "/docs/", T0 + 7));
+
+    // While the last sessions are still open they count as if ending now.
+    let open = summary(24, None, T0 + 600 + SESSION_GAP + 2);
+    assert_eq!(sessions(&open, "sessions"), (3, 2, 600, 5), "{open}");
+    // Closed by settling, the same numbers.
+    let closed = summary(24, None, T0 + 4 * 3600);
+    assert_eq!(sessions(&closed, "sessions"), (3, 2, 600, 5), "{closed}");
+    assert!(closed.contains(r#""channels":[["direct",3]]"#), "one arrival per session: {closed}");
+    assert!(closed.contains(r#""entry_pages":[["example.com/",1],["example.com/blog/",1],["example.com/docs/",1]]"#), "{closed}");
+    assert!(closed.contains(r#""exit_pages":[["example.com/",1],["example.com/blog/",1],["example.com/pricing/",1]]"#), "{closed}");
+    assert_eq!(sessions(&closed, "previous_sessions"), (0, 0, 0, 0));
+
+    // Saved and loaded.
+    let file = crate::test_env::TempPath::new("traffic_sessions.json");
+    super::persist::save(&file).unwrap();
+    reset_for_tests();
+    super::persist::load(&file);
+    assert_eq!(summary(24, None, T0 + 4 * 3600), closed);
+
+    // Another host's filter sees none of them.
+    assert_eq!(sessions(&summary(24, Some("other.example"), T0 + 4 * 3600), "sessions"), (0, 0, 0, 0));
+}
+
+#[test]
+fn open_sessions_stay_bounded() {
+    let _g = fresh();
+    use super::record::MAX_OPEN_SESSIONS;
+    // More people at once than one shard keeps open (spread over 16 shards).
+    let n = MAX_OPEN_SESSIONS * 16 + 500;
+    for i in 0..n {
+        let ip = format!("2001:db8::{:x}:{:x}", i >> 16, i & 0xffff);
+        record(&hit(&ip, CHROME, "/a.css", T0));
+        record(&hit(&ip, CHROME, "/", T0 + 1));
+    }
+    let json = summary(24, None, T0 + 2);
+    // Every session is counted once, closed early or not.
+    assert_eq!(sessions(&json, "sessions").0, totals(&json, "people").2, "{}", &json[..300]);
+}
+
 #[test]
 #[ignore]
 fn zz_cost_per_request() {

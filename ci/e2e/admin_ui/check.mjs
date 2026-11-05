@@ -99,9 +99,13 @@ const has = (list, key, n) => (list ?? []).some(([k, v]) => k === key && v === n
 if (!has(traffic.browsers, "Chrome", 1) || !has(traffic.os, "Linux", 1) || !has(traffic.devices, "desktop", 1)) fail(`audience: ${JSON.stringify([traffic.browsers, traffic.os, traffic.devices])}`);
 if (!has(traffic.channels, "campaign", 1) || !has(traffic.utm_source, "newsletter", 1) || !has(traffic.utm_campaign, "launch", 1)) fail(`sources: ${JSON.stringify([traffic.channels, traffic.utm_source, traffic.utm_campaign])}`);
 if ((traffic.countries ?? []).length !== 1) fail(`countries: ${JSON.stringify(traffic.countries)}`);
+if (traffic.sessions?.sessions !== 1 || traffic.sessions.bounces !== 1) fail(`sessions: ${JSON.stringify(traffic.sessions)}`);
+if (!has(traffic.entry_pages, (traffic.entry_pages ?? [])[0]?.[0], 1)) fail(`entry pages: ${JSON.stringify(traffic.entry_pages)}`);
 await page.goto(`${admin}/admin/#/traffic`);
 await page.locator('lit-material-stat[label="People: visitors"]').waitFor({ timeout: 5000 }).catch(() => fail("no Traffic page"));
 await page.locator("lit-material-line-chart").waitFor({ timeout: 5000 }).catch(() => fail("no traffic chart"));
+await page.locator('lit-material-stat[label="Bounce rate"]').waitFor({ timeout: 5000 }).catch(() => fail("no session tiles"));
+await page.getByRole("heading", { name: "Entry pages", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no entry pages"));
 await page.getByRole("heading", { name: "Sources", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Sources section"));
 await page.getByRole("heading", { name: "Audience", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Audience section"));
 await page.locator('lit-material-bar-chart[label="Visits by channel"]').waitFor({ timeout: 5000 }).catch(() => fail("no channel chart"));

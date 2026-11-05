@@ -618,7 +618,14 @@ export class RwsAdmin extends LitElement {
           .formatX=${(x) => (t.bucket === "hour" ? new Date(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(x).toLocaleDateString())}></lit-material-line-chart>
         ${t.host ? html`<p class="lede">Visitors are counted for all sites together.</p>` : nothing}
       </section>
+      ${this.renderTrafficSessions(t, period)}
       ${table("Most read pages (people)", "Pages people read", pairs(t.people_pages), [{ key: "key", label: "Page", mono: true }, { ...countColumn, label: "Views" }])}
+      ${(t.entry_pages ?? []).length
+        ? html`<div class="grid">
+            ${table("Entry pages", "Pages sessions began on", pairs(t.entry_pages), [{ key: "key", label: "Page", mono: true }, { ...countColumn, label: "Sessions" }])}
+            ${table("Exit pages", "Pages sessions ended on", pairs(t.exit_pages ?? []), [{ key: "key", label: "Page", mono: true }, { ...countColumn, label: "Sessions" }])}
+          </div>`
+        : nothing}
       ${table("AI agents", "AI agents", t.ai_agents, [
         { key: "name", label: "Agent" },
         { key: "operator", label: "Operator" },
@@ -636,6 +643,33 @@ export class RwsAdmin extends LitElement {
       ${this.renderTrafficAudience(t, table)}
       ${table("Not found", "Paths answered 404", pairs(t.not_found), [{ key: "key", label: "Path", mono: true }, countColumn])}
     `;
+  }
+
+  /** People's sessions: count, bounce rate, length, pages per session. */
+  renderTrafficSessions(t, period) {
+    const s = t.sessions;
+    if (!s || !s.sessions) return nothing;
+    const p = t.previous_sessions ?? { sessions: 0, bounces: 0, duration: 0, pages: 0 };
+    const rate = (x) => (x.sessions ? x.bounces / x.sessions : 0);
+    const avg = (x) => (x.sessions ? x.duration / x.sessions : 0);
+    const perSession = (x) => (x.sessions ? x.pages / x.sessions : 0);
+    const delta = (now, before, unit = "%") => {
+      if (!p.sessions) return "";
+      if (unit === "pt") return ` ${now >= before ? "+" : "−"}${Math.abs(Math.round((now - before) * 100))} points vs the previous ${period}.`;
+      return before ? ` ${now >= before ? "+" : "−"}${Math.abs(Math.round(((now - before) / before) * 100))}% vs the previous ${period}.` : "";
+    };
+    const tiles = [
+      ["Sessions", s.sessions.toLocaleString(), `Page views 30 minutes or less apart.${delta(s.sessions, p.sessions)}`],
+      ["Bounce rate", `${Math.round(rate(s) * 100)}%`, `Sessions of one page view.${delta(rate(s), rate(p), "pt")}`],
+      ["Session length", s.duration ? duration(Math.round(avg(s))) : "0s", `On average, first page view to last.${delta(avg(s), avg(p))}`],
+      ["Pages per session", perSession(s).toFixed(1), `On average.${delta(perSession(s), perSession(p))}`],
+    ];
+    return html`
+      <section class="section" aria-label="Sessions">
+        <div class="grid">
+          ${tiles.map(([label, value, caption]) => html`<lit-material-stat label=${label} value=${value} caption=${caption}></lit-material-stat>`)}
+        </div>
+      </section>`;
   }
 
   /** Where people's visits came from: channels, referrers, UTM campaigns. */

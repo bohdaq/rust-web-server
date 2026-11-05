@@ -47,6 +47,9 @@ in memory only.
   `404`.
 - With more than one site (virtual hosts, `Host` names) a button per site.
   Visitor counts are for all sites together.
+- **Sessions** (since 18.31.0): sessions, bounce rate, session length and
+  pages per session, with the change from the period before; the pages
+  sessions began and ended on.
 - **Sources** (since 18.31.0): how people arrived, by channel, plus the
   sites they came from and UTM campaigns (`utm_source`, `utm_medium`,
   `utm_campaign`).
@@ -54,9 +57,19 @@ in memory only.
   systems and devices (desktop, phone, tablet), each person counted once a
   day.
 
+## Sessions
+
+A person's page views 30 minutes or less apart are one **session**; a
+longer pause, or midnight (UTC), starts the next. A **bounce** is a
+session of one page view. **Session length** runs from the first page
+view to the last, so a one-page session is 0 seconds long — the server
+can't see how long the last page stayed open. Sessions still going count
+as if they ended now. Sessions are counted on the day they began.
+
 ## Sources and audience
 
-A page view **arrives from outside** when it has no `Referer` (*direct*),
+Sources are counted once per session, from its first page view. That
+page view **arrives from outside** when it has no `Referer` (*direct*),
 a `Referer` from another site, or UTM tags; moving between the site's own
 pages isn't counted as an arrival. The channel is *campaign* when the URL
 has `utm_*` values, else from the referring site: *search* (Google, Bing,

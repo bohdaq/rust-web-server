@@ -7083,7 +7083,9 @@ pub const rust_web_server::traffic::record::DIM_SAVED: usize
 pub const rust_web_server::traffic::record::DIM_TOP: usize
 pub const rust_web_server::traffic::record::MAX_CACHE: usize
 pub const rust_web_server::traffic::record::MAX_HOSTS: usize
+pub const rust_web_server::traffic::record::MAX_OPEN_SESSIONS: usize
 pub const rust_web_server::traffic::record::MAX_PENDING: usize
+pub const rust_web_server::traffic::record::SESSION_GAP: u64
 pub const rust_web_server::traffic::record::TOP: usize
 pub const rust_web_server::traffic::record::TOP_SAVED: usize
 pub const rust_web_server::traffic::record::UNDECIDED: core::time::Duration

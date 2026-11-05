@@ -21,6 +21,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   the server and no address is kept. Chromium client hints are preferred
   to the `User-Agent`. No cookies or browser storage. Same per-request cost
   as before (A/B ~165 ns). Fuzz target `traffic_geo`.
+- **Traffic page: sessions** (tranche 2): sessions (page views ≤ 30
+  minutes apart), bounce rate, session length, pages per session — with
+  the change from the previous period — and entry and exit pages; `GET
+  /traffic` gains `sessions`, `previous_sessions`, `entry_pages`,
+  `exit_pages`. Sources now count once per session, from its first page
+  view. Older saved files load unchanged.
 
 - **ORM, part 2** (roadmap #90):
   - Eager loading: `Post::query(&pool).with(Post::comments()).with(Post::author()).fetch_all()`

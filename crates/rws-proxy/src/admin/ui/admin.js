@@ -3190,14 +3190,24 @@ var e=globalThis,t=e.ShadowRoot&&(e.ShadyCSS===void 0||e.ShadyCSS.nativeShadow)&
           .formatX=${t=>e.bucket===`hour`?new Date(t).toLocaleTimeString([],{hour:`2-digit`,minute:`2-digit`}):new Date(t).toLocaleDateString()}></lit-material-line-chart>
         ${e.host?b`<p class="lede">Visitors are counted for all sites together.</p>`:C}
       </section>
+      ${this.renderTrafficSessions(e,n)}
       ${l(`Most read pages (people)`,`Pages people read`,o(e.people_pages),[{key:`key`,label:`Page`,mono:!0},{...s,label:`Views`}])}
+      ${(e.entry_pages??[]).length?b`<div class="grid">
+            ${l(`Entry pages`,`Pages sessions began on`,o(e.entry_pages),[{key:`key`,label:`Page`,mono:!0},{...s,label:`Sessions`}])}
+            ${l(`Exit pages`,`Pages sessions ended on`,o(e.exit_pages??[]),[{key:`key`,label:`Page`,mono:!0},{...s,label:`Sessions`}])}
+          </div>`:C}
       ${l(`AI agents`,`AI agents`,e.ai_agents,[{key:`name`,label:`Agent`},{key:`operator`,label:`Operator`},{key:`kind`,label:`Kind`,render:e=>c(e.kind)},{key:`verified`,label:`Network`,render:e=>e.verified?$(`ok`,`Verified`):$(`neutral`,`Unverified`)},{key:`requests`,label:`Requests`,numeric:!0,render:e=>e.requests.toLocaleString()}])}
       ${l(`Pages AI agents read`,`Pages AI agents read`,o(e.ai_pages),[{key:`key`,label:`Page`,mono:!0},s])}
       ${l(`Bots`,`Bots by kind`,e.bots,[{key:`kind`,label:`Kind`,render:e=>c(e.kind)},{key:`name`,label:`Name`,render:e=>e.name||`—`},{key:`requests`,label:`Requests`,numeric:!0,render:e=>e.requests.toLocaleString()}])}
       ${this.renderTrafficSources(e,l,o,s)}
       ${this.renderTrafficAudience(e,l)}
       ${l(`Not found`,`Paths answered 404`,o(e.not_found),[{key:`key`,label:`Path`,mono:!0},s])}
-    `}renderTrafficSources(e,t,n,r){let i={direct:`Direct`,search:`Search`,social:`Social`,ai:`AI assistants`,referral:`Other sites`,campaign:`Campaigns (UTM)`},a={...r,label:`Visits`},o=e=>n(e??[]);return b`
+    `}renderTrafficSessions(e,t){let n=e.sessions;if(!n||!n.sessions)return C;let r=e.previous_sessions??{sessions:0,bounces:0,duration:0,pages:0},i=e=>e.sessions?e.bounces/e.sessions:0,a=e=>e.sessions?e.duration/e.sessions:0,o=e=>e.sessions?e.pages/e.sessions:0,s=(e,n,i=`%`)=>r.sessions?i===`pt`?` ${e>=n?`+`:`−`}${Math.abs(Math.round((e-n)*100))} points vs the previous ${t}.`:n?` ${e>=n?`+`:`−`}${Math.abs(Math.round((e-n)/n*100))}% vs the previous ${t}.`:``:``;return b`
+      <section class="section" aria-label="Sessions">
+        <div class="grid">
+          ${[[`Sessions`,n.sessions.toLocaleString(),`Page views 30 minutes or less apart.${s(n.sessions,r.sessions)}`],[`Bounce rate`,`${Math.round(i(n)*100)}%`,`Sessions of one page view.${s(i(n),i(r),`pt`)}`],[`Session length`,n.duration?rr(Math.round(a(n))):`0s`,`On average, first page view to last.${s(a(n),a(r))}`],[`Pages per session`,o(n).toFixed(1),`On average.${s(o(n),o(r))}`]].map(([e,t,n])=>b`<lit-material-stat label=${e} value=${t} caption=${n}></lit-material-stat>`)}
+        </div>
+      </section>`}renderTrafficSources(e,t,n,r){let i={direct:`Direct`,search:`Search`,social:`Social`,ai:`AI assistants`,referral:`Other sites`,campaign:`Campaigns (UTM)`},a={...r,label:`Visits`},o=e=>n(e??[]);return b`
       <section class="section" aria-labelledby="traffic-sources">
         <h2 id="traffic-sources">Sources</h2>
         <p class="lede">How people arrived: a page view from outside the site. Moving between the site's own pages isn't counted here.</p>

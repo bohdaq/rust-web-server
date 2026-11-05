@@ -87,6 +87,15 @@ pub const DIMS: [&str; 8] = ["countries", "browsers", "os", "devices", "channels
 const COUNTRIES: usize = 0;
 const CHANNELS: usize = 4;
 const UTM: usize = 5;
+/// A person's page views more than this apart are separate sessions (as
+/// Google Analytics counts them).
+pub const SESSION_GAP: u64 = 30 * 60;
+/// Sessions open at once, per shard; past it the quietest is closed.
+#[cfg(not(test))]
+pub const MAX_OPEN_SESSIONS: usize = 8192;
+#[cfg(test)]
+pub const MAX_OPEN_SESSIONS: usize = 64;
+
 /// Entries a day's audience/source list keeps (all hosts together).
 pub const DIM_TOP: usize = 400;
 /// Entries of each audience/source list kept on disk.
@@ -165,6 +174,49 @@ pub struct Day {
     pub not_found: Top,
     /// The [`DIMS`] lists, in that order.
     pub dims: [Top; 8],
+    /// People's sessions per host (by the day they started).
+    pub sessions: BTreeMap<String, Sessions>,
+    /// The first and last page of people's sessions (`host/path`).
+    pub entry_pages: Top,
+    pub exit_pages: Top,
+}
+
+/// Sessions added up.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+#[doc(hidden)]
+pub struct Sessions {
+    pub sessions: u64,
+    /// Sessions of one page view.
+    pub bounces: u64,
+    /// Seconds from each session's first page view to its last.
+    pub duration: u64,
+    /// Page views in sessions.
+    pub pages: u64,
+}
+
+impl Sessions {
+    #[doc(hidden)]
+    pub fn add(&mut self, other: &Sessions) {
+        self.sessions += other.sessions;
+        self.bounces += other.bounces;
+        self.duration += other.duration;
+        self.pages += other.pages;
+    }
+}
+
+/// A person's session while it's open.
+struct Session {
+    start: u64,
+    last: u64,
+    pages: u64,
+    /// The page key (`host/path`) last viewed.
+    exit: String,
+}
+
+impl Session {
+    fn totals(&self) -> Sessions {
+        Sessions { sessions: 1, bounces: (self.pages == 1) as u64, duration: self.last - self.start, pages: self.pages }
+    }
 }
 
 impl Day {
@@ -182,6 +234,11 @@ impl Day {
         self.bots.merge(&other.bots);
         self.referrers.merge(&other.referrers);
         self.not_found.merge(&other.not_found);
+        self.entry_pages.merge(&other.entry_pages);
+        self.exit_pages.merge(&other.exit_pages);
+        for (host, s) in &other.sessions {
+            self.sessions.entry(host.clone()).or_default().add(s);
+        }
     }
 }
 
@@ -192,6 +249,8 @@ struct Pending {
 }
 
 struct Deferred {
+    /// When it was made (seconds).
+    at: u64,
     hour: u64,
     host: u8,
     page: Option<String>,
@@ -216,6 +275,8 @@ struct Shard {
     seen: HashMap<u64, Group>,
     pending: HashMap<u64, Pending>,
     cache: HashMap<u64, Cached>,
+    /// People's open sessions by visitor.
+    open: HashMap<u64, Session>,
     today: u64,
 }
 
@@ -572,7 +633,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
         Group::Person => {
             match shard.seen.get(&visitor).copied() {
                 Some(Group::Person) => {
-                    shard.count_person(hour, host, page, referrer, not_found, arrival);
+                    shard.count_person(visitor, hit.now, host, page, referrer, not_found, arrival);
                     Some(PEOPLE)
                 }
                 Some(_) => {
@@ -587,10 +648,10 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                     }
                     if let Some(pending) = shard.pending.remove(&visitor) {
                         for d in pending.requests {
-                            shard.count_person(d.hour, d.host, d.page, d.referrer, d.not_found, d.arrival);
+                            shard.count_person(visitor, d.at, d.host, d.page, d.referrer, d.not_found, d.arrival);
                         }
                     }
-                    shard.count_person(hour, host, page, referrer, not_found, arrival);
+                    shard.count_person(visitor, hit.now, host, page, referrer, not_found, arrival);
                     Some(PEOPLE)
                 }
                 None => {
@@ -603,7 +664,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                     } else {
                         let pending = shard.pending.entry(visitor).or_insert(Pending { last: hit.now, requests: Vec::new() });
                         pending.last = hit.now;
-                        pending.requests.push(Deferred { hour, host, page, referrer, not_found, arrival });
+                        pending.requests.push(Deferred { at: hit.now, hour, host, page, referrer, not_found, arrival });
                         if pending.requests.len() < MAX_PENDING_REQUESTS {
                             None
                         } else {
@@ -649,6 +710,8 @@ impl Shard {
             return;
         }
         self.today = day;
+        // Visitors are new each day, so no session continues past midnight.
+        self.close_sessions(|_| true);
         self.seen.clear();
         self.cache.clear();
         let oldest_day = day.saturating_sub(retention_days.saturating_sub(1));
@@ -666,8 +729,55 @@ impl Shard {
         }
     }
 
+    /// Close the open sessions `which` picks, adding them to the day they
+    /// started.
+    fn close_sessions(&mut self, which: impl Fn(&Session) -> bool) {
+        let done: Vec<u64> = self.open.iter().filter(|(_, s)| which(s)).map(|(v, _)| *v).collect();
+        for visitor in done {
+            if let Some(session) = self.open.remove(&visitor) {
+                self.close(session);
+            }
+        }
+    }
+
+    fn close(&mut self, session: Session) {
+        let host = session.exit.split('/').next().unwrap_or("").to_string();
+        let day = self.day(session.start / 86_400);
+        day.sessions.entry(host).or_default().add(&session.totals());
+        day.exit_pages.add(&session.exit, 1);
+    }
+
+    /// A person's page view at `at`: continues their session, or ends it and
+    /// starts the next. True when it started one.
+    fn session_page(&mut self, visitor: u64, at: u64, page: &str) -> bool {
+        if let Some(session) = self.open.get_mut(&visitor) {
+            if at.saturating_sub(session.last) < SESSION_GAP {
+                session.last = session.last.max(at);
+                session.pages += 1;
+                session.exit = page.to_string();
+                return false;
+            }
+            let ended = self.open.remove(&visitor).expect("just found");
+            self.close(ended);
+        }
+        if self.open.len() >= MAX_OPEN_SESSIONS {
+            if let Some(quietest) = self.open.iter().min_by_key(|(_, s)| s.last).map(|(v, _)| *v) {
+                let ended = self.open.remove(&quietest).expect("just found");
+                self.close(ended);
+            }
+        }
+        self.day(at / 86_400).entry_pages.add(page, 1);
+        self.open.insert(visitor, Session { start: at, last: at, pages: 1, exit: page.to_string() });
+        true
+    }
+
     #[allow(clippy::too_many_arguments)]
-    fn count_person(&mut self, hour: u64, host: u8, page: Option<String>, referrer: Option<String>, not_found: Option<String>, arrival: Option<Arrival>) {
+    fn count_person(&mut self, visitor: u64, at: u64, host: u8, page: Option<String>, referrer: Option<String>, not_found: Option<String>, arrival: Option<Arrival>) {
+        let hour = at / 3_600;
+        // Sources count once per session, from its first page view (as
+        // Google Analytics attributes a session).
+        let started = page.as_ref().is_some_and(|page| self.session_page(visitor, at, page));
+        let arrival = arrival.filter(|_| started);
         let counts = &mut self.hours.entry((hour, host)).or_default()[PEOPLE];
         counts.requests += 1;
         counts.pages += page.is_some() as u64;
@@ -723,6 +833,7 @@ fn or_unknown(name: &str) -> &str {
 pub fn settle(now: u64) {
     for shard in &recorder().shards {
         let mut shard = shard.lock().unwrap_or_else(|e| e.into_inner());
+        shard.close_sessions(|s| now.saturating_sub(s.last) >= SESSION_GAP);
         let done: Vec<u64> = shard.pending.iter().filter(|(_, p)| now.saturating_sub(p.last) >= UNDECIDED.as_secs()).map(|(v, _)| *v).collect();
         for visitor in done {
             let Some(pending) = shard.pending.remove(&visitor) else { continue };
@@ -756,6 +867,13 @@ pub fn snapshot(now: u64) -> (BTreeMap<(u64, u8), [Counts; 3]>, BTreeMap<u64, Da
         }
         for (day, lists) in &shard.days {
             days.entry(*day).or_default().merge(lists);
+        }
+        // Open sessions count as if they ended now (they stay open).
+        for session in shard.open.values() {
+            let host = session.exit.split('/').next().unwrap_or("").to_string();
+            let day = days.entry(session.start / 86_400).or_default();
+            day.sessions.entry(host).or_default().add(&session.totals());
+            day.exit_pages.add(&session.exit, 1);
         }
     }
     (hours, days)

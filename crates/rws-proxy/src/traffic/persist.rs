@@ -21,7 +21,7 @@ use std::path::Path;
 use super::record::{Counts, Day, Top, DIMS, DIM_SAVED, TOP_SAVED};
 use crate::mcp::json_rpc::{extract_raw, extract_str, split_array_elements};
 
-const LISTS: [&str; 6] = ["people_pages", "ai_pages", "ai_agents", "bots", "referrers", "not_found"];
+const LISTS: [&str; 8] = ["people_pages", "ai_pages", "ai_agents", "bots", "referrers", "not_found", "entry_pages", "exit_pages"];
 
 fn quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -50,6 +50,8 @@ fn list<'a>(day: &'a Day, name: &str) -> &'a Top {
         "ai_agents" => &day.ai_agents,
         "bots" => &day.bots,
         "referrers" => &day.referrers,
+        "entry_pages" => &day.entry_pages,
+        "exit_pages" => &day.exit_pages,
         _ => &day.not_found,
     }
 }
@@ -64,6 +66,8 @@ fn list_mut<'a>(day: &'a mut Day, name: &str) -> &'a mut Top {
         "ai_agents" => &mut day.ai_agents,
         "bots" => &mut day.bots,
         "referrers" => &mut day.referrers,
+        "entry_pages" => &mut day.entry_pages,
+        "exit_pages" => &mut day.exit_pages,
         _ => &mut day.not_found,
     }
 }
@@ -92,7 +96,16 @@ pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; 3]>, days:
                     format!("{}:[{}]", quote(name), entries.join(","))
                 })
                 .collect();
-            format!("{{\"day\":{n},\"visitors\":[{},{},{}],{}}}", day.visitors[0], day.visitors[1], day.visitors[2], lists.join(","))
+            let sessions: Vec<String> =
+                day.sessions.iter().map(|(host, t)| format!("[{},{},{},{},{}]", quote(host), t.sessions, t.bounces, t.duration, t.pages)).collect();
+            format!(
+                "{{\"day\":{n},\"visitors\":[{},{},{}],\"sessions\":[{}],{}}}",
+                day.visitors[0],
+                day.visitors[1],
+                day.visitors[2],
+                sessions.join(","),
+                lists.join(",")
+            )
         })
         .collect();
     out.push_str(&days.join(","));
@@ -132,6 +145,13 @@ pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts
         let visitors = numbers(&extract_raw(&object, "visitors").unwrap_or_default());
         for (g, v) in visitors.iter().take(3).enumerate() {
             day.visitors[g] = *v;
+        }
+        for row in split_array_elements(&extract_raw(&object, "sessions").unwrap_or_default()) {
+            let parts = split_array_elements(&row);
+            let n: Vec<u64> = parts.iter().skip(1).filter_map(|v| v.trim().parse().ok()).collect();
+            if let (Some(host), 4) = (parts.first().and_then(|h| extract_str(&format!("{{\"v\":{h}}}"), "v")), n.len()) {
+                day.sessions.insert(host, super::record::Sessions { sessions: n[0], bounces: n[1], duration: n[2], pages: n[3] });
+            }
         }
         for name in LISTS.iter().chain(DIMS.iter()) {
             let raw = extract_raw(&object, name).unwrap_or_default();
