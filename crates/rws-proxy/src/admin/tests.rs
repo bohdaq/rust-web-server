@@ -168,6 +168,8 @@ fn maintenance_blocklist_and_flags_change_the_running_server() {
 
 #[test]
 fn reads_rate_limits_cors_metrics_requests_and_routes() {
+    // Writes audit entries: not while another test has its own audit file.
+    let _g = crate::test_env::lock();
     let api = AdminApi::new("t");
     for path in ["rate-limit", "cors", "metrics", "build", "requests?n=3", "errors", "routes", "maintenance"] {
         let (status, text) = call(&api, "GET", &format!("/admin/api/v1/{path}"), "");
@@ -259,6 +261,8 @@ fn a_drained_backend_gets_no_new_requests_and_draining_all_gives_503() {
 
 #[test]
 fn upstreams_and_certificates_endpoints() {
+    // Writes audit entries: not while another test has its own audit file.
+    let _g = crate::test_env::lock();
     let api = AdminApi::new("t");
     let (status, text) = call(&api, "GET", "/admin/api/v1/upstreams", "");
     assert_eq!(status, 200);
@@ -626,6 +630,8 @@ fn the_login_page_learns_the_sign_in_methods_without_a_token() {
 
 #[test]
 fn admin_users_and_oidc_settings_are_checked() {
+    // Writes audit entries: not while another test has its own audit file.
+    let _g = crate::test_env::lock();
     let report = check_str_offline("[admin]\nlisten = \"127.0.0.1:9901\"\nusers = [\"ci:CI_TOKEN:superuser\"]\noidc_issuer = \"https://id.example.com\"\n");
     let text = format!("{report:?}");
     assert!(text.contains("viewer, operator or admin"), "{text}");
@@ -637,6 +643,8 @@ fn admin_users_and_oidc_settings_are_checked() {
 
 #[test]
 fn mcp_tool_changes_are_audited() {
+    // Writes audit entries: not while another test has its own audit file.
+    let _g = crate::test_env::lock();
     use crate::middleware::Middleware;
     struct Ok200;
     impl Application for Ok200 {
