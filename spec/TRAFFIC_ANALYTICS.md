@@ -212,3 +212,20 @@ but the site needs the database (a notice says so). Page titles aren't
 known to the server, so "short names" = paths. Verified: unit tests,
 `ci/e2e/admin_ui.sh` (tabs, KPIs, chart, cards, filter notice, period
 switch), screenshots at 1280 px and 390 px with 30 days of seeded data.
+
+## Groups, map, layout fixes (2026-11-05, after 18.32.0)
+
+User, from the live page: cards overlapped (a long page name widened the
+ranked list's implicit grid column past the card — fixed with
+`grid-template-columns: minmax(0, 1fr)` + `min-width: 0` on items), the
+site `<select>` looked off (now a pill with a CSS arrow), and asked for
+**Humans / AI agents / Bots / All** and a **world map**. Groups: a
+segmented switch beside the period; the analytics tabs show for Humans
+only; AI agents / Bots views use `totals[g]`, `series[g]` and
+`previous_series[g]` (requests per bucket) — no per-group countries or
+devices exist, by design. Map: `ci/gen_world_map.py` (Natural Earth 1:110m
+@ca96624a, ISO_A2_EH, Equal Earth, integer coordinates, Antarctica out) →
+`admin-ui/src/world-map.js` (174 countries, 75 KB, 27 KB gzipped),
+`--check` in CI; choropleth by √share, click = country filter. Note on the
+live numbers: sessions started counting with 18.31.0, so a 7-day view
+spanning the upgrade shows few sessions next to many visitors.

@@ -147,11 +147,19 @@ await t2.getByRole("heading", { name: "Top pages", exact: true }).waitFor({ time
 await t2.getByRole("heading", { name: "Right now", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Right now card"));
 const visitorsShown = (await t2.locator(".t-kpi", { hasText: "Visitors" }).locator(".t-kpi-value").textContent()).trim();
 if (visitorsShown !== String(live.visitors)) console.log(`(visitors tile ${visitorsShown}, live ${live.visitors})`);
-for (const [tab, heading] of [["Pages", "Entry pages"], ["Sources", "Channels"], ["Audience", "Browsers"], ["Behaviour", "Goals"], ["AI & bots", "Bots"]]) {
+for (const [tab, heading] of [["Pages", "Entry pages"], ["Sources", "Channels"], ["Audience", "Browsers"], ["Behaviour", "Goals"]]) {
   await t2.getByRole("tab", { name: tab }).click();
   await t2.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 5000 }).catch(() => fail(`no ${heading} on the ${tab} tab`));
 }
 await t2.getByRole("tab", { name: "Overview" }).click();
+if ((await t2.locator(".t-map svg path").count()) < 150) fail("no world map");
+if ((await t2.locator(".t-map path.on").count()) < 1) fail("the map shows no country");
+// Humans / AI agents / Bots / All.
+for (const [group, heading] of [["AI agents", "AI agents"], ["Bots", "By kind"], ["All", "Share of requests"]]) {
+  await t2.locator(".t-seg button", { hasText: group }).click();
+  await t2.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 5000 }).catch(() => fail(`no ${heading} for ${group}`));
+}
+await t2.locator(".t-seg button", { hasText: "Humans" }).click();
 // Without a database, clicking a row explains what filtering needs.
 await t2.locator("button.t-row").first().click();
 await t2.locator(".t-notice").waitFor({ timeout: 5000 }).catch(() => fail("no notice for a filter without the database"));

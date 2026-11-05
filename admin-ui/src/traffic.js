@@ -4,9 +4,10 @@
 // list. Clicking a row filters the page by it: the site always, anything
 // else with the traffic database ([traffic] database_url_env), whose rows
 // can answer any combination.
-import { LitElement, html, nothing } from "lit";
+import { LitElement, html, svg, nothing } from "lit";
 import { api, ApiError } from "./api.js";
 import { formatDuration } from "@lit-material/format";
+import { COUNTRIES, VIEWBOX } from "./world-map.js";
 
 const TABS = [
   ["overview", "Overview"],
@@ -14,8 +15,17 @@ const TABS = [
   ["sources", "Sources"],
   ["audience", "Audience"],
   ["behaviour", "Behaviour"],
-  ["robots", "AI & bots"],
 ];
+
+// Who the page is about: people (the analytics), AI agents, other bots, or
+// all three side by side.
+const GROUPS = [
+  ["people", "Humans"],
+  ["ai", "AI agents"],
+  ["bots", "Bots"],
+  ["all", "All"],
+];
+const GROUP_NAMES = { people: "Humans", ai: "AI agents", bots: "Bots" };
 
 const PRESETS = [
   ["today", "Today", 0],
@@ -73,6 +83,7 @@ function change(now, before, { points = false, lowerIsBetter = false } = {}) {
 export class RwsTraffic extends LitElement {
   static properties = {
     tab: { state: true },
+    group: { state: true },
     preset: { state: true },
     from: { state: true },
     to: { state: true },
@@ -91,6 +102,7 @@ export class RwsTraffic extends LitElement {
   constructor() {
     super();
     this.tab = "overview";
+    this.group = "people";
     this.preset = "7d";
     this.from = day(6);
     this.to = "";
@@ -108,6 +120,7 @@ export class RwsTraffic extends LitElement {
       const saved = JSON.parse(localStorage.getItem("rws-traffic") ?? "{}");
       if (TABS.some(([id]) => id === saved.tab)) this.tab = saved.tab;
       if (typeof saved.compare === "boolean") this.compare = saved.compare;
+      if (GROUPS.some(([id]) => id === saved.group)) this.group = saved.group;
     } catch {
       /* storage unavailable: defaults */
     }
@@ -134,7 +147,7 @@ export class RwsTraffic extends LitElement {
 
   remember() {
     try {
-      localStorage.setItem("rws-traffic", JSON.stringify({ tab: this.tab, compare: this.compare }));
+      localStorage.setItem("rws-traffic", JSON.stringify({ tab: this.tab, compare: this.compare, group: this.group }));
     } catch {
       /* not kept */
     }
@@ -252,6 +265,17 @@ export class RwsTraffic extends LitElement {
 
   setTab(id) {
     this.tab = id;
+    this.remember();
+  }
+
+  setGroup(id) {
+    this.group = id;
+    if (id !== "people") {
+      this.tab = "overview";
+      this.metric = "requests";
+    } else if (this.metric === "requests") {
+      this.metric = "pages";
+    }
     this.remember();
   }
 
@@ -389,6 +413,9 @@ export class RwsTraffic extends LitElement {
           ${this.preset === "custom" ? `${this.from} – ${this.to || "today"}` : "Custom"}
         </button>
       </div>
+      <div class="t-seg" role="group" aria-label="Who">
+        ${GROUPS.map(([id, label]) => html`<button aria-pressed=${this.group === id} @click=${() => this.setGroup(id)}>${label}</button>`)}
+      </div>
       ${hosts.length > 1
         ? html`<label class="t-select"><span class="t-sr">Site</span>
             <select @change=${(e) => this.setHost(e.target.value)}>
@@ -485,7 +512,13 @@ export class RwsTraffic extends LitElement {
       <div class="t-cards">
         ${this.card("Top pages", l.pages, { dim: "page", unit: "views" }, "pages")}
         ${this.card("Sources", l.channels, { dim: "channel", unit: "visits" }, "sources")}
-        ${this.card("Countries", l.countries, { dim: "country", unit: "visitors", flag: true }, "audience")}
+        <section class="t-card t-wide" aria-label="Countries">
+          <header><h3>Countries</h3>${l.countries.length > 6 ? html`<button class="t-more" @click=${() => this.setTab("audience")}>All ${l.countries.length} →</button>` : nothing}</header>
+          <div class="t-map-row">
+            ${this.renderMap(l.countries)}
+            ${this.ranked(l.countries, { dim: "country", unit: "visitors", flag: true, limit: 6 })}
+          </div>
+        </section>
         ${this.card("Devices", l.devices, { dim: "device", unit: "visitors" }, "audience")}
         ${live && !this.filtered
           ? html`<section class="t-card" aria-label="Right now">
@@ -529,7 +562,8 @@ export class RwsTraffic extends LitElement {
       const all = rows.reduce((s, [, n]) => s + n, 0) || 1;
       return (r) => `${num(r[1])} · ${pct(r[1] / all)}`;
     };
-    return html`<div class="t-cards">
+    return html`<section class="t-card t-wide t-map-big" aria-label="Map">${this.renderMap(l.countries)}</section>
+    <div class="t-cards">
       ${this.card("Countries", l.countries, { dim: "country", unit: "visitors", flag: true, value: share(l.countries) })}
       ${this.card("Devices", l.devices, { dim: "device", unit: "visitors", value: share(l.devices) })}
       ${this.card("Browsers", l.browsers, { dim: "browser", unit: "visitors", value: share(l.browsers) })}
@@ -563,26 +597,116 @@ export class RwsTraffic extends LitElement {
     </div>`;
   }
 
-  renderRobots() {
+  /** A group's own numbers (AI agents or bots): visitors, requests, pages. */
+  groupKpis(g) {
     const t = this.data;
-    const g = (k) => t.totals[k];
-    const agents = t.ai_agents.map((a) => [`${a.name}${a.operator ? ` (${a.operator})` : ""}`, a.requests, a]);
-    const bots = t.bots.map((b) => {
+    const now = t.totals[g];
+    const before = t.previous?.[g];
+    const has = before && (before.requests > 0 || before.visitors > 0);
+    const tiles = [
+      ["requests", "Requests", now.requests, has ? before.requests : null, "Everything they fetched"],
+      ["visitors", g === "ai" ? "Agents" : "Clients", now.visitors, has ? before.visitors : null, "Distinct clients, counted once a day"],
+      ["fetches", "Pages", now.pages, has ? before.pages : null, "HTML pages they fetched"],
+    ];
+    return html`<div class="t-kpis" role="group" aria-label="Key numbers">
+      ${tiles.map(([id, label, value, prev, hint]) => {
+        const delta = change(value, prev);
+        return html`<button class="t-kpi" aria-pressed=${id === "requests"} ?disabled=${id !== "requests"} title=${hint}>
+          <span class="t-kpi-label">${label}</span><span class="t-kpi-value">${num(value)}</span>
+          <span class="t-kpi-delta" data-tone=${delta ? "flat" : "none"}>${this.compare && delta ? delta.text : " "}</span>
+        </button>`;
+      })}
+    </div>`;
+  }
+
+  /** Requests per bucket for the groups given, and the period before for one. */
+  groupChart(groups) {
+    const t = this.data;
+    const hourly = t.bucket === "hour";
+    const series = groups.map((g) => ({ name: GROUP_NAMES[g], points: t.series.map((p) => ({ x: p.t * 1000, y: p[g] })) }));
+    if (groups.length === 1 && this.compare) {
+      const before = (t.previous_series ?? []).map((p) => ({ x: p.t * 1000, y: p[groups[0]] }));
+      if (before.some((p) => p.y > 0)) series.push({ name: "Period before", points: before });
+    }
+    return html`<section class="t-chart${groups.length > 1 ? " t-chart-multi" : ""}" aria-label="Chart">
+      <lit-material-line-chart label=${`Requests per ${hourly ? "hour" : "day"}`} unit="requests" height="240" .series=${series}
+        .formatX=${(x) => (hourly ? new Date(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(x).toLocaleDateString([], { month: "short", day: "numeric" }))}></lit-material-line-chart>
+    </section>`;
+  }
+
+  renderRobots(g) {
+    const t = this.data;
+    const byKind = (rows) => {
+      const sum = new Map();
+      for (const [k, n] of rows) sum.set(k, (sum.get(k) ?? 0) + n);
+      return [...sum.entries()].sort((a, b) => b[1] - a[1]);
+    };
+    if (g === "ai") {
+      const agents = t.ai_agents.map((a) => [`${a.name}${a.operator ? ` (${a.operator})` : ""}`, a.requests, a]);
+      const kinds = byKind(t.ai_agents.map((a) => [{ "ai-training": "Training crawlers", "ai-search": "AI search", "ai-assistant": "Assistants (for a person)", "ai-agent": "Agents" }[a.kind] ?? a.kind, a.requests]));
+      return html`
+        ${this.groupKpis("ai")}
+        ${this.groupChart(["ai"])}
+        <div class="t-cards">
+          ${this.card("AI agents", agents, { unit: "requests", value: (r) => html`${num(r[1])}${r[2].verified ? html` <lit-material-status status="ok">Verified</lit-material-status>` : nothing}`, hint: "Verified: from the operator's published network" })}
+          ${this.card("Pages they read", t.ai_pages, { unit: "requests", pages: true })}
+          ${this.card("What for", kinds, { unit: "requests" })}
+        </div>`;
+    }
+    const label = (b) => {
       const kind = b.kind.replaceAll("-", " ");
-      return [b.name && b.name !== kind.replace("browser no assets", "browser, no assets") ? `${kind} · ${b.name}` : kind, b.requests];
-    });
+      return b.name && b.name !== kind.replace("browser no assets", "browser, no assets") ? `${kind} · ${b.name}` : kind;
+    };
+    const kinds = byKind(t.bots.map((b) => [b.kind.replaceAll("-", " "), b.requests]));
     return html`
-      <div class="t-kpis">
-        ${[["ai", "AI agents"], ["bots", "Bots"]].map(([k, label]) => html`<div class="t-kpi" aria-disabled="true">
-          <span class="t-kpi-label">${label}</span><span class="t-kpi-value">${num(g(k).visitors)}</span>
-          <span class="t-kpi-delta">${num(g(k).requests)} requests</span></div>`)}
-      </div>
-      <p class="t-foot">People are browsers that load a page's styles or scripts. AI agents and bots are known by name, published network or behaviour; "Verified" means the request came from the operator's published network.</p>
+      ${this.groupKpis("bots")}
+      ${this.groupChart(["bots"])}
       <div class="t-cards">
-        ${this.card("AI agents", agents, { unit: "requests", value: (r) => html`${num(r[1])}${r[2].verified ? html` <lit-material-status status="ok">Verified</lit-material-status>` : nothing}` })}
-        ${this.card("Pages AI agents read", t.ai_pages, { unit: "requests", pages: true })}
-        ${this.card("Bots", bots, { unit: "requests" })}
+        ${this.card("By kind", kinds, { unit: "requests", hint: "Search, SEO, monitors, scanners…" })}
+        ${this.card("Bots", t.bots.map((b) => [label(b), b.requests]), { unit: "requests" })}
+        ${t.not_found.length ? this.card("Not found", t.not_found, { unit: "requests", hint: "404s, everyone (scanners mostly)", pages: true }) : nothing}
+      </div>
+      <p class="t-foot">People are browsers that load a page's styles or scripts; a browser that never does is counted here as "browser, no assets". Spoofed: claims to be a known crawler from outside its network.</p>`;
+  }
+
+  renderAll() {
+    const t = this.data;
+    const tiles = ["people", "ai", "bots"].map((g) => {
+      const now = t.totals[g];
+      const before = t.previous?.[g];
+      const delta = change(now.requests, before && before.requests ? before.requests : null);
+      return html`<button class="t-kpi" @click=${() => this.setGroup(g)} title=${`Open ${GROUP_NAMES[g]}`}>
+        <span class="t-kpi-label">${GROUP_NAMES[g]}</span><span class="t-kpi-value">${num(now.visitors)}</span>
+        <span class="t-kpi-delta">${num(now.requests)} requests${this.compare && delta ? ` · ${delta.text}` : ""}</span>
+      </button>`;
+    });
+    const total = ["people", "ai", "bots"].reduce((s, g) => s + t.totals[g].requests, 0) || 1;
+    const share = ["people", "ai", "bots"].map((g) => [GROUP_NAMES[g], t.totals[g].requests]);
+    return html`
+      <div class="t-kpis" role="group" aria-label="Groups">${tiles}</div>
+      ${this.groupChart(["people", "ai", "bots"])}
+      <div class="t-cards">
+        ${this.card("Share of requests", share, { unit: "requests", value: (r) => `${num(r[1])} · ${pct(r[1] / total)}` })}
+        ${this.card("Top pages (humans)", t.people_pages, { dim: "page", unit: "views", limit: 6 })}
+        ${this.card("AI agents", t.ai_agents.map((a) => [a.name, a.requests]), { unit: "requests", limit: 6 })}
       </div>`;
+  }
+
+  /** People by country on a world map; a country filters like its row. */
+  renderMap(rows) {
+    const counts = new Map(rows.filter(([k]) => k.length === 2).map(([k, n]) => [k, n]));
+    const max = Math.max(...counts.values(), 1);
+    const can = this.data?.store && !("country" in this.filters);
+    return html`<figure class="t-map">
+      <svg viewBox=${VIEWBOX} role="img" aria-label="Visitors by country">
+        ${Object.entries(COUNTRIES).map(([code, d]) => {
+          const n = counts.get(code) ?? 0;
+          const level = n ? Math.round(18 + 72 * Math.sqrt(n / max)) : 0;
+          return svg`<path d=${d} class=${n ? (can ? "on can" : "on") : ""} style=${n ? `--level:${level}%` : ""}
+            @click=${() => n && this.pick("country", code)}><title>${countryName(code)}${n ? `: ${num(n)}` : ""}</title></path>`;
+        })}
+      </svg>
+    </figure>`;
   }
 
   render() {
@@ -594,23 +718,26 @@ export class RwsTraffic extends LitElement {
       ? html`<div class="t-loading">${[0, 1, 2].map(() => html`<lit-material-skeleton variant="rect" style="height: 96px"></lit-material-skeleton>`)}</div>`
       : this.query === null && this.filtered && !this.notice
         ? html`<p class="t-none">Loading…</p>`
-        : {
+        : this.group !== "people"
+        ? this.group === "all" ? this.renderAll() : this.renderRobots(this.group)
+        : ({
             overview: () => this.renderOverview(),
             pages: () => this.renderPages(),
             sources: () => this.renderSources(),
             audience: () => this.renderAudience(),
             behaviour: () => this.renderBehaviour(),
-            robots: () => this.renderRobots(),
-          }[this.tab]();
+          }[this.tab] ?? (() => this.renderOverview()))();
     return html`
       <div class="t-head">
         <h1>Traffic</h1>
         ${this.renderBar()}
-        <div class="t-tabs" role="tablist" aria-label="Traffic sections">
-          ${TABS.map(([id, label]) => html`<button role="tab" aria-selected=${this.tab === id} @click=${() => this.setTab(id)}>${label}</button>`)}
-        </div>
+        ${this.group === "people"
+          ? html`<div class="t-tabs" role="tablist" aria-label="Traffic sections">
+              ${TABS.map(([id, label]) => html`<button role="tab" aria-selected=${this.tab === id} @click=${() => this.setTab(id)}>${label}</button>`)}
+            </div>`
+          : html`<div class="t-tabs t-tabs-empty"></div>`}
       </div>
-      <div role="tabpanel" aria-label=${TABS.find(([id]) => id === this.tab)[1]}>${body}</div>`;
+      <div role="tabpanel" aria-label=${this.group === "people" ? (TABS.find(([id]) => id === this.tab) ?? TABS[0])[1] : GROUP_NAMES[this.group] ?? "All"}>${body}</div>`;
   }
 }
 

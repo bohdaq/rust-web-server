@@ -41,12 +41,15 @@ in memory only.
 Since 18.32.0 the page is an overview with tabs:
 
 - **The bar at the top**: the period (*Today*, *7 days*, *30 days* or a
-  *Custom* range of whole UTC days), the site when there is more than one,
+  *Custom* range of whole UTC days), **who** — *Humans* (the analytics
+  below), *AI agents*, *Bots* or *All* three side by side — the site when
+  there is more than one,
   **Compare** (the period before, drawn grey in the chart and as the change
   under each number), and how many people are online now.
 - **Overview**: visitors, page views, sessions, bounce rate and session
   length — click one to chart it (per hour for *Today*, else per day) —
-  then cards of top pages, sources, countries and devices, and *Right now*.
+  then cards of top pages, sources, a **world map** of countries, devices,
+  and *Right now*.
   A card's **All →** opens its tab.
 - **Pages**: top, entry and exit pages, and paths answered `404`.
 - **Sources**: channels, referring sites and UTM campaigns.
@@ -54,14 +57,21 @@ Since 18.32.0 the page is an overview with tabs:
   their share.
 - **Behaviour**: what the [first-party script](#the-first-party-script-optional)
   reports — time on page, goals, events, scroll depth, screen sizes.
-- **AI & bots**: AI agents (with **Verified** when the request came from the
-  network its operator publishes), the pages they read, and bots by kind.
+- **AI agents** (the switch, not a tab): requests, agents and pages they
+  fetched with the change from the period before, a chart, the agents
+  (with **Verified** when the request came from the network its operator
+  publishes), the pages they read and what for (training, search,
+  assistants). **Bots**: the same numbers, bots by kind and by name, and
+  the paths answered `404`. **All**: humans, AI agents and bots in one
+  chart and their share of requests.
 
 **Click a row to filter** the page by it: by site always; by page, country,
 channel, campaign, browser, system or device with the
 [traffic database](#keeping-every-page-view-in-postgresql-optional), which
 can answer any combination (the filters show as chips; ✕ removes one).
-Page names drop the site when only one is shown.
+Page names drop the site when only one is shown. The map's country shapes
+are [Natural Earth](https://www.naturalearthdata.com)'s (public domain),
+built into the page; clicking a country filters like its row.
 
 ## The first-party script (optional)
 
