@@ -3202,6 +3202,7 @@ var e=globalThis,t=e.ShadowRoot&&(e.ShadyCSS===void 0||e.ShadyCSS.nativeShadow)&
       ${l(`Bots`,`Bots by kind`,e.bots,[{key:`kind`,label:`Kind`,render:e=>c(e.kind)},{key:`name`,label:`Name`,render:e=>e.name||`—`},{key:`requests`,label:`Requests`,numeric:!0,render:e=>e.requests.toLocaleString()}])}
       ${this.renderTrafficSources(e,l,o,s)}
       ${this.renderTrafficAudience(e,l)}
+      ${this.renderTrafficBehaviour(e,l)}
       ${l(`Not found`,`Paths answered 404`,o(e.not_found),[{key:`key`,label:`Path`,mono:!0},s])}
     `}renderTrafficLive(e){if(!e)return S;let t=e.pages.slice(0,5);return b`
       <section class="section" aria-label="Right now">
@@ -3214,7 +3215,29 @@ var e=globalThis,t=e.ShadowRoot&&(e.ShadyCSS===void 0||e.ShadyCSS.nativeShadow)&
                 .columns=${[{key:`key`,label:`Being read now`,mono:!0},{key:`count`,label:`Views`,numeric:!0}]}
                 .rows=${t.map(([e,t])=>({key:e,count:t}))}></lit-material-table>`:S}
         </div>
-      </section>`}renderTrafficSessions(e,t){let n=e.sessions;if(!n||!n.sessions)return S;let r=e.previous_sessions??{sessions:0,bounces:0,duration:0,pages:0},i=e=>e.sessions?e.bounces/e.sessions:0,a=e=>e.sessions?e.duration/e.sessions:0,o=e=>e.sessions?e.pages/e.sessions:0,s=(e,n,i=`%`)=>r.sessions?i===`pt`?` ${e>=n?`+`:`−`}${Math.abs(Math.round((e-n)*100))} points vs the previous ${t}.`:n?` ${e>=n?`+`:`−`}${Math.abs(Math.round((e-n)/n*100))}% vs the previous ${t}.`:``:``;return b`
+      </section>`}renderTrafficBehaviour(e,t){let n=[`time_on_page`,`scroll`,`screens`,`events`,`goals`].some(t=>(e[t]??[]).length);if(!e.script&&!n)return S;let r=e.sessions?.sessions??0,i={key:`count`,label:`Count`,numeric:!0,render:e=>e.count.toLocaleString()},a=e=>(e??[]).map(([e,t])=>({key:e,count:t})),o={phone:`Phone (< 600 px)`,tablet:`Tablet (600–1023 px)`,laptop:`Laptop (1024–1439 px)`,wide:`Wide (≥ 1440 px)`,"(unknown)":`Unknown`},s=(e.event_props??[]).map(([e,t])=>{let[n,r]=e.split(`	`);return{event:n,prop:r??``,count:t}});return b`
+      <section class="section" aria-labelledby="traffic-behaviour">
+        <h2 id="traffic-behaviour">Behaviour</h2>
+        <p class="lede">From the first-party script (<code>[traffic] script = true</code>, then
+          <code>&lt;script defer src="/_rws/t.js"&gt;&lt;/script&gt;</code> on your pages). It reports to this server only and stores nothing in the browser.</p>
+        ${n?S:b`<p class="lede">No reports yet in this period.</p>`}
+      </section>
+      ${n?b`
+          ${t(`Time on page`,`Average time on page`,(e.time_on_page??[]).map(([e,t,n])=>({key:e,avg:t,n})),[{key:`key`,label:`Page`,mono:!0},{key:`avg`,label:`Average time`,numeric:!0,render:e=>rr(e.avg)},{key:`n`,label:`Views reported`,numeric:!0,render:e=>e.n.toLocaleString()}])}
+          <div class="grid">
+            <section class="section" aria-label="Scroll depth">
+              <h2>Scroll depth</h2>
+              ${(e.scroll??[]).length?b`<lit-material-bar-chart label="Page views by how far they were scrolled"
+                    .format=${e=>`${e.toLocaleString()} view${e===1?``:`s`}`}
+                    .data=${[`25`,`50`,`75`,`100`].map(t=>({name:`up to ${t}%`,value:(e.scroll.find(([e])=>e===t)??[t,0])[1]}))}></lit-material-bar-chart>`:b`<p class="lede">Nothing yet.</p>`}
+            </section>
+            ${t(`Screen sizes`,`Page views by screen width`,a(e.screens).map(e=>({...e,key:o[e.key]??e.key})),[{key:`key`,label:`Width`},i])}
+          </div>
+          <div class="grid">
+            ${t(`Events`,`Events sent with rws.track()`,a(e.events),[{key:`key`,label:`Event`,mono:!0},i])}
+            ${t(`Event properties`,`Event properties`,s,[{key:`event`,label:`Event`,mono:!0},{key:`prop`,label:`Property`,mono:!0},i])}
+          </div>
+          ${t(`Goals`,`Sessions that reached each goal`,a(e.goals),[{key:`key`,label:`Goal`,mono:!0},{key:`count`,label:`Conversions`,numeric:!0,render:e=>e.count.toLocaleString()},{key:`rate`,label:`Conversion rate`,numeric:!0,render:e=>r?`${(e.count/r*100).toFixed(1)}%`:`—`}])}`:S}`}renderTrafficSessions(e,t){let n=e.sessions;if(!n||!n.sessions)return S;let r=e.previous_sessions??{sessions:0,bounces:0,duration:0,pages:0},i=e=>e.sessions?e.bounces/e.sessions:0,a=e=>e.sessions?e.duration/e.sessions:0,o=e=>e.sessions?e.pages/e.sessions:0,s=(e,n,i=`%`)=>r.sessions?i===`pt`?` ${e>=n?`+`:`−`}${Math.abs(Math.round((e-n)*100))} points vs the previous ${t}.`:n?` ${e>=n?`+`:`−`}${Math.abs(Math.round((e-n)/n*100))}% vs the previous ${t}.`:``:``;return b`
       <section class="section" aria-label="Sessions">
         <div class="grid">
           ${[[`Sessions`,n.sessions.toLocaleString(),`Page views 30 minutes or less apart.${s(n.sessions,r.sessions)}`],[`Bounce rate`,`${Math.round(i(n)*100)}%`,`Sessions of one page view.${s(i(n),i(r),`pt`)}`],[`Session length`,n.duration?rr(Math.round(a(n))):`0s`,`On average, first page view to last.${s(a(n),a(r))}`],[`Pages per session`,o(n).toFixed(1),`On average.${s(o(n),o(r))}`]].map(([e,t,n])=>b`<lit-material-stat label=${e} value=${t} caption=${n}></lit-material-stat>`)}

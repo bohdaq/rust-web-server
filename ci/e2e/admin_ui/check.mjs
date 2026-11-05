@@ -101,13 +101,47 @@ if (!has(traffic.channels, "campaign", 1) || !has(traffic.utm_source, "newslette
 if ((traffic.countries ?? []).length !== 1) fail(`countries: ${JSON.stringify(traffic.countries)}`);
 if (traffic.sessions?.sessions !== 1 || traffic.sessions.bounces !== 1) fail(`sessions: ${JSON.stringify(traffic.sessions)}`);
 if (!has(traffic.entry_pages, (traffic.entry_pages ?? [])[0]?.[0], 1)) fail(`entry pages: ${JSON.stringify(traffic.entry_pages)}`);
+// The first-party script in a real browser (as a person: a desktop
+// Firefox UA, since HeadlessChrome is a known bot): an event, a route
+// change, then leaving the page reports time and scroll.
+{
+  const ctx = await browser.newContext({ userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0", viewport: { width: 1280, height: 800 } });
+  await ctx.addInitScript(() => { window.rwsTrackAutomation = true; });
+  const visitor = await ctx.newPage();
+  await visitor.goto(`${externalUrl}app.html`);
+  await visitor.waitForFunction(() => window.rws && typeof window.rws.track === "function", null, { timeout: 5000 }).catch(() => fail("the script didn't load"));
+  await visitor.evaluate(() => { window.scrollTo(0, 2000); window.rws.track("signup", { plan: "pro" }); history.pushState({}, "", "/thanks/"); });
+  await visitor.waitForTimeout(300);
+  // A second route change reports leaving /thanks/. (Not a navigation away:
+  // headless Chromium sends unload-time beacons with its own HeadlessChrome
+  // User-Agent, ignoring the context's — another visitor, a bot.)
+  await visitor.evaluate(() => history.pushState({}, "", "/done/"));
+  await visitor.waitForTimeout(300);
+  await ctx.close();
+  let t;
+  for (let i = 0; i < 30; i++) {
+    t = await api("/traffic?hours=24");
+    if ((t.events ?? []).length && (t.time_on_page ?? []).length >= 2) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const pair = (list, key) => (list ?? []).find(([k]) => k === key)?.[1];
+  if (pair(t.events, "signup") !== 1) fail(`script event: ${JSON.stringify(t.events)}`);
+  if (pair(t.event_props, "signup\tplan=pro") !== 1) fail(`event props: ${JSON.stringify(t.event_props)}`);
+  if (pair(t.goals, "event:signup") !== 1 || pair(t.goals, "/thanks/") !== 1) fail(`goals: ${JSON.stringify(t.goals)}`);
+  if ((t.time_on_page ?? []).length < 2) fail(`time on page: ${JSON.stringify(t.time_on_page)}`);
+  if (pair(t.screens, "laptop") < 1) fail(`screens: ${JSON.stringify(t.screens)}`);
+  if (t.totals.people.visitors !== 2) fail(`people after the script visit: ${JSON.stringify(t.totals.people)}`);
+  console.log("ok: first-party script reports an event, goals, a route change and time on page");
+}
 await page.goto(`${admin}/admin/#/traffic`);
 await page.locator('lit-material-stat[label="People: visitors"]').waitFor({ timeout: 5000 }).catch(() => fail("no Traffic page"));
 await page.locator("lit-material-line-chart").waitFor({ timeout: 5000 }).catch(() => fail("no traffic chart"));
 const live = await api("/traffic/live");
-if (live.visitors !== 1 || live.views_5m !== 1) fail(`live: ${JSON.stringify(live)}`);
+if (live.visitors !== 2 || live.views_5m !== 4) fail(`live: ${JSON.stringify(live)}`);
 await page.locator('lit-material-stat[label="Right now"]').waitFor({ timeout: 5000 }).catch(() => fail("no live tile"));
 await page.locator('lit-material-stat[label="Bounce rate"]').waitFor({ timeout: 5000 }).catch(() => fail("no session tiles"));
+await page.getByRole("heading", { name: "Behaviour", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Behaviour section"));
+await page.getByRole("heading", { name: "Goals", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Goals table"));
 await page.getByRole("heading", { name: "Entry pages", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no entry pages"));
 await page.getByRole("heading", { name: "Sources", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Sources section"));
 await page.getByRole("heading", { name: "Audience", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Audience section"));

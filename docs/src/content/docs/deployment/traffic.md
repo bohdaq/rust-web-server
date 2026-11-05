@@ -60,6 +60,43 @@ in memory only.
   systems and devices (desktop, phone, tablet), each person counted once a
   day.
 
+## The first-party script (optional)
+
+What the server can't see — how long a page stays open, how far it's
+scrolled, screen sizes, route changes in a single-page app, and your own
+events — comes from a small script rws serves itself (since 18.31.0). It
+reports to the same server, sets no cookie and stores nothing in the
+browser, so it needs no consent banner either. Turn it on:
+
+```toml
+[traffic]
+script = true
+goals  = ["/thanks/", "/docs/*", "event:signup"]   # optional conversions
+```
+
+and add it to your pages:
+
+```html
+<script defer src="/_rws/t.js"></script>
+```
+
+Send an event from your own code, with up to four string properties:
+
+```js
+rws.track("signup", { plan: "pro" });
+```
+
+rws then answers `GET /_rws/t.js` (about 1.6 KB, 0.8 KB compressed, cached for an hour) and
+`POST /_rws/t` (reports of at most 2 KB, from the same origin only); every
+other request passes through untouched. `/_rws/` is reserved for rws.
+Reports count only for a visitor already counted as a person, and at most
+500 per session. A **goal** is a page path (exact, or a prefix ending in
+`*`) or `event:<name>`; the page shows how many sessions reached it and the
+share of all sessions. The **Behaviour** section shows time on page, scroll
+depth (up to 25/50/75/100 %), screen widths, events and their properties,
+and goals. Browsers driven by automation (`navigator.webdriver`) don't
+report.
+
 ## Sessions
 
 A person's page views 30 minutes or less apart are one **session**; a

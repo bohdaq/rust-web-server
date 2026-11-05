@@ -96,6 +96,23 @@ pub const MAX_OPEN_SESSIONS: usize = 8192;
 #[cfg(test)]
 pub const MAX_OPEN_SESSIONS: usize = 64;
 
+/// The per-day lists the script feeds (`[traffic] script`): seconds and
+/// page views with a report, keyed `host/path`; scroll depth, screen
+/// sizes, events and event properties, keyed `host\tvalue`; goal
+/// conversions (sessions that reached the goal), keyed `host\tgoal`.
+pub const BEHAVIOUR: [&str; 7] = ["engaged_secs", "engaged_views", "scroll", "screens", "events", "event_props", "goals"];
+const ENGAGED_SECS: usize = 0;
+const ENGAGED_VIEWS: usize = 1;
+const SCROLL: usize = 2;
+const SCREENS: usize = 3;
+const EVENTS: usize = 4;
+const EVENT_PROPS: usize = 5;
+const GOALS: usize = 6;
+/// Reports a session may make; the rest are ignored.
+pub const MAX_REPORTS: u32 = 500;
+/// The longest time on one page counted (a tab left open).
+pub const MAX_ENGAGED_SECS: u64 = 6 * 3600;
+
 /// How far back the live view looks.
 pub const LIVE_WINDOW: u64 = 30 * 60;
 /// People's recent page views kept for it, per shard.
@@ -195,6 +212,8 @@ pub struct Day {
     /// The first and last page of people's sessions (`host/path`).
     pub entry_pages: Top,
     pub exit_pages: Top,
+    /// The [`BEHAVIOUR`] lists, in that order.
+    pub behaviour: [Top; 7],
 }
 
 /// Sessions added up.
@@ -227,6 +246,10 @@ struct Session {
     pages: u64,
     /// The page key (`host/path`) last viewed.
     exit: String,
+    /// Goals reached, by index into the configured goals.
+    goals: u32,
+    /// Script reports so far.
+    reports: u32,
 }
 
 impl Session {
@@ -250,6 +273,9 @@ impl Day {
         self.bots.merge(&other.bots);
         self.referrers.merge(&other.referrers);
         self.not_found.merge(&other.not_found);
+        for (mine, theirs) in self.behaviour.iter_mut().zip(&other.behaviour) {
+            mine.merge(theirs);
+        }
         self.entry_pages.merge(&other.entry_pages);
         self.exit_pages.merge(&other.exit_pages);
         for (host, s) in &other.sessions {
@@ -571,7 +597,8 @@ pub fn record(hit: &Hit<'_>) {
     }
     let recorder = recorder();
     let path = hit.path.split('?').next().unwrap_or(hit.path);
-    if recorder.exclude.iter().any(|e| path == e) {
+    // The script's reports are counted by `beacon`, not as requests.
+    if recorder.exclude.iter().any(|e| path == e) || path == super::script::BEACON_PATH {
         return;
     }
     let day = hit.now / 86_400;
@@ -759,10 +786,8 @@ impl Shard {
     }
 
     fn close(&mut self, session: Session) {
-        let host = session.exit.split('/').next().unwrap_or("").to_string();
         let day = self.day(session.start / 86_400);
-        day.sessions.entry(host).or_default().add(&session.totals());
-        day.exit_pages.add(&session.exit, 1);
+        add_session(day, &session);
     }
 
     /// A person's page view at `at`: continues their session, or ends it and
@@ -773,6 +798,7 @@ impl Shard {
                 session.last = session.last.max(at);
                 session.pages += 1;
                 session.exit = page.to_string();
+                session.goals |= page_goals(page);
                 return false;
             }
             let ended = self.open.remove(&visitor).expect("just found");
@@ -785,7 +811,10 @@ impl Shard {
             }
         }
         self.day(at / 86_400).entry_pages.add(page, 1);
-        self.open.insert(visitor, Session { start: at, last: at, pages: 1, exit: page.to_string() });
+        self.open.insert(visitor, Session { start: at, last: at, pages: 1, exit: page.to_string(), goals: 0, reports: 0 });
+        if let Some(session) = self.open.get_mut(&visitor) {
+            session.goals |= page_goals(page);
+        }
         true
     }
 
@@ -895,13 +924,186 @@ pub fn snapshot(now: u64) -> (BTreeMap<(u64, u8), [Counts; 3]>, BTreeMap<u64, Da
         }
         // Open sessions count as if they ended now (they stay open).
         for session in shard.open.values() {
-            let host = session.exit.split('/').next().unwrap_or("").to_string();
-            let day = days.entry(session.start / 86_400).or_default();
-            day.sessions.entry(host).or_default().add(&session.totals());
-            day.exit_pages.add(&session.exit, 1);
+            add_session(days.entry(session.start / 86_400).or_default(), session);
         }
     }
     (hours, days)
+}
+
+/// A closed (or, in a snapshot, open) session's totals, exit page and goals
+/// into its day.
+fn add_session(day: &mut Day, session: &Session) {
+    let host = session.exit.split('/').next().unwrap_or("").to_string();
+    day.sessions.entry(host.clone()).or_default().add(&session.totals());
+    day.exit_pages.add(&session.exit, 1);
+    if session.goals != 0 {
+        for (i, goal) in goals().iter().enumerate() {
+            if session.goals & (1 << i) != 0 {
+                day.behaviour[GOALS].add_capped(&format!("{host}\t{goal}"), 1, DIM_TOP);
+            }
+        }
+    }
+}
+
+fn goals_lock() -> &'static RwLock<Vec<String>> {
+    static GOALS_SET: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
+    GOALS_SET.get_or_init(|| RwLock::new(super::config::goals()))
+}
+
+/// The configured goals (read from the settings once).
+fn goals() -> std::sync::RwLockReadGuard<'static, Vec<String>> {
+    goals_lock().read().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Replace the goals (tests).
+#[cfg(test)]
+#[doc(hidden)]
+pub fn set_goals_for_tests(goals: &[&str]) {
+    *goals_lock().write().unwrap_or_else(|e| e.into_inner()) = goals.iter().map(|g| g.to_string()).collect();
+}
+
+/// The goals a page view (`host/path`) reaches.
+fn page_goals(page: &str) -> u32 {
+    let path = page.find('/').map_or("/", |i| &page[i..]);
+    let mut reached = 0;
+    for (i, goal) in goals().iter().enumerate() {
+        let hit = match goal.strip_suffix('*') {
+            _ if goal.starts_with("event:") => false,
+            Some(prefix) => path.starts_with(prefix),
+            None => path == goal,
+        };
+        if hit {
+            reached |= 1 << i;
+        }
+    }
+    reached
+}
+
+/// The goals an event reaches.
+fn event_goals(name: &str) -> u32 {
+    let mut reached = 0;
+    for (i, goal) in goals().iter().enumerate() {
+        if goal.strip_prefix("event:") == Some(name) {
+            reached |= 1 << i;
+        }
+    }
+    reached
+}
+
+fn json_string(raw: &str) -> Option<String> {
+    crate::mcp::json_rpc::extract_str(&format!("{{\"v\":{raw}}}"), "v")
+}
+
+fn width_bucket(width: u64) -> &'static str {
+    match width {
+        0 => "(unknown)",
+        1..=599 => "phone",
+        600..=1023 => "tablet",
+        1024..=1439 => "laptop",
+        _ => "wide",
+    }
+}
+
+/// A report from the first-party script (`/_rws/t`): `{"t":"leave"|"view"|
+/// "event", …}`. Counted only for a visitor already counted as a person
+/// today — a client that never loaded the page's assets can't post reports
+/// in.
+#[doc(hidden)]
+pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, now: u64) {
+    if !enabled() {
+        return;
+    }
+    let Some(members) = crate::mcp::json_rpc::object_members(body) else { return };
+    let get = |key: &str| members.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+    let number = |key: &str| get(key).and_then(|v| v.trim().parse::<f64>().ok()).filter(|n| n.is_finite() && *n >= 0.0).map(|n| n as u64);
+    let Some(kind) = get("t").and_then(json_string) else { return };
+    let Some(path) = get("p").and_then(json_string).filter(|p| p.starts_with('/') && p.len() <= 1000) else { return };
+    let host = host_index(raw_host);
+    let day = now / 86_400;
+    let visitor = visitor(day, host, ip, user_agent);
+    let host_name = normalize_host(raw_host);
+
+    if kind == "view" {
+        // A single-page app's route change: a page view like any other,
+        // arriving from the page before (same site, so not a new arrival).
+        let from = get("r").and_then(json_string).filter(|r| r.starts_with('/')).unwrap_or_else(|| "/".to_string());
+        let referer = format!("https://{host_name}{from}");
+        let is_person = {
+            let shard = recorder().shards[(visitor % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
+            shard.seen.get(&visitor) == Some(&Group::Person)
+        };
+        if is_person {
+            record(&Hit {
+                ip,
+                host: raw_host,
+                user_agent,
+                referer: Some(&referer),
+                method: "GET",
+                path: &path,
+                status: 200,
+                content_type: Some("text/html"),
+                headers: &[],
+                now,
+            });
+        }
+        return;
+    }
+
+    let mut shard = recorder().shards[(visitor % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
+    if shard.seen.get(&visitor) != Some(&Group::Person) {
+        return;
+    }
+    if let Some(session) = shard.open.get_mut(&visitor) {
+        session.reports += 1;
+        if session.reports > MAX_REPORTS {
+            return;
+        }
+    }
+    let page = page_key(raw_host, &path);
+    match kind.as_str() {
+        "leave" => {
+            // A report without a usable time isn't one.
+            let Some(ms) = number("ms") else { return };
+            let secs = ms.min(MAX_ENGAGED_SECS * 1000) / 1000;
+            let depth = number("sd").unwrap_or(0).min(100);
+            let width = number("w").unwrap_or(0);
+            let bucket = match depth {
+                0..=25 => "25",
+                26..=50 => "50",
+                51..=75 => "75",
+                _ => "100",
+            };
+            let d = shard.day(day);
+            d.behaviour[ENGAGED_SECS].add(&page, secs);
+            d.behaviour[ENGAGED_VIEWS].add(&page, 1);
+            d.behaviour[SCROLL].add_capped(&format!("{host_name}\t{bucket}"), 1, DIM_TOP);
+            d.behaviour[SCREENS].add_capped(&format!("{host_name}\t{}", width_bucket(width)), 1, DIM_TOP);
+        }
+        "event" => {
+            let Some(name) = get("n").and_then(json_string).map(|n| n.chars().filter(|c| !c.is_control()).take(64).collect::<String>()).filter(|n| !n.is_empty()) else {
+                return;
+            };
+            let props: Vec<(String, String)> = get("q")
+                .and_then(crate::mcp::json_rpc::object_members)
+                .unwrap_or_default()
+                .into_iter()
+                .take(4)
+                .filter_map(|(k, v)| Some((k.chars().take(32).collect::<String>(), json_string(&v)?.chars().take(64).collect::<String>())))
+                .collect();
+            let reached = event_goals(&name);
+            if reached != 0 {
+                if let Some(session) = shard.open.get_mut(&visitor) {
+                    session.goals |= reached;
+                }
+            }
+            let d = shard.day(day);
+            d.behaviour[EVENTS].add_capped(&format!("{host_name}\t{name}"), 1, DIM_TOP);
+            for (k, v) in props {
+                d.behaviour[EVENT_PROPS].add_capped(&format!("{host_name}\t{name}\t{k}={v}"), 1, DIM_TOP);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// People's page views of the last [`LIVE_WINDOW`] before `now`, from every

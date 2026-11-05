@@ -22,6 +22,8 @@ cleanup() {
 trap cleanup EXIT
 cd "$WORK"
 mkdir www
+# A page with the first-party traffic script (served from www/ by the fallback).
+printf '<!doctype html><html><head><script defer src="/_rws/t.js"></script></head><body><p style="height:3000px">app</p></body></html>' > www/app.html
 for port in 18481 18482; do
   mkdir -p "b$port" && echo "backend-$port" > "b$port/index.html"
   echo "body{}" > "b$port/site.css"
@@ -32,6 +34,10 @@ port = 18480
 [admin]
 listen = "127.0.0.1:18489"
 token_env = "UI_E2E_ADMIN_TOKEN"
+
+[traffic]
+script = true
+goals = ["event:signup", "/thanks/"]
 
 [authz]
 [authz.type.doc]

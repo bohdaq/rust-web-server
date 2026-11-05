@@ -46,7 +46,7 @@ cargo install cargo-fuzz
 | `proxy_protocol` | the PROXY protocol v1/v2 header parser (`server::proxy_protocol::parse`) | L4 load balancers, or anyone when it's enabled |
 | `mcp_gateway_reply` | what the MCP gateway reads from an upstream: JSON or event-stream replies, `tools/list` results (via `fuzz_api`) | upstream MCP servers |
 | `llm_usage` | what the LLM proxy reads from a provider: token usage in JSON bodies and event streams fed in pieces, chunked framing (via `fuzz_api`) | LLM providers |
-| `traffic_classify` | a User-Agent and path through the traffic classifier, device parser, UTM and channel readers (via `fuzz_api`) | request headers |
+| `traffic_classify` | a User-Agent and path through the traffic classifier, device parser, UTM and channel readers and the script-report parser (via `fuzz_api`) | request headers |
 | `traffic_geo` | a country table as `[traffic] geo_db` loads it, raw and deflated (via `fuzz_api`) | a config-named file |
 | `authz_parse` | an authorization tuple, subject and relation definition (via `fuzz_api`) | admin API bodies; the config file |
 | `available_dictionary` | an `Available-Dictionary` value, and `dcz`/`dcb` bodies through both decoders (via `fuzz_api`) | request headers; dictionary-compressed bodies |

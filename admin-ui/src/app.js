@@ -646,6 +646,7 @@ export class RwsAdmin extends LitElement {
       ])}
       ${this.renderTrafficSources(t, table, pairs, countColumn)}
       ${this.renderTrafficAudience(t, table)}
+      ${this.renderTrafficBehaviour(t, table)}
       ${table("Not found", "Paths answered 404", pairs(t.not_found), [{ key: "key", label: "Path", mono: true }, countColumn])}
     `;
   }
@@ -668,6 +669,59 @@ export class RwsAdmin extends LitElement {
             : nothing}
         </div>
       </section>`;
+  }
+
+  /** What the first-party script reports: time on page, scroll, screens, events, goals. */
+  renderTrafficBehaviour(t, table) {
+    const any = ["time_on_page", "scroll", "screens", "events", "goals"].some((k) => (t[k] ?? []).length);
+    if (!t.script && !any) return nothing;
+    const sessions = t.sessions?.sessions ?? 0;
+    const views = { key: "count", label: "Count", numeric: true, render: (r) => r.count.toLocaleString() };
+    const rows = (list) => (list ?? []).map(([key, count]) => ({ key, count }));
+    const screens = { phone: "Phone (< 600 px)", tablet: "Tablet (600–1023 px)", laptop: "Laptop (1024–1439 px)", wide: "Wide (≥ 1440 px)", "(unknown)": "Unknown" };
+    const props = (t.event_props ?? []).map(([key, count]) => {
+      const [event, prop] = key.split("\t");
+      return { event, prop: prop ?? "", count };
+    });
+    return html`
+      <section class="section" aria-labelledby="traffic-behaviour">
+        <h2 id="traffic-behaviour">Behaviour</h2>
+        <p class="lede">From the first-party script (<code>[traffic] script = true</code>, then
+          <code>&lt;script defer src="/_rws/t.js"&gt;&lt;/script&gt;</code> on your pages). It reports to this server only and stores nothing in the browser.</p>
+        ${!any ? html`<p class="lede">No reports yet in this period.</p>` : nothing}
+      </section>
+      ${any
+        ? html`
+          ${table("Time on page", "Average time on page", (t.time_on_page ?? []).map(([key, avg, n]) => ({ key, avg, n })), [
+            { key: "key", label: "Page", mono: true },
+            { key: "avg", label: "Average time", numeric: true, render: (r) => duration(r.avg) },
+            { key: "n", label: "Views reported", numeric: true, render: (r) => r.n.toLocaleString() },
+          ])}
+          <div class="grid">
+            <section class="section" aria-label="Scroll depth">
+              <h2>Scroll depth</h2>
+              ${(t.scroll ?? []).length
+                ? html`<lit-material-bar-chart label="Page views by how far they were scrolled"
+                    .format=${(n) => `${n.toLocaleString()} view${n === 1 ? "" : "s"}`}
+                    .data=${["25", "50", "75", "100"].map((b) => ({ name: `up to ${b}%`, value: (t.scroll.find(([k]) => k === b) ?? [b, 0])[1] }))}></lit-material-bar-chart>`
+                : html`<p class="lede">Nothing yet.</p>`}
+            </section>
+            ${table("Screen sizes", "Page views by screen width", rows(t.screens).map((r) => ({ ...r, key: screens[r.key] ?? r.key })), [{ key: "key", label: "Width" }, views])}
+          </div>
+          <div class="grid">
+            ${table("Events", "Events sent with rws.track()", rows(t.events), [{ key: "key", label: "Event", mono: true }, views])}
+            ${table("Event properties", "Event properties", props, [
+              { key: "event", label: "Event", mono: true },
+              { key: "prop", label: "Property", mono: true },
+              views,
+            ])}
+          </div>
+          ${table("Goals", "Sessions that reached each goal", rows(t.goals), [
+            { key: "key", label: "Goal", mono: true },
+            { key: "count", label: "Conversions", numeric: true, render: (r) => r.count.toLocaleString() },
+            { key: "rate", label: "Conversion rate", numeric: true, render: (r) => (sessions ? `${((r.count / sessions) * 100).toFixed(1)}%` : "—") },
+          ])}`
+        : nothing}`;
   }
 
   /** People's sessions: count, bounce rate, length, pages per session. */

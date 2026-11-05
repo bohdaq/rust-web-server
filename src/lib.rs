@@ -512,6 +512,9 @@ pub mod fuzz_api {
         let _ = crate::traffic::device::parse(ua, Some(path), Some(ua));
         let _ = crate::traffic::record::utm(path);
         let _ = crate::traffic::record::channel_of(ua);
+        // A script report (18.31): parsed only once counting is on.
+        crate::traffic::enable();
+        crate::traffic::record::beacon(ip, "fuzz.example", Some(ua), path, 0);
     }
 
     /// A country table as `[traffic] geo_db` loads it (18.31): inflated and

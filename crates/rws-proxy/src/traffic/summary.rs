@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::record::{snapshot, Day, Sessions, Top, DIMS};
+use super::record::{snapshot, Day, Sessions, Top, BEHAVIOUR, DIMS};
 
 fn quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -150,10 +150,26 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         })
         .collect();
     let dims: Vec<String> = DIMS.iter().enumerate().map(|(i, name)| format!("{}:{}", quote(name), dim(&lists.dims[i], if i == 0 { 50 } else { 25 }, host))).collect();
+    // Time on page: seconds and reported views per page, as [page, avg, views].
+    let mut on_page: Vec<(String, u64, u64)> = lists.behaviour[1]
+        .0
+        .iter()
+        .filter(|(k, _)| host.is_none_or(|h| k.starts_with(h)) && k.as_str() != "(other)")
+        .map(|(k, views)| (k.clone(), lists.behaviour[0].0.get(k).copied().unwrap_or(0) / (*views).max(1), *views))
+        .collect();
+    on_page.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+    on_page.truncate(25);
+    let on_page: Vec<String> = on_page.iter().map(|(k, avg, views)| format!("[{},{avg},{views}]", quote(k))).collect();
+    let behaviour: Vec<String> = BEHAVIOUR
+        .iter()
+        .enumerate()
+        .skip(2)
+        .map(|(i, name)| format!("{}:{}", quote(name), dim(&lists.behaviour[i], 25, host)))
+        .collect();
     let session_json = |s: &Sessions| format!(r#"{{"sessions":{},"bounces":{},"duration":{},"pages":{}}}"#, s.sessions, s.bounces, s.duration, s.pages);
     let geo = super::geo::table().map_or("null".to_string(), |t| quote(&t.source));
     format!(
-        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{}}}"#,
+        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{},"script":{},"time_on_page":[{}],{}}}"#,
         if daily { "day" } else { "hour" },
         first_hour.map_or("null".to_string(), |h| (h * 3600).to_string()),
         names.iter().map(|n| quote(n)).collect::<Vec<_>>().join(","),
@@ -172,6 +188,9 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         session_json(&previous_sessions),
         pairs(&lists.entry_pages, 25, host),
         pairs(&lists.exit_pages, 25, host),
+        super::config::script(),
+        on_page.join(","),
+        behaviour.join(","),
     )
 }
 

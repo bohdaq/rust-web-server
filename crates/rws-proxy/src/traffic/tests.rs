@@ -485,6 +485,95 @@ fn the_live_view_shows_who_is_here_now() {
     assert!(one.contains(r#""visitors":1,"views_5m":1"#), "{one}");
 }
 
+// ── first-party script (18.31, tranche 4) ─────────────────────────────────────
+
+struct Inner;
+impl crate::application::Application for Inner {
+    fn execute(&self, _r: &crate::request::Request, _c: &crate::server::ConnectionInfo) -> Result<crate::response::Response, String> {
+        Ok(crate::response::Response::text(crate::response::STATUS_CODE_REASON_PHRASE.n200_ok, "inner"))
+    }
+}
+
+fn through(layer: &super::TrafficScriptLayer, raw: &str) -> crate::response::Response {
+    use crate::middleware::Middleware;
+    let request = crate::request::Request::parse(raw.as_bytes()).unwrap();
+    let mut connection = crate::server::ConnectionInfo::default();
+    connection.client.ip = "8.8.8.8".to_string();
+    layer.handle(&request, &connection, &Inner).unwrap()
+}
+
+fn body(r: &crate::response::Response) -> String {
+    r.content_range_list.iter().map(|c| String::from_utf8_lossy(&c.body).into_owned()).collect()
+}
+
+#[test]
+fn the_script_layer_answers_only_its_paths() {
+    use crate::middleware::Middleware;
+    let off = super::TrafficScriptLayer::new(false);
+    assert_eq!(body(&through(&off, "GET /_rws/t.js HTTP/1.1\r\nHost: example.com\r\n\r\n")), "inner", "off: passed through");
+    let on = super::TrafficScriptLayer::new(true);
+    let request = |raw: &str| crate::request::Request::parse(raw.as_bytes()).unwrap();
+    let conn = crate::server::ConnectionInfo::default();
+    assert!(on.is_passthrough(&request("GET /docs/ HTTP/1.1\r\n\r\n"), &conn), "other paths keep the async forwarder");
+    assert!(!on.is_passthrough(&request("POST /_rws/t HTTP/1.1\r\n\r\n"), &conn));
+    assert!(off.is_passthrough(&request("POST /_rws/t HTTP/1.1\r\n\r\n"), &conn));
+
+    let script = through(&on, "GET /_rws/t.js?v=1 HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    assert_eq!(script.status_code, 200);
+    assert!(body(&script).contains("sendBeacon"));
+    assert!(script.content_range_list[0].content_type.starts_with("text/javascript"));
+    let etag = script.headers.iter().find(|h| h.name.eq_ignore_ascii_case("etag")).unwrap().value.to_string();
+    let again = through(&on, &format!("GET /_rws/t.js HTTP/1.1\r\nHost: example.com\r\nIf-None-Match: {etag}\r\n\r\n"));
+    assert_eq!(again.status_code, 304);
+    assert_eq!(through(&on, "POST /_rws/t.js HTTP/1.1\r\nHost: example.com\r\nContent-Length: 0\r\n\r\n").status_code, 405);
+    assert_eq!(through(&on, "GET /_rws/t HTTP/1.1\r\nHost: example.com\r\n\r\n").status_code, 405);
+    let big = "x".repeat(super::script::MAX_BEACON + 1);
+    assert_eq!(through(&on, &format!("POST /_rws/t HTTP/1.1\r\nHost: example.com\r\nContent-Length: {}\r\n\r\n{big}", big.len())).status_code, 413);
+    assert_eq!(through(&on, "POST /_rws/t HTTP/1.1\r\nHost: example.com\r\nOrigin: https://evil.example\r\nContent-Length: 2\r\n\r\n{}").status_code, 403);
+    assert_eq!(through(&on, "POST /_rws/t HTTP/1.1\r\nHost: example.com\r\nOrigin: https://example.com\r\nContent-Length: 2\r\n\r\n{}").status_code, 204);
+    assert_eq!(body(&through(&on, "GET /docs/ HTTP/1.1\r\nHost: example.com\r\n\r\n")), "inner");
+}
+
+#[test]
+fn script_reports_add_time_scroll_screens_events_and_goals() {
+    let _g = fresh();
+    use super::record::beacon;
+    super::record::set_goals_for_tests(&["/thanks/", "event:signup", "/docs/*"]);
+    // A person: a page and its stylesheet.
+    record(&hit("8.8.8.8", CHROME, "/docs/intro/", T0));
+    record(&hit("8.8.8.8", CHROME, "/a.css", T0 + 1));
+    // The script reports leaving it, a route change, an event, leaving again.
+    beacon("8.8.8.8".parse().unwrap(), "example.com", Some(CHROME), r#"{"t":"leave","p":"/docs/intro/","ms":42500,"sd":80,"w":1280}"#, T0 + 43);
+    beacon("8.8.8.8".parse().unwrap(), "example.com", Some(CHROME), r#"{"t":"view","p":"/pricing/","r":"/docs/intro/"}"#, T0 + 43);
+    beacon("8.8.8.8".parse().unwrap(), "example.com", Some(CHROME), r#"{"t":"event","p":"/pricing/","n":"signup","q":{"plan":"pro","p":"/x"}}"#, T0 + 50);
+    beacon("8.8.8.8".parse().unwrap(), "example.com", Some(CHROME), r#"{"t":"leave","p":"/pricing/","ms":10000,"sd":20,"w":390}"#, T0 + 60);
+    // Not counted: a bot, a browser never decided, garbage.
+    beacon("132.196.86.7".parse().unwrap(), "example.com", Some(GPTBOT), r#"{"t":"event","p":"/","n":"signup"}"#, T0 + 61);
+    beacon("1.1.1.1".parse().unwrap(), "example.com", Some(CHROME), r#"{"t":"leave","p":"/","ms":1000,"sd":1,"w":1}"#, T0 + 62);
+    for junk in ["", "[]", "{", r#"{"t":"leave"}"#, r#"{"t":"leave","p":"no-slash"}"#, r#"{"t":"event","p":"/","n":""}"#, r#"{"t":"leave","p":"/","ms":-5,"sd":1e400}"#] {
+        beacon("8.8.8.8".parse().unwrap(), "example.com", Some(CHROME), junk, T0 + 63);
+    }
+
+    let json = summary(24, None, T0 + 4 * 3600);
+    super::record::set_goals_for_tests(&[]);
+    assert_eq!(totals(&json, "people").1, 2, "the route change is a page view: {json}");
+    assert_eq!(sessions(&json, "sessions"), (1, 0, 43, 2), "{json}");
+    assert!(json.contains(r#""time_on_page":[["example.com/docs/intro/",42,1],["example.com/pricing/",10,1]]"#), "{json}");
+    assert_eq!(dim(&json, "scroll"), r#"[["100",1],["25",1]]"#, "{json}");
+    assert_eq!(dim(&json, "screens"), r#"[["laptop",1],["phone",1]]"#);
+    assert_eq!(dim(&json, "events"), r#"[["signup",1]]"#);
+    assert_eq!(dim(&json, "event_props"), r#"[["signup\u0009p=/x",1],["signup\u0009plan=pro",1]]"#);
+    assert_eq!(dim(&json, "goals"), r#"[["/docs/*",1],["event:signup",1]]"#, "one session reached two goals: {json}");
+    assert!(json.contains(r#""channels":[["direct",1]]"#), "the route change isn't an arrival: {json}");
+
+    // Saved and loaded.
+    let file = crate::test_env::TempPath::new("traffic_behaviour.json");
+    super::persist::save(&file).unwrap();
+    reset_for_tests();
+    super::persist::load(&file);
+    assert_eq!(summary(24, None, T0 + 4 * 3600), json);
+}
+
 #[test]
 #[ignore]
 fn zz_cost_per_request() {

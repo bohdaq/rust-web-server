@@ -18,7 +18,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use super::record::{Counts, Day, Top, DIMS, DIM_SAVED, TOP_SAVED};
+use super::record::{Counts, Day, Top, BEHAVIOUR, DIMS, DIM_SAVED, TOP_SAVED};
 use crate::mcp::json_rpc::{extract_raw, extract_str, split_array_elements};
 
 const LISTS: [&str; 8] = ["people_pages", "ai_pages", "ai_agents", "bots", "referrers", "not_found", "entry_pages", "exit_pages"];
@@ -44,6 +44,9 @@ fn list<'a>(day: &'a Day, name: &str) -> &'a Top {
     if let Some(i) = DIMS.iter().position(|d| *d == name) {
         return &day.dims[i];
     }
+    if let Some(i) = BEHAVIOUR.iter().position(|d| *d == name) {
+        return &day.behaviour[i];
+    }
     match name {
         "people_pages" => &day.people_pages,
         "ai_pages" => &day.ai_pages,
@@ -59,6 +62,9 @@ fn list<'a>(day: &'a Day, name: &str) -> &'a Top {
 fn list_mut<'a>(day: &'a mut Day, name: &str) -> &'a mut Top {
     if let Some(i) = DIMS.iter().position(|d| *d == name) {
         return &mut day.dims[i];
+    }
+    if let Some(i) = BEHAVIOUR.iter().position(|d| *d == name) {
+        return &mut day.behaviour[i];
     }
     match name {
         "people_pages" => &mut day.people_pages,
@@ -90,8 +96,9 @@ pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; 3]>, days:
             let lists: Vec<String> = LISTS
                 .iter()
                 .chain(DIMS.iter())
+                .chain(BEHAVIOUR.iter())
                 .map(|name| {
-                    let keep = if DIMS.contains(name) { DIM_SAVED } else { TOP_SAVED };
+                    let keep = if DIMS.contains(name) || BEHAVIOUR.contains(name) { DIM_SAVED } else { TOP_SAVED };
                     let entries: Vec<String> = list(day, name).sorted(keep).iter().map(|(k, v)| format!("[{},{v}]", quote(k))).collect();
                     format!("{}:[{}]", quote(name), entries.join(","))
                 })
@@ -153,7 +160,7 @@ pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts
                 day.sessions.insert(host, super::record::Sessions { sessions: n[0], bounces: n[1], duration: n[2], pages: n[3] });
             }
         }
-        for name in LISTS.iter().chain(DIMS.iter()) {
+        for name in LISTS.iter().chain(DIMS.iter()).chain(BEHAVIOUR.iter()) {
             let raw = extract_raw(&object, name).unwrap_or_default();
             for pair in split_array_elements(&raw) {
                 let parts = split_array_elements(&pair);

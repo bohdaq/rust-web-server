@@ -110,8 +110,10 @@ pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
     "RWS_CONFIG_TRAFFIC_ENABLED",
     "RWS_CONFIG_TRAFFIC_EXCLUDE",
     "RWS_CONFIG_TRAFFIC_GEO_DB",
+    "RWS_CONFIG_TRAFFIC_GOALS",
     "RWS_CONFIG_TRAFFIC_PERSIST",
     "RWS_CONFIG_TRAFFIC_RETENTION_DAYS",
+    "RWS_CONFIG_TRAFFIC_SCRIPT",
 ];
 
 /// Tables (and their sub-tables) read by `proxy_config`'s own parser, not

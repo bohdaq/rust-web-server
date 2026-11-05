@@ -126,6 +126,9 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
         .wrap(LogLayer)
         .wrap(BlocklistLayer)
         .wrap(GlobalRateLimit::from_env())
+        // The optional first-party traffic script (`[traffic] script`);
+        // every other request passes straight through.
+        .wrap(rust_web_server::traffic::TrafficScriptLayer::from_env())
 }
 
 /// Whether requests are traced: `OTEL_EXPORTER_OTLP_ENDPOINT` (or the
@@ -337,7 +340,7 @@ fn main() {
     telemetry();
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(BlocklistLayer).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(BlocklistLayer).wrap(GlobalRateLimit::from_env()).wrap(rust_web_server::traffic::TrafficScriptLayer::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         #[cfg(unix)]
         rust_web_server::systemd::ready("serving");
@@ -375,7 +378,7 @@ async fn serve() {
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(BlocklistLayer).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(BlocklistLayer).wrap(GlobalRateLimit::from_env()).wrap(rust_web_server::traffic::TrafficScriptLayer::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         #[cfg(unix)]
         rust_web_server::systemd::ready("serving");
@@ -419,7 +422,7 @@ async fn serve() {
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(BlocklistLayer).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(MaintenanceLayer).wrap(BlocklistLayer).wrap(GlobalRateLimit::from_env()).wrap(rust_web_server::traffic::TrafficScriptLayer::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         #[cfg(unix)]
         rust_web_server::systemd::ready("serving");

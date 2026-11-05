@@ -33,6 +33,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `traffic_summary {"live": true}`, a "Right now" tile on the Traffic page
   (which now refreshes every 10 s). Kept in memory only (≤ 4096 recent page
   views per shard).
+- **Traffic page: the optional first-party script** (tranche 4): `[traffic]
+  script = true` makes rws serve `/_rws/t.js` (~1.6 KB, no cookie or
+  browser storage) and take its reports at `/_rws/t` (same origin, ≤ 2 KB,
+  only for visitors counted as people, ≤ 500 per session). New Behaviour
+  section: time on page, scroll depth, screen sizes, single-page-app route
+  changes (counted as page views), `rws.track(name, props)` events, and
+  **goals** (`[traffic] goals`: paths, `prefix*`, `event:<name>`) with
+  conversions per session. `TrafficScriptLayer` is wrapped into the
+  binary's static and proxy apps and passes other requests through (proxy
+  routes keep the async forwarder). `/_rws/` is reserved.
 
 - **ORM, part 2** (roadmap #90):
   - Eager loading: `Post::query(&pool).with(Post::comments()).with(Post::author()).fetch_all()`

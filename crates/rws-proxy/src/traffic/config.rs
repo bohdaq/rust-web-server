@@ -7,6 +7,8 @@ pub const RWS_CONFIG_TRAFFIC_RETENTION_DAYS: &str = "RWS_CONFIG_TRAFFIC_RETENTIO
 pub const RWS_CONFIG_TRAFFIC_PERSIST: &str = "RWS_CONFIG_TRAFFIC_PERSIST";
 pub const RWS_CONFIG_TRAFFIC_EXCLUDE: &str = "RWS_CONFIG_TRAFFIC_EXCLUDE";
 pub const RWS_CONFIG_TRAFFIC_GEO_DB: &str = "RWS_CONFIG_TRAFFIC_GEO_DB";
+pub const RWS_CONFIG_TRAFFIC_SCRIPT: &str = "RWS_CONFIG_TRAFFIC_SCRIPT";
+pub const RWS_CONFIG_TRAFFIC_GOALS: &str = "RWS_CONFIG_TRAFFIC_GOALS";
 
 fn read(key: &str) -> String {
     std::env::var(key).unwrap_or_default().trim().to_string()
@@ -61,4 +63,20 @@ pub fn persist_path() -> Option<PathBuf> {
 pub fn geo_db() -> Option<PathBuf> {
     let value = read(RWS_CONFIG_TRAFFIC_GEO_DB);
     (!value.is_empty()).then(|| PathBuf::from(value))
+}
+
+/// `script`: serve the first-party script at `/_rws/t.js` and take its
+/// reports at `/_rws/t`. Default off.
+pub fn script() -> bool {
+    matches!(read(RWS_CONFIG_TRAFFIC_SCRIPT).to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on")
+}
+
+/// The most goals counted.
+pub const MAX_GOALS: usize = 32;
+
+/// `goals`: what counts as a conversion — a page path (`/thanks/`, or a
+/// prefix ending in `*`: `/docs/*`) or a script event (`event:signup`),
+/// comma-separated; at most [`MAX_GOALS`].
+pub fn goals() -> Vec<String> {
+    read(RWS_CONFIG_TRAFFIC_GOALS).split(',').map(str::trim).filter(|g| !g.is_empty()).take(MAX_GOALS).map(str::to_string).collect()
 }

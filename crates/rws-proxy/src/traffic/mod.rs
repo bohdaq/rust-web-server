@@ -23,10 +23,12 @@ pub mod geo;
 #[doc(hidden)]
 pub mod persist;
 pub mod record;
+pub mod script;
 pub mod summary;
 
 pub use classify::{classify, Class, Group, Kind};
 pub use record::{enable, enabled};
+pub use script::TrafficScriptLayer;
 
 /// Count one finished request (called with the access log line, whatever
 /// the log format).
