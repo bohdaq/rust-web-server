@@ -5,8 +5,9 @@ Written 2026-11-05. Extends the 18.15 Traffic page (`spec/TRAFFIC_INSIGHTS.md`,
 the reports people open Google Analytics for: where visitors come from,
 what they use, how long they stay, which campaigns bring them, who's on
 the site now. rws computes everything itself; it makes no outbound calls
-and sends nothing to a third party. Target: **18.31.0** (tranches 1–4),
-Postgres possibly later.
+and sends nothing to a third party. Target: one release once all six tranches
+are done (user, 2026-11-05: order sessions → real-time → script →
+Postgres; no deploy to bohdan-prod before the release).
 
 ## What exists (18.15–18.30)
 
@@ -143,11 +144,8 @@ never blocks requests. With it set, `/traffic` can answer ranges past
 `retention_days` and any filter combination (country + page, etc.) from
 SQL; the JSON rollups stay the fast default.
 
-**Open item (decide when tranche 5 starts):** release binaries are not
-built with `model-postgres` (sqlx). Options: add sqlx to release builds
-(+~2 MB), a separate `-postgres` release flavour, or a minimal
-hand-rolled client (startup, SCRAM-SHA-256, TLS, `COPY … FROM STDIN`),
-in the spirit of the hand-rolled RESP client for Redis.
+**Decided (user, 2026-11-05):** release binaries get `model-postgres`
+(sqlx, ~+2 MB) and the writer uses `DbPool`.
 
 ### API, UI, MCP (with each tranche)
 
