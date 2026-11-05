@@ -5,7 +5,7 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
-## Unreleased
+## 18.32.0 — 2026-11-05
 
 ### Changed
 
@@ -21,6 +21,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   cover whole UTC days (a "week" is today and the six days before), so
   per-day counts line up with the period; the site list leaves out hosts
   with no counted traffic.
+- **rws8.tech** loads the first-party traffic script on every page.
 
 ## 18.31.0 — 2026-11-05
 
