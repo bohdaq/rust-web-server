@@ -18,7 +18,7 @@
 //! one.
 
 use std::collections::hash_map::RandomState;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -95,6 +95,22 @@ pub const SESSION_GAP: u64 = 30 * 60;
 pub const MAX_OPEN_SESSIONS: usize = 8192;
 #[cfg(test)]
 pub const MAX_OPEN_SESSIONS: usize = 64;
+
+/// How far back the live view looks.
+pub const LIVE_WINDOW: u64 = 30 * 60;
+/// People's recent page views kept for it, per shard.
+pub const MAX_RECENT: usize = 4096;
+
+/// A person's page view, for the live view.
+#[derive(Clone, Debug)]
+#[doc(hidden)]
+pub struct Recent {
+    pub at: u64,
+    pub visitor: u64,
+    /// `host/path`.
+    pub page: String,
+    pub country: Option<[u8; 2]>,
+}
 
 /// Entries a day's audience/source list keeps (all hosts together).
 pub const DIM_TOP: usize = 400;
@@ -277,6 +293,8 @@ struct Shard {
     cache: HashMap<u64, Cached>,
     /// People's open sessions by visitor.
     open: HashMap<u64, Session>,
+    /// People's page views of the last [`LIVE_WINDOW`], oldest first.
+    recent: VecDeque<Recent>,
     today: u64,
 }
 
@@ -777,6 +795,13 @@ impl Shard {
         // Sources count once per session, from its first page view (as
         // Google Analytics attributes a session).
         let started = page.as_ref().is_some_and(|page| self.session_page(visitor, at, page));
+        if let Some(page) = &page {
+            let country = self.cache.get(&visitor).and_then(|c| c.audience.as_ref()).and_then(|a| a.country);
+            while self.recent.front().is_some_and(|r| r.at + LIVE_WINDOW < at) || self.recent.len() >= MAX_RECENT {
+                self.recent.pop_front();
+            }
+            self.recent.push_back(Recent { at, visitor, page: page.clone(), country });
+        }
         let arrival = arrival.filter(|_| started);
         let counts = &mut self.hours.entry((hour, host)).or_default()[PEOPLE];
         counts.requests += 1;
@@ -877,6 +902,20 @@ pub fn snapshot(now: u64) -> (BTreeMap<(u64, u8), [Counts; 3]>, BTreeMap<u64, Da
         }
     }
     (hours, days)
+}
+
+/// People's page views of the last [`LIVE_WINDOW`] before `now`, from every
+/// shard (unordered). Visitor keys are the day's hashes: comparable within
+/// the result, meaningless outside it.
+#[doc(hidden)]
+pub fn recent(now: u64) -> Vec<Recent> {
+    settle(now);
+    let mut out = Vec::new();
+    for shard in &recorder().shards {
+        let shard = shard.lock().unwrap_or_else(|e| e.into_inner());
+        out.extend(shard.recent.iter().filter(|r| r.at + LIVE_WINDOW >= now && r.at <= now).cloned());
+    }
+    out
 }
 
 /// Put back what [`snapshot`] gave (loading a saved file): counts are added

@@ -7081,10 +7081,12 @@ pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_RETENTION_DAYS: &
 pub const rust_web_server::traffic::record::DIMS: [&str; 8]
 pub const rust_web_server::traffic::record::DIM_SAVED: usize
 pub const rust_web_server::traffic::record::DIM_TOP: usize
+pub const rust_web_server::traffic::record::LIVE_WINDOW: u64
 pub const rust_web_server::traffic::record::MAX_CACHE: usize
 pub const rust_web_server::traffic::record::MAX_HOSTS: usize
 pub const rust_web_server::traffic::record::MAX_OPEN_SESSIONS: usize
 pub const rust_web_server::traffic::record::MAX_PENDING: usize
+pub const rust_web_server::traffic::record::MAX_RECENT: usize
 pub const rust_web_server::traffic::record::SESSION_GAP: u64
 pub const rust_web_server::traffic::record::TOP: usize
 pub const rust_web_server::traffic::record::TOP_SAVED: usize
@@ -7411,6 +7413,7 @@ pub fn rust_web_server::admin::ops::set_drained(&str, &str, bool) -> core::resul
 pub fn rust_web_server::admin::ops::set_flag(&str, bool) -> alloc::string::String
 pub fn rust_web_server::admin::ops::set_maintenance(bool) -> alloc::string::String
 pub fn rust_web_server::admin::ops::traffic_json(u64, core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
+pub fn rust_web_server::admin::ops::traffic_live_json(core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::unblock(&str) -> alloc::string::String
 pub fn rust_web_server::admin::ops::upstreams_json() -> alloc::string::String
 pub fn rust_web_server::admin::start(&rust_web_server::admin::AdminConfig) -> core::result::Result<core::option::Option<core::net::socket_addr::SocketAddr>, alloc::string::String>
@@ -10151,6 +10154,7 @@ pub fn rust_web_server::traffic::record::now() -> u64
 pub fn rust_web_server::traffic::save()
 pub fn rust_web_server::traffic::start()
 pub fn rust_web_server::traffic::summary::json(u64, core::option::Option<&str>, u64) -> alloc::string::String
+pub fn rust_web_server::traffic::summary::live_json(core::option::Option<&str>, u64) -> alloc::string::String
 pub fn rust_web_server::udp_proxy::UdpProxy::bind(self, &str) -> core::result::Result<(), alloc::string::String>
 pub fn rust_web_server::udp_proxy::UdpProxy::buffer_size(self, usize) -> Self
 pub fn rust_web_server::udp_proxy::UdpProxy::new<I, S>(I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>

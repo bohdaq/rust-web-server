@@ -47,6 +47,9 @@ in memory only.
   `404`.
 - With more than one site (virtual hosts, `Host` names) a button per site.
   Visitor counts are for all sites together.
+- **Right now** (since 18.31.0): people on the site in the last 5 minutes,
+  page views per minute for the last 30 and the pages being read;
+  refreshed every 10 seconds.
 - **Sessions** (since 18.31.0): sessions, bounce rate, session length and
   pages per session, with the change from the period before; the pages
   sessions began and ended on.
@@ -127,5 +130,11 @@ most 16 sites (the rest count as `other`) and 200 entries per list per day
 
 `GET /admin/api/v1/traffic?hours=168&host=example.com` returns the page's data
 (`hours` 1–2160, default 24; `host` optional); `404` when counting is off. The
+`GET /admin/api/v1/traffic/live?host=example.com` (since 18.31.0) returns
+the live view: `visitors` (people in the last 5 minutes), `views_5m`, a
+`series` of page views per minute for 30 minutes, the `pages` and
+`countries` of the people active now.
+
 MCP tool `traffic_summary` `{"hours": 24}` answers the same, so an AI client
-connected to the server can tell you who has been visiting.
+connected to the server can tell you who has been visiting; `{"live": true}`
+gives the live view.

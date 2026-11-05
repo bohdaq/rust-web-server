@@ -449,6 +449,42 @@ fn open_sessions_stay_bounded() {
     assert_eq!(sessions(&json, "sessions").0, totals(&json, "people").2, "{}", &json[..300]);
 }
 
+// ── live view (18.31, tranche 3) ──────────────────────────────────────────────
+
+#[test]
+fn the_live_view_shows_who_is_here_now() {
+    let _g = fresh();
+    let now = T0 + 3600;
+    // Two people now (one on another host), one 20 minutes ago, one an hour ago.
+    for (ip, page, at) in [("8.8.8.8", "/docs/", now - 30), ("8.8.8.8", "/why/", now - 10), ("193.0.6.139", "/", now - 20 * 60), ("1.1.1.1", "/old/", now - 3600)] {
+        record(&hit(ip, CHROME, page, at));
+        record(&hit(ip, CHROME, "/a.css", at));
+    }
+    let mut shop = hit("5.172.33.9", CHROME, "/cart/", now - 60);
+    shop.host = "shop.example";
+    record(&shop);
+    let mut css = hit("5.172.33.9", CHROME, "/a.css", now - 60);
+    css.host = "shop.example";
+    record(&css);
+    // A bot isn't a visitor.
+    record(&hit("132.196.86.7", GPTBOT, "/docs/", now - 5));
+
+    let live = super::summary::live_json(None, now);
+    assert!(live.contains(r#""visitors":2,"views_5m":3"#), "{live}");
+    assert!(live.contains(r#""pages":[["example.com/docs/",1],["example.com/why/",1],["shop.example/cart/",1]]"#), "{live}");
+    #[cfg(feature = "geo")]
+    assert!(live.contains(r#""countries":[["PL",1],["US",1]]"#), "{live}");
+    let series = crate::mcp::json_rpc::split_array_elements(&crate::mcp::json_rpc::extract_raw(&live, "series").unwrap());
+    assert_eq!(series.len(), 30);
+    let views: u64 = series.iter().map(|p| crate::mcp::json_rpc::extract_raw(p, "views").unwrap().trim().parse::<u64>().unwrap()).sum();
+    assert_eq!(views, 4, "the last 30 minutes, not the hour-old one: {live}");
+    // `now` is on a minute boundary: the last minute's three views sit just before it.
+    assert!(series.last().unwrap().contains(r#""views":0"#) && series[28].contains(r#""views":3"#), "{live}");
+
+    let one = super::summary::live_json(Some("shop.example"), now);
+    assert!(one.contains(r#""visitors":1,"views_5m":1"#), "{one}");
+}
+
 #[test]
 #[ignore]
 fn zz_cost_per_request() {

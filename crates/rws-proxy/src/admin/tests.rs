@@ -351,6 +351,12 @@ fn traffic_is_404_while_off_and_a_summary_while_on() {
     assert!(text.contains(r#""hours":168"#) && text.contains(r#""bucket":"day""#) && text.contains(r#""host":"example.com""#), "{text}");
     assert!(text.contains(r#""totals":{"people":"#), "{text}");
     assert_eq!(call(&api, "POST", "/admin/api/v1/traffic", "").0, 405);
+    let (status, text) = call(&api, "GET", "/admin/api/v1/traffic/live?host=example.com", "");
+    assert_eq!(status, 200, "{text}");
+    assert!(text.contains(r#""visitors":"#) && text.contains(r#""host":"example.com""#), "{text}");
+    assert_eq!(call(&api, "POST", "/admin/api/v1/traffic/live", "").0, 405);
+    crate::traffic::record::disable_for_tests();
+    assert_eq!(call(&api, "GET", "/admin/api/v1/traffic/live", "").0, 404);
 }
 
 // ── 18.22.0: users, roles, audit log ──────────────────────────────────────

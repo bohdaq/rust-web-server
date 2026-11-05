@@ -323,6 +323,14 @@ pub fn purge_cache(name: &str, path: Option<&str>, prefix: Option<&str>) -> Opti
 
 /// Who visited in the last `hours` (1–2160), optionally for one host: the
 /// Traffic page's JSON. `Err` when counting is off.
+/// `GET /traffic/live`: who is on the site now.
+pub fn traffic_live_json(host: Option<&str>) -> Result<String, String> {
+    if !crate::traffic::enabled() {
+        return Err("traffic counting is off (on with the admin API unless [traffic] enabled = false)".to_string());
+    }
+    Ok(crate::traffic::summary::live_json(host.filter(|h| !h.is_empty()), crate::traffic::record::now()))
+}
+
 pub fn traffic_json(hours: u64, host: Option<&str>) -> Result<String, String> {
     if !crate::traffic::enabled() {
         return Err("traffic counting is off (on with the admin API unless [traffic] enabled = false)".to_string());

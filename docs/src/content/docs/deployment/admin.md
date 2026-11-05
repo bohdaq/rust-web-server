@@ -214,6 +214,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
 | `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
 | `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
+| `GET /traffic/live?host=` | People on the site in the last 5 minutes, page views per minute for 30 minutes, current pages and countries (18.31.0). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |

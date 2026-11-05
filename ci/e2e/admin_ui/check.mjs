@@ -104,6 +104,9 @@ if (!has(traffic.entry_pages, (traffic.entry_pages ?? [])[0]?.[0], 1)) fail(`ent
 await page.goto(`${admin}/admin/#/traffic`);
 await page.locator('lit-material-stat[label="People: visitors"]').waitFor({ timeout: 5000 }).catch(() => fail("no Traffic page"));
 await page.locator("lit-material-line-chart").waitFor({ timeout: 5000 }).catch(() => fail("no traffic chart"));
+const live = await api("/traffic/live");
+if (live.visitors !== 1 || live.views_5m !== 1) fail(`live: ${JSON.stringify(live)}`);
+await page.locator('lit-material-stat[label="Right now"]').waitFor({ timeout: 5000 }).catch(() => fail("no live tile"));
 await page.locator('lit-material-stat[label="Bounce rate"]').waitFor({ timeout: 5000 }).catch(() => fail("no session tiles"));
 await page.getByRole("heading", { name: "Entry pages", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no entry pages"));
 await page.getByRole("heading", { name: "Sources", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Sources section"));

@@ -549,6 +549,16 @@ impl AdminApi {
                 _ => wrong_method("DELETE"),
             };
         }
+        if route == "/traffic/live" {
+            if method != "GET" {
+                return wrong_method("GET");
+            }
+            let host = query(request, "host").map(|h| crate::url::URL::percent_decode(&h));
+            return match ops::traffic_live_json(host.as_deref()) {
+                Ok(body) => ok(body),
+                Err(e) => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+            };
+        }
         if route == "/traffic" {
             if method != "GET" {
                 return wrong_method("GET");

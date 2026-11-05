@@ -237,6 +237,17 @@ fn ops_tools_is_the_binarys_set_of_25() {
 }
 
 #[test]
+fn traffic_summary_answers_the_period_or_now() {
+    let _g = crate::test_env::lock();
+    crate::traffic::enable();
+    let mcp = TestClient::new(ops_tools(McpServer::new("rws", "1"), Vec::new(), None));
+    let period = call(&mcp, "traffic_summary", r#"{"hours":24}"#);
+    assert!(period.contains(r#""totals":"#) && period.contains(r#""sessions":"#), "{period}");
+    let live = call(&mcp, "traffic_summary", r#"{"live":true,"host":"example.com"}"#);
+    assert!(live.contains(r#""views_5m":"#) && live.contains(r#""host":"example.com""#), "{live}");
+}
+
+#[test]
 fn register_adds_the_tools_to_an_apps_own_server() {
     let mcp = dev().register(app().mcp("mine", "2.0"));
     let client = TestClient::new(mcp);

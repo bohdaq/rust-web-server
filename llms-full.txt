@@ -20755,7 +20755,7 @@ client that asks before acting asks for those.
 | `feature_flags`, `feature_list` | |
 | `authz_check` `{"subject": "user:alice", "relation": "viewer", "object": "doc:42"}` — allowed, and why | `authz_write` / `authz_delete` `{"tuple": "doc:42#viewer@user:alice"}` |
 | `authz_tuples` `{"object": "doc", "subject": "user:alice"}` — relationship tuples | |
-| `traffic_summary` `{"hours": 24, "host": "example.com"}` — who visited: people, AI agents, bots; sessions and bounce rate; where people came from and their countries, browsers and devices | |
+| `traffic_summary` `{"hours": 24, "host": "example.com"}` (or `{"live": true}`, who is on the site now) — who visited: people, AI agents, bots; sessions and bounce rate; where people came from and their countries, browsers and devices | |
 
 The same operations are on the [admin API](/deployment/admin/) (since
 18.10.0), which runs the same code: a tool and its admin endpoint answer
@@ -23436,6 +23436,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `DELETE /authz/tuples?tuple=…` (or the same JSON body) | Remove a tuple: `{"tuple":…,"deleted":true\|false}` |
 | `POST /authz/check` `{"subject":"user:alice","relation":"viewer","object":"doc:42"}` | `{"allowed":true,"path":[…]}` — the path that allowed it |
 | `GET /traffic?hours=24&host=` | Visitors, page views and requests for people, AI agents and bots over the last `hours` (1–2160), the period before, a series and the top lists (18.15.0, [Traffic insights](/deployment/traffic/)). `404` when counting is off |
+| `GET /traffic/live?host=` | People on the site in the last 5 minutes, page views per minute for 30 minutes, current pages and countries (18.31.0). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |
@@ -23654,6 +23655,9 @@ in memory only.
   `404`.
 - With more than one site (virtual hosts, `Host` names) a button per site.
   Visitor counts are for all sites together.
+- **Right now** (since 18.31.0): people on the site in the last 5 minutes,
+  page views per minute for the last 30 and the pages being read;
+  refreshed every 10 seconds.
 - **Sessions** (since 18.31.0): sessions, bounce rate, session length and
   pages per session, with the change from the period before; the pages
   sessions began and ended on.
@@ -23734,8 +23738,14 @@ most 16 sites (the rest count as `other`) and 200 entries per list per day
 
 `GET /admin/api/v1/traffic?hours=168&host=example.com` returns the page's data
 (`hours` 1–2160, default 24; `host` optional); `404` when counting is off. The
+`GET /admin/api/v1/traffic/live?host=example.com` (since 18.31.0) returns
+the live view: `visitors` (people in the last 5 minutes), `views_5m`, a
+`series` of page views per minute for 30 minutes, the `pages` and
+`countries` of the people active now.
+
 MCP tool `traffic_summary` `{"hours": 24}` answers the same, so an AI client
-connected to the server can tell you who has been visiting.
+connected to the server can tell you who has been visiting; `{"live": true}`
+gives the live view.
 
 ---
 

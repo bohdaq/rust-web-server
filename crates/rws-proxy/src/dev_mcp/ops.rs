@@ -202,11 +202,15 @@ pub(super) fn install(mcp: McpServer, routes: Vec<(String, String)>, cache: Opti
     let mcp = super::recent_tools(mcp)
         .tool(
             "traffic_summary",
-            "Who visited the site: people, AI agents (by name and operator) and bots (by kind), with top pages, referrers and 404s, for the last N hours",
-            r#"{"type":"object","properties":{"hours":{"type":"integer","default":24,"description":"24 = a day, 168 = a week, 720 = 30 days"},"host":{"type":"string","description":"only this site (Host header)"}}}"#,
+            "Who visited the site: people, AI agents (by name and operator) and bots (by kind), with top pages, referrers, 404s, sessions and bounce rate, sources (channels, UTM) and audience (countries, browsers, devices), for the last N hours; with live=true, who is on the site now instead",
+            r#"{"type":"object","properties":{"hours":{"type":"integer","default":24,"description":"24 = a day, 168 = a week, 720 = 30 days"},"host":{"type":"string","description":"only this site (Host header)"},"live":{"type":"boolean","default":false,"description":"people in the last 5 minutes, views per minute for the last 30, current pages"}}}"#,
             |args| {
+                let host = extract_arg(args, "host");
+                if extract_arg(args, "live").is_some_and(|v| v == "true") {
+                    return crate::admin::ops::traffic_live_json(host.as_deref()).map(McpContent::json);
+                }
                 let hours = extract_arg(args, "hours").and_then(|h| h.parse().ok()).unwrap_or(24);
-                crate::admin::ops::traffic_json(hours, extract_arg(args, "host").as_deref()).map(McpContent::json)
+                crate::admin::ops::traffic_json(hours, host.as_deref()).map(McpContent::json)
             },
         )
         .tool(

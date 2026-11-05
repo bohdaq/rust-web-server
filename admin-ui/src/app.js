@@ -191,7 +191,7 @@ export class RwsAdmin extends LitElement {
     this.view = view;
     if (location.hash !== `#/${view}`) history.replaceState(null, "", `#/${view}`);
     this.error = "";
-    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, traffic: 30000, audit: 10000 }[view];
+    const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, traffic: 10000, audit: 10000 }[view];
     this.load(view);
     if (every) this.timer = setInterval(() => this.load(view), every);
     if (view === "logs") this.updateComplete.then(() => this.follow());
@@ -291,7 +291,11 @@ export class RwsAdmin extends LitElement {
   async loadTraffic() {
     const host = this.trafficHost ? `&host=${encodeURIComponent(this.trafficHost)}` : "";
     try {
-      this.data = { ...this.data, traffic: await api(`/traffic?hours=${this.trafficHours}${host}`) };
+      const [traffic, live] = await Promise.all([
+        api(`/traffic?hours=${this.trafficHours}${host}`),
+        api(`/traffic/live?${host.slice(1)}`).catch(() => null),
+      ]);
+      this.data = { ...this.data, traffic, trafficLive: live };
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) this.data = { ...this.data, traffic: null };
     }
@@ -597,6 +601,7 @@ export class RwsAdmin extends LitElement {
       </section>`;
     return html`
       <h1>Traffic</h1>
+      ${this.renderTrafficLive(this.data.trafficLive)}
       <p class="lede">Who visited in the last ${period}. People are browsers that load the page's styles or scripts; AI agents and bots are known by name, published network or behaviour. No IP addresses or User-Agents are kept.</p>
       <div class="row" style="margin-bottom: var(--space-300)">
         ${ranges.map(([hours, label]) => html`<lit-material-button variant=${t.hours === hours ? "tonal" : "text"} @click=${() => this.setTraffic(hours, this.trafficHost)}>${label}</lit-material-button>`)}
@@ -643,6 +648,26 @@ export class RwsAdmin extends LitElement {
       ${this.renderTrafficAudience(t, table)}
       ${table("Not found", "Paths answered 404", pairs(t.not_found), [{ key: "key", label: "Path", mono: true }, countColumn])}
     `;
+  }
+
+  /** Who is on the site now: the last 5 minutes, views per minute for 30. */
+  renderTrafficLive(live) {
+    if (!live) return nothing;
+    const top = live.pages.slice(0, 5);
+    return html`
+      <section class="section" aria-label="Right now">
+        <div class="grid">
+          <lit-material-stat label="Right now" value=${live.visitors.toLocaleString()}
+            caption=${`${live.visitors === 1 ? "person" : "people"} in the last 5 minutes, ${live.views_5m.toLocaleString()} page view${live.views_5m === 1 ? "" : "s"}.`}>
+            <lit-material-sparkline slot="caption" label="Page views per minute, last 30 minutes" .values=${live.series.map((p) => p.views)}></lit-material-sparkline>
+          </lit-material-stat>
+          ${top.length
+            ? html`<lit-material-table caption="Pages being read now" density="compact"
+                .columns=${[{ key: "key", label: "Being read now", mono: true }, { key: "count", label: "Views", numeric: true }]}
+                .rows=${top.map(([key, count]) => ({ key, count }))}></lit-material-table>`
+            : nothing}
+        </div>
+      </section>`;
   }
 
   /** People's sessions: count, bounce rate, length, pages per session. */

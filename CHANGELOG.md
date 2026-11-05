@@ -27,6 +27,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   /traffic` gains `sessions`, `previous_sessions`, `entry_pages`,
   `exit_pages`. Sources now count once per session, from its first page
   view. Older saved files load unchanged.
+- **Traffic page: right now** (tranche 3): people on the site in the last
+  5 minutes, page views per minute for the last 30, the pages being read
+  and where the readers are — `GET /admin/api/v1/traffic/live`, MCP
+  `traffic_summary {"live": true}`, a "Right now" tile on the Traffic page
+  (which now refreshes every 10 s). Kept in memory only (≤ 4096 recent page
+  views per shard).
 
 - **ORM, part 2** (roadmap #90):
   - Eager loading: `Post::query(&pool).with(Post::comments()).with(Post::author()).fetch_all()`

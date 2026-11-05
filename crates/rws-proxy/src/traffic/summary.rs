@@ -174,3 +174,44 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         pairs(&lists.exit_pages, 25, host),
     )
 }
+
+/// The live view: people on the site in the last 5 minutes, page views per
+/// minute for the last 30, and what the active ones read and where they
+/// are; optionally one host's.
+pub fn live_json(host: Option<&str>, now: u64) -> String {
+    use std::collections::{HashMap, HashSet};
+    let prefix = host.map(|h| format!("{}/", h.to_ascii_lowercase()));
+    let views: Vec<_> = super::record::recent(now).into_iter().filter(|r| prefix.as_ref().is_none_or(|p| r.page.starts_with(p.as_str()))).collect();
+    let this_minute = now / 60;
+    let mut minutes = [0u64; 30];
+    let active_since = now.saturating_sub(5 * 60);
+    let mut active: HashSet<u64> = HashSet::new();
+    let mut pages = Top::default();
+    let mut countries: HashMap<u64, String> = HashMap::new();
+    for r in &views {
+        let ago = this_minute.saturating_sub(r.at / 60) as usize;
+        if ago < 30 {
+            minutes[29 - ago] += 1;
+        }
+        if r.at >= active_since {
+            active.insert(r.visitor);
+            *pages.0.entry(r.page.clone()).or_default() += 1;
+            let country = r.country.map_or("(unknown)".to_string(), |c| String::from_utf8_lossy(&c).into_owned());
+            countries.insert(r.visitor, country);
+        }
+    }
+    let mut by_country = Top::default();
+    for c in countries.values() {
+        *by_country.0.entry(c.clone()).or_default() += 1;
+    }
+    let series: Vec<String> = minutes.iter().enumerate().map(|(i, n)| format!(r#"{{"t":{},"views":{n}}}"#, (this_minute + 1 + i as u64 - 30) * 60)).collect();
+    format!(
+        r#"{{"now":{now},"host":{},"visitors":{},"views_5m":{},"series":[{}],"pages":{},"countries":{}}}"#,
+        host.map_or("null".to_string(), quote),
+        active.len(),
+        views.iter().filter(|r| r.at >= active_since).count(),
+        series.join(","),
+        pairs(&pages, 10, None),
+        pairs(&by_country, 10, None),
+    )
+}
