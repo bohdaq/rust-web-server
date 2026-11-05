@@ -38,6 +38,14 @@ repository secret (a crates.io token with publish rights for every crate; a new
 crate's first publish creates it under the token's owner); a version already on
 crates.io is skipped, so re-runs are safe.
 
+## Refresh the bundled data
+
+Before a minor release, refresh the traffic page's tables and commit the
+results: `python3 ci/gen_bot_lists.py --update` (AI agents, crawlers,
+crawler networks) and `python3 ci/gen_geo.py --update` (DB-IP Lite
+countries, this month's file; CC BY 4.0, attribution in
+`crates/rws-proxy/src/traffic/NOTICE.md`).
+
 ## Publish a GitHub Release
 
 Tag the commit with the exact `Cargo.toml` version (no `v` prefix) and push the tag. The

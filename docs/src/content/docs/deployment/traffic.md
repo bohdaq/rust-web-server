@@ -76,7 +76,8 @@ anywhere, and only the country is counted — the address isn't kept.
 Private and reserved addresses are *Unknown*. To use a newer table, build
 one with `ci/gen_geo.py --update` and point `[traffic] geo_db` at it.
 Building without the `geo` feature (on by default) leaves the table out;
-countries are then *Unknown*.
+countries are then *Unknown*, and `geo_db` isn't read either (decoding a
+table needs the feature).
 
 Nothing is stored in the visitor's browser — no cookie, no local storage —
 so no consent banner is needed for these counts. The cost is that a

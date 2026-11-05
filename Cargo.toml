@@ -227,7 +227,7 @@ proxy = ["http3", "brotli", "zstd", "acme", "auth", "auth-asymmetric", "sso", "r
 full = ["http3", "brotli", "zstd", "http-client", "serde", "auth", "auth-asymmetric", "macros", "acme", "tera",
         "model-sqlite", "model-postgres", "model-mysql", "crypto", "csrf", "mailer", "sso", "sso-server", "sso-saml",
         "jobs", "storage-local", "storage-s3", "storage-azure", "storage-gcs", "tower", "gateway-api", "wasm-plugins",
-        "openapi", "webhook", "rewrite-regex", "secrets"]
+        "openapi", "webhook", "rewrite-regex", "secrets", "geo"]
 
 [dependencies]
 # The crates the facade is split into (spec/WORKSPACE_SPLIT.md).
