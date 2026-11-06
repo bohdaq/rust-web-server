@@ -9,6 +9,9 @@ export const meta = {
   title: "Page not found · rws",
   description: "This page does not exist on rws8.tech.",
   noindex: true,
+  // Served at every missing path: a canonical would name /404.html as the
+  // page for all of them.
+  canonical: null,
 };
 
 export function render() {
