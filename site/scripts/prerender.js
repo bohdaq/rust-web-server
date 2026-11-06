@@ -88,6 +88,9 @@ for (const p of pages) {
   write(p.meta.markdown, `${head.join("\n")}\n${source}\n`);
   markdownCopies++;
 }
+// IndexNow (Bing, Yandex, Seznam, Naver): the key file that proves the
+// site's ownership when ci/indexnow.py announces changed pages.
+write("2c32426256ab5e82b6a7fa63c90848c0.txt", "2c32426256ab5e82b6a7fa63c90848c0\n");
 console.log("sitemap", indexable.length, "urls; robots.txt;", markdownCopies, "Markdown copies")
 
 write("favicon.svg", favicon());
