@@ -33,7 +33,16 @@ setup, content drafts):
 Also fixed: rws8.tech `llms.txt` linked `/getting-started/…`, which only
 worked through a 301; it now links the `/docs/…/*.md` copies.
 
-## To go live
+## Rollout (2026-11-06)
+
+- rws **18.34.0** released (tag on 4cf458ef; CI + release green, 25 assets).
+- VM (user ran `rws-18.34.0-seo.sh`): rws 18.34.0, www→apex 301, lit and
+  hitop installed (hitop built from a clean origin/main worktree at fef42b6 —
+  a peer had uncommitted hitop work) — every probe passed.
+- rws8.tech site: through the hourly `rws-site-update` from the 18.34.0
+  site archive.
+
+## To go live (as planned)
 
 1. Release rws **18.34.0** (commit 0eae7699 on main, CI to pass; the tag
    push needs the user's go-ahead). The release rebuilds rws8.tech (site
