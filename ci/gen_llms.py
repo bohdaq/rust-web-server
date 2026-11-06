@@ -104,8 +104,11 @@ def build():
             meta, body = parse(path)
             title = meta.get("title", title)
             desc = meta.get("description", "")
-            url = SITE + link
-            entries.append(f"- [{title}]({url})" + (f": {desc}" if desc else ""))
+            # The page's own URL (pages live under /docs/), and its Markdown
+            # copy, which agents read more reliably than HTML.
+            url = SITE + "/docs" + link
+            markdown = SITE + "/docs" + link.rstrip("/") + ".md"
+            entries.append(f"- [{title}]({markdown})" + (f": {desc}" if desc else ""))
             full.append(f"\n---\n\n# {title}\n\n<{url}>\n\n{body}")
         if entries:
             index.append(f"\n## {label}\n\n" + "\n".join(entries) + "\n")
@@ -117,7 +120,7 @@ def build():
                 orphans.append(os.path.relpath(path, DOCS))
     index.append(
         "\n## Optional\n\n"
-        "- [llms-full.txt](https://raw.githubusercontent.com/bohdaq/rust-web-server/main/llms-full.txt): every page above in one file\n"
+        "- [llms-full.txt](https://rws8.tech/llms-full.txt): every page above in one file\n"
         "- [CHANGELOG.md](https://github.com/bohdaq/rust-web-server/blob/main/CHANGELOG.md): changes per release\n"
         "- [CLAUDE.md](https://github.com/bohdaq/rust-web-server/blob/main/CLAUDE.md): architecture and conventions for working on the crate itself\n"
     )

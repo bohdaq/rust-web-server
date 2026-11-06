@@ -345,3 +345,9 @@ fn a_parameter_starting_with_a_multibyte_character_is_not_a_panic() {
     }
     assert_eq!(Some(Encoding::Gzip), negotiate(&accepting("gzip;aé"), &[Encoding::Gzip]));
 }
+
+#[test]
+fn markdown_is_compressible() {
+    assert!(super::is_compressible("text/markdown"));
+    assert!(super::is_compressible("text/markdown; charset=utf-8"));
+}

@@ -56,6 +56,7 @@ impl MimeType {
     pub const TEXT_PLAIN: &'static str = "text/plain";
     pub const TEXT_CSS: &'static str = "text/css";
     pub const TEXT_CSV: &'static str = "text/csv";
+    pub const TEXT_MARKDOWN: &'static str = "text/markdown";
     pub const TEXT_HTML: &'static str = "text/html";
     pub const TEXT_JAVASCRIPT: &'static str = "text/javascript";
     pub const TEXT_CALENDAR: &'static str = "text/calendar";
@@ -148,6 +149,7 @@ impl MimeType {
     pub const CDA_SUFFIX: &'static str = ".cda";
     pub const CSH_SUFFIX: &'static str = ".csh";
     pub const CSV_SUFFIX: &'static str = ".csv";
+    pub const MD_SUFFIX: &'static str = ".md";
     pub const DOC_SUFFIX: &'static str = ".doc";
     pub const DOCX_SUFFIX: &'static str = ".docx";
     pub const EOT_SUFFIX: &'static str = ".eot";
@@ -253,6 +255,7 @@ impl MimeType {
             "cda" => MimeType::APPLICATION_X_CDF,
             "csh" => MimeType::APPLICATION_X_CSH,
             "csv" => MimeType::TEXT_CSV,
+            "md" | "markdown" => MimeType::TEXT_MARKDOWN,
             "doc" => MimeType::APPLICATION_MSWORD,
             "docx" => MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT,
             "eot" => MimeType::APPLICATION_VND_MS_FONTOBJECT,
@@ -536,6 +539,10 @@ impl MimeType {
         let is_csv_suffix = request_uri.ends_with(MimeType::CSV_SUFFIX);
         if is_csv_suffix {
             return MimeType::TEXT_CSV;
+        }
+
+        if request_uri.ends_with(MimeType::MD_SUFFIX) {
+            return MimeType::TEXT_MARKDOWN;
         }
 
         let is_doc_suffix = request_uri.ends_with(MimeType::DOC_SUFFIX);

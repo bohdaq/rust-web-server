@@ -16,6 +16,7 @@ const COMPRESSIBLE: &[&str] = &[
     "text/css",
     "text/javascript",
     "text/plain",
+    "text/markdown",
     "text/xml",
     "application/json",
     "application/javascript",

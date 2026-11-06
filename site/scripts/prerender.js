@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import "../src/components.js";
 import { favicon, icon, mark } from "../src/brand/mark.js";
-import { documentHtml } from "../src/shell.js";
+import { documentHtml, SITE } from "../src/shell.js";
 import * as themePage from "../src/pages/theme.js";
 import * as homePage from "../src/pages/home.js";
 import * as privacyPage from "../src/pages/privacy.js";
@@ -52,7 +52,46 @@ for (const page of pages) {
 }
 console.log(pages.length, "pages")
 
+// Search engines and AI crawlers: every indexable page in a sitemap (with
+// when it changed, where known), robots.txt pointing at it, and a Markdown
+// copy of each current docs page (linked from the page and from llms.txt).
+const indexable = pages.filter((p) => !p.meta.noindex && p.meta.path !== "/404.html" && !p.meta.path.endsWith(".html"));
+const xml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+write(
+  "sitemap.xml",
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${indexable
+    .map((p) => `  <url><loc>${xml(SITE + p.meta.path)}</loc>${p.meta.modified ? `<lastmod>${p.meta.modified.slice(0, 10)}</lastmod>` : ""}</url>`)
+    .join("\n")}\n</urlset>\n`,
+);
+write(
+  "robots.txt",
+  [
+    "# rws8.tech: everything is public. AI crawlers and assistants are welcome:",
+    "# the docs are written to be quoted, and /llms.txt lists them for agents.",
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /admin/",
+    "",
+    ...["GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-User", "Claude-SearchBot", "PerplexityBot", "Perplexity-User", "Google-Extended", "Applebot-Extended", "CCBot"].flatMap((ua) => [`User-agent: ${ua}`, "Allow: /", "Disallow: /admin/", ""]),
+    `Sitemap: ${SITE}/sitemap.xml`,
+    "",
+  ].join("\n"),
+);
+let markdownCopies = 0;
+for (const p of pages) {
+  if (!p.meta.markdown || !p.page?.source) continue;
+  const source = readFileSync(p.page.source, "utf8")
+    .replace(/^---\n[\s\S]*?\n---\n/, "")
+    .replace(/^import .*$/gm, "")
+    .trim();
+  const head = [`# ${p.page.title}`, "", p.page.description ? `> ${p.page.description}` : null, "", `Source: ${SITE}${p.meta.path}${p.meta.modified ? ` · Last updated ${p.meta.modified.slice(0, 10)}` : ""}`, ""].filter((l) => l !== null);
+  write(p.meta.markdown, `${head.join("\n")}\n${source}\n`);
+  markdownCopies++;
+}
+console.log("sitemap", indexable.length, "urls; robots.txt;", markdownCopies, "Markdown copies")
+
 write("favicon.svg", favicon());
+copyFileSync(join(site, "src", "brand", "favicon.ico"), join(dist, "favicon.ico"));
 mkdirSync(join(dist, "brand"), { recursive: true });
 copyFileSync(join(site, "src", "brand", "og.png"), join(dist, "brand", "og.png"));
 write("brand/mark.svg", mark({ rack: "#16120F", dot: "#F2EBE3", slot: "#7A706A", accent: "#D2551E", accentDot: "#16120F" }));

@@ -28,7 +28,7 @@ This file is every page of the documentation site in one document, generated fro
 
 # Quick Start
 
-<https://rws8.tech/getting-started/quick-start/>
+<https://rws8.tech/docs/getting-started/quick-start/>
 
 Pick the path that matches your goal. Each ends with a working server you can hit with `curl`.
 
@@ -267,7 +267,7 @@ curl -I https://example.com/     # 200, valid certificate
 
 # Examples
 
-<https://rws8.tech/getting-started/examples/>
+<https://rws8.tech/docs/getting-started/examples/>
 
 The repository's [`examples/`](https://github.com/bohdaq/rust-web-server/tree/main/examples)
 directory holds small, complete apps. Each one runs with `cargo run --example
@@ -323,7 +323,7 @@ whole documentation is also available as one file,
 
 # AI coding agents
 
-<https://rws8.tech/getting-started/ai-agents/>
+<https://rws8.tech/docs/getting-started/ai-agents/>
 
 Coding agents mostly go wrong on rws by guessing its API — from an older release, or from axum. Three things give them the right context for the release your project uses.
 
@@ -387,7 +387,7 @@ The library's own conventions for agents working **on** the crate (rather than w
 
 # Installation
 
-<https://rws8.tech/getting-started/installation/>
+<https://rws8.tech/docs/getting-started/installation/>
 
 ## Requirements
 
@@ -622,7 +622,7 @@ The HTTP/2 server is rws's own (`h2_server`: framing, HPACK, flow control — co
 
 # Auto-Rebuild on Change (cargo-watch)
 
-<https://rws8.tech/getting-started/dev-workflow/>
+<https://rws8.tech/docs/getting-started/dev-workflow/>
 
 `rws` doesn't need any special support for this — it's the standard Rust dev-loop pattern, using an external file-watcher to rebuild and restart your binary. [`cargo-watch`](https://crates.io/crates/cargo-watch) is the simplest way to get it.
 
@@ -674,7 +674,7 @@ cargo watch -w src -w ../rust-web-server/src -x run
 
 # Frontend Dev Server Proxy (React / Vite / webpack)
 
-<https://rws8.tech/getting-started/frontend-dev-proxy/>
+<https://rws8.tech/docs/getting-started/frontend-dev-proxy/>
 
 `rws` is a production HTTP server, not a bundler — it has no built-in dev-mode HMR/asset-compilation story. During local development you run your frontend's own dev server (Vite, webpack-dev-server, etc.) for fast hot-module-reload, and `rws` as your API backend on a separate port. This page covers the two ways to wire the two together, and which one to reach for.
 
@@ -780,7 +780,7 @@ In production there's no separate dev server at all — build your frontend (`np
 
 # All Features
 
-<https://rws8.tech/getting-started/features/>
+<https://rws8.tech/docs/getting-started/features/>
 
 This page is a single-page reference for everything the crate ships. Items that require an opt-in feature flag are annotated with the flag name in backticks.
 
@@ -973,7 +973,7 @@ All ORM features require at least one of `model-sqlite`, `model-postgres`, or `m
 
 # Cookbook
 
-<https://rws8.tech/cookbook/overview/>
+<https://rws8.tech/docs/cookbook/overview/>
 
 Each recipe is one `rws.config.toml` you can copy, change the names in, and
 run. Every TOML block on these pages is checked by `rws --check` in CI, so
@@ -1001,7 +1001,7 @@ rws --check=rws.config.toml && rws
 
 # Cookbook: static site
 
-<https://rws8.tech/cookbook/static-site/>
+<https://rws8.tech/docs/cookbook/static-site/>
 
 rws serves the directory it runs in. With a domain pointed at the server,
 this is the whole configuration:
@@ -1054,7 +1054,7 @@ put the files in `/var/www/rws` and the configuration in
 
 # Cookbook: single-page app + API
 
-<https://rws8.tech/cookbook/single-page-app/>
+<https://rws8.tech/docs/cookbook/single-page-app/>
 
 The front end is a directory of built files; deep links like `/orders/42`
 must get `index.html` (the client-side router takes over), while `/api/*`
@@ -1123,7 +1123,7 @@ upstream = "api"
 
 # Cookbook: Node apps
 
-<https://rws8.tech/cookbook/node-apps/>
+<https://rws8.tech/docs/cookbook/node-apps/>
 
 Run the app on a local port (`next start -p 3000`, `node build` for
 SvelteKit, `node .output/server/index.mjs` for Nuxt) and put rws in front:
@@ -1180,7 +1180,7 @@ rws ctl drain web http://127.0.0.1:3000 --undo
 
 # Cookbook: Python and Ruby apps
 
-<https://rws8.tech/cookbook/python-ruby/>
+<https://rws8.tech/docs/cookbook/python-ruby/>
 
 The app server (Gunicorn, Uvicorn, Puma) listens on a local port; rws
 terminates HTTPS, serves the collected static files itself and proxies the
@@ -1242,7 +1242,7 @@ WebSockets work through the `app` route.
 
 # Cookbook: PHP apps
 
-<https://rws8.tech/cookbook/php/>
+<https://rws8.tech/docs/cookbook/php/>
 
 rws talks to php-fpm directly ([FastCGI](/proxy/config-driven/#type--fastcgi--php-and-other-fastcgi-apps)).
 Laravel or Symfony, whose web root is `public/` with a front controller:
@@ -1334,7 +1334,7 @@ to `index.php` with the original `REQUEST_URI`.
 
 # Cookbook: internal tools behind sign-in
 
-<https://rws8.tech/cookbook/internal-tools/>
+<https://rws8.tech/docs/cookbook/internal-tools/>
 
 Sign-in with your identity provider in front of any app
 ([`type = "oidc"`](/features/auth/#sign-in-with-google-okta-keycloak-type--oidc)).
@@ -1427,7 +1427,7 @@ copy_headers = ["Remote-User", "Remote-Groups", "Remote-Email", "Remote-Name"]
 
 # Cookbook: API gateway
 
-<https://rws8.tech/cookbook/api-gateway/>
+<https://rws8.tech/docs/cookbook/api-gateway/>
 
 One public host, a service per path prefix, JWT on everything but the
 public catalogue, stricter limits on writes, and the catalogue cached:
@@ -1512,7 +1512,7 @@ without logging anyone out with `previous_secret_env`
 
 # Cookbook: local development
 
-<https://rws8.tech/cookbook/local-development/>
+<https://rws8.tech/docs/cookbook/local-development/>
 
 `https://localhost` that browsers trust — needed for secure cookies,
 service workers, WebAuthn and OAuth redirects — with a Vite / Next dev
@@ -1575,7 +1575,7 @@ More in [Frontend dev proxy](/getting-started/frontend-dev-proxy/) and
 
 # Configuration Overview
 
-<https://rws8.tech/configuration/overview/>
+<https://rws8.tech/docs/configuration/overview/>
 
 `rust-web-server` uses a four-layer configuration system. Each layer can override
 the one below it. All resolved values are stored as process environment variables
@@ -1714,7 +1714,7 @@ upstream bodies over 1 MB.
 
 # Environment Variables
 
-<https://rws8.tech/configuration/env-vars/>
+<https://rws8.tech/docs/configuration/env-vars/>
 
 All configuration in `rust-web-server` is ultimately stored as process
 environment variables. The variables below can be set before the process starts
@@ -2020,7 +2020,7 @@ export RWS_CONFIG_LOG_FORMAT=json
 
 # Config File (rws.config.toml)
 
-<https://rws8.tech/configuration/config-file/>
+<https://rws8.tech/docs/configuration/config-file/>
 
 `rws.config.toml` is an optional TOML file placed in the server's working
 directory. It provides a convenient alternative to environment variables and CLI
@@ -2842,7 +2842,7 @@ body   = "pong"
 
 # CLI Arguments
 
-<https://rws8.tech/configuration/cli-args/>
+<https://rws8.tech/docs/configuration/cli-args/>
 
 Command-line arguments are the highest-priority configuration layer — they
 override defaults, system environment variables, and `rws.config.toml`. Every
@@ -3060,7 +3060,7 @@ OPTIONS:
 
 # Building Apps Overview
 
-<https://rws8.tech/building-apps/overview/>
+<https://rws8.tech/docs/building-apps/overview/>
 
 ## Request lifecycle
 
@@ -3209,7 +3209,7 @@ Unmatched requests fall through to the built-in `App` controller chain (static f
 
 # Project layout and rws.app.toml
 
-<https://rws8.tech/building-apps/project-layout/>
+<https://rws8.tech/docs/building-apps/project-layout/>
 
 Since 18.28.0 an rws application has one conventional layout, so a person or
 a coding agent can find (and add) a route, a model or a migration without
@@ -3370,7 +3370,7 @@ manifest from a string; files over 64 KiB are refused.
 
 # Generators (rws gen)
 
-<https://rws8.tech/building-apps/generators/>
+<https://rws8.tech/docs/building-apps/generators/>
 
 Since 18.29.0 `rws gen` writes the four things an app gets more of — a
 model, a resource's routes, a migration, a test — into a project in the
@@ -3621,7 +3621,7 @@ if !plan.has_conflicts() {
 
 # Controllers
 
-<https://rws8.tech/building-apps/controllers/>
+<https://rws8.tech/docs/building-apps/controllers/>
 
 ## The Controller trait
 
@@ -3731,7 +3731,7 @@ For new application routes, `App::with_state(S).get(pattern, handler)` or the `r
 
 # Routing
 
-<https://rws8.tech/building-apps/routing/>
+<https://rws8.tech/docs/building-apps/routing/>
 
 ## routes! macro
 
@@ -3957,7 +3957,7 @@ See the [API reference](/reference/api/) for the full list of public types.
 
 # Request & Response
 
-<https://rws8.tech/building-apps/request-response/>
+<https://rws8.tech/docs/building-apps/request-response/>
 
 ## Request
 
@@ -4252,7 +4252,7 @@ For multipart range responses (e.g. `Accept-Ranges` support), push multiple `Con
 
 # Shared State
 
-<https://rws8.tech/building-apps/state/>
+<https://rws8.tech/docs/building-apps/state/>
 
 ## App::with_state
 
@@ -4426,7 +4426,7 @@ Routes are tried in registration order. Any request that does not match a regist
 
 # Typed Extractors
 
-<https://rws8.tech/building-apps/extractors/>
+<https://rws8.tech/docs/building-apps/extractors/>
 
 ## FromRequest trait
 
@@ -4678,7 +4678,7 @@ This covers structs built from existing extractors (`Body`, `BodyText`, `Query`,
 
 # Error Handling
 
-<https://rws8.tech/building-apps/error-handling/>
+<https://rws8.tech/docs/building-apps/error-handling/>
 
 ## IntoResponse trait
 
@@ -4824,7 +4824,7 @@ fn handler(...) -> Response {
 
 # Middleware
 
-<https://rws8.tech/building-apps/middleware/>
+<https://rws8.tech/docs/building-apps/middleware/>
 
 ## The Middleware trait
 
@@ -5072,7 +5072,7 @@ Layers push in order: `app.wrap(A).wrap(B)` runs A before B on the request path 
 
 # Validation
 
-<https://rws8.tech/building-apps/validation/>
+<https://rws8.tech/docs/building-apps/validation/>
 
 Validation in `rust-web-server` is built around three pieces that compose cleanly:
 
@@ -5281,7 +5281,7 @@ Prefer `#[derive(Validate)]` for straightforward field constraints. Implement `V
 
 # Forms & File Uploads
 
-<https://rws8.tech/building-apps/forms-uploads/>
+<https://rws8.tech/docs/building-apps/forms-uploads/>
 
 `rust-web-server` provides two parsers for HTML form submissions, both living under `rust_web_server::body`:
 
@@ -5561,7 +5561,7 @@ let body_bytes = FormMultipartData::generate(vec![file_part], boundary).unwrap()
 
 # JSON
 
-<https://rws8.tech/building-apps/json/>
+<https://rws8.tech/docs/building-apps/json/>
 
 `rust-web-server` ships two JSON layers:
 
@@ -5763,7 +5763,7 @@ Use `Json` with `serde` for any production code where the JSON schema is known a
 
 # Cookies
 
-<https://rws8.tech/building-apps/cookies/>
+<https://rws8.tech/docs/building-apps/cookies/>
 
 `rust-web-server` provides two types in `rust_web_server::cookie` for working with HTTP cookies:
 
@@ -6015,7 +6015,7 @@ fn rotate_token(old: &str) -> String {
 
 # Async Handlers
 
-<https://rws8.tech/building-apps/async-handlers/>
+<https://rws8.tech/docs/building-apps/async-handlers/>
 
 `AsyncAppWithState` is the async counterpart to `AppWithState`. Its handlers are `async fn` closures that can `await` database queries, outbound HTTP calls, timers, or any other async I/O.
 
@@ -6272,7 +6272,7 @@ let app = AsyncAppWithState::new(Config {
 
 # HTTP Client
 
-<https://rws8.tech/building-apps/http-client/>
+<https://rws8.tech/docs/building-apps/http-client/>
 
 `rust_web_server::http_client` is a small outbound HTTP/1.1 client with no third-party HTTP dependency. It follows redirects (up to 10 by default; 301/302/303 become `GET`, 307/308 keep the method) and decodes chunked bodies.
 
@@ -6376,7 +6376,7 @@ See [Async Handlers](/building-apps/async-handlers/#full-example--async-http-cal
 
 # HTML Templates
 
-<https://rws8.tech/building-apps/templates/>
+<https://rws8.tech/docs/building-apps/templates/>
 
 `rust-web-server` integrates the [Tera](https://keats.github.io/tera/) template engine — a Jinja2-compatible HTML templating system with variables, control flow, filters, and inheritance.
 
@@ -6645,7 +6645,7 @@ engine.reload().unwrap();
 
 # Translations (i18n)
 
-<https://rws8.tech/building-apps/i18n/>
+<https://rws8.tech/docs/building-apps/i18n/>
 
 The `i18n` module (since 18.16.0) holds your messages in one catalog per
 language, picks the language each request asks for in `Accept-Language`, and
@@ -6758,7 +6758,7 @@ in the wrong language.
 
 # Dependency Injection
 
-<https://rws8.tech/building-apps/dependency-injection/>
+<https://rws8.tech/docs/building-apps/dependency-injection/>
 
 `Container` is a type-keyed service store backed by `HashMap>`. Register services at startup, then pass the container directly as `AppWithState`/`AsyncAppWithState`'s state — it's `Send + Sync + 'static` like any other state type, so it needs no wrapping.
 
@@ -6975,7 +6975,7 @@ container.is_empty();                           // no unnamed registrations?
 
 # CORS & Security Headers
 
-<https://rws8.tech/features/cors-security/>
+<https://rws8.tech/docs/features/cors-security/>
 
 Every response includes a baseline set of security headers automatically. CORS is controlled by a set of `RWS_CONFIG_CORS_*` environment variables. Client Hints are opt-in.
 
@@ -7150,7 +7150,7 @@ With client hints on, the `Vary` response header includes the full list of hints
 
 # Static Files, Directory Listing & SPA Fallback
 
-<https://rws8.tech/features/static-files/>
+<https://rws8.tech/docs/features/static-files/>
 
 ## Serving files
 
@@ -7387,7 +7387,7 @@ The settings are read fresh on every request, so they can be changed via `rws.co
 
 # Rate Limiting
 
-<https://rws8.tech/features/rate-limiting/>
+<https://rws8.tech/docs/features/rate-limiting/>
 
 `rust-web-server` ships a built-in sliding-window rate limiter in `crates/rws-server/src/rate_limit/mod.rs`. It is keyed by a string (typically the client IP) and is safe to share across threads.
 
@@ -7584,7 +7584,7 @@ Cloning a `RedisRateLimiter` is cheap — all clones share the same underlying T
 
 # Compression
 
-<https://rws8.tech/features/compression/>
+<https://rws8.tech/docs/features/compression/>
 
 `rust-web-server` compresses text responses automatically, in the coding the
 client prefers: `br` (brotli), `zstd` or `gzip` (brotli and zstd since
@@ -7776,7 +7776,7 @@ is opt-in, with `compression_dictionaries` (above).
 
 # Early Hints
 
-<https://rws8.tech/features/early-hints/>
+<https://rws8.tech/docs/features/early-hints/>
 
 A `103 Early Hints` response (RFC 8297) carries `Link` headers ahead of the real response. A browser that gets one starts preloading the listed stylesheets and scripts, or connecting to the listed origins, while the server is still working on the page: a slow database query or upstream no longer delays those downloads. Since 18.12.0.
 
@@ -7840,7 +7840,7 @@ Browsers act on `103` only over HTTP/2 and HTTP/3, and some older HTTP/1.1 clien
 
 # HTTPS / TLS
 
-<https://rws8.tech/features/https-tls/>
+<https://rws8.tech/docs/features/https-tls/>
 
 ## Feature requirements
 
@@ -8080,7 +8080,7 @@ See [Config-Driven Proxy → TLS upstreams](/proxy/config-driven/#tls-https-upst
 
 # Automatic HTTPS (ACME)
 
-<https://rws8.tech/features/acme/>
+<https://rws8.tech/docs/features/acme/>
 
 `rws` obtains certificates from Let's Encrypt (or any ACME CA) by itself and
 keeps them renewed. Point a domain's DNS at the server, then:
@@ -8491,7 +8491,7 @@ also available if you want to handle failures yourself.
 
 # Mutual TLS (mTLS)
 
-<https://rws8.tech/features/mtls/>
+<https://rws8.tech/docs/features/mtls/>
 
 ## Overview
 
@@ -8605,7 +8605,7 @@ is configured, or connections on a redirect port) are not affected.
 
 # Virtual Hosting
 
-<https://rws8.tech/features/virtual-hosting/>
+<https://rws8.tech/docs/features/virtual-hosting/>
 
 ## Overview
 
@@ -8771,7 +8771,7 @@ certificates; existing connections are not interrupted.
 
 # HTTP/2
 
-<https://rws8.tech/features/http2/>
+<https://rws8.tech/docs/features/http2/>
 
 ## Feature requirements
 
@@ -8917,7 +8917,7 @@ with none skipped (`ci/e2e/h2spec.sh`).
 
 # HTTP/3 / QUIC
 
-<https://rws8.tech/features/http3-quic/>
+<https://rws8.tech/docs/features/http3-quic/>
 
 ## Feature requirements
 
@@ -9023,7 +9023,7 @@ traffic on the server port (default 7878) in addition to TCP.
 
 # WebSocket
 
-<https://rws8.tech/features/websocket/>
+<https://rws8.tech/docs/features/websocket/>
 
 ## WebSocket routes
 
@@ -9243,7 +9243,7 @@ client and a backend server.
 
 # Server-Sent Events
 
-<https://rws8.tech/features/sse/>
+<https://rws8.tech/docs/features/sse/>
 
 ## Streaming
 
@@ -9381,7 +9381,7 @@ source.onerror = () => console.warn("SSE connection lost, retrying…");
 
 # Authentication
 
-<https://rws8.tech/features/auth/>
+<https://rws8.tech/docs/features/auth/>
 
 The `auth` Cargo feature adds `BasicAuthLayer`, `JwtLayer`, and `ForwardAuthLayer` middleware, plus standalone helpers for building and verifying HS256 JWTs. The `auth-asymmetric` feature (on top of `auth`) adds `JwtLayer::rs256`/`::es256` for verifying RS256/ES256 tokens against a static public key.
 
@@ -9836,7 +9836,7 @@ All three live in `rust_web_server::crypto`; errors are `CryptoError`. Use at le
 
 # Authorization
 
-<https://rws8.tech/features/authorization/>
+<https://rws8.tech/docs/features/authorization/>
 
 Authentication says a request is allowed in; authorization says what its
 caller may do. rws gives every authenticator's caller one shape,
@@ -10068,7 +10068,7 @@ operators and fixes.
 
 # OAuth2 / OIDC SSO
 
-<https://rws8.tech/features/sso/>
+<https://rws8.tech/docs/features/sso/>
 
 The `sso` feature adds full OAuth 2.0 / OIDC support: authorization-code + PKCE flow, session management, and asymmetric JWT verification via a live JWKS endpoint. The `sso-server` feature additionally lets `rws` act as its own OAuth 2.0 Authorization Server, issuing tokens instead of delegating to an external IdP.
 
@@ -10405,7 +10405,7 @@ at startup.
 
 # SAML 2.0 SSO
 
-<https://rws8.tech/features/saml/>
+<https://rws8.tech/docs/features/saml/>
 
 The `sso-saml` feature (implies `sso`) adds `SamlSp`, a SAML 2.0 Service Provider middleware — the enterprise/B2B alternative to [OAuth2 / OIDC SSO](/features/sso/) for identity providers that only speak SAML (Active Directory Federation Services, Okta SAML, Google Workspace SAML, Keycloak).
 
@@ -10533,7 +10533,7 @@ None of these are silent gaps — each one either fails closed (rejects rather t
 
 # CSRF Protection
 
-<https://rws8.tech/features/csrf/>
+<https://rws8.tech/docs/features/csrf/>
 
 The `csrf` feature adds `CsrfLayer` middleware that protects state-mutating requests against cross-site request forgery using the double-submit cookie pattern.
 
@@ -10714,7 +10714,7 @@ If neither is present, `403 Forbidden` is returned.
 
 # Sessions
 
-<https://rws8.tech/features/sessions/>
+<https://rws8.tech/docs/features/sessions/>
 
 `rust-web-server` ships three session store implementations in `crates/rws-server/src/session/mod.rs`:
 
@@ -11031,7 +11031,7 @@ The underlying TCP connection is protected by a `Mutex`. For high-concurrency wo
 
 # Email / SMTP
 
-<https://rws8.tech/features/email/>
+<https://rws8.tech/docs/features/email/>
 
 `rust-web-server` ships a hand-rolled SMTP client in `src/mailer/mod.rs` — no third-party mail library required. Enable the `mailer` feature, set `RWS_SMTP_*` environment variables, and call `Mailer::send()` from any handler.
 
@@ -11259,7 +11259,7 @@ match mailer.send(&email) {
 
 # File / Object Storage
 
-<https://rws8.tech/features/storage/>
+<https://rws8.tech/docs/features/storage/>
 
 `FormMultipartData::parse()` (see [Forms & File Uploads](/building-apps/forms-uploads/)) hands back raw bytes with no place to put them. The `storage` module gives handlers a single `Storage` trait so the same upload code works against local disk in development and an S3-compatible bucket, Azure Blob Storage or Google Cloud Storage in production.
 
@@ -11560,7 +11560,7 @@ Wire `store` in via [dependency injection](/building-apps/dependency-injection/)
 
 # Response Caching
 
-<https://rws8.tech/features/caching/>
+<https://rws8.tech/docs/features/caching/>
 
 `CacheLayer` is a middleware that short-circuits the inner application for cacheable `GET` responses, serving them directly from an in-memory store until their TTL elapses. It lives in `crates/rws-server/src/cache/mod.rs` and implements the standard `Middleware` trait, so it composes with every application variant.
 
@@ -11785,7 +11785,7 @@ let app = App::with_state(cache_handle)
 
 # Metrics
 
-<https://rws8.tech/features/metrics/>
+<https://rws8.tech/docs/features/metrics/>
 
 `rust-web-server` exposes two tiers of Prometheus-compatible metrics. Server-wide counters are always active at the server-core level with no configuration. Per-route counters and latency histograms are opt-in via `MetricsLayer` middleware. All metrics are served at `GET /metrics` in the standard Prometheus text format.
 
@@ -12028,7 +12028,7 @@ scrape_configs:
 
 # Distributed Tracing
 
-<https://rws8.tech/features/tracing/>
+<https://rws8.tech/docs/features/tracing/>
 
 `rust-web-server` includes an OpenTelemetry-compatible distributed tracing implementation in `crates/rws-server/src/otel/mod.rs`. `OtelLayer` middleware creates an HTTP server root span for every request, reads and propagates W3C `traceparent` headers, and exports spans to stdout or an OTLP-compatible collector (Jaeger, Grafana Tempo, OpenTelemetry Collector). Application code can nest child spans under that root (or under each other) with `otel::span`/`otel::client_span` — see [Child spans](#child-spans) below.
 
@@ -12269,7 +12269,7 @@ Note that `setup`/`setup_with_exporter` initialize a process-wide singleton (fir
 
 # Hot Config Reload
 
-<https://rws8.tech/features/hot-reload/>
+<https://rws8.tech/docs/features/hot-reload/>
 
 ## Triggering a reload
 
@@ -12445,7 +12445,7 @@ The `SIGHUP` handler does only one thing: it stores `true` into the `AtomicBool`
 
 # Request/Response Rewriting
 
-<https://rws8.tech/features/rewrite/>
+<https://rws8.tech/docs/features/rewrite/>
 
 ## Quick start
 
@@ -12627,7 +12627,7 @@ Request rules and response rules are each applied in the order they were registe
 
 # WebAssembly Plugins
 
-<https://rws8.tech/features/wasm-plugins/>
+<https://rws8.tech/docs/features/wasm-plugins/>
 
 A WebAssembly plugin (since 18.10.0) runs on every request of a route, and optionally on its response. It can let the request through, change its headers or target, answer it itself, or change the response's status and headers. Plugins are compiled WebAssembly core modules, written in any language that targets `wasm32`, and rws loads them without being rebuilt.
 
@@ -12744,7 +12744,7 @@ let app = my_app.wrap(plugin);
 
 # IP Filtering
 
-<https://rws8.tech/features/ip-filter/>
+<https://rws8.tech/docs/features/ip-filter/>
 
 ## Quick start
 
@@ -12880,7 +12880,7 @@ The client IP is read from `ConnectionInfo::client.ip`, which is the remote addr
 
 # Web application firewall
 
-<https://rws8.tech/features/waf/>
+<https://rws8.tech/docs/features/waf/>
 
 Since 18.22.0 rws checks requests itself before they reach your app. No
 rule language to learn and no external engine: a table in the config file.
@@ -12964,7 +12964,7 @@ app with `.wrap(…)`.
 
 # Request ID / Correlation ID
 
-<https://rws8.tech/features/request-id/>
+<https://rws8.tech/docs/features/request-id/>
 
 Distributed tracing ([`OtelLayer`](/features/tracing/)) creates a span per request, but doesn't give handlers a simple, stable identifier to put in their own log lines — and doesn't propagate one across service boundaries unless the caller already sends a W3C `traceparent`. `RequestIdLayer` fills that gap with a plain string ID, present on both the request (so your handler can read and log it) and the response (so the caller can log the same value).
 
@@ -13050,7 +13050,7 @@ Don't use `generate_request_id()` (or the ID `RequestIdLayer` generates) as a se
 
 # Background Scheduler
 
-<https://rws8.tech/features/scheduler/>
+<https://rws8.tech/docs/features/scheduler/>
 
 ## Quick start
 
@@ -13193,7 +13193,7 @@ Cron tasks poll at 200 ms resolution. A task is guaranteed to fire at most once 
 
 # Background Job Queue
 
-<https://rws8.tech/features/jobs/>
+<https://rws8.tech/docs/features/jobs/>
 
 Requires the `jobs` feature:
 
@@ -13390,7 +13390,7 @@ other worker simply moves on. This is safe under SQLite, PostgreSQL, and MySQL.
 
 # OpenAPI / Swagger
 
-<https://rws8.tech/features/openapi/>
+<https://rws8.tech/docs/features/openapi/>
 
 Requires the `openapi` feature:
 
@@ -13514,7 +13514,7 @@ let spec_json = build_spec(&OpenApiConfig::new("My API", "1.0.0"), &routes);
 
 # Tower interop
 
-<https://rws8.tech/features/tower/>
+<https://rws8.tech/docs/features/tower/>
 
 Requires the `tower` feature:
 
@@ -13587,7 +13587,7 @@ What each conversion does: headers `http` refuses (rare; obs-text is kept) are l
 
 # Per-Route Timeouts
 
-<https://rws8.tech/features/timeouts/>
+<https://rws8.tech/docs/features/timeouts/>
 
 A single global read timeout (30s per connection; a request head must also arrive within 30s of its first byte, else `408`) applies to every route by default. A file-upload endpoint may legitimately need 120s while a health check should fail fast at 500ms. `rust_web_server::timeout` wraps individual handlers with their own budget — no new Cargo feature required, no new dependencies.
 
@@ -13699,7 +13699,7 @@ This means these timeouts bound the **client's wait time**, not the handler's ac
 
 # Typed Config Binding
 
-<https://rws8.tech/features/config-binding/>
+<https://rws8.tech/docs/features/config-binding/>
 
 ## Setup
 
@@ -13901,7 +13901,7 @@ cargo run
 
 # Webhook Signature Verification
 
-<https://rws8.tech/features/webhooks/>
+<https://rws8.tech/docs/features/webhooks/>
 
 Requires the `webhook` feature:
 
@@ -13994,7 +13994,7 @@ fn stripe_webhook(request: &Request) -> Response {
 
 # Secrets Manager Integration
 
-<https://rws8.tech/features/secrets/>
+<https://rws8.tech/docs/features/secrets/>
 
 JWT signing keys, DB credentials, and TLS keys are ordinarily just plain environment variables. On a managed cloud, the idiomatic pattern is a managed secrets store — HashiCorp Vault, AWS Secrets Manager, or Azure Key Vault — rather than an init container that bridges secrets into env vars by hand.
 
@@ -14127,7 +14127,7 @@ Every HTTP call in this module goes through the crate's existing outbound `http_
 
 # Proxy Overview
 
-<https://rws8.tech/proxy/overview/>
+<https://rws8.tech/docs/proxy/overview/>
 
 `rust-web-server` ships a full-featured proxy stack. You can use it in two distinct ways depending on how much control you need.
 
@@ -14247,7 +14247,7 @@ At startup `main()` calls `ProxyConfig::is_proxy_mode()`, which reads `rws.confi
 
 # Config-Driven Proxy
 
-<https://rws8.tech/proxy/config-driven/>
+<https://rws8.tech/docs/proxy/config-driven/>
 
 When `rws.config.toml` (or the file pointed to by `RWS_CONFIG_FILE`) contains at least one `[[route]]` or `[[upstream]]` section, `rws` boots in proxy mode automatically. No code changes required.
 
@@ -14965,7 +14965,7 @@ backends = ["8.8.8.8:53", "8.8.4.4:53"]
 
 # Reverse Proxy
 
-<https://rws8.tech/proxy/reverse-proxy/>
+<https://rws8.tech/docs/proxy/reverse-proxy/>
 
 `ReverseProxy` is a [`Middleware`](/building-apps/middleware/) that forwards incoming HTTP/1.1 requests to one or more backends. It lives in `crates/rws-proxy/src/proxy/mod.rs` and requires no feature flags.
 
@@ -15341,7 +15341,7 @@ Middleware is applied outermost-first, so `RateLimitLayer` runs before `ReverseP
 
 # Load Balancing
 
-<https://rws8.tech/proxy/load-balancing/>
+<https://rws8.tech/docs/proxy/load-balancing/>
 
 Every proxy component in `rust-web-server` — `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `TcpProxy`, `UdpProxy`, `WsProxy`, and `DynamicProxy` (config-driven mode) — uses the same underlying selection mechanism: a **lock-free atomic round-robin counter**.
 
@@ -15437,7 +15437,7 @@ The library API (`ReverseProxy::strategy(LoadBalancing::RoundRobin)` above) only
 
 # Health Checks
 
-<https://rws8.tech/proxy/health-checks/>
+<https://rws8.tech/docs/proxy/health-checks/>
 
 Health checks are available in **config-driven mode** only. Each `[[upstream]]` — and, for WebSocket backends, each `[[ws_proxy]]` — that includes a `[*.health_check]` section gets a dedicated daemon thread (`health-{name}`) that probes every backend on a regular interval and updates the live backend list without any restart. Both use the exact same checker (`start_health_checker`), so everything on this page applies to `[ws_proxy.health_check]` too, unless noted otherwise.
 
@@ -15560,7 +15560,7 @@ The health checker lives in `crates/rws-proxy/src/proxy_config/health.rs`:
 
 # Circuit Breaker & Retry
 
-<https://rws8.tech/proxy/circuit-breaker/>
+<https://rws8.tech/docs/proxy/circuit-breaker/>
 
 The `circuit_breaker` module provides a per-backend state machine that stops forwarding requests to a broken upstream and a `RetryLayer` middleware that automatically re-dispatches failed requests.
 
@@ -15806,7 +15806,7 @@ Wiring `ReverseProxy` to `circuit_breaker::global()` (as in the example above) g
 
 # Canary Deployments
 
-<https://rws8.tech/proxy/canary/>
+<https://rws8.tech/docs/proxy/canary/>
 
 `CanaryLayer` implements `Middleware` and distributes requests across backend URLs according to configurable weights. It is the primary tool for blue/green deployments, A/B testing, and incremental rollouts.
 
@@ -15975,7 +15975,7 @@ WeightedPool::new(pool: BackendPool, weight: u32)
 
 # Service Discovery
 
-<https://rws8.tech/proxy/service-discovery/>
+<https://rws8.tech/docs/proxy/service-discovery/>
 
 `BackendPool` maintains a thread-safe list of `"host:port"` addresses and can refresh that list on a background thread. All clones of a `BackendPool` share the same underlying `RwLock>`, so the live backend list is always consistent across the process.
 
@@ -16168,7 +16168,7 @@ The poll interval is set before `.start()`. Changing it after `.start()` has no 
 
 # TCP Proxy
 
-<https://rws8.tech/proxy/tcp-proxy/>
+<https://rws8.tech/docs/proxy/tcp-proxy/>
 
 `TcpProxy` is a Layer-4 reverse proxy. It accepts raw TCP connections and tunnels bytes bidirectionally to a backend server. Because it operates below the HTTP layer, it is protocol-agnostic: database wire formats, raw TLS passthrough, custom binary protocols, and any other TCP-based traffic all flow through unchanged.
 
@@ -16256,7 +16256,7 @@ Each live connection holds two threads plus two socket file descriptors on the r
 
 # UDP Proxy
 
-<https://rws8.tech/proxy/udp-proxy/>
+<https://rws8.tech/docs/proxy/udp-proxy/>
 
 `UdpProxy` receives UDP datagrams from clients and forwards each one to a backend server, then relays the backend's reply back to the original sender. This request-reply model covers protocols such as DNS, NTP, RADIUS, and syslog.
 
@@ -16342,7 +16342,7 @@ DNS responses larger than the buffer size (usually 512 bytes over plain UDP) may
 
 # WebSocket Proxy
 
-<https://rws8.tech/proxy/websocket-proxy/>
+<https://rws8.tech/docs/proxy/websocket-proxy/>
 
 `WsProxy` listens for incoming HTTP/1.1 connections, validates that each connection is a WebSocket upgrade, forwards the upgrade handshake to a backend, and then tunnels all subsequent WebSocket frames bidirectionally.
 
@@ -16533,7 +16533,7 @@ Backend selection happens once at connection time, not per-frame. All frames for
 
 # gRPC Proxy
 
-<https://rws8.tech/proxy/grpc-proxy/>
+<https://rws8.tech/docs/proxy/grpc-proxy/>
 
 `GrpcProxy` is a middleware that forwards requests with `Content-Type: application/grpc*` to HTTP/2 backends, passing all other requests through to the next layer. It wraps `H2ReverseProxy` and adds a content-type filter so that gRPC and non-gRPC traffic can share the same application.
 
@@ -16748,7 +16748,7 @@ buffered (and keep their length); the rest stream.
 
 # LLM Proxy
 
-<https://rws8.tech/proxy/llm-proxy/>
+<https://rws8.tech/docs/proxy/llm-proxy/>
 
 The LLM proxy (since 18.9.0) puts one endpoint in front of LLM providers. Applications keep their OpenAI or Anthropic SDK and point its base URL at rws; rws swaps the caller's virtual key for the provider's key, counts the tokens each response reports, enforces token budgets, and fails over to the next provider when one is down or rate limited.
 
@@ -16886,7 +16886,7 @@ The full example is `examples/llm_proxy.rs`; `ci/e2e/llm_proxy.sh` runs the prox
 
 # Database Overview
 
-<https://rws8.tech/database/overview/>
+<https://rws8.tech/docs/database/overview/>
 
 The database layer in `rust-web-server` is a JPA/Hibernate-style async ORM backed by [`sqlx`](https://github.com/launchbadge/sqlx). All database operations are `async fn` and require a tokio runtime, which is automatically included when any `model-*` feature is enabled (they all imply `http2`).
 
@@ -17100,7 +17100,7 @@ A replica lags behind its primary, so a read right after a write may not see it.
 
 # #[derive(Model)]
 
-<https://rws8.tech/database/model-derive/>
+<https://rws8.tech/docs/database/model-derive/>
 
 `#[derive(Model)]` generates the full `Model` trait implementation for a struct, including typed serialisation, deserialisation, and helper constructors. It is the entry point for every other database feature.
 
@@ -17333,7 +17333,7 @@ Add `#[derive(Factory)]` beside `Model` and `User::factory()` builds users with 
 
 # Repository
 
-<https://rws8.tech/database/repository/>
+<https://rws8.tech/docs/database/repository/>
 
 `ModelRepository` implements the `Repository` trait and provides the standard set of async create, read, update, and delete operations for a model type. Obtain one from any `#[derive(Model)]` struct using `User::repository(&pool)`.
 
@@ -17539,7 +17539,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 # Keys, timestamps, soft delete and locking
 
-<https://rws8.tech/database/conventions/>
+<https://rws8.tech/docs/database/conventions/>
 
 Since 18.30.0 `#[derive(Model)]` and the repository handle four things apps otherwise write by hand: keys that aren't auto-increment integers, `created_at` / `updated_at`, soft delete, and optimistic locking. Each is opt-in per model, and none adds a callback or a lazy load: the repository writes the columns in the same statements it already runs.
 
@@ -17671,7 +17671,7 @@ cargo test -p rws-server --features "http2 test-support macros model-sqlite mode
 
 # Query Builder
 
-<https://rws8.tech/database/query-builder/>
+<https://rws8.tech/docs/database/query-builder/>
 
 `QueryBuilder` is obtained from `T::query(&pool)` and provides a fluent API for building queries against the table mapped to `T`. All builder methods consume `self` and return a new `QueryBuilder`. Terminal methods (`fetch_all`, `fetch_one`, `count`, `delete`, `update`) are `async fn`.
 
@@ -17899,7 +17899,7 @@ See [Pagination](/database/pagination/) for `.paginate_after()` (cursor/keyset p
 
 # Pagination
 
-<https://rws8.tech/database/pagination/>
+<https://rws8.tech/docs/database/pagination/>
 
 `QueryBuilder` has two pagination terminals so list endpoints don't need to hand-roll `LIMIT`/`OFFSET` math or a separate `COUNT(*)` query every time: `.paginate()` for classic page-number pagination, and `.paginate_after()` for cursor (keyset) pagination on large or frequently-changing tables.
 
@@ -18004,7 +18004,7 @@ let page = Page::new(all_items[2..4].to_vec(), 2, 2, all_items.len() as u64);
 
 # Raw SQL
 
-<https://rws8.tech/database/raw-sql/>
+<https://rws8.tech/docs/database/raw-sql/>
 
 The query builder covers most common queries, but sometimes you need raw SQL — complex joins, CTEs, window functions, or database-specific syntax. `DbPool` exposes three async methods for this.
 
@@ -18151,7 +18151,7 @@ Never interpolate user input directly into a SQL string. Always pass untrusted v
 
 # Transactions
 
-<https://rws8.tech/database/transactions/>
+<https://rws8.tech/docs/database/transactions/>
 
 `DbPool` provides two ways to work with transactions: a closure-based helper that handles commit and rollback automatically, and a manual `begin` / `commit` / `rollback` API for more complex flows.
 
@@ -18291,7 +18291,7 @@ The current API does not expose SQL savepoints. For nested transaction semantics
 
 # Migrations
 
-<https://rws8.tech/database/migrations/>
+<https://rws8.tech/docs/database/migrations/>
 
 The migration runner reads `*.sql` files from a directory in lexicographic order, executes any that have not already been applied, and records each run in a `_schema_migrations` table. No external tools or frameworks are required.
 
@@ -18586,7 +18586,7 @@ Prefer `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` so that rer
 
 # Relations
 
-<https://rws8.tech/database/relations/>
+<https://rws8.tech/docs/database/relations/>
 
 The ORM provides relationship helpers for one record — `HasMany`, `HasOne`, `BelongsTo` and (18.30.0) `BelongsToMany` — and `Relation` descriptors that [load a relation for a whole result set](#eager-loading-with-with). There is no lazy loading — you call `.load(&pool).await` or `.with(…)` explicitly when you want the data.
 
@@ -18776,7 +18776,7 @@ Lazy loading hides database access behind field access, making it easy to accide
 
 # In-memory SQLite
 
-<https://rws8.tech/database/in-memory/>
+<https://rws8.tech/docs/database/in-memory/>
 
 The `model-sqlite` feature ships an ergonomic constructor that opens a SQLite `":memory:"` database without a file path, hostname, or credentials. All operations are `async fn`.
 
@@ -18853,7 +18853,7 @@ rust-web-server = { version = "18", features = ["model-sqlite"] }
 
 # MCP Server Overview
 
-<https://rws8.tech/mcp/overview/>
+<https://rws8.tech/docs/mcp/overview/>
 
 The Model Context Protocol (MCP) is a JSON-RPC 2.0 standard that lets AI agents (Claude Desktop, Cursor, custom agents) call server-defined **tools**, read **resources**, and retrieve **prompt templates** over plain HTTP. `rust-web-server` ships a first-class `McpServer` that implements the MCP specification up to 2026-07-28 with no external dependencies, and speaks each version from 2024-11-05 on to the clients that ask for it, on one endpoint — see [MCP 2026-07-28](#mcp-2026-07-28) and [Protocol version negotiation](#protocol-version-negotiation) below.
 
@@ -19393,7 +19393,7 @@ Or for HTTPS deployments:
 
 # MCP Tools
 
-<https://rws8.tech/mcp/tools/>
+<https://rws8.tech/docs/mcp/tools/>
 
 Tools are the primary way AI agents interact with your server. Each tool has a name, a description, a JSON Schema describing its inputs, and a handler closure that executes when the tool is called.
 
@@ -20090,7 +20090,7 @@ Return `Err(String)` for recoverable tool errors (invalid input, resource not fo
 
 # MCP Resources
 
-<https://rws8.tech/mcp/resources/>
+<https://rws8.tech/docs/mcp/resources/>
 
 Resources are named, URI-addressed data sources that AI agents can read. Unlike tools (which are invoked with arguments), resources are addressed by URI — the AI browses available resources via `resources/list` and fetches them with `resources/read`.
 
@@ -20219,7 +20219,7 @@ McpServer::new("my-server", "1.0")
 
 # MCP Prompts
 
-<https://rws8.tech/mcp/prompts/>
+<https://rws8.tech/docs/mcp/prompts/>
 
 Prompts are reusable message templates that clients can retrieve from the server and inject directly into a conversation. Unlike tools (which the AI calls autonomously), prompts are user-initiated: the client fetches the template, fills in arguments, and inserts the resulting messages.
 
@@ -20429,7 +20429,7 @@ Server::run(listener, pool, mcp);
 
 # MCP Authentication
 
-<https://rws8.tech/mcp/auth/>
+<https://rws8.tech/docs/mcp/auth/>
 
 By default the MCP endpoint (`POST /mcp`) is open to any caller. Call `.require_bearer(token)` to gate every request behind a static Bearer token, or `.require_oauth(provider, audience)` (`sso` feature) for full per-user OAuth 2.0 / OIDC bearer JWT verification — see [OAuth 2.0 authorization](#oauth-20-authorization-mcp-2025-03-26) below.
 
@@ -20687,7 +20687,7 @@ If `.require_bearer(token)` or `.require_bearer_tokens(...)` and `.require_oauth
 
 # Operate rws from an AI client
 
-<https://rws8.tech/mcp/operate/>
+<https://rws8.tech/docs/mcp/operate/>
 
 The `rws` binary has an MCP endpoint with 25 tools for looking at and steering
 the running server: its configuration, metrics, recent requests and errors,
@@ -20803,7 +20803,7 @@ blocklist and maintenance mode are in memory: a restart clears them.
 
 # Build agent tools on your app
 
-<https://rws8.tech/mcp/agent-tools/>
+<https://rws8.tech/docs/mcp/agent-tools/>
 
 An app built on rws can answer AI agents with the same functions its REST
 API calls. `app.mcp(name, version)` puts an MCP endpoint at `/mcp` in front
@@ -20903,7 +20903,7 @@ assert!(client.get("/items/TEE-02").send().body_text().contains(r#""onHand":1"#)
 
 # Let a coding agent inspect your app
 
-<https://rws8.tech/mcp/dev-tools/>
+<https://rws8.tech/docs/mcp/dev-tools/>
 
 A coding agent working on an rws app can read the code, but not what the
 running app actually registered, which settings it ended up with, or why the
@@ -21106,7 +21106,7 @@ Jobs, and the same data as MCP resources, are planned.
 
 # MCP gateway
 
-<https://rws8.tech/mcp/gateway/>
+<https://rws8.tech/docs/mcp/gateway/>
 
 `McpGateway` (since 18.0.0) federates upstream MCP servers behind one
 `/mcp`. Clients connect to the gateway with their own credentials; the
@@ -21251,7 +21251,7 @@ Upstream notifications (`listChanged`, resource updates, progress) aren't follow
 
 # A2A agents
 
-<https://rws8.tech/mcp/a2a/>
+<https://rws8.tech/docs/mcp/a2a/>
 
 [Agent2Agent (A2A)](https://a2a-protocol.org/latest/specification/) lets one
 AI agent call another: it reads the other's **Agent Card**, sends it a
@@ -21435,7 +21435,7 @@ oldest finished ones go first), 16 streams per task, 4 MiB per request.
 
 # Tools from OpenAPI
 
-<https://rws8.tech/mcp/openapi-tools/>
+<https://rws8.tech/docs/mcp/openapi-tools/>
 
 Most APIs an agent should use already describe themselves with OpenAPI.
 `mcp::openapi_tools` (since 18.19.0) reads an OpenAPI 3.0 or 3.1 document
@@ -21537,7 +21537,7 @@ refused.
 
 # Test Client
 
-<https://rws8.tech/testing/test-client/>
+<https://rws8.tech/docs/testing/test-client/>
 
 `TestClient` wraps any type that implements `Application` and dispatches requests through `Application::execute` in-process. No network, no port binding, no spawned threads — tests run as fast as plain function calls.
 
@@ -21845,7 +21845,7 @@ If `Application::execute` returns `Err(String)`, `TestClient` converts it to a s
 
 # WebSocket and SSE in tests
 
-<https://rws8.tech/testing/websocket-sse/>
+<https://rws8.tech/docs/testing/websocket-sse/>
 
 `TestClient` drives two kinds of long-lived responses in-process (since 18.29.0): a WebSocket route's upgrade handler, over an in-memory duplex, and a `text/event-stream` body, read as it arrives. Both wait with timeouts, so a handler that never answers fails the test instead of hanging it.
 
@@ -21949,7 +21949,7 @@ A streamed body is read on a thread of its own; it ends with the stream, or at t
 
 # Test databases and factories
 
-<https://rws8.tech/testing/database/>
+<https://rws8.tech/docs/testing/database/>
 
 Two helpers for tests that touch the database (since 18.29.0, `model-*` features): `TestDb`, a database per test that leaves nothing behind, and `#[derive(Factory)]`, which builds `#[derive(Model)]` structs with a default for every field.
 
@@ -22057,7 +22057,7 @@ The sequence is per model type and shared by every test in the process, in whate
 
 # OpenAPI snapshots
 
-<https://rws8.tech/testing/snapshots/>
+<https://rws8.tech/docs/testing/snapshots/>
 
 `assert_openapi_snapshot` (since 18.29.0) compares an app's OpenAPI document with a file committed beside the tests, so a change to the API shows up in review as a change to that file:
 
@@ -22105,7 +22105,7 @@ Relative paths are relative to the working directory, which under `cargo test` i
 
 # Docker
 
-<https://rws8.tech/deployment/docker/>
+<https://rws8.tech/docs/deployment/docker/>
 
 ## Prebuilt image
 
@@ -22264,7 +22264,7 @@ Send `docker kill --signal=SIGHUP <container>` to reload TLS certificates, CORS 
 
 # Kubernetes
 
-<https://rws8.tech/deployment/kubernetes/>
+<https://rws8.tech/docs/deployment/kubernetes/>
 
 ## Health endpoints
 
@@ -22522,7 +22522,7 @@ See the [Observability](/deployment/observability) page for example Grafana quer
 
 # Kubernetes Ingress
 
-<https://rws8.tech/deployment/kubernetes-ingress/>
+<https://rws8.tech/docs/deployment/kubernetes-ingress/>
 
 `KubernetesIngressWatcher` watches the Kubernetes API server for Ingress resources and maintains a live route table in memory. `IngressRouter` implements `Application` and uses that table to forward requests to the correct upstream service.
 
@@ -22700,7 +22700,7 @@ rust-web-server = { version = "18", features = ["http-client"] }
 
 # Kubernetes Gateway API
 
-<https://rws8.tech/deployment/kubernetes-gateway-api/>
+<https://rws8.tech/docs/deployment/kubernetes-gateway-api/>
 
 :::note[Conformance]
 rws passes the Gateway API v1.6.3 conformance suite (standard channel) for the GATEWAY-HTTP, GATEWAY-GRPC, GATEWAY-TLS, GATEWAY-TCP and GATEWAY-UDP profiles with every standard-channel extended feature, in both deployment modes; CI runs the suite on every change (`.github/workflows/gateway-api.yml`). Experimental-channel features (HTTPRoute retries, destination-port matching, mixed TLS termination) aren't claimed yet. Design and history: [`spec/GATEWAY_API.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/GATEWAY_API.md).
@@ -22801,7 +22801,7 @@ What this doesn't measure: many routes or Gateways, configuration churn, connect
 
 # Observability
 
-<https://rws8.tech/deployment/observability/>
+<https://rws8.tech/docs/deployment/observability/>
 
 ## Metrics
 
@@ -23229,7 +23229,7 @@ The readiness gate ensures the load balancer stops routing new traffic to a pod 
 
 # Admin API
 
-<https://rws8.tech/deployment/admin/>
+<https://rws8.tech/docs/deployment/admin/>
 
 The admin API (since 18.10.0) lets you inspect a running server without editing files or restarting it. It runs on a listener of its own, which is off by default and never mixed into the public routes, and every request needs a bearer token.
 
@@ -23483,7 +23483,7 @@ Example `GET /status`:
 
 # Several replicas
 
-<https://rws8.tech/deployment/cluster/>
+<https://rws8.tech/docs/deployment/cluster/>
 
 Most of rws's configuration is the config file, so replicas agree by
 running the same file. Changes made at runtime through the
@@ -23534,7 +23534,7 @@ Redis services); run it on a private network or with a password.
 
 # Fleet config
 
-<https://rws8.tech/deployment/fleet/>
+<https://rws8.tech/docs/deployment/fleet/>
 
 Since 18.23.0 an instance can fetch its configuration instead of having it
 copied onto it. Point it at a source, give it the public key the configs
@@ -23616,7 +23616,7 @@ a fleet update.
 
 # Traffic insights
 
-<https://rws8.tech/deployment/traffic/>
+<https://rws8.tech/docs/deployment/traffic/>
 
 The admin UI's **Traffic** page (since 18.15.0) shows who visited your sites
 over the last day, week or 30 days, in three groups:
@@ -23860,7 +23860,7 @@ database query.
 
 # systemd
 
-<https://rws8.tech/deployment/systemd/>
+<https://rws8.tech/docs/deployment/systemd/>
 
 On a Linux host without containers, run `rws` as a systemd service. The unit
 below runs it as an unprivileged user that can bind ports 80 and 443, sees
@@ -24055,7 +24055,7 @@ passed.
 
 # Windows
 
-<https://rws8.tech/deployment/windows/>
+<https://rws8.tech/docs/deployment/windows/>
 
 The `rws.exe` in each release's `x86_64-pc-windows-msvc` zip on the
 [GitHub release page](https://github.com/bohdaq/rust-web-server/releases)
@@ -24110,7 +24110,7 @@ log directory.
 
 # WASM Guest Component
 
-<https://rws8.tech/deployment/wasm/>
+<https://rws8.tech/docs/deployment/wasm/>
 
 `rws-wasm-shim` is a separate workspace package that runs the same `App`/`Router`/middleware logic you use natively — but hosted inside a WASM component instead of a `TcpListener`. The host (Wasmtime, Spin, Fastly Compute) owns the listening socket and TLS termination; it calls the guest once per request through the standard [`wasi:http/proxy`](https://github.com/WebAssembly/wasi-http) world.
 
@@ -24205,7 +24205,7 @@ See `spec/WASM_SHIM.md` in the repository for the complete, itemized history of 
 
 # API Reference
 
-<https://rws8.tech/reference/api/>
+<https://rws8.tech/docs/reference/api/>
 
 Full rustdoc documentation is published at [docs.rs/rust-web-server](https://docs.rs/rust-web-server).
 
@@ -24614,7 +24614,7 @@ Items marked with a feature in parentheses compile only with that Cargo feature.
 
 # Troubleshooting
 
-<https://rws8.tech/reference/troubleshooting/>
+<https://rws8.tech/docs/reference/troubleshooting/>
 
 ## Starting the server
 
@@ -24771,7 +24771,7 @@ The Cargo registry was written by `sudo cargo …` once. Fix the ownership
 
 # Error responses
 
-<https://rws8.tech/reference/errors/>
+<https://rws8.tech/docs/reference/errors/>
 
 Since 18.17.0 the errors rws produces itself, rather than your application,
 answer with [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem
@@ -24836,7 +24836,7 @@ brings back the bodies of earlier releases: `502 Bad Gateway`,
 
 # Migrating to 18.0
 
-<https://rws8.tech/reference/migrating-18/>
+<https://rws8.tech/docs/reference/migrating-18/>
 
 18.0 has a handful of breaking changes; most applications only meet the first and the `Request.body` type. If you are coming from 17.113.0 or earlier, also read [the patch-release changes](#coming-from-171130-or-earlier).
 
@@ -25029,7 +25029,7 @@ behind a load balancer or CDN with a public address, list it:
 
 # Architecture
 
-<https://rws8.tech/reference/architecture/>
+<https://rws8.tech/docs/reference/architecture/>
 
 `rws` is one crate: the server, the reverse proxy and the application
 framework share one request type and one handler trait. HTTP/1.1 parsing,
@@ -25131,7 +25131,7 @@ without a restart. See [Configuration](/configuration/overview/).
 
 # Benchmarks
 
-<https://rws8.tech/reference/benchmarks/>
+<https://rws8.tech/docs/reference/benchmarks/>
 
 `rws` is measured against Caddy and nginx on the same machine, with the same
 files and the same load. The numbers below come from one run (40243377254) of the
@@ -25317,7 +25317,7 @@ CPUs; on a dedicated server one worker per core is right.)
 
 # Roadmap
 
-<https://rws8.tech/reference/roadmap/>
+<https://rws8.tech/docs/reference/roadmap/>
 
 These features are planned. Each appears as a callout on the relevant docs page.
 
@@ -25351,7 +25351,7 @@ The full ordered list of open work is [`spec/ROADMAP.md`](https://github.com/boh
 
 # Support policy
 
-<https://rws8.tech/reference/support-policy/>
+<https://rws8.tech/docs/reference/support-policy/>
 
 ## Release lines
 

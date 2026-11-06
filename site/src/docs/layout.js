@@ -111,7 +111,11 @@ export function docsPage({ page, sidebar, base, prev, next, version }) {
         <div class="prose">${unsafeHTML(page.html)}</div>
       </article>
       <p class="docs-edit">
+        ${page.modified
+          ? html`<span class="docs-updated">Last updated <time datetime=${page.modified}>${new Date(page.modified).toLocaleDateString("en", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })}</time> · </span>`
+          : nothing}
         <a href=${`${REPO}/edit/main/docs/src/content/docs/${page.file}`}>${unsafeHTML(icon("pencil-simple"))} Edit this page on GitHub</a>
+        ${version.latest ? html` · <a href=${page.path.replace(/\/$/, ".md")}>Markdown</a>` : nothing}
       </p>
       ${pager(prev, next)}`,
   });

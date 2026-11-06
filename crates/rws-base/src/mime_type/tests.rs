@@ -1037,3 +1037,11 @@ fn mime_type_for_common_files() {
     // ...but the ends_with ones still see the suffix.
     assert_eq!(MimeType::TEXT_CSS, MimeType::mime_type_for("/.css"));
 }
+
+#[test]
+fn detect_mime_type_for_markdown_files() {
+    // Docs sites publish Markdown copies of pages for AI agents (llms.txt).
+    assert_eq!(MimeType::TEXT_MARKDOWN, MimeType::detect_mime_type("/docs/getting-started/quick-start.md"));
+    assert_eq!(MimeType::TEXT_MARKDOWN, MimeType::detect_mime_type("/README.markdown"));
+    assert_eq!(MimeType::TEXT_PLAIN, MimeType::detect_mime_type("/llms.txt"));
+}

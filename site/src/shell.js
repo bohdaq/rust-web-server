@@ -64,7 +64,11 @@ export function footer() {
 // a cream flash. Storage can throw (private windows), hence the try.
 const THEME_BOOT = themeBootScript("rws-theme");
 
-export function documentHtml({ title, description, path, body, assets, noindex = false, canonical = path, jsonLd = [] }) {
+export const SITE = "https://rws8.tech";
+
+const attr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+export function documentHtml({ title, description, path, body, assets, noindex = false, canonical = path, jsonLd = [], ogType = "website", markdown = null, modified = null }) {
   const css = assets.css.map((href) => `<link rel="stylesheet" href="${href}">`).join("");
   return `<!doctype html>
 <html lang="en">
@@ -74,11 +78,19 @@ export function documentHtml({ title, description, path, body, assets, noindex =
 <title>${title}</title>
 <meta name="description" content="${description}">
 ${noindex ? '<meta name="robots" content="noindex">' : ""}
-<link rel="canonical" href="https://rws8.tech${canonical}">
+${canonical ? `<link rel="canonical" href="${SITE}${canonical}">` : ""}
+${markdown ? `<link rel="alternate" type="text/markdown" href="${markdown}" title="This page as Markdown">` : ""}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="${ogType}">
+<meta property="og:site_name" content="rws">
+<meta property="og:url" content="${SITE}${canonical ?? path}">
 <meta property="og:title" content="${title}">
 <meta property="og:description" content="${description}">
-<meta property="og:image" content="https://rws8.tech/brand/og.png">
+<meta property="og:image" content="${SITE}/brand/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+${modified ? `<meta property="article:modified_time" content="${attr(modified)}">` : ""}
 <meta name="theme-color" content="#16120F">
 <script>${THEME_BOOT}</script>
 ${jsonLd.map((d) => `<script type="application/ld+json">${JSON.stringify(d).replace(/</g, "\\u003c")}</script>`).join("")}

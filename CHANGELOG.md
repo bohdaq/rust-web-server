@@ -5,6 +5,21 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- **`.md` is served as `text/markdown`** (and compressed): Markdown copies of
+  pages for AI agents no longer download as `application/octet-stream`.
+- **rws8.tech for search engines and AI answers**: `robots.txt` (AI crawlers
+  explicitly welcome) and `sitemap.xml` (with each docs page's last change
+  from git) are generated; docs pages carry `TechArticle` and
+  `BreadcrumbList` structured data, a visible "Last updated" date and a
+  Markdown copy (`/docs/<page>.md`, also linked from the page); the home page
+  adds `Organization` and `WebSite`; every page has `og:type`, `og:url` and a
+  Twitter card; `/favicon.ico` exists. `llms.txt` links the Markdown copies
+  under `/docs/` (it linked old paths that redirected).
+
 ## 18.33.0 — 2026-11-05
 
 ### Added
