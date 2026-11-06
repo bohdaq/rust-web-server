@@ -568,4 +568,3 @@ jobs:
       - run: python3 ci/gen_agents.py --check
       - run: python3 ci/gen_bot_lists.py --check
       - run: python3 ci/gen_geo.py --check
-      - run: python3 ci/gen_world_map.py --check

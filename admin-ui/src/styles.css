@@ -217,10 +217,5 @@ button.t-row:hover .t-name { text-decoration: underline; }
 .t-wide { grid-column: 1 / -1; }
 .t-map-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-300); align-items: center; }
 @media (max-width: 719.98px) { .t-map-row { grid-template-columns: minmax(0, 1fr); } }
-.t-map { margin: 0; }
-.t-map svg { display: block; width: 100%; height: auto; }
-.t-map path { fill: color-mix(in srgb, var(--md-sys-color-on-surface) 9%, transparent); stroke: var(--panel); stroke-width: 0.6; stroke-linejoin: round; }
-.t-map path.on { fill: color-mix(in srgb, var(--md-sys-color-primary) var(--level), transparent); }
-.t-map path.can { cursor: pointer; }
-.t-map path.on:hover { stroke: var(--md-sys-color-on-surface); stroke-width: 1; }
+.t-map { --lit-material-world-map-fill: var(--md-sys-color-primary); --lit-material-world-map-border: var(--panel); }
 .t-map-big { padding: var(--space-300); }

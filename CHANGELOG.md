@@ -5,6 +5,17 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- **Admin Traffic page: world map** is now `@lit-material/world-map`: one
+  tab stop, the arrow keys read countries highest first and Enter picks one
+  (again clears the filter), a legend for the shading, countries too small
+  to draw (Singapore, Malta…) listed under the map, and a screen-reader
+  table. The shapes it ships are 12 kB gzipped instead of 27 kB;
+  `ci/gen_world_map.py` is gone.
+
 ## 18.34.1 — 2026-11-06
 
 Docs and website only; no code changes.

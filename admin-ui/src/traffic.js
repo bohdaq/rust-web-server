@@ -4,10 +4,11 @@
 // list. Clicking a row filters the page by it: the site always, anything
 // else with the traffic database ([traffic] database_url_env), whose rows
 // can answer any combination.
-import { LitElement, html, svg, nothing } from "lit";
+import { LitElement, html, nothing } from "lit";
 import { api, ApiError } from "./api.js";
 import { formatDuration } from "@lit-material/format";
-import { COUNTRIES, VIEWBOX } from "./world-map.js";
+import { live } from "lit/directives/live.js";
+import "@lit-material/world-map";
 
 const TABS = [
   ["overview", "Overview"],
@@ -692,21 +693,19 @@ export class RwsTraffic extends LitElement {
       </div>`;
   }
 
-  /** People by country on a world map; a country filters like its row. */
+  /** People by country on a world map; picking a country filters like its row, picking it again clears. */
   renderMap(rows) {
-    const counts = new Map(rows.filter(([k]) => k.length === 2).map(([k, n]) => [k, n]));
-    const max = Math.max(...counts.values(), 1);
-    const can = this.data?.store && !("country" in this.filters);
-    return html`<figure class="t-map">
-      <svg viewBox=${VIEWBOX} role="img" aria-label="Visitors by country">
-        ${Object.entries(COUNTRIES).map(([code, d]) => {
-          const n = counts.get(code) ?? 0;
-          const level = n ? Math.round(18 + 72 * Math.sqrt(n / max)) : 0;
-          return svg`<path d=${d} class=${n ? (can ? "on can" : "on") : ""} style=${n ? `--level:${level}%` : ""}
-            @click=${() => n && this.pick("country", code)}><title>${countryName(code)}${n ? `: ${num(n)}` : ""}</title></path>`;
-        })}
-      </svg>
-    </figure>`;
+    const data = Object.fromEntries(rows.filter(([k]) => k.length === 2));
+    return html`<lit-material-world-map
+      class="t-map"
+      label="Visitors by country"
+      unit="visitors"
+      selectable
+      .data=${data}
+      .selected=${live(this.filters.country ?? "")}
+      .format=${num}
+      @change=${(e) => (e.detail.code ? this.pick("country", e.detail.code) : this.unpick("country"))}
+    ></lit-material-world-map>`;
   }
 
   render() {

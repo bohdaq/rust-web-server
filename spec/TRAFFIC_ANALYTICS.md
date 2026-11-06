@@ -226,6 +226,9 @@ only; AI agents / Bots views use `totals[g]`, `series[g]` and
 devices exist, by design. Map: `ci/gen_world_map.py` (Natural Earth 1:110m
 @ca96624a, ISO_A2_EH, Equal Earth, integer coordinates, Antarctica out) →
 `admin-ui/src/world-map.js` (174 countries, 75 KB, 27 KB gzipped),
-`--check` in CI; choropleth by √share, click = country filter. Note on the
+`--check` in CI; choropleth by √share, click = country filter. Since
+2026-11-06 the map is `@lit-material/world-map` (the same data and scale,
+upstreamed with keyboard reading, selection, legend and a table); the
+generator and `world-map.js` are gone. Note on the
 live numbers: sessions started counting with 18.31.0, so a 7-day view
 spanning the upgrade shows few sessions next to many visitors.
