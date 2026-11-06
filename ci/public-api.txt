@@ -6970,6 +6970,7 @@ pub const rust_web_server::mime_type::MimeType::JS_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::M4A_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::M4P_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::M4V_SUFFIX: &'static str
+pub const rust_web_server::mime_type::MimeType::MD_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::MIDI_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::MID_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::MJS_SUFFIX: &'static str
@@ -7007,6 +7008,7 @@ pub const rust_web_server::mime_type::MimeType::TEXT_CSS: &'static str
 pub const rust_web_server::mime_type::MimeType::TEXT_CSV: &'static str
 pub const rust_web_server::mime_type::MimeType::TEXT_HTML: &'static str
 pub const rust_web_server::mime_type::MimeType::TEXT_JAVASCRIPT: &'static str
+pub const rust_web_server::mime_type::MimeType::TEXT_MARKDOWN: &'static str
 pub const rust_web_server::mime_type::MimeType::TEXT_PLAIN: &'static str
 pub const rust_web_server::mime_type::MimeType::TIFF_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::TIF_SUFFIX: &'static str
