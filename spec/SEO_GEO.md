@@ -39,8 +39,11 @@ worked through a 301; it now links the `/docs/…/*.md` copies.
 - VM (user ran `rws-18.34.0-seo.sh`): rws 18.34.0, www→apex 301, lit and
   hitop installed (hitop built from a clean origin/main worktree at fef42b6 —
   a peer had uncommitted hitop work) — every probe passed.
-- rws8.tech site: through the hourly `rws-site-update` from the 18.34.0
-  site archive.
+- rws8.tech site 18.34.0 installed by the hourly `rws-site-update`
+  (robots, sitemap, Markdown copies as `text/markdown`, favicon live).
+- IndexNow submitted 2026-11-06: rws8.tech 143, lit 109, hitop 28 URLs, all
+  HTTP 202 (accepted).
+- Left to the owner: Google Search Console + Bing import; review the drafts.
 
 ## To go live (as planned)
 
