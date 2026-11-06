@@ -5,6 +5,18 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## 18.34.1 — 2026-11-06
+
+Docs and website only; no code changes.
+
+### Changed
+
+- **rws vs nginx vs Caddy**: a new comparison page in the reference section,
+  with the nginx and Caddy facts checked against their docs (sources on the
+  page).
+- **Answer-first openings** on the home page, Quick start, Automatic HTTPS
+  and the proxy overview, plus new home page FAQ entries.
+
 ## 18.34.0 — 2026-11-06
 
 ### Added
