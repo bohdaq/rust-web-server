@@ -69,7 +69,8 @@
 .tagline-text { max-width: 900px; margin: 0; font-size: var(--text-4xl); line-height: var(--leading-4xl); font-weight: 700; text-wrap: balance; }
 @media (min-width: 768px) { .tagline-text { font-size: var(--text-6xl); line-height: var(--leading-6xl); } }
 .tagline-line { display: block; }
-.js .tagline .word { opacity: 0.3; transition: opacity 600ms var(--ease); }
+/* Unlit words stay at 3:1 contrast or more in both themes (WCAG for large text). */
+.js .tagline .word { opacity: 0.5; transition: opacity 600ms var(--ease); }
 .js .tagline .word.lit { opacity: 1; }
 
 /* Tiles */
