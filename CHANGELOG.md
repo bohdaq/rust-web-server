@@ -20,6 +20,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   Twitter card; `/favicon.ico` exists. `llms.txt` links the Markdown copies
   under `/docs/` (it linked old paths that redirected).
 
+### Fixed
+
+- **The home page (`/` → `./index.html`) gets the static `Cache-Control`**
+  (`static_cache_control`, default `no-cache`) like every other static file,
+  not the dynamic `no-store`, which kept browsers from caching it and out of
+  their back/forward cache.
+- **A config `static` route answers a miss with its root's `404.html`**
+  (status 404) when there is one, as the default static server does; it
+  sent an empty body.
+
 ## 18.33.0 — 2026-11-05
 
 ### Added

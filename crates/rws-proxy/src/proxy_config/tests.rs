@@ -1410,6 +1410,18 @@ root = "{}"
     let conn = make_conn("127.0.0.1");
     let resp = app.execute(&make_request("GET", "/nope.txt"), &conn).unwrap();
     assert_eq!(resp.status_code, 404);
+    assert!(resp.content_range_list.is_empty(), "no 404.html: empty body");
+
+    // With a 404.html in the root, a miss shows it (still a 404); the page
+    // itself is still served normally.
+    std::fs::write(dir.join("404.html"), "<h1>Not here</h1>").unwrap();
+    for path in ["/nope.txt", "/missing/dir/"] {
+        let resp = app.execute(&make_request("GET", path), &conn).unwrap();
+        assert_eq!(resp.status_code, 404, "{path}");
+        assert_eq!(resp.content_range_list[0].body, b"<h1>Not here</h1>", "{path}");
+        assert!(resp.content_range_list[0].content_type.starts_with("text/html"), "{path}");
+    }
+    assert_eq!(app.execute(&make_request("GET", "/404.html"), &conn).unwrap().status_code, 200);
 
     std::fs::remove_dir_all(&dir).ok();
 }

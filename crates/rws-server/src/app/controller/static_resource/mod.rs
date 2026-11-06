@@ -1044,7 +1044,7 @@ fn is_not_modified(request: &Request, modified_nanos: u128, etag: &str) -> bool 
 
 /// The static-file `Cache-Control` (`RWS_CONFIG_STATIC_CACHE_CONTROL`) in
 /// place of the default `no-store, …`; an empty setting keeps the default.
-fn set_static_cache_control(response: &mut Response, value: &str) {
+pub(crate) fn set_static_cache_control(response: &mut Response, value: &str) {
     if value.is_empty() {
         return;
     }

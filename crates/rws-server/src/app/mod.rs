@@ -189,7 +189,18 @@ impl Application for App {
 
         for c in &controllers {
             if (c.is_matching)(request, connection) {
-                return Ok((c.process)(request, response, connection));
+                let mut response = (c.process)(request, response, connection);
+                // The site's own index.html is a static file: the static
+                // Cache-Control (default `no-cache`) instead of the dynamic
+                // `no-store`, which kept browsers from caching the home page
+                // at all (and out of their back/forward cache).
+                if IndexController::is_matching(request, connection)
+                    && response.status_code == *STATUS_CODE_REASON_PHRASE.n200_ok.status_code
+                    && file_ext::FileExt::does_file_exist(IndexController::INDEX_FILEPATH)
+                {
+                    crate::app::controller::static_resource::set_static_cache_control(&mut response, &config.static_cache_control);
+                }
+                return Ok(response);
             }
         }
 

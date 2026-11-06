@@ -2402,6 +2402,7 @@ impl Application for RespondAdapter {
 /// the process's current working directory), this adapter is parameterized
 /// per-route by `ActionConfig::Static { root, index }` from `rws.config.toml`,
 /// so a config-driven proxy can serve an arbitrary directory without Rust code.
+/// A path with no file answers `404` with `<root>/404.html` when it exists.
 #[derive(Clone)]
 #[doc(hidden)]
 pub struct StaticAdapter {
@@ -2439,9 +2440,17 @@ impl Application for StaticAdapter {
     fn execute(&self, request: &Request, _conn: &ConnectionInfo) -> Result<Response, String> {
         let mut response = Response::new();
 
+        // A miss answers 404 with the root's own 404.html when it has one (as
+        // the default static server does with ./404.html), else an empty body.
         let not_found = |mut response: Response| {
             response.status_code = *STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
             response.reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase.to_string();
+            let page = self.root.join("404.html");
+            if let (true, Some(page)) = (page.is_file(), page.to_str()) {
+                if let Ok(content_range) = crate::range::Range::get_content_range_of_a_file(page) {
+                    response.content_range_list = vec![content_range];
+                }
+            }
             response
         };
 
