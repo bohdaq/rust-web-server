@@ -186,6 +186,7 @@ Use it as:
 - [Migrating to 18.0](https://rws8.tech/docs/reference/migrating-18.md): What changes when upgrading rws from 17.x to 18.0 — Header field types, default response headers, and RSA public keys.
 - [Architecture](https://rws8.tech/docs/reference/architecture.md): How rws handles a request — listeners, the HTTP/1.1, HTTP/2 and HTTP/3 front ends, the Application trait, middleware, the static-file and proxy fast paths, and configuration.
 - [Benchmarks](https://rws8.tech/docs/reference/benchmarks.md): rws compared with Caddy and nginx on static files and reverse proxying, and how to reproduce the numbers.
+- [rws vs nginx vs Caddy](https://rws8.tech/docs/reference/compare.md): How rws compares with nginx and Caddy as a web server and reverse proxy — certificates, config, HTTP/3, load balancing, auth, observability, Kubernetes and speed — with sources and measured benchmarks.
 - [Roadmap](https://rws8.tech/docs/reference/roadmap.md): Planned features for rust-web-server — each appears as a callout on the relevant docs page.
 - [Support policy](https://rws8.tech/docs/reference/support-policy.md): Which rws releases get fixes and for how long, the long-term-support (LTS) lines, security response targets and how fixes are released.
 

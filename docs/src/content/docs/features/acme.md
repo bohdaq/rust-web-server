@@ -3,8 +3,12 @@ title: Automatic HTTPS (ACME)
 description: Get and auto-renew Let's Encrypt certificates with one config section — no certbot, no cron, no restarts.
 ---
 
-`rws` obtains certificates from Let's Encrypt (or any ACME CA) by itself and
-keeps them renewed. Point a domain's DNS at the server, then:
+rws gets HTTPS certificates from Let's Encrypt (or any ACME CA) by itself:
+list your domains under `[acme]`, open ports 80 and 443, and it orders,
+installs and renews them with no restart. HTTP-01, TLS-ALPN-01 and DNS-01
+challenges are supported, including wildcards and on-demand TLS.
+
+Point a domain's DNS at the server, then:
 
 ```toml
 # rws.config.toml

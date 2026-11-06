@@ -3,7 +3,7 @@ title: Proxy Overview
 description: Two ways to use rws as a reverse proxy — zero-code config-driven mode and programmatic library mode.
 ---
 
-`rust-web-server` ships a full-featured proxy stack. You can use it in two distinct ways depending on how much control you need.
+rws proxies requests to your apps from config alone: a `[[route]]` matches host and path, an `[[upstream]]` lists the backends, and rws load balances, health checks and retries them — no code. When you need more control, the same proxy stack is a library, so there are two ways to use it.
 
 ## Mode 1 — Config-driven proxy (no code)
 

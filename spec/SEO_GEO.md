@@ -23,10 +23,10 @@ setup, content drafts):
 | 6 | lit | component pages: no structured data; a second (hidden) h1 from the embedded demo | TechArticle + BreadcrumbList on components and guides; the hidden h1 left (Google: several h1s are fine; 85 demo files) | **done** lit-material 599e2a8 |
 | 7 | all | no Organization/WebSite | on each home page, `sameAs` linking GitHub, crates.io/npm, the other two sites | **done** |
 | 8 | all | /favicon.ico 404 | favicon.ico from each brand icon | **done** |
-| 9 | all | not registered with search engines | IndexNow key file on each site + `ci/indexnow.py`; Google Search Console and Bing Webmaster Tools need the owner's sign-in (below) | key files **done**; sign-ins: user |
+| 9 | all | not registered with search engines | IndexNow key file on each site + `ci/indexnow.py`; Google Search Console and Bing Webmaster Tools need the owner's sign-in (below) | **done**: key files; Search Console (Domain property) + Bing import by the user 2026-11-06 |
 | 10 | hitop | no llms.txt | generated: guides (Markdown copies) + pages | **done** hitop 3a7bc68 |
 | 11 | rws8.tech, hitop | no Markdown for agents | `/docs/<page>.md` and `/terms/<name>.md`, linked from the page (`rel=alternate type=text/markdown`) and llms.txt; rws serves `.md` as `text/markdown` (rws 18.34.0) | **done** |
-| 12–13 | all | intros not answer-first; no comparison pages (rws, lit) | drafts in spec/seo-drafts/ for review | **drafts** |
+| 12–13 | all | intros not answer-first; no comparison pages (rws, lit) | drafts in spec/seo-drafts/ for review | **done** (user approved all 2026-11-06): answer-first ledes on the three sites; comparisons fact-checked against the other projects' docs (sources on each page) and published at rws `/docs/reference/compare/` and lit `/guides/compare/`; hitop guides moved `/terms/<name>.html` → `/guides/<name>/` with 301s in hitop-server. Live after the next rws site release and the lit + hitop deploys, then `ci/indexnow.py` |
 | 14 | rws8.tech | no visible dates | "Last updated" on docs (from git) | **done** |
 | 15 | all | AI crawlers not named | robots.txt names GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, Claude-SearchBot, PerplexityBot, Perplexity-User, Google-Extended, Applebot-Extended, CCBot as allowed | **done** |
 

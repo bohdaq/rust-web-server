@@ -3,7 +3,7 @@ title: Quick Start
 description: Four paths to a running rust-web-server in under five minutes — static files, a first route, a config-driven proxy, and automatic HTTPS.
 ---
 
-Pick the path that matches your goal. Each ends with a working server you can hit with `curl`.
+To run rws, install it (`brew install bohdaq/tap/rws`, `cargo binstall rust-web-server` or `docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws`) and start `rws` in a folder: it serves that folder on http://localhost:7878. The four paths below add a route, a proxy and automatic HTTPS; each ends with a working server you can hit with `curl`.
 
 ---
 

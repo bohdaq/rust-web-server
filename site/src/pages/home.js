@@ -120,13 +120,14 @@ async fn main() {
 \`\`\``;
 
 export const FAQ = [
+  ["Is rws a replacement for nginx?", "For most small and medium sites, yes: static files, the reverse proxy, automatic HTTPS, auth and rate limits in one file. nginx still uses less memory and has more modules; see rws vs nginx vs Caddy in the docs."],
   ["How is rws different from nginx or Caddy?", "One binary covers static files, certificates, the reverse proxy and a Kubernetes gateway, configured in TOML. When config runs out, the same engine is a Rust library, so you don't switch tools."],
   ["Is it ready for production?", "It runs the HTTP/2 conformance suite, the Gateway API suite and ACME against Pebble on every change, and fuzzes its parsers. It is a younger project than nginx; read the changelog and pin a version."],
   ["Does it run on Windows?", "Yes. There are prebuilt binaries for Windows, Linux (static, any distribution) and macOS, and it can run as a Windows service."],
-  ["What does it cost?", "Nothing. rws is MIT licensed."],
+  ["What does it cost?", "Nothing. rws is MIT licensed, with no paid tier."],
   ["How do I upgrade?", "Replace the binary and restart, or reload. Breaking changes are listed in the changelog with a migration guide per major version."],
   ["Does it support HTTP/3?", "Yes, over QUIC on the same port as HTTPS, alongside HTTP/2 and HTTP/1.1."],
-  ["Can I run it on Kubernetes?", "Yes, as a plain Deployment or as a Gateway API controller with the Helm chart."],
+  ["Can I run it on Kubernetes?", "Yes: as a plain Deployment from the container image, or as a Gateway API controller (v1.6.3 conformance) with the Helm chart."],
   ["Can my AI coding agent use these docs?", "Yes. llms.txt and llms-full.txt cover every page, and an agent skill pack lives at /agents/."],
   ["What if I outgrow the config file?", "Use the rust-web-server crate: the config file's features are library types you can compose in code."],
   ["How do I remove it?", "Delete the binary and the config file. rws keeps nothing else, except certificates under .rws/acme/ if you used ACME."],
@@ -191,7 +192,7 @@ export async function render() {
       <section class="hero container">
         <div class="hero-text">
           <h1 class="hero-heading">The web server that gets <br />its own certificates <br />and routes your apps</h1>
-          <p class="lead">Static files, automatic Let's Encrypt certificates, HTTP/3 and a load balancing reverse proxy, configured in one TOML file. When you need code, the same engine is a Rust crate.</p>
+          <p class="lead">rws is a free, open-source (MIT) web server and reverse proxy in one binary: it serves static files, gets and renews Let's Encrypt certificates on its own, load balances your apps and adds auth and rate limits, all from one <code>rws.config.toml</code>. It runs on Linux, macOS and Windows, speaks HTTP/1.1, HTTP/2 and HTTP/3, and is also a Rust crate for building apps.</p>
           ${heroInstall}
           <p class="proof-line">Gateway API v1.6.3 conformant · h2spec 146 of 146 · MIT licensed</p>
         </div>

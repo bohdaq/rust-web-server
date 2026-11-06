@@ -596,6 +596,10 @@
         "link": "/reference/benchmarks/"
       },
       {
+        "label": "rws vs nginx vs Caddy",
+        "link": "/reference/compare/"
+      },
+      {
         "label": "Roadmap",
         "link": "/reference/roadmap/"
       },
