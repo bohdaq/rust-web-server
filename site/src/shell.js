@@ -56,6 +56,7 @@ export function footer() {
           <li><a href="/privacy/">Privacy</a></li>
           <li><a href="https://github.com/bohdaq/rust-web-server/blob/main/LICENSE">MIT license</a></li>
         </ul>
+        <p class="footer-by">Built by <a href="https://bohdantsap.com/" rel="author">Bohdan Tsap</a>.</p>
       </div>
     </footer>`;
 }

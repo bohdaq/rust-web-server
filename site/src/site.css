@@ -91,6 +91,7 @@
 }
 .site-footer ul { display: flex; flex-wrap: wrap; gap: var(--space-300); list-style: none; margin: 0; padding: 0; }
 .site-footer a { color: inherit; }
+.site-footer .footer-by { margin: var(--space-300) 0 0; }
 
 /* /theme/ page */
 .theme-page section { padding: var(--space-600) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-300); }
