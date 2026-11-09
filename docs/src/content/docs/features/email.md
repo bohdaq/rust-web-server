@@ -181,6 +181,81 @@ let app = App::with_state(state)
     });
 ```
 
+## Templates
+
+With the `tera` feature, `render(name, &ctx)` on the builder sets the bodies from the templates `<name>.txt` and `<name>.html` of the global engine ([`template::init`](/building-apps/templates/)), whichever exist (18.35.0):
+
+```rust,no_run
+use rust_web_server::mailer::Email;
+use rust_web_server::template::Context;
+
+let mut ctx = Context::new();
+ctx.insert("name", "Ann");
+let email = Email::builder()
+    .to("ann@example.com")
+    .subject("Welcome")
+    .render("mail/welcome", &ctx)?     // templates/mail/welcome.txt and .html
+    .build()?;
+```
+
+`render_with(&engine, name, &ctx)` uses a given `TeraEngine`. HTML templates are escaped as usual; `.txt` ones aren't.
+
+## Attachments
+
+A `Mail` is an `Email` plus attachments; `Mailer::send_mail` sends it as `multipart/mixed` with each file in base64:
+
+```rust,no_run
+use rust_web_server::mailer::{Mail, MailAttachment};
+
+let mail = Mail::new(email).attach(MailAttachment::new("invoice.pdf", "application/pdf", pdf_bytes));
+mailer.send_mail(&mail)?;
+```
+
+## Transports and tests
+
+`Deliver` is what sends a `Mail`: `Mailer` (SMTP), `TestMailbox`, or your own (an email API over HTTP). Code that takes an `Arc<dyn Deliver>` can be tested without SMTP:
+
+```rust
+use std::sync::Arc;
+use rust_web_server::mailer::{Deliver, Email, Mail, TestMailbox};
+
+let mailbox = TestMailbox::new();
+let transport: Arc<dyn Deliver> = Arc::new(mailbox.clone());
+transport.deliver(&Mail::new(Email::builder().to("ann@example.com").subject("Hi").text("Hello").build().unwrap())).unwrap();
+assert_eq!("Hi", mailbox.last_to("ann@example.com").unwrap().email.subject);
+```
+
+`TestMailbox` keeps everything it's given (`sent`, `last`, `last_to`, `count`, `clear`; clones share it) — a transport for local development too.
+
+## Sending later
+
+Sending takes a network round trip; a request shouldn't wait for it:
+
+```rust,no_run
+// In memory (`jobs`): sent on the queue's workers, with its retries.
+mail.deliver_later(&job_queue, Arc::clone(&transport));
+
+// Persistent (`jobs` + a `model-*` feature): survives a restart, retried like any job.
+rust_web_server::mailer::register_delivery(&persistent_queue, transport);   // once, in the worker process
+mail.enqueue(&persistent_queue, EnqueueOptions::new().queue("mailers")).await?;
+```
+
+A persistent mail is a [job](/features/jobs/#persistentjobqueue) of type `rws.mail` whose payload is `Mail::to_payload()`.
+
+## Previews
+
+`MailPreviews` is a middleware that shows what each email looks like, built from sample data, without sending anything — mount it **in development only**:
+
+```rust,no_run
+use rust_web_server::mailer::{Email, MailPreviews};
+
+let previews = MailPreviews::new("/_mail")
+    .add("welcome", || Ok(Email::builder().to("ann@example.com").subject("Welcome").render("mail/welcome", &sample_context())?.build()?.into()));
+let app = app.wrap(previews);
+```
+
+`/_mail` lists the previews; `/_mail/welcome` shows the headers, attachments, the HTML body in a sandboxed frame and the text body; `/_mail/welcome.html` and `.txt` are the bodies alone.
+
 ## Use cases
 
 | Use case | Setup |

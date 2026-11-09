@@ -365,10 +365,13 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | Type / Trait | Module | Description |
 |---|---|---|
 | `Scheduler` | `scheduler` | Recurring tasks: `.every(d, f)`, `.after(d, f)`, `.cron(expr, f)`. See [Scheduler](/features/scheduler/) |
-| `CronSchedule` | `scheduler` | Parsed six-field cron expression (`sec min hour day month weekday`) |
+| `CronSchedule` | `scheduler` | Parsed six-field cron expression (`sec min hour day month weekday`); `next_after(epoch)` gives the next matching second (18.35.0) |
 | `Job` | `jobs` (`jobs`) | Job trait, implemented for `Fn() -> Result<(), String> + Send` closures. See [Jobs](/features/jobs/) |
 | `JobQueue` | `jobs` (`jobs`) | In-memory worker pool with retry and exponential backoff; not crash-safe |
 | `PersistentJobQueue` | `jobs` (`jobs` + a `model-*` feature) | Crash-safe queue in a `rws_jobs` table; `(job_type, payload)` jobs dispatched to registered handlers |
+| `EnqueueOptions` | `jobs` (`jobs` + a `model-*` feature) | Per-job `run_at`/`run_in`, `queue`, `priority`, `unique(key)`, `max_retries` for `PersistentJobQueue::enqueue_with` (18.35.0). See [Jobs](/features/jobs/#when-where-and-how-often) |
+| `JobInfo` | `jobs` (`jobs` + a `model-*` feature) | A job's row (`jobs`, `failed_jobs` — the dead-letter list; `retry`, `delete`, `on_dead`) (18.35.0) |
+| `EventBus` / `SubscriptionId` | `events` | Typed in-process events: `subscribe(\|e: &E\| …)`, `publish(&event)`, `forward_to_mcp`, `forward_to_channel` (18.35.0). See [Events](/features/events/) |
 
 ## Storage and mail
 
@@ -388,6 +391,9 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `EmailBuilder` | `mailer` (`mailer`) | `.to`, `.cc`, `.bcc`, `.reply_to`, `.subject`, `.text`, `.html`, `.build()` (`multipart/alternative` when both bodies are set) |
 | `SmtpTls` | `mailer` (`mailer`) | `None` (25), `Starttls` (587, default), `Smtps` (465) |
 | `MailerError` | `mailer` (`mailer`) | `MissingConfig`, `Io`, `Smtp`, `Build` |
+| `Mail` / `MailAttachment` | `mailer` (`mailer`) | An `Email` with attachments: `Mailer::send_mail`, `deliver_later(&JobQueue, transport)`, `enqueue(&PersistentJobQueue, options)`, `to_payload`/`from_payload` (18.35.0). See [Email](/features/email/#attachments) |
+| `Deliver` / `TestMailbox` | `mailer` (`mailer`) | What sends a `Mail` (`Mailer`, or your own); `TestMailbox` keeps it instead (`sent`, `last`, `last_to`) (18.35.0) |
+| `MailPreviews` | `mailer` (`mailer`) | Middleware showing sample emails at `/_mail` — development only (18.35.0). See [Previews](/features/email/#previews) |
 
 ## Other
 

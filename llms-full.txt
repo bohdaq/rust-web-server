@@ -9601,6 +9601,39 @@ Channels are in-process: each replica has its own subscribers. Behind several re
 
 ---
 
+# Events
+
+<https://rws8.tech/docs/features/events/>
+
+`events::EventBus` decouples the code that does something from the code that reacts to it: publish an event value, and every subscriber to its type runs (18.35.0).
+
+```rust
+use rust_web_server::events::EventBus;
+
+#[derive(Clone)]
+struct OrderPlaced { id: i64, email: String }
+
+let bus = EventBus::new();
+bus.subscribe(|e: &OrderPlaced| println!("send the receipt for {} to {}", e.id, e.email));
+bus.subscribe(|e: &OrderPlaced| println!("update stock for {}", e.id));
+
+// In the handler that places the order:
+bus.publish(&OrderPlaced { id: 7, email: "ann@example.com".into() });
+```
+
+| Method | What it does |
+|---|---|
+| `subscribe(\|e: &E\| …)` | Runs the closure for every `E` published from now on; returns a `SubscriptionId` |
+| `unsubscribe(id)` | Stops one subscription |
+| `publish(&event)` | Runs the subscribers of the event's type in subscription order; returns how many completed |
+| `subscribers::()` | How many there are |
+| `forward_to_mcp(server, method, \|e\| json)` | Sends each `E` to MCP clients as a notification (`McpServer::notify`) |
+| `forward_to_channel(hub, \|e\| topic, \|e\| message)` | Publishes each `E` to a [channel](/features/channels/) topic — live updates in pages |
+
+Subscribers run on the publishing thread. One that panics is skipped and reported on stderr; the others still run. Keep them quick: anything slow (sending mail, calling an API) belongs in a [job](/features/jobs/) the subscriber enqueues. A bus is cheap to clone and all clones share the subscribers; put one in the app state. Events stay in the process — across replicas, use a queue.
+
+---
+
 # Authentication
 
 <https://rws8.tech/docs/features/auth/>
@@ -11431,6 +11464,81 @@ let app = App::with_state(state)
         r
     });
 ```
+
+## Templates
+
+With the `tera` feature, `render(name, &ctx)` on the builder sets the bodies from the templates `<name>.txt` and `<name>.html` of the global engine ([`template::init`](/building-apps/templates/)), whichever exist (18.35.0):
+
+```rust,no_run
+use rust_web_server::mailer::Email;
+use rust_web_server::template::Context;
+
+let mut ctx = Context::new();
+ctx.insert("name", "Ann");
+let email = Email::builder()
+    .to("ann@example.com")
+    .subject("Welcome")
+    .render("mail/welcome", &ctx)?     // templates/mail/welcome.txt and .html
+    .build()?;
+```
+
+`render_with(&engine, name, &ctx)` uses a given `TeraEngine`. HTML templates are escaped as usual; `.txt` ones aren't.
+
+## Attachments
+
+A `Mail` is an `Email` plus attachments; `Mailer::send_mail` sends it as `multipart/mixed` with each file in base64:
+
+```rust,no_run
+use rust_web_server::mailer::{Mail, MailAttachment};
+
+let mail = Mail::new(email).attach(MailAttachment::new("invoice.pdf", "application/pdf", pdf_bytes));
+mailer.send_mail(&mail)?;
+```
+
+## Transports and tests
+
+`Deliver` is what sends a `Mail`: `Mailer` (SMTP), `TestMailbox`, or your own (an email API over HTTP). Code that takes an `Arc<dyn Deliver>` can be tested without SMTP:
+
+```rust
+use std::sync::Arc;
+use rust_web_server::mailer::{Deliver, Email, Mail, TestMailbox};
+
+let mailbox = TestMailbox::new();
+let transport: Arc<dyn Deliver> = Arc::new(mailbox.clone());
+transport.deliver(&Mail::new(Email::builder().to("ann@example.com").subject("Hi").text("Hello").build().unwrap())).unwrap();
+assert_eq!("Hi", mailbox.last_to("ann@example.com").unwrap().email.subject);
+```
+
+`TestMailbox` keeps everything it's given (`sent`, `last`, `last_to`, `count`, `clear`; clones share it) — a transport for local development too.
+
+## Sending later
+
+Sending takes a network round trip; a request shouldn't wait for it:
+
+```rust,no_run
+// In memory (`jobs`): sent on the queue's workers, with its retries.
+mail.deliver_later(&job_queue, Arc::clone(&transport));
+
+// Persistent (`jobs` + a `model-*` feature): survives a restart, retried like any job.
+rust_web_server::mailer::register_delivery(&persistent_queue, transport);   // once, in the worker process
+mail.enqueue(&persistent_queue, EnqueueOptions::new().queue("mailers")).await?;
+```
+
+A persistent mail is a [job](/features/jobs/#persistentjobqueue) of type `rws.mail` whose payload is `Mail::to_payload()`.
+
+## Previews
+
+`MailPreviews` is a middleware that shows what each email looks like, built from sample data, without sending anything — mount it **in development only**:
+
+```rust,no_run
+use rust_web_server::mailer::{Email, MailPreviews};
+
+let previews = MailPreviews::new("/_mail")
+    .add("welcome", || Ok(Email::builder().to("ann@example.com").subject("Welcome").render("mail/welcome", &sample_context())?.build()?.into()));
+let app = app.wrap(previews);
+```
+
+`/_mail` lists the previews; `/_mail/welcome` shows the headers, attachments, the HTML body in a sandboxed frame and the text body; `/_mail/welcome.html` and `.txt` are the bodies alone.
 
 ## Use cases
 
@@ -13550,8 +13658,9 @@ current poll; join the returned handles to wait for them.
 
 ### Crash safety
 
-`PersistentJobQueue::new()` creates the `rws_jobs` table if it doesn't exist,
-then resets any row left `status = 'running'` back to `pending` — those rows
+`PersistentJobQueue::new()` creates the `rws_jobs` table if it doesn't exist
+(adding the `queue`, `priority` and `unique_key` columns to one from before
+18.35.0), then resets any row left `status = 'running'` back to `pending` — those rows
 were being processed when the previous instance crashed or was killed, so they
 get picked up again on the next poll.
 
@@ -13579,6 +13688,56 @@ let queue = PersistentJobQueue::new(pool).await?
 Use `enqueue_with_retries(job_type, payload, max_retries)` to override the
 retry count for a single job instead of the queue-wide default.
 
+### When, where and how often
+
+`enqueue_with(job_type, payload, options)` takes `EnqueueOptions` (18.35.0):
+
+```rust,no_run
+# async fn example(queue: &rust_web_server::jobs::PersistentJobQueue) -> Result<(), rust_web_server::model::DbError> {
+use std::time::Duration;
+use rust_web_server::jobs::EnqueueOptions;
+
+queue.enqueue_with("send_reminder", "user:42", EnqueueOptions::new()
+    .run_in(Duration::from_secs(24 * 3600))   // or .run_at(SystemTime)
+    .queue("mailers")                          // default "default"
+    .priority(10)                              // higher first among due jobs; default 0
+    .unique("reminder:42")                     // skipped while one with this key is pending or running
+    .max_retries(5)).await?;
+# Ok(())
+# }
+```
+
+| Option | Effect |
+|---|---|
+| `run_at(time)` / `run_in(delay)` | Not claimed before that time (second precision) |
+| `queue(name)` | A named queue; `PersistentJobQueue::queues(&["mailers"])` makes a process take only those |
+| `priority(n)` | Due jobs run highest priority first, then oldest due |
+| `unique(key)` | While a job of the same type with that key is pending or running, `enqueue_with` returns its id and inserts nothing. Checked when enqueuing, so two enqueues at the same instant from different processes can both insert |
+| `max_retries(n)` | Overrides the queue's default |
+
+### The dead-letter list
+
+A job that exhausts its retries stays in `rws_jobs` with `status = 'failed'` and its `last_error`. `failed_jobs(limit)` lists them, `retry(id)` puts one back in the queue (due now, attempts reset), `delete(id)` removes it, and `on_dead(|job| …)` is called as each one fails for good — to alert someone, say. `jobs(status, limit)` lists any status as `JobInfo` rows.
+
+### Recurring jobs across replicas
+
+`schedule(name, cron, job_type, payload)` enqueues a job on a six-field cron schedule (seconds first, UTC, as [`Scheduler`](/features/scheduler/)). Every replica can declare the same schedule: each due time is claimed by exactly one of them with a compare-and-set on the schedule's row in `rws_job_schedules`, and only that one enqueues the job. Runs missed while every replica was down collapse into one.
+
+```rust,no_run
+# async fn example(pool: rust_web_server::model::DbPool) -> Result<(), Box<dyn std::error::Error>> {
+use std::sync::Arc;
+use rust_web_server::jobs::PersistentJobQueue;
+
+let queue = Arc::new(PersistentJobQueue::new(pool).await?
+    .schedule("nightly-report", "0 0 3 * * *", "build_report", "")?);
+queue.register("build_report", |_| Ok(()));
+Arc::clone(&queue).start(2);   // the first worker checks the schedules about once a second
+# Ok(())
+# }
+```
+
+`schedule_with(…, options)` gives the enqueued jobs `EnqueueOptions`; `tick_schedules()` runs one check in a loop of your own.
+
 ### Testing without a background poll loop
 
 `tick()` runs a single poll-claim-execute cycle and returns whether a job was
@@ -13605,7 +13764,8 @@ assert_eq!(false, queue.tick().await?); // nothing left to do
 `claim_next` claims a row with `UPDATE rws_jobs SET status = 'running' WHERE id = ? AND status = 'pending'`
 — if two workers (in the same process or different processes sharing the
 same database) race to claim the same row, only one `UPDATE` succeeds, so the
-other worker simply moves on. This is safe under SQLite, PostgreSQL, and MySQL.
+other worker simply moves on. This is safe under SQLite, PostgreSQL, and MySQL; CI runs the queue's tests on
+all three. (Before 18.35.0 the queue's SQL only worked on SQLite.)
 :::
 
 ---
@@ -24791,10 +24951,13 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | Type / Trait | Module | Description |
 |---|---|---|
 | `Scheduler` | `scheduler` | Recurring tasks: `.every(d, f)`, `.after(d, f)`, `.cron(expr, f)`. See [Scheduler](/features/scheduler/) |
-| `CronSchedule` | `scheduler` | Parsed six-field cron expression (`sec min hour day month weekday`) |
+| `CronSchedule` | `scheduler` | Parsed six-field cron expression (`sec min hour day month weekday`); `next_after(epoch)` gives the next matching second (18.35.0) |
 | `Job` | `jobs` (`jobs`) | Job trait, implemented for `Fn() -> Result<(), String> + Send` closures. See [Jobs](/features/jobs/) |
 | `JobQueue` | `jobs` (`jobs`) | In-memory worker pool with retry and exponential backoff; not crash-safe |
 | `PersistentJobQueue` | `jobs` (`jobs` + a `model-*` feature) | Crash-safe queue in a `rws_jobs` table; `(job_type, payload)` jobs dispatched to registered handlers |
+| `EnqueueOptions` | `jobs` (`jobs` + a `model-*` feature) | Per-job `run_at`/`run_in`, `queue`, `priority`, `unique(key)`, `max_retries` for `PersistentJobQueue::enqueue_with` (18.35.0). See [Jobs](/features/jobs/#when-where-and-how-often) |
+| `JobInfo` | `jobs` (`jobs` + a `model-*` feature) | A job's row (`jobs`, `failed_jobs` — the dead-letter list; `retry`, `delete`, `on_dead`) (18.35.0) |
+| `EventBus` / `SubscriptionId` | `events` | Typed in-process events: `subscribe(\|e: &E\| …)`, `publish(&event)`, `forward_to_mcp`, `forward_to_channel` (18.35.0). See [Events](/features/events/) |
 
 ## Storage and mail
 
@@ -24814,6 +24977,9 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `EmailBuilder` | `mailer` (`mailer`) | `.to`, `.cc`, `.bcc`, `.reply_to`, `.subject`, `.text`, `.html`, `.build()` (`multipart/alternative` when both bodies are set) |
 | `SmtpTls` | `mailer` (`mailer`) | `None` (25), `Starttls` (587, default), `Smtps` (465) |
 | `MailerError` | `mailer` (`mailer`) | `MissingConfig`, `Io`, `Smtp`, `Build` |
+| `Mail` / `MailAttachment` | `mailer` (`mailer`) | An `Email` with attachments: `Mailer::send_mail`, `deliver_later(&JobQueue, transport)`, `enqueue(&PersistentJobQueue, options)`, `to_payload`/`from_payload` (18.35.0). See [Email](/features/email/#attachments) |
+| `Deliver` / `TestMailbox` | `mailer` (`mailer`) | What sends a `Mail` (`Mailer`, or your own); `TestMailbox` keeps it instead (`sent`, `last`, `last_to`) (18.35.0) |
+| `MailPreviews` | `mailer` (`mailer`) | Middleware showing sample emails at `/_mail` — development only (18.35.0). See [Previews](/features/email/#previews) |
 
 ## Other
 

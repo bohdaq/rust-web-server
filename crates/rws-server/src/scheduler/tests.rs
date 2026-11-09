@@ -225,3 +225,21 @@ fn scheduler_default() {
     let s: Scheduler = Default::default();
     assert_eq!(s.tasks.len(), 0);
 }
+
+#[test]
+fn next_after_finds_the_next_matching_second() {
+    // 2026-11-10T12:34:56Z
+    let now = 1_794_314_096;
+    assert_eq!(epoch_to_datetime(now), (56, 34, 12, 10, 11, 2));
+    let every_minute = CronSchedule::parse("0 * * * * *").unwrap();
+    assert_eq!(Some(now + 4), every_minute.next_after(now));
+    let daily_3am = CronSchedule::parse("0 0 3 * * *").unwrap();
+    let next = daily_3am.next_after(now).unwrap();
+    assert_eq!((0, 0, 3, 11, 11, 3), epoch_to_datetime(next));
+    // Strictly after: a matching second isn't its own next.
+    assert_eq!(Some(next + 86_400), daily_3am.next_after(next));
+    let feb_31 = CronSchedule::parse("0 0 0 31 2 *").unwrap();
+    assert_eq!(None, feb_31.next_after(now));
+    let every_second = CronSchedule::parse("* * * * * *").unwrap();
+    assert_eq!(Some(now + 1), every_second.next_after(now));
+}

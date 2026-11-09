@@ -114,6 +114,7 @@ pub use rws_server::router;
 pub use rws_server::group;
 pub use rws_server::flash;
 pub use rws_server::channels;
+pub use rws_server::events;
 #[cfg(feature = "serde")]
 pub use rws_server::vite;
 pub use rws_server::handler;

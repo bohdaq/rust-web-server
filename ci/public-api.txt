@@ -199,6 +199,8 @@ impl core::clone::Clone for rust_web_server::dev_mcp::DevTools
 impl core::clone::Clone for rust_web_server::early_hints::EarlyHintsLayer
 impl core::clone::Clone for rust_web_server::entry_point::Config
 impl core::clone::Clone for rust_web_server::entry_point::RwsEnv
+impl core::clone::Clone for rust_web_server::events::EventBus
+impl core::clone::Clone for rust_web_server::events::SubscriptionId
 impl core::clone::Clone for rust_web_server::extract::RequestId
 impl core::clone::Clone for rust_web_server::fastcgi::Address
 impl core::clone::Clone for rust_web_server::fastcgi::FastCgi
@@ -507,6 +509,7 @@ impl core::cmp::Eq for rust_web_server::cors::Cors
 impl core::cmp::Eq for rust_web_server::entry_point::Config
 impl core::cmp::Eq for rust_web_server::entry_point::RwsEnv
 impl core::cmp::Eq for rust_web_server::error::AppError
+impl core::cmp::Eq for rust_web_server::events::SubscriptionId
 impl core::cmp::Eq for rust_web_server::flash::Flash
 impl core::cmp::Eq for rust_web_server::flash::FlashMessage
 impl core::cmp::Eq for rust_web_server::gateway_api::types::BackendObjectReference
@@ -643,6 +646,7 @@ impl core::cmp::PartialEq for rust_web_server::entry_point::Config
 impl core::cmp::PartialEq for rust_web_server::entry_point::RwsEnv
 impl core::cmp::PartialEq for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::cmp::PartialEq for rust_web_server::error::AppError
+impl core::cmp::PartialEq for rust_web_server::events::SubscriptionId
 impl core::cmp::PartialEq for rust_web_server::fastcgi::Address
 impl core::cmp::PartialEq for rust_web_server::fastcgi::Record
 impl core::cmp::PartialEq for rust_web_server::flash::Flash
@@ -887,6 +891,7 @@ impl core::default::Default for rust_web_server::dev_mcp::DevTools
 impl core::default::Default for rust_web_server::di::Container
 impl core::default::Default for rust_web_server::entry_point::RwsEnv
 impl core::default::Default for rust_web_server::entry_point::config_file::ConfigSettings
+impl core::default::Default for rust_web_server::events::EventBus
 impl core::default::Default for rust_web_server::flash::Flash
 impl core::default::Default for rust_web_server::flash::FlashLayer
 impl core::default::Default for rust_web_server::gateway_api::dataplane::DataPlane
@@ -1101,6 +1106,7 @@ impl core::fmt::Debug for rust_web_server::entry_point::Config
 impl core::fmt::Debug for rust_web_server::entry_point::RwsEnv
 impl core::fmt::Debug for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::fmt::Debug for rust_web_server::error::AppError
+impl core::fmt::Debug for rust_web_server::events::SubscriptionId
 impl core::fmt::Debug for rust_web_server::extract::Body
 impl core::fmt::Debug for rust_web_server::extract::BodyText
 impl core::fmt::Debug for rust_web_server::extract::Query
@@ -1400,6 +1406,7 @@ impl core::hash::Hash for rust_web_server::authz::rebac::Subject
 impl core::hash::Hash for rust_web_server::authz::rebac::Tuple
 impl core::hash::Hash for rust_web_server::compression::Encoding
 impl core::hash::Hash for rust_web_server::compression::dictionary::DictionaryEncoding
+impl core::hash::Hash for rust_web_server::events::SubscriptionId
 impl core::hash::Hash for rust_web_server::model::RelationKind
 impl core::hash::Hash for rust_web_server::model::timestamp::Timestamp
 impl core::hash::Hash for rust_web_server::model::uuid::Uuid
@@ -1416,6 +1423,7 @@ impl core::marker::Copy for rust_web_server::compression::dictionary::Dictionary
 impl core::marker::Copy for rust_web_server::core::base64::Alphabet
 impl core::marker::Copy for rust_web_server::core::base64::Decoder
 impl core::marker::Copy for rust_web_server::entry_point::RwsEnv
+impl core::marker::Copy for rust_web_server::events::SubscriptionId
 impl core::marker::Copy for rust_web_server::flash::FlashLayer
 impl core::marker::Copy for rust_web_server::generator::BaseType
 impl core::marker::Copy for rust_web_server::generator::ChangeKind
@@ -1558,6 +1566,8 @@ impl core::marker::Freeze for rust_web_server::entry_point::RwsEnv
 impl core::marker::Freeze for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Freeze for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Freeze for rust_web_server::error::AppError
+impl core::marker::Freeze for rust_web_server::events::EventBus
+impl core::marker::Freeze for rust_web_server::events::SubscriptionId
 impl core::marker::Freeze for rust_web_server::ext::date_time_ext::DateTimeExt
 impl core::marker::Freeze for rust_web_server::ext::string_ext::StringExt
 impl core::marker::Freeze for rust_web_server::extract::Body
@@ -2047,6 +2057,8 @@ impl core::marker::Send for rust_web_server::entry_point::RwsEnv
 impl core::marker::Send for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Send for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Send for rust_web_server::error::AppError
+impl core::marker::Send for rust_web_server::events::EventBus
+impl core::marker::Send for rust_web_server::events::SubscriptionId
 impl core::marker::Send for rust_web_server::ext::date_time_ext::DateTimeExt
 impl core::marker::Send for rust_web_server::ext::string_ext::StringExt
 impl core::marker::Send for rust_web_server::extract::Body
@@ -2490,6 +2502,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::entry_point::Config
 impl core::marker::StructuralPartialEq for rust_web_server::entry_point::RwsEnv
 impl core::marker::StructuralPartialEq for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::StructuralPartialEq for rust_web_server::error::AppError
+impl core::marker::StructuralPartialEq for rust_web_server::events::SubscriptionId
 impl core::marker::StructuralPartialEq for rust_web_server::fastcgi::Address
 impl core::marker::StructuralPartialEq for rust_web_server::fastcgi::Record
 impl core::marker::StructuralPartialEq for rust_web_server::flash::Flash
@@ -2791,6 +2804,8 @@ impl core::marker::Sync for rust_web_server::entry_point::RwsEnv
 impl core::marker::Sync for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Sync for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Sync for rust_web_server::error::AppError
+impl core::marker::Sync for rust_web_server::events::EventBus
+impl core::marker::Sync for rust_web_server::events::SubscriptionId
 impl core::marker::Sync for rust_web_server::ext::date_time_ext::DateTimeExt
 impl core::marker::Sync for rust_web_server::ext::string_ext::StringExt
 impl core::marker::Sync for rust_web_server::extract::Body
@@ -3293,6 +3308,8 @@ impl core::marker::Unpin for rust_web_server::entry_point::RwsEnv
 impl core::marker::Unpin for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Unpin for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Unpin for rust_web_server::error::AppError
+impl core::marker::Unpin for rust_web_server::events::EventBus
+impl core::marker::Unpin for rust_web_server::events::SubscriptionId
 impl core::marker::Unpin for rust_web_server::ext::date_time_ext::DateTimeExt
 impl core::marker::Unpin for rust_web_server::ext::string_ext::StringExt
 impl core::marker::Unpin for rust_web_server::extract::Body
@@ -3801,6 +3818,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::entry_point::RwsEnv
 impl core::marker::UnsafeUnpin for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::UnsafeUnpin for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::UnsafeUnpin for rust_web_server::error::AppError
+impl core::marker::UnsafeUnpin for rust_web_server::events::EventBus
+impl core::marker::UnsafeUnpin for rust_web_server::events::SubscriptionId
 impl core::marker::UnsafeUnpin for rust_web_server::ext::date_time_ext::DateTimeExt
 impl core::marker::UnsafeUnpin for rust_web_server::ext::string_ext::StringExt
 impl core::marker::UnsafeUnpin for rust_web_server::extract::Body
@@ -4307,6 +4326,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::R
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::error::AppError
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::events::EventBus
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::events::SubscriptionId
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::ext::date_time_ext::DateTimeExt
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::ext::string_ext::StringExt
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::extract::Body
@@ -4772,6 +4793,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::RwsE
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::error::AppError
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::events::EventBus
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::events::SubscriptionId
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::ext::date_time_ext::DateTimeExt
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::ext::string_ext::StringExt
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::extract::Body
@@ -5279,6 +5302,7 @@ impl rust_web_server::error::IntoResponse for alloc::string::String
 impl rust_web_server::error::IntoResponse for rust_web_server::error::AppError
 impl rust_web_server::error::IntoResponse for rust_web_server::flash::Redirect
 impl rust_web_server::error::IntoResponse for rust_web_server::response::Response
+impl rust_web_server::events::EventBus
 impl rust_web_server::ext::date_time_ext::DateTimeExt
 impl rust_web_server::ext::string_ext::StringExt
 impl rust_web_server::extract::Body
@@ -8118,6 +8142,19 @@ pub fn rust_web_server::error::problem(&rust_web_server::response::StatusCodeRea
 pub fn rust_web_server::error::problem::problem(&rust_web_server::response::StatusCodeReasonPhrase, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem::problem_with_text(&rust_web_server::response::StatusCodeReasonPhrase, &str, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem::text_errors() -> bool
+pub fn rust_web_server::events::EventBus::clone(&self) -> Self
+pub fn rust_web_server::events::EventBus::default() -> Self
+pub fn rust_web_server::events::EventBus::forward_to_channel<E, T, M>(&self, rust_web_server::channels::Hub, T, M) -> rust_web_server::events::SubscriptionId where E: core::any::Any, T: core::ops::function::Fn(&E) -> alloc::string::String + core::marker::Send + core::marker::Sync + 'static, M: core::ops::function::Fn(&E) -> alloc::string::String + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::events::EventBus::forward_to_mcp<E, F>(&self, rust_web_server::mcp::McpServer, &str, F) -> rust_web_server::events::SubscriptionId where E: core::any::Any, F: core::ops::function::Fn(&E) -> alloc::string::String + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::events::EventBus::new() -> Self
+pub fn rust_web_server::events::EventBus::publish<E: core::any::Any>(&self, &E) -> usize
+pub fn rust_web_server::events::EventBus::subscribe<E, F>(&self, F) -> rust_web_server::events::SubscriptionId where E: core::any::Any, F: core::ops::function::Fn(&E) + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::events::EventBus::subscribers<E: core::any::Any>(&self) -> usize
+pub fn rust_web_server::events::EventBus::unsubscribe(&self, rust_web_server::events::SubscriptionId) -> bool
+pub fn rust_web_server::events::SubscriptionId::clone(&self) -> Self
+pub fn rust_web_server::events::SubscriptionId::eq(&self, &Self) -> bool
+pub fn rust_web_server::events::SubscriptionId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::events::SubscriptionId::hash<__H: core::hash::Hasher>(&self, &mut __H)
 pub fn rust_web_server::ext::date_time_ext::DateTimeExt::_now_unix_epoch_nanos() -> u128
 pub fn rust_web_server::ext::date_time_ext::DateTimeExt::_system_time_to_unix_nanos(std::time::SystemTime) -> u128
 pub fn rust_web_server::ext::string_ext::StringExt::filter_ascii_control_characters(&str) -> alloc::string::String
@@ -9986,6 +10023,7 @@ pub fn rust_web_server::scheduler::cron::CronSchedule::clone(&self) -> Self
 pub fn rust_web_server::scheduler::cron::CronSchedule::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::scheduler::cron::CronSchedule::matches_epoch(&self, u64) -> bool
 pub fn rust_web_server::scheduler::cron::CronSchedule::matches_now(&self) -> bool
+pub fn rust_web_server::scheduler::cron::CronSchedule::next_after(&self, u64) -> core::option::Option<u64>
 pub fn rust_web_server::scheduler::cron::CronSchedule::parse(&str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::schema::JsonSchema::is_optional() -> bool
 pub fn rust_web_server::schema::JsonSchema::json_schema() -> alloc::string::String
@@ -10636,6 +10674,7 @@ pub mod rust_web_server::entry_point::config_file
 pub mod rust_web_server::entry_point::environment_variables
 pub mod rust_web_server::error
 pub mod rust_web_server::error::problem
+pub mod rust_web_server::events
 pub mod rust_web_server::ext
 pub mod rust_web_server::ext::date_time_ext
 pub mod rust_web_server::ext::string_ext
@@ -12553,6 +12592,8 @@ pub struct rust_web_server::early_hints::EarlyHintsLayer
 pub struct rust_web_server::entry_point::Config
 pub struct rust_web_server::entry_point::command_line_args::CommandLineArgument
 pub struct rust_web_server::entry_point::config_file::ConfigSettings
+pub struct rust_web_server::events::EventBus
+pub struct rust_web_server::events::SubscriptionId(_)
 pub struct rust_web_server::ext::date_time_ext::DateTimeExt
 pub struct rust_web_server::ext::string_ext::StringExt
 pub struct rust_web_server::extract::Body(pub alloc::vec::Vec<u8>)

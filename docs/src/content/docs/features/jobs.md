@@ -136,8 +136,9 @@ current poll; join the returned handles to wait for them.
 
 ### Crash safety
 
-`PersistentJobQueue::new()` creates the `rws_jobs` table if it doesn't exist,
-then resets any row left `status = 'running'` back to `pending` — those rows
+`PersistentJobQueue::new()` creates the `rws_jobs` table if it doesn't exist
+(adding the `queue`, `priority` and `unique_key` columns to one from before
+18.35.0), then resets any row left `status = 'running'` back to `pending` — those rows
 were being processed when the previous instance crashed or was killed, so they
 get picked up again on the next poll.
 
@@ -165,6 +166,56 @@ let queue = PersistentJobQueue::new(pool).await?
 Use `enqueue_with_retries(job_type, payload, max_retries)` to override the
 retry count for a single job instead of the queue-wide default.
 
+### When, where and how often
+
+`enqueue_with(job_type, payload, options)` takes `EnqueueOptions` (18.35.0):
+
+```rust,no_run
+# async fn example(queue: &rust_web_server::jobs::PersistentJobQueue) -> Result<(), rust_web_server::model::DbError> {
+use std::time::Duration;
+use rust_web_server::jobs::EnqueueOptions;
+
+queue.enqueue_with("send_reminder", "user:42", EnqueueOptions::new()
+    .run_in(Duration::from_secs(24 * 3600))   // or .run_at(SystemTime)
+    .queue("mailers")                          // default "default"
+    .priority(10)                              // higher first among due jobs; default 0
+    .unique("reminder:42")                     // skipped while one with this key is pending or running
+    .max_retries(5)).await?;
+# Ok(())
+# }
+```
+
+| Option | Effect |
+|---|---|
+| `run_at(time)` / `run_in(delay)` | Not claimed before that time (second precision) |
+| `queue(name)` | A named queue; `PersistentJobQueue::queues(&["mailers"])` makes a process take only those |
+| `priority(n)` | Due jobs run highest priority first, then oldest due |
+| `unique(key)` | While a job of the same type with that key is pending or running, `enqueue_with` returns its id and inserts nothing. Checked when enqueuing, so two enqueues at the same instant from different processes can both insert |
+| `max_retries(n)` | Overrides the queue's default |
+
+### The dead-letter list
+
+A job that exhausts its retries stays in `rws_jobs` with `status = 'failed'` and its `last_error`. `failed_jobs(limit)` lists them, `retry(id)` puts one back in the queue (due now, attempts reset), `delete(id)` removes it, and `on_dead(|job| …)` is called as each one fails for good — to alert someone, say. `jobs(status, limit)` lists any status as `JobInfo` rows.
+
+### Recurring jobs across replicas
+
+`schedule(name, cron, job_type, payload)` enqueues a job on a six-field cron schedule (seconds first, UTC, as [`Scheduler`](/features/scheduler/)). Every replica can declare the same schedule: each due time is claimed by exactly one of them with a compare-and-set on the schedule's row in `rws_job_schedules`, and only that one enqueues the job. Runs missed while every replica was down collapse into one.
+
+```rust,no_run
+# async fn example(pool: rust_web_server::model::DbPool) -> Result<(), Box<dyn std::error::Error>> {
+use std::sync::Arc;
+use rust_web_server::jobs::PersistentJobQueue;
+
+let queue = Arc::new(PersistentJobQueue::new(pool).await?
+    .schedule("nightly-report", "0 0 3 * * *", "build_report", "")?);
+queue.register("build_report", |_| Ok(()));
+Arc::clone(&queue).start(2);   // the first worker checks the schedules about once a second
+# Ok(())
+# }
+```
+
+`schedule_with(…, options)` gives the enqueued jobs `EnqueueOptions`; `tick_schedules()` runs one check in a loop of your own.
+
 ### Testing without a background poll loop
 
 `tick()` runs a single poll-claim-execute cycle and returns whether a job was
@@ -191,5 +242,6 @@ assert_eq!(false, queue.tick().await?); // nothing left to do
 `claim_next` claims a row with `UPDATE rws_jobs SET status = 'running' WHERE id = ? AND status = 'pending'`
 — if two workers (in the same process or different processes sharing the
 same database) race to claim the same row, only one `UPDATE` succeeds, so the
-other worker simply moves on. This is safe under SQLite, PostgreSQL, and MySQL.
+other worker simply moves on. This is safe under SQLite, PostgreSQL, and MySQL; CI runs the queue's tests on
+all three. (Before 18.35.0 the queue's SQL only worked on SQLite.)
 :::

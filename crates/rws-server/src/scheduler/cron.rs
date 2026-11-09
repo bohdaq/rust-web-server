@@ -131,6 +131,29 @@ impl CronSchedule {
         self.matches_epoch(secs)
     }
 
+    /// The first second after `epoch_secs` (UTC) that matches, within the
+    /// next five years; `None` for a schedule that never fires in that time
+    /// (`0 0 0 31 2 *`).
+    pub fn next_after(&self, epoch_secs: u64) -> Option<u64> {
+        let mut t = epoch_secs.checked_add(1)?;
+        let limit = epoch_secs.saturating_add(5 * 366 * 86_400);
+        while t <= limit {
+            let (sec, min, hour, day, month, dow) = epoch_to_datetime(t);
+            if !(self.months.matches(month) && self.days_of_month.matches(day) && self.days_of_week.matches(dow)) {
+                t = (t / 86_400 + 1) * 86_400;
+            } else if !self.hours.matches(hour) {
+                t = (t / 3_600 + 1) * 3_600;
+            } else if !self.minutes.matches(min) {
+                t = (t / 60 + 1) * 60;
+            } else if !self.seconds.matches(sec) {
+                t += 1;
+            } else {
+                return Some(t);
+            }
+        }
+        None
+    }
+
     /// Returns `true` if the given Unix timestamp (seconds since epoch, UTC) matches.
     pub fn matches_epoch(&self, epoch_secs: u64) -> bool {
         let (sec, min, hour, day, month, dow) = epoch_to_datetime(epoch_secs);

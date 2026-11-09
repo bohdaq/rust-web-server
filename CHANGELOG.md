@@ -29,6 +29,26 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   - **Attachments on models** (`attachment`, any `storage-*` feature): a
     file in a `Storage` backend as one `TEXT` column, from a multipart
     upload with `Attachment::from_multipart`.
+- **Jobs, mail and events** (roadmap #93):
+  - **`PersistentJobQueue`**: `enqueue_with(type, payload, EnqueueOptions)` —
+    `run_at`/`run_in`, named `queue`s (`queues(&[…])` limits a process),
+    `priority`, `unique(key)`; the dead-letter list (`failed_jobs`, `retry`,
+    `delete`, `on_dead`, `jobs`); `schedule(name, cron, type, payload)`
+    enqueues on a cron schedule once per due time across replicas
+    (`rws_job_schedules`). `CronSchedule::next_after`.
+  - **Mail**: `Mail` (an `Email` with `MailAttachment`s, sent as
+    `multipart/mixed` by `Mailer::send_mail`); the `Deliver` trait and
+    `TestMailbox`; `deliver_later` on a `JobQueue` and `Mail::enqueue` +
+    `register_delivery` on a `PersistentJobQueue`; `EmailBuilder::render`
+    from `<name>.txt`/`.html` templates (`tera`); `MailPreviews` at `/_mail`.
+  - **`events::EventBus`**: typed in-process events, forwarded to MCP
+    notifications or channel topics.
+
+### Fixed
+
+- **`PersistentJobQueue` on PostgreSQL and MySQL**: its SQL used `?`
+  placeholders (PostgreSQL wants `$1`…) and a `TEXT` primary key (MySQL
+  refuses one), so it only worked on SQLite. CI now runs it on all three.
 
 ### Changed
 

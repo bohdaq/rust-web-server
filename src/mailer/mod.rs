@@ -59,6 +59,10 @@ use std::time::Duration;
 
 #[cfg(test)]
 mod tests;
+mod delivery;
+pub use delivery::{Deliver, Mail, MailAttachment, MailPreviews, TestMailbox, MAIL_JOB_TYPE};
+#[cfg(all(feature = "jobs", any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
+pub use delivery::register_delivery;
 
 // ── Error ──────────────────────────────────────────────────────────────────────
 
@@ -289,10 +293,19 @@ impl Mailer {
 
     /// Send an email.
     pub fn send(&self, email: &Email) -> Result<(), MailerError> {
+        self.send_parts(email, &[])
+    }
+
+    /// Send an email with its attachments (18.35.0).
+    pub fn send_mail(&self, mail: &Mail) -> Result<(), MailerError> {
+        self.send_parts(&mail.email, &mail.attachments)
+    }
+
+    fn send_parts(&self, email: &Email, attachments: &[MailAttachment]) -> Result<(), MailerError> {
         match self.tls {
-            SmtpTls::None     => self.send_plain(email),
-            SmtpTls::Starttls => self.send_starttls(email),
-            SmtpTls::Smtps    => self.send_smtps(email),
+            SmtpTls::None     => self.send_plain(email, attachments),
+            SmtpTls::Starttls => self.send_starttls(email, attachments),
+            SmtpTls::Smtps    => self.send_smtps(email, attachments),
         }
     }
 
@@ -304,7 +317,7 @@ impl Mailer {
         Ok(stream)
     }
 
-    fn send_plain(&self, email: &Email) -> Result<(), MailerError> {
+    fn send_plain(&self, email: &Email, attachments: &[MailAttachment]) -> Result<(), MailerError> {
         let stream = self.connect()?;
         smtp_full_session(
             stream,
@@ -312,12 +325,14 @@ impl Mailer {
             self.password.as_deref(),
             &self.from,
             email,
+            attachments,
         )
     }
 
-    fn send_starttls(&self, email: &Email) -> Result<(), MailerError> {
+    fn send_starttls(&self, email: &Email, attachments: &[MailAttachment]) -> Result<(), MailerError> {
         #[cfg(not(any(feature = "http-client", feature = "http2")))]
         {
+            let _ = (email, attachments);
             return Err(MailerError::Smtp(
                 "STARTTLS requires the http-client or http2 feature; \
                  set RWS_SMTP_TLS=none to use a local relay without TLS"
@@ -350,13 +365,15 @@ impl Mailer {
                 self.password.as_deref(),
                 &self.from,
                 email,
+                attachments,
             )
         }
     }
 
-    fn send_smtps(&self, email: &Email) -> Result<(), MailerError> {
+    fn send_smtps(&self, email: &Email, attachments: &[MailAttachment]) -> Result<(), MailerError> {
         #[cfg(not(any(feature = "http-client", feature = "http2")))]
         {
+            let _ = (email, attachments);
             return Err(MailerError::Smtp(
                 "SMTPS (implicit TLS) requires the http-client or http2 feature".into(),
             ));
@@ -372,6 +389,7 @@ impl Mailer {
                 self.password.as_deref(),
                 &self.from,
                 email,
+                attachments,
             )
         }
     }
@@ -448,6 +466,7 @@ fn smtp_deliver<S: Read + Write>(
     conn: &mut SmtpConn<S>,
     from: &str,
     email: &Email,
+    attachments: &[MailAttachment],
 ) -> Result<(), MailerError> {
     // An address goes into an SMTP command line: one with CR, LF or angle
     // brackets could end the command and inject others (#47).
@@ -467,7 +486,7 @@ fn smtp_deliver<S: Read + Write>(
     conn.cmd("DATA")?;
     conn.expect(354)?;
 
-    let msg = build_message(from, email);
+    let msg = build_message_with(from, email, attachments);
     conn.reader.get_mut().write_all(msg.as_bytes())?;
     // SMTP DATA terminator: end the message body then signal end-of-data.
     conn.reader.get_mut().write_all(b"\r\n.\r\n")?;
@@ -488,6 +507,7 @@ fn smtp_full_session<S: Read + Write>(
     pass: Option<&str>,
     from: &str,
     email: &Email,
+    attachments: &[MailAttachment],
 ) -> Result<(), MailerError> {
     let mut conn = SmtpConn::new(stream);
     conn.expect(220)?;
@@ -496,7 +516,7 @@ fn smtp_full_session<S: Read + Write>(
     if let (Some(u), Some(p)) = (user, pass) {
         smtp_auth_plain(&mut conn, u, p)?;
     }
-    smtp_deliver(&mut conn, from, email)?;
+    smtp_deliver(&mut conn, from, email, attachments)?;
     Ok(())
 }
 
@@ -536,7 +556,14 @@ pub(crate) fn smtp_address_ok(addr: &str) -> bool {
 
 /// Build a minimal RFC 5322 message string (headers + blank line + body).
 /// The SMTP DATA terminator (`\r\n.\r\n`) is NOT included here.
+#[cfg(test)]
 pub(crate) fn build_message(from: &str, email: &Email) -> String {
+    build_message_with(from, email, &[])
+}
+
+/// [`build_message`] with attachments: a `multipart/mixed` message whose
+/// first part is the body, then each attachment in base64.
+pub(crate) fn build_message_with(from: &str, email: &Email, attachments: &[MailAttachment]) -> String {
     let mut msg = String::new();
 
     // Header values on one line each (#47): a CR/LF in a subject or
@@ -552,6 +579,12 @@ pub(crate) fn build_message(from: &str, email: &Email) -> String {
         msg.push_str(&format!("Reply-To: {}\r\n", Header::single_line(rt)));
     }
     msg.push_str("MIME-Version: 1.0\r\n");
+
+    let mixed = "----=_Part_rws_mixed";
+    if !attachments.is_empty() {
+        msg.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{mixed}\"\r\n\r\n"));
+        msg.push_str(&format!("--{mixed}\r\n"));
+    }
 
     match (&email.text, &email.html) {
         (Some(text), None) => {
@@ -578,7 +611,32 @@ pub(crate) fn build_message(from: &str, email: &Email) -> String {
         (None, None) => {} // caught by EmailBuilder::build
     }
 
+    for attachment in attachments {
+        let name = attachment_name(&attachment.filename);
+        let content_type = Header::single_line(&attachment.content_type).replace(['"', ';'], "");
+        msg.push_str(&format!("\r\n--{mixed}\r\n"));
+        msg.push_str(&format!("Content-Type: {content_type}; name=\"{name}\"\r\n"));
+        msg.push_str(&format!("Content-Disposition: attachment; filename=\"{name}\"\r\n"));
+        msg.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
+        let encoded = crate::core::base64::Base64::encode(&attachment.data).unwrap_or_default();
+        let lines: Vec<&str> = encoded.as_bytes().chunks(76).map(|c| std::str::from_utf8(c).unwrap_or("")).collect();
+        msg.push_str(&lines.join("\r\n"));
+    }
+    if !attachments.is_empty() {
+        msg.push_str(&format!("\r\n--{mixed}--\r\n"));
+    }
+
     msg
+}
+
+/// An attachment's file name for a quoted header parameter: one line,
+/// no quotes or backslashes, ASCII (others become `_`).
+fn attachment_name(name: &str) -> String {
+    let name: String = crate::header::Header::single_line(name)
+        .chars()
+        .map(|c| if c.is_ascii() && !matches!(c, '"' | '\\' | '\r' | '\n') && !c.is_ascii_control() { c } else { '_' })
+        .collect();
+    if name.is_empty() { "attachment".to_string() } else { name }
 }
 
 /// SMTP dot-stuffing (RFC 5321 §4.5.2): prefix any line starting with `.`

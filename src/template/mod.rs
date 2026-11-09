@@ -135,6 +135,11 @@ impl TeraEngine {
             .map_err(|e| format!("render '{}' failed: {}", template_name, e))
     }
 
+    /// Whether the engine has a template named `name` (18.35.0).
+    pub fn has_template(&self, name: &str) -> bool {
+        self.inner.get_template_names().any(|n| n == name)
+    }
+
     /// Render `template_name` and wrap the output in a `200 OK` HTML [`Response`].
     pub fn response(&self, template_name: &str, ctx: &Context) -> Result<Response, String> {
         let html = self.render(template_name, ctx)?;
@@ -208,6 +213,11 @@ pub fn global() -> std::sync::RwLockReadGuard<'static, TeraEngine> {
         .expect("template engine not initialized — call template::init() at startup")
         .read()
         .unwrap_or_else(|e| e.into_inner())
+}
+
+/// A read lock on the global engine, or `None` before [`init`] (18.35.0).
+pub fn try_global() -> Option<std::sync::RwLockReadGuard<'static, TeraEngine>> {
+    ENGINE.get().map(|lock| lock.read().unwrap_or_else(|e| e.into_inner()))
 }
 
 /// Render `template_name` with `ctx` using the global engine and return a `200 OK` HTML response.

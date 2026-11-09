@@ -238,6 +238,11 @@
         "label": "Channels",
         "link": "/features/channels/"
       },
+
+      {
+        "label": "Events",
+        "link": "/features/events/"
+      },
       {
         "label": "Auth",
         "link": "/features/auth/"

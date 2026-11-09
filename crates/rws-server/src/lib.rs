@@ -70,6 +70,7 @@ pub mod flash;
 #[cfg(feature = "serde")]
 pub mod vite;
 pub mod channels;
+pub mod events;
 pub mod handler;
 pub mod schema;
 pub mod state;
