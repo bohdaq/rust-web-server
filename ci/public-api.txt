@@ -160,6 +160,7 @@ impl core::clone::Clone for rust_web_server::app_manifest::AppPaths
 impl core::clone::Clone for rust_web_server::app_manifest::EntryKind
 impl core::clone::Clone for rust_web_server::app_manifest::LayoutEntry
 impl core::clone::Clone for rust_web_server::app_manifest::ManifestError
+impl core::clone::Clone for rust_web_server::attachment::Attachment
 impl core::clone::Clone for rust_web_server::authz::AuthzLayer
 impl core::clone::Clone for rust_web_server::authz::Identity
 impl core::clone::Clone for rust_web_server::authz::ObjectTemplate
@@ -176,6 +177,7 @@ impl core::clone::Clone for rust_web_server::cache::Purge
 impl core::clone::Clone for rust_web_server::canary::CanaryLayer
 impl core::clone::Clone for rust_web_server::canary::WeightedBackend
 impl core::clone::Clone for rust_web_server::canary::WeightedPool
+impl core::clone::Clone for rust_web_server::channels::Hub
 impl core::clone::Clone for rust_web_server::circuit_breaker::BreakerState
 impl core::clone::Clone for rust_web_server::circuit_breaker::RedisCircuitBreaker
 impl core::clone::Clone for rust_web_server::client_hint::ClientHint
@@ -202,6 +204,10 @@ impl core::clone::Clone for rust_web_server::fastcgi::Address
 impl core::clone::Clone for rust_web_server::fastcgi::FastCgi
 impl core::clone::Clone for rust_web_server::fastcgi::FastCgiConfig
 impl core::clone::Clone for rust_web_server::fastcgi::Record
+impl core::clone::Clone for rust_web_server::flash::Flash
+impl core::clone::Clone for rust_web_server::flash::FlashLayer
+impl core::clone::Clone for rust_web_server::flash::FlashMessage
+impl core::clone::Clone for rust_web_server::flash::Redirect
 impl core::clone::Clone for rust_web_server::fleet::FleetConfig
 impl core::clone::Clone for rust_web_server::fleet::Source
 impl core::clone::Clone for rust_web_server::gateway_api::backend_tls::BackendTls
@@ -455,6 +461,8 @@ impl core::clone::Clone for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::clone::Clone for rust_web_server::url::path::Part
 impl core::clone::Clone for rust_web_server::validate::FieldError
 impl core::clone::Clone for rust_web_server::virtual_host::VirtualHostConfig
+impl core::clone::Clone for rust_web_server::vite::ChunkFiles
+impl core::clone::Clone for rust_web_server::vite::Vite
 impl core::clone::Clone for rust_web_server::waf::Action
 impl core::clone::Clone for rust_web_server::waf::CustomRule
 impl core::clone::Clone for rust_web_server::waf::Exclusion
@@ -476,6 +484,7 @@ impl core::cmp::Eq for rust_web_server::app_manifest::AppPaths
 impl core::cmp::Eq for rust_web_server::app_manifest::EntryKind
 impl core::cmp::Eq for rust_web_server::app_manifest::LayoutEntry
 impl core::cmp::Eq for rust_web_server::app_manifest::ManifestError
+impl core::cmp::Eq for rust_web_server::attachment::Attachment
 impl core::cmp::Eq for rust_web_server::authz::Identity
 impl core::cmp::Eq for rust_web_server::authz::ObjectTemplate
 impl core::cmp::Eq for rust_web_server::authz::rebac::AuthzError
@@ -498,6 +507,8 @@ impl core::cmp::Eq for rust_web_server::cors::Cors
 impl core::cmp::Eq for rust_web_server::entry_point::Config
 impl core::cmp::Eq for rust_web_server::entry_point::RwsEnv
 impl core::cmp::Eq for rust_web_server::error::AppError
+impl core::cmp::Eq for rust_web_server::flash::Flash
+impl core::cmp::Eq for rust_web_server::flash::FlashMessage
 impl core::cmp::Eq for rust_web_server::gateway_api::types::BackendObjectReference
 impl core::cmp::Eq for rust_web_server::gateway_api::types::BackendRef
 impl core::cmp::Eq for rust_web_server::gateway_api::types::LocalObjectReference
@@ -566,6 +577,7 @@ impl core::cmp::Eq for rust_web_server::traffic::Class
 impl core::cmp::Eq for rust_web_server::traffic::Group
 impl core::cmp::Eq for rust_web_server::traffic::Kind
 impl core::cmp::Eq for rust_web_server::traffic::device::Device
+impl core::cmp::Eq for rust_web_server::vite::ChunkFiles
 impl core::cmp::Eq for rust_web_server::websocket::Frame
 impl core::cmp::Eq for rust_web_server::websocket::Message
 impl core::cmp::Ord for rust_web_server::admin::access::Role
@@ -603,6 +615,7 @@ impl core::cmp::PartialEq for rust_web_server::app_manifest::AppPaths
 impl core::cmp::PartialEq for rust_web_server::app_manifest::EntryKind
 impl core::cmp::PartialEq for rust_web_server::app_manifest::LayoutEntry
 impl core::cmp::PartialEq for rust_web_server::app_manifest::ManifestError
+impl core::cmp::PartialEq for rust_web_server::attachment::Attachment
 impl core::cmp::PartialEq for rust_web_server::authz::Identity
 impl core::cmp::PartialEq for rust_web_server::authz::ObjectTemplate
 impl core::cmp::PartialEq for rust_web_server::authz::rebac::AuthzError
@@ -632,6 +645,8 @@ impl core::cmp::PartialEq for rust_web_server::entry_point::config_file::ConfigS
 impl core::cmp::PartialEq for rust_web_server::error::AppError
 impl core::cmp::PartialEq for rust_web_server::fastcgi::Address
 impl core::cmp::PartialEq for rust_web_server::fastcgi::Record
+impl core::cmp::PartialEq for rust_web_server::flash::Flash
+impl core::cmp::PartialEq for rust_web_server::flash::FlashMessage
 impl core::cmp::PartialEq for rust_web_server::fleet::Fetched
 impl core::cmp::PartialEq for rust_web_server::fleet::Outcome
 impl core::cmp::PartialEq for rust_web_server::fleet::Source
@@ -808,6 +823,7 @@ impl core::cmp::PartialEq for rust_web_server::traffic::Class
 impl core::cmp::PartialEq for rust_web_server::traffic::Group
 impl core::cmp::PartialEq for rust_web_server::traffic::Kind
 impl core::cmp::PartialEq for rust_web_server::traffic::device::Device
+impl core::cmp::PartialEq for rust_web_server::vite::ChunkFiles
 impl core::cmp::PartialEq for rust_web_server::waf::Action
 impl core::cmp::PartialEq for rust_web_server::waf::CustomRule
 impl core::cmp::PartialEq for rust_web_server::waf::Exclusion
@@ -862,6 +878,7 @@ impl core::default::Default for rust_web_server::app_manifest::AppPaths
 impl core::default::Default for rust_web_server::authz::rebac::MemoryStore
 impl core::default::Default for rust_web_server::authz::rebac::Schema
 impl core::default::Default for rust_web_server::authz::rebac::TupleFilter
+impl core::default::Default for rust_web_server::channels::Hub
 impl core::default::Default for rust_web_server::circuit_breaker::RetryLayer
 impl core::default::Default for rust_web_server::cluster::MemoryStore
 impl core::default::Default for rust_web_server::cluster::State
@@ -870,6 +887,8 @@ impl core::default::Default for rust_web_server::dev_mcp::DevTools
 impl core::default::Default for rust_web_server::di::Container
 impl core::default::Default for rust_web_server::entry_point::RwsEnv
 impl core::default::Default for rust_web_server::entry_point::config_file::ConfigSettings
+impl core::default::Default for rust_web_server::flash::Flash
+impl core::default::Default for rust_web_server::flash::FlashLayer
 impl core::default::Default for rust_web_server::gateway_api::dataplane::DataPlane
 impl core::default::Default for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::default::Default for rust_web_server::gateway_api::services::ServiceSettings
@@ -1004,6 +1023,7 @@ impl core::default::Default for rust_web_server::test_client::sse::SseParser
 impl core::default::Default for rust_web_server::tower::Body
 impl core::default::Default for rust_web_server::traffic::device::Device
 impl core::default::Default for rust_web_server::traffic::script::TrafficScriptLayer
+impl core::default::Default for rust_web_server::vite::ChunkFiles
 impl core::default::Default for rust_web_server::waf::Mode
 impl core::default::Default for rust_web_server::waf::Verdict
 impl core::default::Default for rust_web_server::waf::WafConfig
@@ -1047,6 +1067,7 @@ impl core::fmt::Debug for rust_web_server::app_manifest::AppPaths
 impl core::fmt::Debug for rust_web_server::app_manifest::EntryKind
 impl core::fmt::Debug for rust_web_server::app_manifest::LayoutEntry
 impl core::fmt::Debug for rust_web_server::app_manifest::ManifestError
+impl core::fmt::Debug for rust_web_server::attachment::Attachment
 impl core::fmt::Debug for rust_web_server::authz::AuthzLayer
 impl core::fmt::Debug for rust_web_server::authz::Identity
 impl core::fmt::Debug for rust_web_server::authz::ObjectTemplate
@@ -1088,6 +1109,10 @@ impl core::fmt::Debug for rust_web_server::extract::RequestId
 impl core::fmt::Debug for rust_web_server::fastcgi::Address
 impl core::fmt::Debug for rust_web_server::fastcgi::FastCgiConfig
 impl core::fmt::Debug for rust_web_server::fastcgi::Record
+impl core::fmt::Debug for rust_web_server::flash::Flash
+impl core::fmt::Debug for rust_web_server::flash::FlashLayer
+impl core::fmt::Debug for rust_web_server::flash::FlashMessage
+impl core::fmt::Debug for rust_web_server::flash::Redirect
 impl core::fmt::Debug for rust_web_server::fleet::Fetched
 impl core::fmt::Debug for rust_web_server::fleet::FleetConfig
 impl core::fmt::Debug for rust_web_server::fleet::Outcome
@@ -1334,6 +1359,8 @@ impl core::fmt::Debug for rust_web_server::url::path::Part
 impl core::fmt::Debug for rust_web_server::validate::FieldError
 impl core::fmt::Debug for rust_web_server::validate::ValidationErrors
 impl core::fmt::Debug for rust_web_server::virtual_host::VirtualHostConfig
+impl core::fmt::Debug for rust_web_server::vite::ChunkFiles
+impl core::fmt::Debug for rust_web_server::vite::Vite
 impl core::fmt::Debug for rust_web_server::waf::Action
 impl core::fmt::Debug for rust_web_server::waf::CustomRule
 impl core::fmt::Debug for rust_web_server::waf::Exclusion
@@ -1389,6 +1416,7 @@ impl core::marker::Copy for rust_web_server::compression::dictionary::Dictionary
 impl core::marker::Copy for rust_web_server::core::base64::Alphabet
 impl core::marker::Copy for rust_web_server::core::base64::Decoder
 impl core::marker::Copy for rust_web_server::entry_point::RwsEnv
+impl core::marker::Copy for rust_web_server::flash::FlashLayer
 impl core::marker::Copy for rust_web_server::generator::BaseType
 impl core::marker::Copy for rust_web_server::generator::ChangeKind
 impl core::marker::Copy for rust_web_server::generator::Db
@@ -1475,6 +1503,7 @@ impl core::marker::Freeze for rust_web_server::app_manifest::AppPaths
 impl core::marker::Freeze for rust_web_server::app_manifest::EntryKind
 impl core::marker::Freeze for rust_web_server::app_manifest::LayoutEntry
 impl core::marker::Freeze for rust_web_server::app_manifest::ManifestError
+impl core::marker::Freeze for rust_web_server::attachment::Attachment
 impl core::marker::Freeze for rust_web_server::auth::Claims
 impl core::marker::Freeze for rust_web_server::auth::JwtLayer
 impl core::marker::Freeze for rust_web_server::auth::forward::ForwardAuthLayer
@@ -1498,6 +1527,7 @@ impl core::marker::Freeze for rust_web_server::cache::Purge
 impl core::marker::Freeze for rust_web_server::canary::CanaryLayer
 impl core::marker::Freeze for rust_web_server::canary::WeightedBackend
 impl core::marker::Freeze for rust_web_server::canary::WeightedPool
+impl core::marker::Freeze for rust_web_server::channels::Hub
 impl core::marker::Freeze for rust_web_server::circuit_breaker::BreakerState
 impl core::marker::Freeze for rust_web_server::circuit_breaker::CircuitBreaker
 impl core::marker::Freeze for rust_web_server::circuit_breaker::RetryLayer
@@ -1539,6 +1569,10 @@ impl core::marker::Freeze for rust_web_server::fastcgi::Address
 impl core::marker::Freeze for rust_web_server::fastcgi::FastCgi
 impl core::marker::Freeze for rust_web_server::fastcgi::FastCgiConfig
 impl core::marker::Freeze for rust_web_server::fastcgi::Record
+impl core::marker::Freeze for rust_web_server::flash::Flash
+impl core::marker::Freeze for rust_web_server::flash::FlashLayer
+impl core::marker::Freeze for rust_web_server::flash::FlashMessage
+impl core::marker::Freeze for rust_web_server::flash::Redirect
 impl core::marker::Freeze for rust_web_server::fleet::Fetched
 impl core::marker::Freeze for rust_web_server::fleet::FleetConfig
 impl core::marker::Freeze for rust_web_server::fleet::Outcome
@@ -1880,6 +1914,8 @@ impl core::marker::Freeze for rust_web_server::url::path::UrlPath
 impl core::marker::Freeze for rust_web_server::validate::FieldError
 impl core::marker::Freeze for rust_web_server::validate::ValidationErrors
 impl core::marker::Freeze for rust_web_server::virtual_host::VirtualHostConfig
+impl core::marker::Freeze for rust_web_server::vite::ChunkFiles
+impl core::marker::Freeze for rust_web_server::vite::Vite
 impl core::marker::Freeze for rust_web_server::waf::Action
 impl core::marker::Freeze for rust_web_server::waf::CustomRule
 impl core::marker::Freeze for rust_web_server::waf::Exclusion
@@ -1949,6 +1985,7 @@ impl core::marker::Send for rust_web_server::app_manifest::AppPaths
 impl core::marker::Send for rust_web_server::app_manifest::EntryKind
 impl core::marker::Send for rust_web_server::app_manifest::LayoutEntry
 impl core::marker::Send for rust_web_server::app_manifest::ManifestError
+impl core::marker::Send for rust_web_server::attachment::Attachment
 impl core::marker::Send for rust_web_server::auth::Claims
 impl core::marker::Send for rust_web_server::auth::JwtLayer
 impl core::marker::Send for rust_web_server::auth::forward::ForwardAuthLayer
@@ -1975,6 +2012,7 @@ impl core::marker::Send for rust_web_server::cache::Purge
 impl core::marker::Send for rust_web_server::canary::CanaryLayer
 impl core::marker::Send for rust_web_server::canary::WeightedBackend
 impl core::marker::Send for rust_web_server::canary::WeightedPool
+impl core::marker::Send for rust_web_server::channels::Hub
 impl core::marker::Send for rust_web_server::circuit_breaker::BreakerState
 impl core::marker::Send for rust_web_server::circuit_breaker::CircuitBreaker
 impl core::marker::Send for rust_web_server::circuit_breaker::RedisCircuitBreaker
@@ -2021,6 +2059,10 @@ impl core::marker::Send for rust_web_server::fastcgi::FastCgi
 impl core::marker::Send for rust_web_server::fastcgi::FastCgiConfig
 impl core::marker::Send for rust_web_server::fastcgi::Record
 impl core::marker::Send for rust_web_server::feature::FeatureStore
+impl core::marker::Send for rust_web_server::flash::Flash
+impl core::marker::Send for rust_web_server::flash::FlashLayer
+impl core::marker::Send for rust_web_server::flash::FlashMessage
+impl core::marker::Send for rust_web_server::flash::Redirect
 impl core::marker::Send for rust_web_server::fleet::Fetched
 impl core::marker::Send for rust_web_server::fleet::Fleet
 impl core::marker::Send for rust_web_server::fleet::FleetConfig
@@ -2378,6 +2420,8 @@ impl core::marker::Send for rust_web_server::url::path::UrlPath
 impl core::marker::Send for rust_web_server::validate::FieldError
 impl core::marker::Send for rust_web_server::validate::ValidationErrors
 impl core::marker::Send for rust_web_server::virtual_host::VirtualHostConfig
+impl core::marker::Send for rust_web_server::vite::ChunkFiles
+impl core::marker::Send for rust_web_server::vite::Vite
 impl core::marker::Send for rust_web_server::waf::Action
 impl core::marker::Send for rust_web_server::waf::CustomRule
 impl core::marker::Send for rust_web_server::waf::Exclusion
@@ -2418,6 +2462,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::AppPat
 impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::EntryKind
 impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::LayoutEntry
 impl core::marker::StructuralPartialEq for rust_web_server::app_manifest::ManifestError
+impl core::marker::StructuralPartialEq for rust_web_server::attachment::Attachment
 impl core::marker::StructuralPartialEq for rust_web_server::authz::Identity
 impl core::marker::StructuralPartialEq for rust_web_server::authz::ObjectTemplate
 impl core::marker::StructuralPartialEq for rust_web_server::authz::rebac::AuthzError
@@ -2447,6 +2492,8 @@ impl core::marker::StructuralPartialEq for rust_web_server::entry_point::config_
 impl core::marker::StructuralPartialEq for rust_web_server::error::AppError
 impl core::marker::StructuralPartialEq for rust_web_server::fastcgi::Address
 impl core::marker::StructuralPartialEq for rust_web_server::fastcgi::Record
+impl core::marker::StructuralPartialEq for rust_web_server::flash::Flash
+impl core::marker::StructuralPartialEq for rust_web_server::flash::FlashMessage
 impl core::marker::StructuralPartialEq for rust_web_server::fleet::Fetched
 impl core::marker::StructuralPartialEq for rust_web_server::fleet::Outcome
 impl core::marker::StructuralPartialEq for rust_web_server::fleet::Source
@@ -2618,6 +2665,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::traffic::Class
 impl core::marker::StructuralPartialEq for rust_web_server::traffic::Group
 impl core::marker::StructuralPartialEq for rust_web_server::traffic::Kind
 impl core::marker::StructuralPartialEq for rust_web_server::traffic::device::Device
+impl core::marker::StructuralPartialEq for rust_web_server::vite::ChunkFiles
 impl core::marker::StructuralPartialEq for rust_web_server::waf::Action
 impl core::marker::StructuralPartialEq for rust_web_server::waf::CustomRule
 impl core::marker::StructuralPartialEq for rust_web_server::waf::Exclusion
@@ -2681,6 +2729,7 @@ impl core::marker::Sync for rust_web_server::app_manifest::AppPaths
 impl core::marker::Sync for rust_web_server::app_manifest::EntryKind
 impl core::marker::Sync for rust_web_server::app_manifest::LayoutEntry
 impl core::marker::Sync for rust_web_server::app_manifest::ManifestError
+impl core::marker::Sync for rust_web_server::attachment::Attachment
 impl core::marker::Sync for rust_web_server::auth::Claims
 impl core::marker::Sync for rust_web_server::auth::JwtLayer
 impl core::marker::Sync for rust_web_server::auth::forward::ForwardAuthLayer
@@ -2707,6 +2756,7 @@ impl core::marker::Sync for rust_web_server::cache::Purge
 impl core::marker::Sync for rust_web_server::canary::CanaryLayer
 impl core::marker::Sync for rust_web_server::canary::WeightedBackend
 impl core::marker::Sync for rust_web_server::canary::WeightedPool
+impl core::marker::Sync for rust_web_server::channels::Hub
 impl core::marker::Sync for rust_web_server::circuit_breaker::BreakerState
 impl core::marker::Sync for rust_web_server::circuit_breaker::CircuitBreaker
 impl core::marker::Sync for rust_web_server::circuit_breaker::RedisCircuitBreaker
@@ -2753,6 +2803,10 @@ impl core::marker::Sync for rust_web_server::fastcgi::FastCgi
 impl core::marker::Sync for rust_web_server::fastcgi::FastCgiConfig
 impl core::marker::Sync for rust_web_server::fastcgi::Record
 impl core::marker::Sync for rust_web_server::feature::FeatureStore
+impl core::marker::Sync for rust_web_server::flash::Flash
+impl core::marker::Sync for rust_web_server::flash::FlashLayer
+impl core::marker::Sync for rust_web_server::flash::FlashMessage
+impl core::marker::Sync for rust_web_server::flash::Redirect
 impl core::marker::Sync for rust_web_server::fleet::Fetched
 impl core::marker::Sync for rust_web_server::fleet::Fleet
 impl core::marker::Sync for rust_web_server::fleet::FleetConfig
@@ -3107,6 +3161,8 @@ impl core::marker::Sync for rust_web_server::url::path::UrlPath
 impl core::marker::Sync for rust_web_server::validate::FieldError
 impl core::marker::Sync for rust_web_server::validate::ValidationErrors
 impl core::marker::Sync for rust_web_server::virtual_host::VirtualHostConfig
+impl core::marker::Sync for rust_web_server::vite::ChunkFiles
+impl core::marker::Sync for rust_web_server::vite::Vite
 impl core::marker::Sync for rust_web_server::waf::Action
 impl core::marker::Sync for rust_web_server::waf::CustomRule
 impl core::marker::Sync for rust_web_server::waf::Exclusion
@@ -3175,6 +3231,7 @@ impl core::marker::Unpin for rust_web_server::app_manifest::AppPaths
 impl core::marker::Unpin for rust_web_server::app_manifest::EntryKind
 impl core::marker::Unpin for rust_web_server::app_manifest::LayoutEntry
 impl core::marker::Unpin for rust_web_server::app_manifest::ManifestError
+impl core::marker::Unpin for rust_web_server::attachment::Attachment
 impl core::marker::Unpin for rust_web_server::auth::Claims
 impl core::marker::Unpin for rust_web_server::auth::JwtLayer
 impl core::marker::Unpin for rust_web_server::auth::forward::ForwardAuthLayer
@@ -3201,6 +3258,7 @@ impl core::marker::Unpin for rust_web_server::cache::Purge
 impl core::marker::Unpin for rust_web_server::canary::CanaryLayer
 impl core::marker::Unpin for rust_web_server::canary::WeightedBackend
 impl core::marker::Unpin for rust_web_server::canary::WeightedPool
+impl core::marker::Unpin for rust_web_server::channels::Hub
 impl core::marker::Unpin for rust_web_server::circuit_breaker::BreakerState
 impl core::marker::Unpin for rust_web_server::circuit_breaker::CircuitBreaker
 impl core::marker::Unpin for rust_web_server::circuit_breaker::RedisCircuitBreaker
@@ -3247,6 +3305,10 @@ impl core::marker::Unpin for rust_web_server::fastcgi::FastCgi
 impl core::marker::Unpin for rust_web_server::fastcgi::FastCgiConfig
 impl core::marker::Unpin for rust_web_server::fastcgi::Record
 impl core::marker::Unpin for rust_web_server::feature::FeatureStore
+impl core::marker::Unpin for rust_web_server::flash::Flash
+impl core::marker::Unpin for rust_web_server::flash::FlashLayer
+impl core::marker::Unpin for rust_web_server::flash::FlashMessage
+impl core::marker::Unpin for rust_web_server::flash::Redirect
 impl core::marker::Unpin for rust_web_server::fleet::Fetched
 impl core::marker::Unpin for rust_web_server::fleet::Fleet
 impl core::marker::Unpin for rust_web_server::fleet::FleetConfig
@@ -3606,6 +3668,8 @@ impl core::marker::Unpin for rust_web_server::url::path::UrlPath
 impl core::marker::Unpin for rust_web_server::validate::FieldError
 impl core::marker::Unpin for rust_web_server::validate::ValidationErrors
 impl core::marker::Unpin for rust_web_server::virtual_host::VirtualHostConfig
+impl core::marker::Unpin for rust_web_server::vite::ChunkFiles
+impl core::marker::Unpin for rust_web_server::vite::Vite
 impl core::marker::Unpin for rust_web_server::waf::Action
 impl core::marker::Unpin for rust_web_server::waf::CustomRule
 impl core::marker::Unpin for rust_web_server::waf::Exclusion
@@ -3675,6 +3739,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::AppPaths
 impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::EntryKind
 impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::LayoutEntry
 impl core::marker::UnsafeUnpin for rust_web_server::app_manifest::ManifestError
+impl core::marker::UnsafeUnpin for rust_web_server::attachment::Attachment
 impl core::marker::UnsafeUnpin for rust_web_server::auth::Claims
 impl core::marker::UnsafeUnpin for rust_web_server::auth::JwtLayer
 impl core::marker::UnsafeUnpin for rust_web_server::auth::forward::ForwardAuthLayer
@@ -3701,6 +3766,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::cache::Purge
 impl core::marker::UnsafeUnpin for rust_web_server::canary::CanaryLayer
 impl core::marker::UnsafeUnpin for rust_web_server::canary::WeightedBackend
 impl core::marker::UnsafeUnpin for rust_web_server::canary::WeightedPool
+impl core::marker::UnsafeUnpin for rust_web_server::channels::Hub
 impl core::marker::UnsafeUnpin for rust_web_server::circuit_breaker::BreakerState
 impl core::marker::UnsafeUnpin for rust_web_server::circuit_breaker::CircuitBreaker
 impl core::marker::UnsafeUnpin for rust_web_server::circuit_breaker::RedisCircuitBreaker
@@ -3747,6 +3813,10 @@ impl core::marker::UnsafeUnpin for rust_web_server::fastcgi::FastCgi
 impl core::marker::UnsafeUnpin for rust_web_server::fastcgi::FastCgiConfig
 impl core::marker::UnsafeUnpin for rust_web_server::fastcgi::Record
 impl core::marker::UnsafeUnpin for rust_web_server::feature::FeatureStore
+impl core::marker::UnsafeUnpin for rust_web_server::flash::Flash
+impl core::marker::UnsafeUnpin for rust_web_server::flash::FlashLayer
+impl core::marker::UnsafeUnpin for rust_web_server::flash::FlashMessage
+impl core::marker::UnsafeUnpin for rust_web_server::flash::Redirect
 impl core::marker::UnsafeUnpin for rust_web_server::fleet::Fetched
 impl core::marker::UnsafeUnpin for rust_web_server::fleet::Fleet
 impl core::marker::UnsafeUnpin for rust_web_server::fleet::FleetConfig
@@ -4106,6 +4176,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::url::path::UrlPath
 impl core::marker::UnsafeUnpin for rust_web_server::validate::FieldError
 impl core::marker::UnsafeUnpin for rust_web_server::validate::ValidationErrors
 impl core::marker::UnsafeUnpin for rust_web_server::virtual_host::VirtualHostConfig
+impl core::marker::UnsafeUnpin for rust_web_server::vite::ChunkFiles
+impl core::marker::UnsafeUnpin for rust_web_server::vite::Vite
 impl core::marker::UnsafeUnpin for rust_web_server::waf::Action
 impl core::marker::UnsafeUnpin for rust_web_server::waf::CustomRule
 impl core::marker::UnsafeUnpin for rust_web_server::waf::Exclusion
@@ -4179,6 +4251,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::EntryKind
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::LayoutEntry
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::app_manifest::ManifestError
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::attachment::Attachment
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::auth::Claims
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::auth::JwtLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::auth::forward::ForwardAuthLayer
@@ -4202,6 +4275,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::cache::Purge
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::canary::CanaryLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::canary::WeightedBackend
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::canary::WeightedPool
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::channels::Hub
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::circuit_breaker::BreakerState
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::circuit_breaker::CircuitBreaker
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::circuit_breaker::RedisCircuitBreaker
@@ -4244,6 +4318,10 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fastcgi::Addre
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fastcgi::FastCgiConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fastcgi::Record
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::feature::FeatureStore
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::flash::Flash
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::flash::FlashLayer
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::flash::FlashMessage
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::flash::Redirect
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fleet::Fetched
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fleet::Fleet
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fleet::FleetConfig
@@ -4570,6 +4648,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::url::path::Url
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::validate::FieldError
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::validate::ValidationErrors
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::virtual_host::VirtualHostConfig
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::vite::ChunkFiles
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::vite::Vite
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::waf::Action
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::waf::CustomRule
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::waf::Exclusion
@@ -4636,6 +4716,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::App
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::EntryKind
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::LayoutEntry
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::app_manifest::ManifestError
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::attachment::Attachment
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::auth::Claims
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::auth::JwtLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::auth::forward::ForwardAuthLayer
@@ -4659,6 +4740,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::cache::Purge
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::canary::CanaryLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::canary::WeightedBackend
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::canary::WeightedPool
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::channels::Hub
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::circuit_breaker::BreakerState
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::circuit_breaker::CircuitBreaker
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::circuit_breaker::RedisCircuitBreaker
@@ -4701,6 +4783,10 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fastcgi::Address
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fastcgi::FastCgiConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fastcgi::Record
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::feature::FeatureStore
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::flash::Flash
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::flash::FlashLayer
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::flash::FlashMessage
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::flash::Redirect
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fleet::Fetched
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fleet::Fleet
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fleet::FleetConfig
@@ -5028,6 +5114,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::url::path::UrlPat
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::validate::FieldError
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::validate::ValidationErrors
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::virtual_host::VirtualHostConfig
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::vite::ChunkFiles
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::vite::Vite
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::waf::Action
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::waf::CustomRule
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::waf::Exclusion
@@ -5097,6 +5185,7 @@ impl rust_web_server::application::Application for rust_web_server::ingress::Ing
 impl rust_web_server::application::Application for rust_web_server::llm::LlmProxy
 impl rust_web_server::application::Application for rust_web_server::mcp::McpServer
 impl rust_web_server::application::Application for rust_web_server::proxy_config::ConfigDrivenApp
+impl rust_web_server::attachment::Attachment
 impl rust_web_server::auth::BasicAuthLayer<alloc::boxed::Box<(dyn core::ops::function::Fn(&str, &str) -> bool + core::marker::Send + core::marker::Sync)>>
 impl rust_web_server::auth::Claims
 impl rust_web_server::auth::JwtLayer
@@ -5123,6 +5212,7 @@ impl rust_web_server::cache::Purge
 impl rust_web_server::canary::CanaryLayer
 impl rust_web_server::canary::WeightedBackend
 impl rust_web_server::canary::WeightedPool
+impl rust_web_server::channels::Hub
 impl rust_web_server::circuit_breaker::Breaker for rust_web_server::circuit_breaker::RedisCircuitBreaker
 impl rust_web_server::circuit_breaker::Breaker for std::sync::poison::mutex::Mutex<rust_web_server::circuit_breaker::CircuitBreaker>
 impl rust_web_server::circuit_breaker::CircuitBreaker
@@ -5187,6 +5277,7 @@ impl rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl rust_web_server::error::IntoResponse for &'static str
 impl rust_web_server::error::IntoResponse for alloc::string::String
 impl rust_web_server::error::IntoResponse for rust_web_server::error::AppError
+impl rust_web_server::error::IntoResponse for rust_web_server::flash::Redirect
 impl rust_web_server::error::IntoResponse for rust_web_server::response::Response
 impl rust_web_server::ext::date_time_ext::DateTimeExt
 impl rust_web_server::ext::string_ext::StringExt
@@ -5197,6 +5288,7 @@ impl rust_web_server::extract::FromRequest for rust_web_server::extract::BodyTex
 impl rust_web_server::extract::FromRequest for rust_web_server::extract::Query
 impl rust_web_server::extract::FromRequest for rust_web_server::extract::RequestHeaders
 impl rust_web_server::extract::FromRequest for rust_web_server::extract::RequestId
+impl rust_web_server::extract::FromRequest for rust_web_server::flash::Flash
 impl rust_web_server::extract::FromRequest for rust_web_server::i18n::AcceptLanguage
 impl rust_web_server::extract::Query
 impl rust_web_server::extract::RequestHeaders
@@ -5205,6 +5297,9 @@ impl rust_web_server::fastcgi::Address
 impl rust_web_server::fastcgi::FastCgi
 impl rust_web_server::fastcgi::FastCgiConfig
 impl rust_web_server::feature::FeatureStore
+impl rust_web_server::flash::Flash
+impl rust_web_server::flash::FlashLayer
+impl rust_web_server::flash::Redirect
 impl rust_web_server::fleet::Fleet
 impl rust_web_server::fleet::FleetConfig
 impl rust_web_server::fleet::Source
@@ -5299,6 +5394,7 @@ impl rust_web_server::middleware::Middleware for rust_web_server::cache::CacheLa
 impl rust_web_server::middleware::Middleware for rust_web_server::canary::CanaryLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::circuit_breaker::RetryLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::early_hints::EarlyHintsLayer
+impl rust_web_server::middleware::Middleware for rust_web_server::flash::FlashLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::ip_filter::IpFilter
 impl rust_web_server::middleware::Middleware for rust_web_server::maintenance::MaintenanceLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::metrics::MetricsLayer
@@ -5328,6 +5424,7 @@ impl rust_web_server::model::FromColumn for f64
 impl rust_web_server::model::FromColumn for i16
 impl rust_web_server::model::FromColumn for i32
 impl rust_web_server::model::FromColumn for i64
+impl rust_web_server::model::FromColumn for rust_web_server::attachment::Attachment
 impl rust_web_server::model::FromColumn for rust_web_server::model::Value
 impl rust_web_server::model::FromColumn for rust_web_server::model::timestamp::Timestamp
 impl rust_web_server::model::FromColumn for rust_web_server::model::uuid::Uuid
@@ -5344,6 +5441,7 @@ impl rust_web_server::model::ToColumn for f64
 impl rust_web_server::model::ToColumn for i16
 impl rust_web_server::model::ToColumn for i32
 impl rust_web_server::model::ToColumn for i64
+impl rust_web_server::model::ToColumn for rust_web_server::attachment::Attachment
 impl rust_web_server::model::ToColumn for rust_web_server::model::timestamp::Timestamp
 impl rust_web_server::model::ToColumn for rust_web_server::model::uuid::Uuid
 impl rust_web_server::model::ToColumn for str
@@ -5495,6 +5593,7 @@ impl rust_web_server::udp_proxy::UdpProxy
 impl rust_web_server::url::URL
 impl rust_web_server::url::path::UrlPath
 impl rust_web_server::validate::ValidationErrors
+impl rust_web_server::vite::Vite
 impl rust_web_server::waf::Exclusion
 impl rust_web_server::waf::Field
 impl rust_web_server::waf::Mode
@@ -5894,33 +5993,65 @@ impl<S: core::clone::Clone> core::clone::Clone for rust_web_server::tower::Tower
 impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::application::Application for rust_web_server::async_state::AsyncAppWithState<S>
 impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::application::Application for rust_web_server::state::AppWithState<S>
 impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::async_state::AsyncAppWithState<S>
+impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::group::AsyncGroup<S>
+impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::group::AsyncResource<S>
+impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::group::Group<S>
+impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::group::Resource<S>
 impl<S: core::marker::Send + core::marker::Sync + 'static> rust_web_server::state::AppWithState<S>
 impl<S> !core::marker::Freeze for rust_web_server::proxy::pool::Pool<S>
 impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::async_state::AsyncAppWithState<S>
+impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::group::AsyncGroup<S>
+impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::group::AsyncResource<S>
+impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::group::Group<S>
+impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::group::Resource<S>
 impl<S> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::state::AppWithState<S>
 impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::async_state::AsyncAppWithState<S>
+impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::group::AsyncGroup<S>
+impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::group::AsyncResource<S>
+impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::group::Group<S>
+impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::group::Resource<S>
 impl<S> !core::panic::unwind_safe::UnwindSafe for rust_web_server::state::AppWithState<S>
 impl<S> core::clone::Clone for rust_web_server::handler::State<S>
 impl<S> core::marker::Freeze for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Freeze, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Freeze
+impl<S> core::marker::Freeze for rust_web_server::group::AsyncGroup<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Freeze, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>>: core::marker::Freeze
+impl<S> core::marker::Freeze for rust_web_server::group::AsyncResource<S> where rust_web_server::group::AsyncGroup<S>: core::marker::Freeze, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::Freeze
+impl<S> core::marker::Freeze for rust_web_server::group::Group<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Freeze, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>>>: core::marker::Freeze
+impl<S> core::marker::Freeze for rust_web_server::group::Resource<S> where rust_web_server::group::Group<S>: core::marker::Freeze, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>)>: core::marker::Freeze
 impl<S> core::marker::Freeze for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Freeze
 impl<S> core::marker::Freeze for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Freeze
 impl<S> core::marker::Freeze for rust_web_server::tower::TowerApp<S> where S: core::marker::Freeze
 impl<S> core::marker::Send for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Send, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Send
+impl<S> core::marker::Send for rust_web_server::group::AsyncGroup<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Send, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>>: core::marker::Send
+impl<S> core::marker::Send for rust_web_server::group::AsyncResource<S> where rust_web_server::group::AsyncGroup<S>: core::marker::Send, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::Send
+impl<S> core::marker::Send for rust_web_server::group::Group<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Send, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>>>: core::marker::Send
+impl<S> core::marker::Send for rust_web_server::group::Resource<S> where rust_web_server::group::Group<S>: core::marker::Send, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>)>: core::marker::Send
 impl<S> core::marker::Send for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Send
 impl<S> core::marker::Send for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::Send
 impl<S> core::marker::Send for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Send
 impl<S> core::marker::Send for rust_web_server::tower::TowerApp<S> where S: core::marker::Send
 impl<S> core::marker::Sync for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Sync, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Sync
+impl<S> core::marker::Sync for rust_web_server::group::AsyncGroup<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Sync, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>>: core::marker::Sync
+impl<S> core::marker::Sync for rust_web_server::group::AsyncResource<S> where rust_web_server::group::AsyncGroup<S>: core::marker::Sync, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::Sync
+impl<S> core::marker::Sync for rust_web_server::group::Group<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Sync, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>>>: core::marker::Sync
+impl<S> core::marker::Sync for rust_web_server::group::Resource<S> where rust_web_server::group::Group<S>: core::marker::Sync, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>)>: core::marker::Sync
 impl<S> core::marker::Sync for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Sync
 impl<S> core::marker::Sync for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::Sync
 impl<S> core::marker::Sync for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Sync
 impl<S> core::marker::Sync for rust_web_server::tower::TowerApp<S> where S: core::marker::Sync
 impl<S> core::marker::Unpin for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Unpin, alloc::vec::Vec<AsyncRoute<S>>: core::marker::Unpin
+impl<S> core::marker::Unpin for rust_web_server::group::AsyncGroup<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Unpin, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>>: core::marker::Unpin
+impl<S> core::marker::Unpin for rust_web_server::group::AsyncResource<S> where rust_web_server::group::AsyncGroup<S>: core::marker::Unpin, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::Unpin
+impl<S> core::marker::Unpin for rust_web_server::group::Group<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::Unpin, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>>>: core::marker::Unpin
+impl<S> core::marker::Unpin for rust_web_server::group::Resource<S> where rust_web_server::group::Group<S>: core::marker::Unpin, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>)>: core::marker::Unpin
 impl<S> core::marker::Unpin for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::Unpin
 impl<S> core::marker::Unpin for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::Unpin
 impl<S> core::marker::Unpin for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::Unpin
 impl<S> core::marker::Unpin for rust_web_server::tower::TowerApp<S> where S: core::marker::Unpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::async_state::AsyncAppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::UnsafeUnpin, alloc::vec::Vec<AsyncRoute<S>>: core::marker::UnsafeUnpin
+impl<S> core::marker::UnsafeUnpin for rust_web_server::group::AsyncGroup<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::UnsafeUnpin, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>>: core::marker::UnsafeUnpin
+impl<S> core::marker::UnsafeUnpin for rust_web_server::group::AsyncResource<S> where rust_web_server::group::AsyncGroup<S>: core::marker::UnsafeUnpin, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::UnsafeUnpin
+impl<S> core::marker::UnsafeUnpin for rust_web_server::group::Group<S> where alloc::vec::Vec<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>>: core::marker::UnsafeUnpin, alloc::vec::Vec<GroupRoute<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>>>: core::marker::UnsafeUnpin
+impl<S> core::marker::UnsafeUnpin for rust_web_server::group::Resource<S> where rust_web_server::group::Group<S>: core::marker::UnsafeUnpin, alloc::vec::Vec<(&'static str, &'static str, &'static str, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &alloc::rcs::arc::Arc<S>) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync)>)>: core::marker::UnsafeUnpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::handler::State<S> where alloc::rcs::arc::Arc<S>: core::marker::UnsafeUnpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::proxy::pool::Pool<S> where std::sync::poison::mutex::Mutex<std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<PoolEntry<S>>>>: core::marker::UnsafeUnpin
 impl<S> core::marker::UnsafeUnpin for rust_web_server::state::AppWithState<S> where alloc::rcs::arc::Arc<S>: core::marker::UnsafeUnpin
@@ -6455,6 +6586,8 @@ pub const rust_web_server::entry_point::Config::RWS_DEFAULT_THREAD_COUNT: &'stat
 pub const rust_web_server::entry_point::RwsEnv::VAR: &'static str
 pub const rust_web_server::entry_point::config_file::SETTINGS_WITHOUT_FLAG: &[&str]
 pub const rust_web_server::error::problem::PROBLEM_JSON: &str
+pub const rust_web_server::flash::COOKIE_NAME: &str
+pub const rust_web_server::flash::MAX_COOKIE_BYTES: usize
 pub const rust_web_server::fleet::RWS_CONFIG_FLEET_INSECURE: &str
 pub const rust_web_server::fleet::RWS_CONFIG_FLEET_INTERVAL_SECS: &str
 pub const rust_web_server::fleet::RWS_CONFIG_FLEET_PUBLIC_KEY: &str
@@ -7206,6 +7339,7 @@ pub enum rust_web_server::sso::GrantType
 pub enum rust_web_server::sso::client_store::GrantType
 pub enum rust_web_server::traffic::Group
 pub enum rust_web_server::traffic::Kind
+pub enum rust_web_server::vite::Vite
 pub enum rust_web_server::waf::Action
 pub enum rust_web_server::waf::Field
 pub enum rust_web_server::waf::Mode
@@ -7515,16 +7649,30 @@ pub fn rust_web_server::application::Application::streams_body(&self, &rust_web_
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::clone(&self) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::delete<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::get<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::async_state::AsyncAppWithState<S>::group(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::AsyncGroup<S>) -> rust_web_server::group::AsyncGroup<S>) -> Self
+pub fn rust_web_server::async_state::AsyncAppWithState<S>::name(self, &str) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::new(S) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::openapi(self, rust_web_server::openapi::OpenApiConfig) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::patch<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::post<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::put<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::async_state::AsyncAppWithState<S>::resource(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::AsyncResource<S>) -> rust_web_server::group::AsyncResource<S>) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::route<H: rust_web_server::handler::AsyncHandler<S>>(self, H) -> Self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::route_conflicts(&self) -> alloc::vec::Vec<rust_web_server::router::RouteConflict>
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::state(&self) -> &S
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::with_config(self, rust_web_server::server_config::ServerConfig) -> Self
+pub fn rust_web_server::attachment::Attachment::clone(&self) -> Self
+pub fn rust_web_server::attachment::Attachment::decode(&str) -> core::option::Option<rust_web_server::attachment::Attachment>
+pub fn rust_web_server::attachment::Attachment::delete(&self, &dyn rust_web_server::storage::Storage) -> core::result::Result<(), rust_web_server::storage::StorageError>
+pub fn rust_web_server::attachment::Attachment::encode(&self) -> alloc::string::String
+pub fn rust_web_server::attachment::Attachment::eq(&self, &Self) -> bool
+pub fn rust_web_server::attachment::Attachment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::attachment::Attachment::from_multipart(&dyn rust_web_server::storage::Storage, &str, &rust_web_server::request::Request, &str) -> core::result::Result<core::option::Option<rust_web_server::attachment::Attachment>, rust_web_server::storage::StorageError>
+pub fn rust_web_server::attachment::Attachment::read(&self, &dyn rust_web_server::storage::Storage) -> core::result::Result<alloc::vec::Vec<u8>, rust_web_server::storage::StorageError>
+pub fn rust_web_server::attachment::Attachment::store(&dyn rust_web_server::storage::Storage, &str, &str, &str, &[u8]) -> core::result::Result<rust_web_server::attachment::Attachment, rust_web_server::storage::StorageError>
+pub fn rust_web_server::attachment::Attachment::store_stream(&dyn rust_web_server::storage::Storage, &str, &str, &str, &mut dyn alloc::io::read::Read) -> core::result::Result<rust_web_server::attachment::Attachment, rust_web_server::storage::StorageError>
+pub fn rust_web_server::attachment::Attachment::url(&self, &dyn rust_web_server::storage::Storage) -> alloc::string::String
 pub fn rust_web_server::auth::BasicAuthLayer<F>::new(F) -> Self
 pub fn rust_web_server::auth::BasicAuthLayer<alloc::boxed::Box<(dyn core::ops::function::Fn(&str, &str) -> bool + core::marker::Send + core::marker::Sync)>>::from_htpasswd_file(&str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::auth::Claims::is_valid_at(&self, u64) -> bool
@@ -7685,6 +7833,16 @@ pub fn rust_web_server::canary::WeightedBackend::clone(&self) -> Self
 pub fn rust_web_server::canary::WeightedBackend::new(impl core::convert::Into<alloc::string::String>, u32) -> Self
 pub fn rust_web_server::canary::WeightedPool::clone(&self) -> Self
 pub fn rust_web_server::canary::WeightedPool::new(rust_web_server::service_discovery::BackendPool, u32) -> Self
+pub fn rust_web_server::channels::Hub::clone(&self) -> Self
+pub fn rust_web_server::channels::Hub::default() -> Self
+pub fn rust_web_server::channels::Hub::new() -> Self
+pub fn rust_web_server::channels::Hub::publish(&self, &str, &str) -> usize
+pub fn rust_web_server::channels::Hub::serve_websocket<F>(&self, rust_web_server::websocket::WebSocketConnection, &str, F) where F: core::ops::function::Fn(&rust_web_server::channels::Hub, &str, &str)
+pub fn rust_web_server::channels::Hub::sse(&self, &str) -> rust_web_server::response::Response
+pub fn rust_web_server::channels::Hub::subscribe(&self, &str) -> std::sync::mpsc::Receiver<alloc::string::String>
+pub fn rust_web_server::channels::Hub::subscribe_websocket(&self, &str, rust_web_server::websocket::WebSocketSender)
+pub fn rust_web_server::channels::Hub::subscribers(&self, &str) -> usize
+pub fn rust_web_server::channels::Hub::topics(&self) -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::circuit_breaker::Breaker::is_available(&self, &str) -> bool
 pub fn rust_web_server::circuit_breaker::Breaker::record_failure(&self, &str)
 pub fn rust_web_server::circuit_breaker::Breaker::record_success(&self, &str)
@@ -8002,6 +8160,34 @@ pub fn rust_web_server::feature::FeatureStore::is_enabled(&self, &str) -> bool
 pub fn rust_web_server::feature::FeatureStore::list(&self) -> alloc::vec::Vec<(alloc::string::String, bool)>
 pub fn rust_web_server::feature::FeatureStore::set(&self, &str, bool)
 pub fn rust_web_server::feature::global() -> &'static rust_web_server::feature::FeatureStore
+pub fn rust_web_server::flash::Flash::alert(&self) -> core::option::Option<&str>
+pub fn rust_web_server::flash::Flash::clone(&self) -> Self
+pub fn rust_web_server::flash::Flash::default() -> Self
+pub fn rust_web_server::flash::Flash::eq(&self, &Self) -> bool
+pub fn rust_web_server::flash::Flash::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::flash::Flash::get(&self, &str) -> core::option::Option<&str>
+pub fn rust_web_server::flash::Flash::is_empty(&self) -> bool
+pub fn rust_web_server::flash::Flash::messages(&self) -> &[rust_web_server::flash::FlashMessage]
+pub fn rust_web_server::flash::Flash::notice(&self) -> core::option::Option<&str>
+pub fn rust_web_server::flash::Flash::read(&rust_web_server::request::Request) -> rust_web_server::flash::Flash
+pub fn rust_web_server::flash::FlashLayer::clone(&self) -> Self
+pub fn rust_web_server::flash::FlashLayer::default() -> Self
+pub fn rust_web_server::flash::FlashLayer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::flash::FlashLayer::new() -> Self
+pub fn rust_web_server::flash::FlashMessage::clone(&self) -> Self
+pub fn rust_web_server::flash::FlashMessage::eq(&self, &Self) -> bool
+pub fn rust_web_server::flash::FlashMessage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::flash::Redirect::alert(self, &str) -> Self
+pub fn rust_web_server::flash::Redirect::clone(&self) -> Self
+pub fn rust_web_server::flash::Redirect::flash(self, &str, &str) -> Self
+pub fn rust_web_server::flash::Redirect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::flash::Redirect::found(&str) -> Self
+pub fn rust_web_server::flash::Redirect::location(&self) -> &str
+pub fn rust_web_server::flash::Redirect::notice(self, &str) -> Self
+pub fn rust_web_server::flash::Redirect::permanent(&str) -> Self
+pub fn rust_web_server::flash::Redirect::to(&str) -> Self
+pub fn rust_web_server::flash::Redirect::to_route(&str, &[(&str, &str)]) -> Self
+pub fn rust_web_server::flash::set(&mut rust_web_server::response::Response, &str, &str)
 pub fn rust_web_server::fleet::Fetched::eq(&self, &Self) -> bool
 pub fn rust_web_server::fleet::Fetched::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::fleet::Fleet::new(rust_web_server::fleet::FleetConfig) -> rust_web_server::fleet::Fleet
@@ -8603,6 +8789,49 @@ pub fn rust_web_server::generator::parse_fields<S: core::convert::AsRef<str>>(&[
 pub fn rust_web_server::generator::plan(impl core::convert::AsRef<std::path::Path>, &rust_web_server::generator::Generate) -> core::result::Result<rust_web_server::generator::Plan, rust_web_server::generator::GenError>
 pub fn rust_web_server::generator::requested(&[alloc::string::String]) -> core::option::Option<&[alloc::string::String]>
 pub fn rust_web_server::generator::run(&[alloc::string::String], &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
+pub fn rust_web_server::group::AsyncGroup<S>::delete<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncGroup<S>::get<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncGroup<S>::group(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::AsyncGroup<S>) -> rust_web_server::group::AsyncGroup<S>) -> Self
+pub fn rust_web_server::group::AsyncGroup<S>::guard<G>(self, G) -> Self where G: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::AsyncGroup<S>::name(self, &str) -> Self
+pub fn rust_web_server::group::AsyncGroup<S>::patch<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncGroup<S>::post<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncGroup<S>::put<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncGroup<S>::resource(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::AsyncResource<S>) -> rust_web_server::group::AsyncResource<S>) -> Self
+pub fn rust_web_server::group::AsyncGroup<S>::route<H: rust_web_server::handler::AsyncHandler<S>>(self, H) -> Self
+pub fn rust_web_server::group::AsyncResource<S>::create<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncResource<S>::destroy<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncResource<S>::edit<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncResource<S>::extra(self, impl core::ops::function::FnOnce(rust_web_server::group::AsyncGroup<S>) -> rust_web_server::group::AsyncGroup<S>) -> Self
+pub fn rust_web_server::group::AsyncResource<S>::guard<G>(self, G) -> Self where G: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::AsyncResource<S>::index<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncResource<S>::name(self, &str) -> Self
+pub fn rust_web_server::group::AsyncResource<S>::new_form<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncResource<S>::show<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::AsyncResource<S>::update<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
+pub fn rust_web_server::group::Group<S>::delete<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Group<S>::get<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Group<S>::group(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::Group<S>) -> rust_web_server::group::Group<S>) -> Self
+pub fn rust_web_server::group::Group<S>::guard<G>(self, G) -> Self where G: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Group<S>::name(self, &str) -> Self
+pub fn rust_web_server::group::Group<S>::patch<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Group<S>::post<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Group<S>::put<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Group<S>::resource(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::Resource<S>) -> rust_web_server::group::Resource<S>) -> Self
+pub fn rust_web_server::group::Group<S>::route<H: rust_web_server::handler::Handler<S>>(self, H) -> Self
+pub fn rust_web_server::group::Group<S>::wrap<M: rust_web_server::middleware::Middleware + 'static>(self, M) -> Self
+pub fn rust_web_server::group::Resource<S>::create<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::destroy<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::edit<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::extra(self, impl core::ops::function::FnOnce(rust_web_server::group::Group<S>) -> rust_web_server::group::Group<S>) -> Self
+pub fn rust_web_server::group::Resource<S>::guard<G>(self, G) -> Self where G: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::index<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::name(self, &str) -> Self
+pub fn rust_web_server::group::Resource<S>::new_form<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::show<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::update<F>(self, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::group::Resource<S>::wrap<M: rust_web_server::middleware::Middleware + 'static>(self, M) -> Self
+pub fn rust_web_server::group::join_path(&str, &str) -> alloc::string::String
 pub fn rust_web_server::handler::AsyncHandler::handle_async(&self, rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> rust_web_server::handler::HandlerFuture
 pub fn rust_web_server::handler::Form<T>::clone(&self) -> Self
 pub fn rust_web_server::handler::Form<T>::deref(&self) -> &T
@@ -9729,6 +9958,11 @@ pub fn rust_web_server::router::Router::route_conflicts(&self) -> alloc::vec::Ve
 pub fn rust_web_server::router::Router::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
 pub fn rust_web_server::router::Router::websocket<F>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::websocket::WebSocketConnection, rust_web_server::router::PathParams) + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::router::Router::with_host(self, &str) -> Self
+pub fn rust_web_server::router::build_path(&str, &[(&str, &str)]) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::router::name_route(&str, &str)
+pub fn rust_web_server::router::named_pattern(&str) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::router::named_routes() -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub fn rust_web_server::router::url_for(&str, &[(&str, &str)]) -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::rsa_key::RsaPublicKey::clone(&self) -> Self
 pub fn rust_web_server::rsa_key::RsaPublicKey::eq(&self, &Self) -> bool
 pub fn rust_web_server::rsa_key::RsaPublicKey::exponent(&self) -> u64
@@ -9978,13 +10212,16 @@ pub fn rust_web_server::sso::server::AuthServer::subject_session_key(self, &str)
 pub fn rust_web_server::state::AppWithState<S>::clone(&self) -> Self
 pub fn rust_web_server::state::AppWithState<S>::delete<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::get<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::state::AppWithState<S>::group(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::Group<S>) -> rust_web_server::group::Group<S>) -> Self
 pub fn rust_web_server::state::AppWithState<S>::mcp(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rust_web_server::mcp::McpServer
+pub fn rust_web_server::state::AppWithState<S>::name(self, &str) -> Self
 pub fn rust_web_server::state::AppWithState<S>::new(S) -> Self
 pub fn rust_web_server::state::AppWithState<S>::openapi(self, rust_web_server::openapi::OpenApiConfig) -> Self
 pub fn rust_web_server::state::AppWithState<S>::openapi_spec(&self, &rust_web_server::openapi::OpenApiConfig) -> alloc::string::String
 pub fn rust_web_server::state::AppWithState<S>::patch<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::post<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::state::AppWithState<S>::put<F>(self, &str, F) -> Self where F: core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::router::PathParams, &rust_web_server::server::ConnectionInfo, &S) -> rust_web_server::response::Response + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::state::AppWithState<S>::resource(self, &str, impl core::ops::function::FnOnce(rust_web_server::group::Resource<S>) -> rust_web_server::group::Resource<S>) -> Self
 pub fn rust_web_server::state::AppWithState<S>::route<H: rust_web_server::handler::Handler<S>>(self, H) -> Self
 pub fn rust_web_server::state::AppWithState<S>::route_conflicts(&self) -> alloc::vec::Vec<rust_web_server::router::RouteConflict>
 pub fn rust_web_server::state::AppWithState<S>::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
@@ -10223,6 +10460,21 @@ pub fn rust_web_server::validate::is_email(&str) -> bool
 pub fn rust_web_server::validate::is_url(&str) -> bool
 pub fn rust_web_server::virtual_host::VirtualHostConfig::clone(&self) -> Self
 pub fn rust_web_server::virtual_host::VirtualHostConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::vite::ChunkFiles::clone(&self) -> Self
+pub fn rust_web_server::vite::ChunkFiles::default() -> Self
+pub fn rust_web_server::vite::ChunkFiles::eq(&self, &Self) -> bool
+pub fn rust_web_server::vite::ChunkFiles::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::vite::Vite::asset(&self, &str) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::vite::Vite::clone(&self) -> Self
+pub fn rust_web_server::vite::Vite::dev(&str) -> rust_web_server::vite::Vite
+pub fn rust_web_server::vite::Vite::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::vite::Vite::from_env() -> core::result::Result<rust_web_server::vite::Vite, alloc::string::String>
+pub fn rust_web_server::vite::Vite::from_manifest_file(&str, &str) -> core::result::Result<rust_web_server::vite::Vite, alloc::string::String>
+pub fn rust_web_server::vite::Vite::from_manifest_str(&str, &str) -> core::result::Result<rust_web_server::vite::Vite, alloc::string::String>
+pub fn rust_web_server::vite::Vite::tags(&self, &str) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::vite::asset(&str) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::vite::install(rust_web_server::vite::Vite)
+pub fn rust_web_server::vite::tags(&str) -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::waf::Action::clone(&self) -> Self
 pub fn rust_web_server::waf::Action::eq(&self, &Self) -> bool
 pub fn rust_web_server::waf::Action::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -10341,6 +10593,7 @@ pub mod rust_web_server::app::controller::style
 pub mod rust_web_server::app_manifest
 pub mod rust_web_server::application
 pub mod rust_web_server::async_state
+pub mod rust_web_server::attachment
 pub mod rust_web_server::auth
 pub mod rust_web_server::auth::forward
 pub mod rust_web_server::authz
@@ -10353,6 +10606,7 @@ pub mod rust_web_server::body::multipart_form_data
 pub mod rust_web_server::cache
 pub mod rust_web_server::cache::registry
 pub mod rust_web_server::canary
+pub mod rust_web_server::channels
 pub mod rust_web_server::circuit_breaker
 pub mod rust_web_server::client_hint
 pub mod rust_web_server::cluster
@@ -10388,6 +10642,7 @@ pub mod rust_web_server::ext::string_ext
 pub mod rust_web_server::extract
 pub mod rust_web_server::fastcgi
 pub mod rust_web_server::feature
+pub mod rust_web_server::flash
 pub mod rust_web_server::fleet
 pub mod rust_web_server::gateway_api
 pub mod rust_web_server::gateway_api::backend_tls
@@ -10404,6 +10659,7 @@ pub mod rust_web_server::gateway_api::services
 pub mod rust_web_server::gateway_api::translate
 pub mod rust_web_server::gateway_api::types
 pub mod rust_web_server::generator
+pub mod rust_web_server::group
 pub mod rust_web_server::handler
 pub mod rust_web_server::header
 pub mod rust_web_server::header::content_disposition
@@ -10530,6 +10786,7 @@ pub mod rust_web_server::url
 pub mod rust_web_server::url::path
 pub mod rust_web_server::validate
 pub mod rust_web_server::virtual_host
+pub mod rust_web_server::vite
 pub mod rust_web_server::waf
 pub mod rust_web_server::waf::decode
 pub mod rust_web_server::waf::detect
@@ -10701,6 +10958,10 @@ pub rust_web_server::app_manifest::LayoutEntry::path: alloc::string::String
 pub rust_web_server::app_manifest::LayoutEntry::role: &'static str
 pub rust_web_server::app_manifest::ManifestError::line: usize
 pub rust_web_server::app_manifest::ManifestError::message: alloc::string::String
+pub rust_web_server::attachment::Attachment::content_type: alloc::string::String
+pub rust_web_server::attachment::Attachment::filename: alloc::string::String
+pub rust_web_server::attachment::Attachment::key: alloc::string::String
+pub rust_web_server::attachment::Attachment::size: u64
 pub rust_web_server::auth::Claims::exp: core::option::Option<u64>
 pub rust_web_server::auth::Claims::raw: alloc::string::String
 pub rust_web_server::auth::Claims::sub: core::option::Option<alloc::string::String>
@@ -10855,6 +11116,8 @@ pub rust_web_server::fastcgi::FastCgiConfig::split_path: alloc::string::String
 pub rust_web_server::fastcgi::Record::content: alloc::vec::Vec<u8>
 pub rust_web_server::fastcgi::Record::kind: u8
 pub rust_web_server::fastcgi::Record::request_id: u16
+pub rust_web_server::flash::FlashMessage::kind: alloc::string::String
+pub rust_web_server::flash::FlashMessage::text: alloc::string::String
 pub rust_web_server::fleet::Fetched::Config
 pub rust_web_server::fleet::Fetched::Config::body: alloc::vec::Vec<u8>
 pub rust_web_server::fleet::Fetched::Config::signature: core::option::Option<alloc::vec::Vec<u8>>
@@ -12119,6 +12382,13 @@ pub rust_web_server::validate::FieldError::message: alloc::string::String
 pub rust_web_server::virtual_host::VirtualHostConfig::cert_file: alloc::string::String
 pub rust_web_server::virtual_host::VirtualHostConfig::domain: alloc::string::String
 pub rust_web_server::virtual_host::VirtualHostConfig::key_file: alloc::string::String
+pub rust_web_server::vite::ChunkFiles::css: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::vite::ChunkFiles::file: alloc::string::String
+pub rust_web_server::vite::ChunkFiles::imports: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::vite::Vite::Dev(alloc::string::String)
+pub rust_web_server::vite::Vite::Manifest
+pub rust_web_server::vite::Vite::Manifest::base: alloc::string::String
+pub rust_web_server::vite::Vite::Manifest::chunks: alloc::collections::btree::map::BTreeMap<alloc::string::String, rust_web_server::vite::ChunkFiles>
 pub rust_web_server::waf::Action::Allow
 pub rust_web_server::waf::Action::Deny
 pub rust_web_server::waf::Action::Log
@@ -12223,6 +12493,7 @@ pub struct rust_web_server::app_manifest::AppPaths
 pub struct rust_web_server::app_manifest::LayoutEntry
 pub struct rust_web_server::app_manifest::ManifestError
 pub struct rust_web_server::async_state::AsyncAppWithState<S>
+pub struct rust_web_server::attachment::Attachment
 pub struct rust_web_server::auth::BasicAuthLayer<F>
 pub struct rust_web_server::auth::Claims
 pub struct rust_web_server::auth::JwtLayer
@@ -12255,6 +12526,7 @@ pub struct rust_web_server::cache::CacheLayer
 pub struct rust_web_server::canary::CanaryLayer
 pub struct rust_web_server::canary::WeightedBackend
 pub struct rust_web_server::canary::WeightedPool
+pub struct rust_web_server::channels::Hub
 pub struct rust_web_server::circuit_breaker::CircuitBreaker
 pub struct rust_web_server::circuit_breaker::RedisCircuitBreaker
 pub struct rust_web_server::circuit_breaker::RetryLayer
@@ -12292,6 +12564,10 @@ pub struct rust_web_server::fastcgi::FastCgi
 pub struct rust_web_server::fastcgi::FastCgiConfig
 pub struct rust_web_server::fastcgi::Record
 pub struct rust_web_server::feature::FeatureStore
+pub struct rust_web_server::flash::Flash
+pub struct rust_web_server::flash::FlashLayer
+pub struct rust_web_server::flash::FlashMessage
+pub struct rust_web_server::flash::Redirect
 pub struct rust_web_server::fleet::Fleet
 pub struct rust_web_server::fleet::FleetConfig
 pub struct rust_web_server::gateway_api::backend_tls::BackendTls
@@ -12386,6 +12662,10 @@ pub struct rust_web_server::generator::FieldType
 pub struct rust_web_server::generator::FileChange
 pub struct rust_web_server::generator::GenError
 pub struct rust_web_server::generator::Plan
+pub struct rust_web_server::group::AsyncGroup<S>
+pub struct rust_web_server::group::AsyncResource<S>
+pub struct rust_web_server::group::Group<S>
+pub struct rust_web_server::group::Resource<S>
 pub struct rust_web_server::handler::Form<T>(pub T)
 pub struct rust_web_server::handler::Path<T>(pub T)
 pub struct rust_web_server::handler::Query<T>(pub T)
@@ -12683,6 +12963,7 @@ pub struct rust_web_server::validate::FieldError
 pub struct rust_web_server::validate::Validated<T>(pub T)
 pub struct rust_web_server::validate::ValidationErrors
 pub struct rust_web_server::virtual_host::VirtualHostConfig
+pub struct rust_web_server::vite::ChunkFiles
 pub struct rust_web_server::waf::CustomRule
 pub struct rust_web_server::waf::Exclusion
 pub struct rust_web_server::waf::Match
@@ -12747,6 +13028,7 @@ pub type rust_web_server::gateway_api::resources::TlsRoute = kube_core::object::
 pub type rust_web_server::gateway_api::resources::UdpRoute = kube_core::object::Object<rust_web_server::gateway_api::types::L4RouteSpec, rust_web_server::gateway_api::types::RouteStatus>
 pub type rust_web_server::gateway_api::router::PortListeners = alloc::rcs::arc::Arc<std::sync::poison::rwlock::RwLock<alloc::rcs::arc::Arc<alloc::vec::Vec<rust_web_server::gateway_api::translate::ListenerConfig>>>>
 pub type rust_web_server::gateway_api::types::AllowedListeners = rust_web_server::gateway_api::types::RouteNamespacesHolder
+pub type rust_web_server::group::Guard<S> = alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>
 pub type rust_web_server::handler::Form<T>::Target = T
 pub type rust_web_server::handler::HandlerFuture = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static)>>
 pub type rust_web_server::handler::Path<T>::Target = T

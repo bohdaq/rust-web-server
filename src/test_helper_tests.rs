@@ -15,8 +15,10 @@ struct Note {
     pinned: bool,
 }
 
-fn migrations() -> TempPath {
-    let dir = TempPath::new("facade_test_helpers");
+/// A migrations directory per test: two tests sharing one raced (the
+/// first to finish deleted it under the other).
+fn migrations(name: &str) -> TempPath {
+    let dir = TempPath::new(&format!("facade_test_helpers_{name}"));
     std::fs::create_dir_all(&*dir).unwrap();
     std::fs::write(
         dir.join("0001_create_notes.sql"),
@@ -28,7 +30,7 @@ fn migrations() -> TempPath {
 
 #[tokio::test]
 async fn factories_save_into_a_test_db() {
-    let dir = migrations();
+    let dir = migrations("factories");
     let db = TestDb::sqlite().migrations(dir.as_str()).await.unwrap();
     let pinned = Note::factory().with(|n| n.pinned = true).create(&db).await.unwrap();
     let plain = Note::factory().create(&db).await.unwrap();
@@ -45,7 +47,7 @@ async fn factories_save_into_a_test_db() {
 async fn an_async_app_on_a_test_db() {
     use crate::app::App;
     use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-    let dir = migrations();
+    let dir = migrations("async_app");
     let db = TestDb::sqlite().migrations(dir.as_str()).await.unwrap();
     Note::factory().create_many(3, &db).await.unwrap();
     let app = App::with_async_state(db.pool()).get("/notes", |_req, _params, _conn, pool| async move {

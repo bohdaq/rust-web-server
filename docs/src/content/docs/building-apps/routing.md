@@ -221,4 +221,81 @@ for conflict in app.route_conflicts() {
 
 Each `RouteConflict` has the `method`, the `pattern` that never runs, the `earlier` one that answers instead, and a `kind` (`Duplicate`: the same pattern, parameter names aside; `Shadowed`: the earlier one has a parameter or wildcard where it has a literal). It's a warning only — the app is built and serves as before; register the specific route first (`/users/me`, then `/users/:id`). Patterns that only overlap (`/a/:x` and `/:y/b`) aren't reported. A test can assert `app.route_conflicts().is_empty()`.
 
+## Groups and guards
+
+`group(prefix, |g| …)` registers routes under a shared path prefix. They share guards — checks that run before the handler (`before_action`) — and, on `AppWithState`, middleware (18.35.0):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::flash::Redirect;
+use rust_web_server::error::IntoResponse;
+use rust_web_server::request::Request;
+use rust_web_server::response::Response;
+use rust_web_server::server::ConnectionInfo;
+
+fn signed_in(request: &Request, _: &ConnectionInfo, _: &Db) -> Result<(), Response> {
+    match current_user(request) {
+        Some(_) => Ok(()),
+        None => Err(Redirect::to("/login").alert("Sign in first").into_response()),
+    }
+}
+
+let app = App::with_state(db)
+    .get("/", home)
+    .group("/admin", |admin| {
+        admin
+            .guard(signed_in)
+            .wrap(RateLimitLayer)            // only these routes (AppWithState)
+            .get("/", dashboard)
+            .route(export_csv)               // a typed #[get("/export")] handler: /admin/export
+            .group("/billing", |billing| billing.guard(is_owner).get("/", invoices))
+    });
+```
+
+A guard is `Fn(&Request, &ConnectionInfo, &S) -> Result<(), Response>`; `Err(response)` answers the request. Guards apply to every route of the group, whichever order they were added in, outer groups' first. Groups nest. On `AsyncAppWithState` (`group` takes async handlers) groups have guards but no `wrap`: wrap the whole app instead.
+
+## Resources
+
+`resource(path, |r| …)` registers the conventional routes of a collection, each with a name for [`url_for`](#named-routes-and-url_for):
+
+| Method | Path | Builder | Name |
+|---|---|---|---|
+| GET | `/posts` | `index` | `posts.index` |
+| GET | `/posts/new` | `new_form` | `posts.new` |
+| POST | `/posts` | `create` | `posts.create` |
+| GET | `/posts/{id}` | `show` | `posts.show` |
+| GET | `/posts/{id}/edit` | `edit` | `posts.edit` |
+| PUT, PATCH | `/posts/{id}` | `update` | `posts.update` |
+| DELETE | `/posts/{id}` | `destroy` | `posts.destroy` |
+
+```rust
+let app = App::with_state(db).resource("/posts", |posts| {
+    posts
+        .index(list_posts)
+        .new_form(new_post_form)
+        .create(create_post)
+        .show(show_post)       // params.get("id")
+        .destroy(delete_post)
+        .guard(signed_in)
+        .extra(|g| g.post("/{id}/publish", publish_post))
+});
+```
+
+Only the actions you give are registered, and `new` always comes before `{id}`. `.name("articles")` changes the name prefix (default: the path's last segment); `extra` adds routes under the resource's path with its guards. A group has `resource` too, so `/admin/posts` is `admin.resource("/posts", …)`. Handlers have the classic signature (`AsyncAppWithState`: the async one); typed `#[get]` handlers go in a group with `.route(…)`.
+
+## Named routes and `url_for`
+
+`.name("…")` after a route names it; `router::url_for(name, params)` builds its path, percent-encoding the values. Parameters the pattern doesn't have become the query string:
+
+```rust
+use rust_web_server::router::url_for;
+
+let app = App::with_state(db).get("/posts/{id}", show_post).name("post");
+
+assert_eq!(Some("/posts/7?tab=comments".to_string()), url_for("post", &[("id", "7"), ("tab", "comments")]));
+assert_eq!(None, url_for("post", &[]));                      // a parameter is missing
+```
+
+Names are process-wide (registering one again replaces it) and `named_routes()` lists them. Templates call it as `url_for(name="post", id=7)` ([view helpers](/building-apps/templates/#view-helpers)); `Redirect::to_route(name, params)` redirects to one ([flash](/building-apps/forms-uploads/#flash-messages-and-redirects)).
+
 See the [API reference](/reference/api/) for the full list of public types.

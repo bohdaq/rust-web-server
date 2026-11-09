@@ -111,6 +111,11 @@ pub use rws_acme::acme;
 pub use rws_server::middleware;
 pub use rws_server::rate_limit;
 pub use rws_server::router;
+pub use rws_server::group;
+pub use rws_server::flash;
+pub use rws_server::channels;
+#[cfg(feature = "serde")]
+pub use rws_server::vite;
 pub use rws_server::handler;
 pub use rws_server::schema;
 pub use rws_server::state;
@@ -229,6 +234,8 @@ pub mod jobs;
 // reuse `StorageError` and the SigV4/Managed-Identity credential helpers from here.
 #[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs"))]
 pub use rws_storage::storage;
+#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs"))]
+pub mod attachment;
 // `secrets` alone needs only what rws-server's slim `storage` has.
 #[cfg(all(feature = "secrets", not(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "storage-gcs"))))]
 pub use rws_server::storage;

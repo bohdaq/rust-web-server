@@ -3951,6 +3951,83 @@ for conflict in app.route_conflicts() {
 
 Each `RouteConflict` has the `method`, the `pattern` that never runs, the `earlier` one that answers instead, and a `kind` (`Duplicate`: the same pattern, parameter names aside; `Shadowed`: the earlier one has a parameter or wildcard where it has a literal). It's a warning only — the app is built and serves as before; register the specific route first (`/users/me`, then `/users/:id`). Patterns that only overlap (`/a/:x` and `/:y/b`) aren't reported. A test can assert `app.route_conflicts().is_empty()`.
 
+## Groups and guards
+
+`group(prefix, |g| …)` registers routes under a shared path prefix. They share guards — checks that run before the handler (`before_action`) — and, on `AppWithState`, middleware (18.35.0):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::flash::Redirect;
+use rust_web_server::error::IntoResponse;
+use rust_web_server::request::Request;
+use rust_web_server::response::Response;
+use rust_web_server::server::ConnectionInfo;
+
+fn signed_in(request: &Request, _: &ConnectionInfo, _: &Db) -> Result<(), Response> {
+    match current_user(request) {
+        Some(_) => Ok(()),
+        None => Err(Redirect::to("/login").alert("Sign in first").into_response()),
+    }
+}
+
+let app = App::with_state(db)
+    .get("/", home)
+    .group("/admin", |admin| {
+        admin
+            .guard(signed_in)
+            .wrap(RateLimitLayer)            // only these routes (AppWithState)
+            .get("/", dashboard)
+            .route(export_csv)               // a typed #[get("/export")] handler: /admin/export
+            .group("/billing", |billing| billing.guard(is_owner).get("/", invoices))
+    });
+```
+
+A guard is `Fn(&Request, &ConnectionInfo, &S) -> Result<(), Response>`; `Err(response)` answers the request. Guards apply to every route of the group, whichever order they were added in, outer groups' first. Groups nest. On `AsyncAppWithState` (`group` takes async handlers) groups have guards but no `wrap`: wrap the whole app instead.
+
+## Resources
+
+`resource(path, |r| …)` registers the conventional routes of a collection, each with a name for [`url_for`](#named-routes-and-url_for):
+
+| Method | Path | Builder | Name |
+|---|---|---|---|
+| GET | `/posts` | `index` | `posts.index` |
+| GET | `/posts/new` | `new_form` | `posts.new` |
+| POST | `/posts` | `create` | `posts.create` |
+| GET | `/posts/{id}` | `show` | `posts.show` |
+| GET | `/posts/{id}/edit` | `edit` | `posts.edit` |
+| PUT, PATCH | `/posts/{id}` | `update` | `posts.update` |
+| DELETE | `/posts/{id}` | `destroy` | `posts.destroy` |
+
+```rust
+let app = App::with_state(db).resource("/posts", |posts| {
+    posts
+        .index(list_posts)
+        .new_form(new_post_form)
+        .create(create_post)
+        .show(show_post)       // params.get("id")
+        .destroy(delete_post)
+        .guard(signed_in)
+        .extra(|g| g.post("/{id}/publish", publish_post))
+});
+```
+
+Only the actions you give are registered, and `new` always comes before `{id}`. `.name("articles")` changes the name prefix (default: the path's last segment); `extra` adds routes under the resource's path with its guards. A group has `resource` too, so `/admin/posts` is `admin.resource("/posts", …)`. Handlers have the classic signature (`AsyncAppWithState`: the async one); typed `#[get]` handlers go in a group with `.route(…)`.
+
+## Named routes and `url_for`
+
+`.name("…")` after a route names it; `router::url_for(name, params)` builds its path, percent-encoding the values. Parameters the pattern doesn't have become the query string:
+
+```rust
+use rust_web_server::router::url_for;
+
+let app = App::with_state(db).get("/posts/{id}", show_post).name("post");
+
+assert_eq!(Some("/posts/7?tab=comments".to_string()), url_for("post", &[("id", "7"), ("tab", "comments")]));
+assert_eq!(None, url_for("post", &[]));                      // a parameter is missing
+```
+
+Names are process-wide (registering one again replaces it) and `named_routes()` lists them. Templates call it as `url_for(name="post", id=7)` ([view helpers](/building-apps/templates/#view-helpers)); `Redirect::to_route(name, params)` redirects to one ([flash](/building-apps/forms-uploads/#flash-messages-and-redirects)).
+
 See the [API reference](/reference/api/) for the full list of public types.
 
 ---
@@ -5457,6 +5534,59 @@ let key = store.put("avatars/42.png", &part.body, "image/png")?;
 
 See [File / Object Storage](/features/storage/) for the full API, including `S3Storage` for AWS S3, Cloudflare R2, and MinIO, and `AzureBlobStorage` for Azure Blob Storage.
 
+## Attachments on models
+
+An `Attachment` (`attachment` module, any `storage-*` feature) is a model field whose bytes are in a `Storage` backend and whose description — key, file name, content type, size — is one `TEXT` column (18.35.0):
+
+```rust
+use rust_web_server::attachment::Attachment;
+
+#[derive(Model)]
+#[table(name = "users")]
+struct User {
+    #[primary_key(auto_increment)]
+    id: i64,
+    name: String,
+    avatar: Option,   // TEXT column
+}
+
+// In the upload handler: the file in the form field "avatar".
+let avatar = Attachment::from_multipart(&storage, "avatars", request, "avatar")?;
+user.avatar = avatar;
+User::repository(&pool).save(&user).await?;
+
+// Later:
+let url = user.avatar.as_ref().map(|a| a.url(&storage));
+```
+
+`from_multipart` answers `Ok(None)` when the field is missing or the file input was left empty. `store(storage, prefix, filename, content_type, bytes)` and `store_stream(…, reader)` store bytes you already have; `read`, `url` and `delete` work with the stored file. Keys are `<prefix>/<id>/<file name>`, the name reduced to letters, digits, `.`, `-` and `_`, so uploads never overwrite each other. Deleting a row doesn't delete its file: call `attachment.delete(&storage)` where you delete the row.
+
+## Flash messages and redirects
+
+A flash message is set on one response — usually the redirect after a form post — and shown on the next page, once (18.35.0):
+
+```rust
+use rust_web_server::error::IntoResponse;
+use rust_web_server::flash::{Flash, FlashLayer, Redirect};
+
+fn create(request: &Request, _: &PathParams, _: &ConnectionInfo, db: &Db) -> Response {
+    // … save …
+    Redirect::to("/posts").notice("Post saved").into_response()        // 303 See Other
+}
+
+fn index(request: &Request, _: &PathParams, _: &ConnectionInfo, db: &Db) -> Response {
+    let flash = Flash::read(request);                                   // or a `Flash` handler argument
+    let notice = flash.notice().unwrap_or("");
+    // …
+}
+
+let app = App::with_state(db).post("/posts", create).get("/posts", index).wrap(FlashLayer::new());
+```
+
+`Redirect` is `303 See Other` (`found` for 302, `permanent` for 301; `to_route(name, params)` for a [named route](/building-apps/routing/#named-routes-and-url_for)) with any number of `.notice(…)`, `.alert(…)` or `.flash(kind, text)` messages. `flash::set(&mut response, kind, text)` adds one to any response. `FlashLayer` clears the flash cookie after the request that carried it, unless the response sets a new flash; it changes nothing for requests without one, so async handlers stay async. In templates, [`page_context(request)`](/building-apps/templates/#view-helpers) puts the messages in `flash`, `notice` and `alert`.
+
+Messages travel in the `rws_flash` cookie (`HttpOnly`, `SameSite=Lax`), percent-encoded and capped at 3800 bytes: the browser can read and change them, so a flash is for display only — templates escape it like any other text.
+
 ## Size limits
 
 Two independent knobs apply to request bodies:
@@ -6612,6 +6742,51 @@ let response = engine.response("hello.html", &ctx).unwrap();
 ```
 
 `TeraEngine::from_glob(pattern)` accepts any glob pattern Tera accepts, e.g. `"templates/**/*.html"`.
+
+## View helpers
+
+Every engine has three functions (18.35.0):
+
+| Function | Output |
+|---|---|
+| `url_for(name="posts.show", id=7)` | The path of a [named route](/building-apps/routing/#named-routes-and-url_for); other arguments become the query string |
+| `vite(entry="src/main.ts")` | The `<link>`/`<script>` tags of a [Vite](#vite) entry |
+| `vite_asset(path="src/logo.svg")` | A built asset's URL |
+
+Their output is already encoded, so mark it `| safe` (without it Tera writes `/` as `&#x2F;`, which browsers read back as `/`, and `vite` would show its tags as text). `template::page_context(request)` starts a `Context` with what most pages need: `flash` (a list of `{kind, text}`), `notice` and `alert` ([flash messages](/building-apps/forms-uploads/#flash-messages-and-redirects)), `csrf_token` and `csrf_field` (a hidden `_csrf` input from [`CsrfLayer`](/features/csrf/), `csrf` feature) and `path`:
+
+```html
+{% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
+<form method="post" action="{{ url_for(name='posts.create') | safe }}">
+  {{ csrf_field | safe }}
+  <input name="title">
+</form>
+```
+
+```rust
+let mut ctx = template::page_context(request);
+ctx.insert("posts", &posts);
+template::render("posts/index.html", &ctx)
+```
+
+## Vite
+
+`vite::Vite` (`serde` feature) writes the tags for an entry point of a frontend built with Vite (`build.manifest: true`): its CSS and that of every chunk it imports, `modulepreload` links for the imports, then the module script — or, in development, the two scripts that load it from the Vite dev server:
+
+```rust
+use rust_web_server::vite::{self, Vite};
+
+// VITE_DEV_SERVER=http://localhost:5173 → the dev server; otherwise the
+// manifest at VITE_MANIFEST (default frontend/dist/.vite/manifest.json),
+// assets under VITE_BASE (default /).
+vite::install(Vite::from_env()?);
+```
+
+```html
+<head>{{ vite(entry="src/main.ts") | safe }}</head>
+```
+
+`Vite::from_manifest_file(path, base)`, `Vite::from_manifest_str(json, base)` and `Vite::dev(url)` build one directly; `tags(entry)` and `asset(path)` answer the same as the template functions.
 
 ## Hot reload
 
@@ -9380,6 +9555,49 @@ source.addEventListener("update", (e) => {
 // Reconnection — browser retries automatically; Last-Event-ID is sent
 source.onerror = () => console.warn("SSE connection lost, retrying…");
 ```
+
+---
+
+# Channels
+
+<https://rws8.tech/docs/features/channels/>
+
+A `channels::Hub` holds named topics. Pages subscribe to a topic over [SSE](/features/sse/) or [WebSocket](/features/websocket/); server code publishes to it — "a comment was added", "the import finished" (18.35.0):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::channels::Hub;
+
+let hub = Hub::new();
+let app = App::with_state(State { hub: hub.clone(), db })
+    // EventSource("/posts/7/events").addEventListener("post-7", …)
+    .get("/posts/:id/events", |_, params, _, state| {
+        state.hub.sse(&format!("post-{}", params.get("id").unwrap_or("")))
+    })
+    // A chat room: every client gets what any of them sends.
+    .websocket("/rooms/:room", |ws, params, state| {
+        let room = params.get("room").unwrap_or("lobby").to_string();
+        state.hub.serve_websocket(ws, &room, |hub, room, text| { hub.publish(room, text); });
+    })
+    .post("/posts/:id/comments", |request, params, _, state| {
+        // … save the comment …
+        state.hub.publish(&format!("post-{}", params.get("id").unwrap_or("")), "comment added");
+        Response::text(STATUS_CODE_REASON_PHRASE.n201_created, "ok")
+    });
+```
+
+| Method | What it does |
+|---|---|
+| `publish(topic, message)` | Sends to every subscriber; returns how many it reached. SSE clients get an event named after the topic, WebSocket clients a text message |
+| `sse(topic)` | A streaming SSE response subscribed to `topic` — return it from the handler |
+| `serve_websocket(ws, topic, on_message)` | Subscribes a WebSocket connection and reads it until it closes, calling `on_message(hub, topic, text)` for each text message |
+| `subscribe_websocket(topic, sender)` | Subscribes a `WebSocketSender` you manage yourself |
+| `subscribe(topic)` | An in-process `Receiver` (a worker thread, a test) |
+| `subscribers(topic)`, `topics()` | What's subscribed |
+
+A `Hub` is cheap to clone; all clones share the topics. Delivery is best effort: a message that doesn't fit a slow SSE client's buffer is dropped for that client, and clients that have gone away are removed on the next publish to their topic. WebSocket messages are written by the publishing thread.
+
+Channels are in-process: each replica has its own subscribers. Behind several replicas, publish where every replica hears it — consume a queue (Kafka, Redis) in each and call `publish` from there.
 
 ---
 
@@ -24234,7 +24452,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `FileChange` / `ChangeKind` / `GenError` | `generator` | One file of a plan (`path`, `kind` — `Create`, `Edit`, `Unchanged`, `Conflict` — `content`, `original`, `diff`); why a generator refused (`usage`, `message`, `to_json()`) |
 | `Field` / `FieldType` / `BaseType` / `Db` / `RouteAction` | `generator` | `name:type` (`Field::parse`, `parse_fields`; types `i64`, `i32`, `f64`, `bool`, `String`, `Option`); the database a migration is written for (`sqlite`, `postgres`, `mysql`); the routes `gen route` writes (`List`, `Show`, `Create`, `Update`, `Remove`; `parse_list("list,show")`) |
 | `AppPaths` / `LayoutEntry` / `EntryKind` / `ManifestError` | `app_manifest` | Where each part lives (`main`, `lib`, `routes`, `models`, `jobs`, `migrations`, `templates`, `tests`, `static_files`; `Default` = the conventional layout; `entries()`, `get(role)`); one role as found on disk (`role`, `path`, `kind` file/dir, `exists`); a parse error (`line`, `message`) |
-| `TeraEngine` | `template` (`tera`) | Jinja2-style templates: `from_dir`, `from_raw`; global `template::init(dir)` / `template::render(name, &ctx)` / `template::reload()` (also run on `SIGHUP`). See [Templates](/building-apps/templates/) |
+| `TeraEngine` | `template` (`tera`) | Jinja2-style templates: `from_dir`, `from_raw`; global `template::init(dir)` / `template::render(name, &ctx)` / `template::reload()` (also run on `SIGHUP`); view helpers `url_for`, `vite`, `vite_asset` and `template::page_context(request)` (flash, CSRF field, path; 18.35.0). See [Templates](/building-apps/templates/) |
 
 ## Macros
 
@@ -24275,6 +24493,13 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `Router` | `router` | Path-pattern router with `:param` and `*wildcard`; `.with_host(name)` restricts it to one virtual host; `.matches(request, connection)` tells whether `handle()` would run a handler |
+| `Group` / `Resource` | `group` | Routes under a path prefix sharing guards and middleware (`app.group(prefix, \|g\| …)`), and a collection's conventional routes (`app.resource(path, \|r\| …)`: `index`, `new_form`, `create`, `show`, `edit`, `update`, `destroy`, `extra`) (18.35.0). See [Groups and guards](/building-apps/routing/#groups-and-guards) |
+| `AsyncGroup` / `AsyncResource` | `group` (`http2`) | The same for `AsyncAppWithState` (guards, no per-group middleware) |
+| `url_for` / `name_route` / `named_routes` / `build_path` | `router` | Named routes (`.name("post")` after a route) and their paths with parameters filled in (18.35.0). See [Named routes](/building-apps/routing/#named-routes-and-url_for) |
+| `Flash` / `FlashLayer` / `Redirect` | `flash` | Flash messages in the `rws_flash` cookie, shown once; `Redirect::to(path).notice(…)` (303), `found`, `permanent`, `to_route` (18.35.0). See [Flash messages](/building-apps/forms-uploads/#flash-messages-and-redirects) |
+| `Hub` | `channels` | Named topics pushed to SSE and WebSocket clients: `publish`, `sse`, `serve_websocket`, `subscribe` (18.35.0). See [Channels](/features/channels/) |
+| `Vite` | `vite` (`serde`) | Tags for a Vite entry from its manifest or dev server; `vite::install` for the `vite` template function (18.35.0). See [Vite](/building-apps/templates/#vite) |
+| `Attachment` | `attachment` (`storage-*`) | A model field whose bytes are in a `Storage` backend, stored as one `TEXT` column; `store`, `store_stream`, `from_multipart`, `url`, `read`, `delete` (18.35.0). See [Attachments](/building-apps/forms-uploads/#attachments-on-models) |
 | `PathParams` | `router` | Extracted path parameters; `.get(name) -> Option<&str>` |
 | `RouteConflict` / `RouteConflictKind` | `router` | A route that never runs because an earlier one with the same method matches every path it does (`Duplicate`, `Shadowed`); `route_conflicts()` on `Router`, `AppWithState`, `AsyncAppWithState`, also printed once when registered (18.28.0). See [Route conflicts](/building-apps/routing/#route-conflicts) |
 | `Handler` / `AsyncHandler` / `RouteSpec` | `handler` | What the route macros generate for a typed handler: `handle(request, params, connection, &Arc)`, `handle_async(…)` → `HandlerFuture`, `METHOD`/`PATTERN`; `.route(h)` registers one (18.28.0) |

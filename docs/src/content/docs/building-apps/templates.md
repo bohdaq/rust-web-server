@@ -238,6 +238,51 @@ let response = engine.response("hello.html", &ctx).unwrap();
 
 `TeraEngine::from_glob(pattern)` accepts any glob pattern Tera accepts, e.g. `"templates/**/*.html"`.
 
+## View helpers
+
+Every engine has three functions (18.35.0):
+
+| Function | Output |
+|---|---|
+| `url_for(name="posts.show", id=7)` | The path of a [named route](/building-apps/routing/#named-routes-and-url_for); other arguments become the query string |
+| `vite(entry="src/main.ts")` | The `<link>`/`<script>` tags of a [Vite](#vite) entry |
+| `vite_asset(path="src/logo.svg")` | A built asset's URL |
+
+Their output is already encoded, so mark it `| safe` (without it Tera writes `/` as `&#x2F;`, which browsers read back as `/`, and `vite` would show its tags as text). `template::page_context(request)` starts a `Context` with what most pages need: `flash` (a list of `{kind, text}`), `notice` and `alert` ([flash messages](/building-apps/forms-uploads/#flash-messages-and-redirects)), `csrf_token` and `csrf_field` (a hidden `_csrf` input from [`CsrfLayer`](/features/csrf/), `csrf` feature) and `path`:
+
+```html
+{% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
+<form method="post" action="{{ url_for(name='posts.create') | safe }}">
+  {{ csrf_field | safe }}
+  <input name="title">
+</form>
+```
+
+```rust
+let mut ctx = template::page_context(request);
+ctx.insert("posts", &posts);
+template::render("posts/index.html", &ctx)
+```
+
+## Vite
+
+`vite::Vite` (`serde` feature) writes the tags for an entry point of a frontend built with Vite (`build.manifest: true`): its CSS and that of every chunk it imports, `modulepreload` links for the imports, then the module script — or, in development, the two scripts that load it from the Vite dev server:
+
+```rust
+use rust_web_server::vite::{self, Vite};
+
+// VITE_DEV_SERVER=http://localhost:5173 → the dev server; otherwise the
+// manifest at VITE_MANIFEST (default frontend/dist/.vite/manifest.json),
+// assets under VITE_BASE (default /).
+vite::install(Vite::from_env()?);
+```
+
+```html
+<head>{{ vite(entry="src/main.ts") | safe }}</head>
+```
+
+`Vite::from_manifest_file(path, base)`, `Vite::from_manifest_str(json, base)` and `Vite::dev(url)` build one directly; `tags(entry)` and `asset(path)` answer the same as the template functions.
+
 ## Hot reload
 
 Edit a template file and reload it without restarting the server:

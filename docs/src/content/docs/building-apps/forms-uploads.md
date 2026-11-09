@@ -177,6 +177,59 @@ let key = store.put("avatars/42.png", &part.body, "image/png")?;
 
 See [File / Object Storage](/features/storage/) for the full API, including `S3Storage` for AWS S3, Cloudflare R2, and MinIO, and `AzureBlobStorage` for Azure Blob Storage.
 
+## Attachments on models
+
+An `Attachment` (`attachment` module, any `storage-*` feature) is a model field whose bytes are in a `Storage` backend and whose description — key, file name, content type, size — is one `TEXT` column (18.35.0):
+
+```rust
+use rust_web_server::attachment::Attachment;
+
+#[derive(Model)]
+#[table(name = "users")]
+struct User {
+    #[primary_key(auto_increment)]
+    id: i64,
+    name: String,
+    avatar: Option<Attachment>,   // TEXT column
+}
+
+// In the upload handler: the file in the form field "avatar".
+let avatar = Attachment::from_multipart(&storage, "avatars", request, "avatar")?;
+user.avatar = avatar;
+User::repository(&pool).save(&user).await?;
+
+// Later:
+let url = user.avatar.as_ref().map(|a| a.url(&storage));
+```
+
+`from_multipart` answers `Ok(None)` when the field is missing or the file input was left empty. `store(storage, prefix, filename, content_type, bytes)` and `store_stream(…, reader)` store bytes you already have; `read`, `url` and `delete` work with the stored file. Keys are `<prefix>/<id>/<file name>`, the name reduced to letters, digits, `.`, `-` and `_`, so uploads never overwrite each other. Deleting a row doesn't delete its file: call `attachment.delete(&storage)` where you delete the row.
+
+## Flash messages and redirects
+
+A flash message is set on one response — usually the redirect after a form post — and shown on the next page, once (18.35.0):
+
+```rust
+use rust_web_server::error::IntoResponse;
+use rust_web_server::flash::{Flash, FlashLayer, Redirect};
+
+fn create(request: &Request, _: &PathParams, _: &ConnectionInfo, db: &Db) -> Response {
+    // … save …
+    Redirect::to("/posts").notice("Post saved").into_response()        // 303 See Other
+}
+
+fn index(request: &Request, _: &PathParams, _: &ConnectionInfo, db: &Db) -> Response {
+    let flash = Flash::read(request);                                   // or a `Flash` handler argument
+    let notice = flash.notice().unwrap_or("");
+    // …
+}
+
+let app = App::with_state(db).post("/posts", create).get("/posts", index).wrap(FlashLayer::new());
+```
+
+`Redirect` is `303 See Other` (`found` for 302, `permanent` for 301; `to_route(name, params)` for a [named route](/building-apps/routing/#named-routes-and-url_for)) with any number of `.notice(…)`, `.alert(…)` or `.flash(kind, text)` messages. `flash::set(&mut response, kind, text)` adds one to any response. `FlashLayer` clears the flash cookie after the request that carried it, unless the response sets a new flash; it changes nothing for requests without one, so async handlers stay async. In templates, [`page_context(request)`](/building-apps/templates/#view-helpers) puts the messages in `flash`, `notice` and `alert`.
+
+Messages travel in the `rws_flash` cookie (`HttpOnly`, `SameSite=Lax`), percent-encoded and capped at 3800 bytes: the browser can read and change them, so a flash is for display only — templates escape it like any other text.
+
 ## Size limits
 
 Two independent knobs apply to request bodies:

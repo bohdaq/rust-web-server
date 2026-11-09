@@ -65,6 +65,11 @@ pub mod otel;
 pub mod middleware;
 pub mod rate_limit;
 pub mod router;
+pub mod group;
+pub mod flash;
+#[cfg(feature = "serde")]
+pub mod vite;
+pub mod channels;
 pub mod handler;
 pub mod schema;
 pub mod state;

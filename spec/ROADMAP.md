@@ -298,7 +298,7 @@ Rws as a Rails/Spring-class framework built agent-first: the app explains itself
 
 - **#92** **Auth flows** — sign-up, login, password reset, email confirmation (JSON and Tera).
 - **#93** **Jobs, mail and events** — `run_at`, queues, unique jobs, dead-letter, persistent cron across replicas; templated mail, previews, `deliver_later`; a typed `EventBus`.
-- **#94** **Web layer** — `resource()` routing, `nest`/`group`, route guards, `Form<T>`, flash messages, view helpers, Vite manifest helper, channels over WebSocket/SSE, attachments on models.
+- **#94** ✅ *branch `framework-18-31` (2026-11-10): `group` (guards, per-group middleware on `AppWithState`; nested), `resource`, named routes + `router::url_for`, `flash` (`Redirect`, `Flash`, `FlashLayer`), template helpers (`url_for`, `vite`, `vite_asset`, `page_context`), `vite::Vite`, `channels::Hub`, `attachment::Attachment`; `Form<T>` already shipped in 18.28. No separate `nest`: groups nest.* **Web layer** — `resource()` routing, `nest`/`group`, route guards, `Form<T>`, flash messages, view helpers, Vite manifest helper, channels over WebSocket/SSE, attachments on models.
 - **#95** **Defaults** — `RWS_ENV` profiles, problem+json by default, a dev error page, a `fetch_or` cache, DI lifecycle hooks.
 
 **Done when:** `starters/fullstack` uses the auth flows, a job, a mail and the web layer, and passes in CI.

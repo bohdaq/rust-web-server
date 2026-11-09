@@ -40,6 +40,34 @@
 //! template::reload().unwrap(); // re-globs the directory, replacing all templates
 //! ```
 //!
+//! # View helpers (18.35.0)
+//!
+//! Every engine has these functions:
+//!
+//! - `url_for(name="posts.show", id=7)` — the path of a named route
+//!   ([`router::url_for`](crate::router::url_for)); arguments the pattern
+//!   doesn't have become the query string. Its output is percent-encoded,
+//!   so `| safe` is fine (Tera otherwise writes `/` as `&#x2F;`, which
+//!   browsers read back as `/`).
+//! - `vite(entry="src/main.ts")` — the `<script>`/`<link>` tags of a Vite
+//!   entry from the installed [`vite`](crate::vite) helper (`| safe`).
+//! - `vite_asset(path="src/logo.svg")` — a built asset's URL (`| safe`).
+//!
+//! [`page_context`] starts a [`Context`] for a request with its flash
+//! messages (`flash`, `notice`, `alert`), the CSRF token (`csrf_token`,
+//! and `csrf_field`, a hidden `_csrf` input: `{{ csrf_field | safe }}`)
+//! and the request path (`path`):
+//!
+//! ```rust
+//! use rust_web_server::template::{page_context, TeraEngine};
+//!
+//! let engine = TeraEngine::from_raw(&[("form.html", r#"<form method="post" action="{{ url_for(name='doc_form_save') | safe }}">{{ csrf_field | safe }}</form>"#)]).unwrap();
+//! rust_web_server::router::name_route("doc_form_save", "/save");
+//! # let request = rust_web_server::request::Request { method: "GET".into(), request_uri: "/form".into(), http_version: "HTTP/1.1".into(), headers: vec![], body: Vec::new().into() };
+//! let html = engine.render("form.html", &page_context(&request)).unwrap();
+//! assert!(html.starts_with(r#"<form method="post" action="/save">"#));
+//! ```
+//!
 //! Only engines created from a glob ([`init`], [`init_from_env`],
 //! [`TeraEngine::from_dir`], [`TeraEngine::from_glob`]) can reload — an
 //! engine built from [`TeraEngine::from_raw`] has no directory to re-read,
@@ -74,8 +102,9 @@ impl TeraEngine {
     ///
     /// The pattern is passed directly to [`tera::Tera::new`].
     pub fn from_glob(pattern: &str) -> Result<Self, String> {
-        let tera = tera::Tera::new(pattern)
+        let mut tera = tera::Tera::new(pattern)
             .map_err(|e| format!("template engine init failed: {}", e))?;
+        register_helpers(&mut tera);
         Ok(TeraEngine { inner: tera, glob: Some(pattern.to_string()) })
     }
 
@@ -91,6 +120,7 @@ impl TeraEngine {
     /// [`reload`][Self::reload] always returns `Err` for an engine built this way.
     pub fn from_raw(templates: &[(&str, &str)]) -> Result<Self, String> {
         let mut tera = tera::Tera::default();
+        register_helpers(&mut tera);
         for (name, content) in templates {
             tera.add_raw_template(name, content)
                 .map_err(|e| format!("failed to add template '{}': {}", name, e))?;
@@ -133,8 +163,9 @@ impl TeraEngine {
              which has no template directory to re-read"
                 .to_string()
         })?;
-        let fresh = tera::Tera::new(pattern)
+        let mut fresh = tera::Tera::new(pattern)
             .map_err(|e| format!("template reload failed, previous templates are still active: {}", e))?;
+        register_helpers(&mut fresh);
         self.inner = fresh;
         Ok(())
     }
@@ -221,6 +252,87 @@ pub(crate) fn reload_if_initialized() {
             eprintln!("[template] hot reload failed: {}", e);
         }
     }
+}
+
+// ── view helpers ──────────────────────────────────────────────────────────────
+
+/// A template argument as text: strings as they are, other values as JSON.
+fn arg_text(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
+fn register_helpers(tera: &mut tera::Tera) {
+    tera.register_function("url_for", |args: &std::collections::HashMap<String, Value>| {
+        let name = args.get("name").and_then(Value::as_str).ok_or_else(|| tera::Error::msg("url_for: needs name=\"<route name>\""))?;
+        // Sorted, so the query string doesn't depend on hash order.
+        let mut params: Vec<(String, String)> = args.iter().filter(|(k, _)| k.as_str() != "name").map(|(k, v)| (k.clone(), arg_text(v))).collect();
+        params.sort();
+        let borrowed: Vec<(&str, &str)> = params.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        crate::router::url_for(name, &borrowed)
+            .map(Value::String)
+            .ok_or_else(|| tera::Error::msg(format!("url_for: no route named {name:?}, or a parameter of it is missing")))
+    });
+    tera.register_function("vite", |args: &std::collections::HashMap<String, Value>| {
+        let entry = args.get("entry").and_then(Value::as_str).ok_or_else(|| tera::Error::msg("vite: needs entry=\"<source path>\""))?;
+        crate::vite::tags(entry)
+            .map(Value::String)
+            .ok_or_else(|| tera::Error::msg(format!("vite: no entry {entry:?} (or no Vite helper installed: rust_web_server::vite::install)")))
+    });
+    tera.register_function("vite_asset", |args: &std::collections::HashMap<String, Value>| {
+        let path = args.get("path").and_then(Value::as_str).ok_or_else(|| tera::Error::msg("vite_asset: needs path=\"<source path>\""))?;
+        crate::vite::asset(path).map(Value::String).ok_or_else(|| tera::Error::msg(format!("vite_asset: no asset {path:?}")))
+    });
+}
+
+/// A [`Context`] for rendering a page in answer to `request`: `flash`
+/// (a list of `{kind, text}`), `notice` and `alert` (the first of each,
+/// when there is one), `csrf_token` and `csrf_field` (`csrf` feature; from
+/// [`CsrfLayer`](crate::csrf::CsrfLayer), else its `_csrf` cookie; empty
+/// without either) and `path`.
+pub fn page_context(request: &crate::request::Request) -> Context {
+    let mut ctx = Context::new();
+    let flash = crate::flash::Flash::read(request);
+    let messages: Vec<Value> = flash
+        .messages()
+        .iter()
+        .map(|m| serde_json::json!({ "kind": m.kind, "text": m.text }))
+        .collect();
+    ctx.insert("flash", &messages);
+    if let Some(notice) = flash.notice() {
+        ctx.insert("notice", notice);
+    }
+    if let Some(alert) = flash.alert() {
+        ctx.insert("alert", alert);
+    }
+    let token = csrf_token(request);
+    let field = if token.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<input type="hidden" name="_csrf" value="{}">"#, token.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;"))
+    };
+    ctx.insert("csrf_token", &token);
+    ctx.insert("csrf_field", &field);
+    ctx.insert("path", request.request_uri.split('?').next().unwrap_or("/"));
+    ctx
+}
+
+#[cfg(feature = "csrf")]
+fn csrf_token(request: &crate::request::Request) -> String {
+    if let Some(token) = crate::csrf::CsrfToken::from_request(request) {
+        return token.value().to_string();
+    }
+    request
+        .header("cookie")
+        .and_then(|h| crate::cookie::CookieJar::parse(&h.value).get("_csrf").map(|c| c.value.clone()))
+        .unwrap_or_default()
+}
+
+#[cfg(not(feature = "csrf"))]
+fn csrf_token(_request: &crate::request::Request) -> String {
+    String::new()
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

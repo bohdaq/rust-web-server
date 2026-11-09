@@ -7,6 +7,29 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- **Web layer** (roadmap #94, `spec/AGENT_FIRST_FRAMEWORK.md`):
+  - **Route groups and guards**: `app.group("/admin", |g| g.guard(signed_in).wrap(layer).get(…))`
+    on `AppWithState` and `AsyncAppWithState` (async groups: guards, no
+    per-group middleware); groups nest, guards run outer first.
+  - **Resources**: `app.resource("/posts", |r| r.index(…).show(…)…)` — the
+    seven conventional routes (`new` before `{id}`, `update` on PUT and
+    PATCH), each named `posts.<action>`; `extra` for more.
+  - **Named routes**: `.name("post")` after a route, `router::url_for(name, params)`.
+  - **Flash messages** (`flash`): `Redirect::to(path).notice(…)` (303),
+    `Flash` (also a handler argument), `FlashLayer` clears it once shown.
+  - **View helpers**: the `url_for`, `vite` and `vite_asset` template
+    functions and `template::page_context(request)` (flash, `csrf_field`,
+    path). The `tera` feature now turns on `serde`.
+  - **Vite manifest helper** (`vite`, `serde`): tags for an entry from
+    `.vite/manifest.json` or the dev server (`VITE_DEV_SERVER`).
+  - **Channels** (`channels::Hub`): named topics pushed to SSE and
+    WebSocket clients.
+  - **Attachments on models** (`attachment`, any `storage-*` feature): a
+    file in a `Storage` backend as one `TEXT` column, from a multipart
+    upload with `Attachment::from_multipart`.
+
 ### Changed
 
 - **Admin Traffic page: world map** is now `@lit-material/world-map`: one

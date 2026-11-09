@@ -274,6 +274,45 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         self
     }
 
+    /// Register routes under `prefix` that share guards and middleware
+    /// (18.35.0, #94); see [`group`](crate::group).
+    pub fn group(mut self, prefix: &str, build: impl FnOnce(crate::group::Group<S>) -> crate::group::Group<S>) -> Self {
+        let routes = build(crate::group::Group::new(prefix)).finish();
+        self.add_group_routes(routes);
+        self
+    }
+
+    /// Register the conventional routes of a resource at `path` (18.35.0,
+    /// #94): `index`, `new_form`, `create`, `show`, `edit`, `update`,
+    /// `destroy`; see [`group`](crate::group).
+    pub fn resource(mut self, path: &str, build: impl FnOnce(crate::group::Resource<S>) -> crate::group::Resource<S>) -> Self {
+        let routes = crate::group::Group::new("").resource(path, build).finish();
+        self.add_group_routes(routes);
+        self
+    }
+
+    /// Name the route registered last, for
+    /// [`url_for`](crate::router::url_for) (18.35.0, #94).
+    pub fn name(self, name: &str) -> Self {
+        if let Some(pattern) = self.router.last_pattern() {
+            crate::router::name_route(name, &pattern);
+        }
+        self
+    }
+
+    fn add_group_routes(&mut self, routes: Vec<crate::group::GroupRoute<crate::group::SyncHandler<S>>>) {
+        let mut router = std::mem::replace(&mut self.router, Router::new());
+        for route in routes {
+            if let Some(name) = &route.name {
+                crate::router::name_route(name, &route.pattern);
+            }
+            let state = Arc::clone(&self.state);
+            let handler = route.handler;
+            router = router.add(route.method, &route.pattern, move |request, params, connection| handler(request, params, connection, &state));
+        }
+        self.router = router;
+    }
+
     /// Routes that never run because an earlier one with the same method
     /// matches every path they do (18.28.0). See
     /// [`Router::route_conflicts`](crate::router::Router::route_conflicts);

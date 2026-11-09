@@ -26,7 +26,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `FileChange` / `ChangeKind` / `GenError` | `generator` | One file of a plan (`path`, `kind` — `Create`, `Edit`, `Unchanged`, `Conflict` — `content`, `original`, `diff`); why a generator refused (`usage`, `message`, `to_json()`) |
 | `Field` / `FieldType` / `BaseType` / `Db` / `RouteAction` | `generator` | `name:type` (`Field::parse`, `parse_fields`; types `i64`, `i32`, `f64`, `bool`, `String`, `Option<T>`); the database a migration is written for (`sqlite`, `postgres`, `mysql`); the routes `gen route` writes (`List`, `Show`, `Create`, `Update`, `Remove`; `parse_list("list,show")`) |
 | `AppPaths` / `LayoutEntry` / `EntryKind` / `ManifestError` | `app_manifest` | Where each part lives (`main`, `lib`, `routes`, `models`, `jobs`, `migrations`, `templates`, `tests`, `static_files`; `Default` = the conventional layout; `entries()`, `get(role)`); one role as found on disk (`role`, `path`, `kind` file/dir, `exists`); a parse error (`line`, `message`) |
-| `TeraEngine` | `template` (`tera`) | Jinja2-style templates: `from_dir`, `from_raw`; global `template::init(dir)` / `template::render(name, &ctx)` / `template::reload()` (also run on `SIGHUP`). See [Templates](/building-apps/templates/) |
+| `TeraEngine` | `template` (`tera`) | Jinja2-style templates: `from_dir`, `from_raw`; global `template::init(dir)` / `template::render(name, &ctx)` / `template::reload()` (also run on `SIGHUP`); view helpers `url_for`, `vite`, `vite_asset` and `template::page_context(request)` (flash, CSRF field, path; 18.35.0). See [Templates](/building-apps/templates/) |
 
 ## Macros
 
@@ -67,6 +67,13 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `Router` | `router` | Path-pattern router with `:param` and `*wildcard`; `.with_host(name)` restricts it to one virtual host; `.matches(request, connection)` tells whether `handle()` would run a handler |
+| `Group<S>` / `Resource<S>` | `group` | Routes under a path prefix sharing guards and middleware (`app.group(prefix, \|g\| …)`), and a collection's conventional routes (`app.resource(path, \|r\| …)`: `index`, `new_form`, `create`, `show`, `edit`, `update`, `destroy`, `extra`) (18.35.0). See [Groups and guards](/building-apps/routing/#groups-and-guards) |
+| `AsyncGroup<S>` / `AsyncResource<S>` | `group` (`http2`) | The same for `AsyncAppWithState` (guards, no per-group middleware) |
+| `url_for` / `name_route` / `named_routes` / `build_path` | `router` | Named routes (`.name("post")` after a route) and their paths with parameters filled in (18.35.0). See [Named routes](/building-apps/routing/#named-routes-and-url_for) |
+| `Flash` / `FlashLayer` / `Redirect` | `flash` | Flash messages in the `rws_flash` cookie, shown once; `Redirect::to(path).notice(…)` (303), `found`, `permanent`, `to_route` (18.35.0). See [Flash messages](/building-apps/forms-uploads/#flash-messages-and-redirects) |
+| `Hub` | `channels` | Named topics pushed to SSE and WebSocket clients: `publish`, `sse`, `serve_websocket`, `subscribe` (18.35.0). See [Channels](/features/channels/) |
+| `Vite` | `vite` (`serde`) | Tags for a Vite entry from its manifest or dev server; `vite::install` for the `vite` template function (18.35.0). See [Vite](/building-apps/templates/#vite) |
+| `Attachment` | `attachment` (`storage-*`) | A model field whose bytes are in a `Storage` backend, stored as one `TEXT` column; `store`, `store_stream`, `from_multipart`, `url`, `read`, `delete` (18.35.0). See [Attachments](/building-apps/forms-uploads/#attachments-on-models) |
 | `PathParams` | `router` | Extracted path parameters; `.get(name) -> Option<&str>` |
 | `RouteConflict` / `RouteConflictKind` | `router` | A route that never runs because an earlier one with the same method matches every path it does (`Duplicate`, `Shadowed`); `route_conflicts()` on `Router`, `AppWithState`, `AsyncAppWithState`, also printed once when registered (18.28.0). See [Route conflicts](/building-apps/routing/#route-conflicts) |
 | `Handler<S>` / `AsyncHandler<S>` / `RouteSpec` | `handler` | What the route macros generate for a typed handler: `handle(request, params, connection, &Arc<S>)`, `handle_async(…)` → `HandlerFuture`, `METHOD`/`PATTERN`; `.route(h)` registers one (18.28.0) |

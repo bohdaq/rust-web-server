@@ -203,6 +203,41 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
         })
     }
 
+    /// Register routes under `prefix` that share guards (18.35.0, #94);
+    /// see [`group`](crate::group).
+    pub fn group(mut self, prefix: &str, build: impl FnOnce(crate::group::AsyncGroup<S>) -> crate::group::AsyncGroup<S>) -> Self {
+        for route in build(crate::group::AsyncGroup::new(prefix)).finish() {
+            self = self.add_group_route(route);
+        }
+        self
+    }
+
+    /// Register the conventional routes of a resource at `path` (18.35.0,
+    /// #94); see [`group`](crate::group).
+    pub fn resource(mut self, path: &str, build: impl FnOnce(crate::group::AsyncResource<S>) -> crate::group::AsyncResource<S>) -> Self {
+        for route in crate::group::AsyncGroup::new("").resource(path, build).finish() {
+            self = self.add_group_route(route);
+        }
+        self
+    }
+
+    /// Name the route registered last, for
+    /// [`url_for`](crate::router::url_for) (18.35.0, #94).
+    pub fn name(self, name: &str) -> Self {
+        if let Some(route) = self.routes.last() {
+            crate::router::name_route(name, &matcher::segments_to_pattern(&route.segments));
+        }
+        self
+    }
+
+    fn add_group_route(self, route: crate::group::GroupRoute<crate::group::AsyncHandlerFn<S>>) -> Self {
+        if let Some(name) = &route.name {
+            crate::router::name_route(name, &route.pattern);
+        }
+        let handler = route.handler;
+        self.add(route.method, &route.pattern, move |request, params, connection, state| handler(request, params, connection, state))
+    }
+
     /// Register an async `GET` handler for `pattern`.
     pub fn get<F, Fut>(self, pattern: &str, handler: F) -> Self
     where

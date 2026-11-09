@@ -222,3 +222,50 @@ fn global_init_render_and_reload_lifecycle() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ── view helpers (18.35.0) ────────────────────────────────────────────────────
+
+fn request(uri: &str, cookie: Option<&str>) -> crate::request::Request {
+    let headers = cookie.map(|c| vec![crate::header::Header::new("Cookie", c.to_string())]).unwrap_or_default();
+    crate::request::Request { method: "GET".into(), request_uri: uri.into(), http_version: "HTTP/1.1".into(), headers, body: Vec::new().into() }
+}
+
+#[test]
+fn url_for_fills_parameters_and_query() {
+    crate::router::name_route("tpl_post", "/tpl/posts/{id}");
+    let engine = TeraEngine::from_raw(&[("a.html", r#"<a href="{{ url_for(name='tpl_post', id=7, tab='x y') | safe }}"><a href="{{ url_for(name='tpl_post', id=7) }}">"#)]).unwrap();
+    // Escaped without `| safe`: `/` as `&#x2F;`, which browsers read back as `/`.
+    assert_eq!(r#"<a href="/tpl/posts/7?tab=x%20y"><a href="&#x2F;tpl&#x2F;posts&#x2F;7">"#, engine.render("a.html", &Context::new()).unwrap());
+}
+
+#[test]
+fn url_for_errors_name_the_problem() {
+    let engine = TeraEngine::from_raw(&[("bad.html", "{{ url_for(name='tpl_missing') }}"), ("noname.html", "{{ url_for(id=1) }}")]).unwrap();
+    assert!(engine.render("bad.html", &Context::new()).is_err());
+    assert!(engine.render("noname.html", &Context::new()).is_err());
+}
+
+#[test]
+fn vite_functions_read_the_installed_helper() {
+    let manifest = r#"{"src/tpl.ts": {"file": "assets/tpl.js"}, "src/tpl.svg": {"file": "assets/tpl-1.svg"}}"#;
+    crate::vite::install(crate::vite::Vite::from_manifest_str(manifest, "/").unwrap());
+    let engine = TeraEngine::from_raw(&[("v.html", r#"{{ vite(entry="src/tpl.ts") | safe }}|{{ vite_asset(path="src/tpl.svg") | safe }}"#), ("missing.html", r#"{{ vite(entry="src/none.ts") }}"#)]).unwrap();
+    assert_eq!(r#"<script type="module" src="/assets/tpl.js"></script>|/assets/tpl-1.svg"#, engine.render("v.html", &Context::new()).unwrap());
+    assert!(engine.render("missing.html", &Context::new()).is_err());
+}
+
+#[test]
+fn page_context_has_flash_csrf_and_path() {
+    let engine = TeraEngine::from_raw(&[(
+        "page.html",
+        "{{ path }}|{% if notice %}{{ notice }}{% endif %}|{% for m in flash %}{{ m.kind }}:{{ m.text }};{% endfor %}|{{ csrf_field | safe }}",
+    )])
+    .unwrap();
+    let plain = engine.render("page.html", &super::page_context(&request("/posts?x=1", None))).unwrap();
+    assert_eq!("&#x2F;posts|||", plain);
+    let with = engine.render("page.html", &super::page_context(&request("/", Some("rws_flash=notice=%3Cb%3E&alert=No; _csrf=tok")))).unwrap();
+    #[cfg(feature = "csrf")]
+    assert_eq!(r#"&#x2F;|&lt;b&gt;|notice:&lt;b&gt;;alert:No;|<input type="hidden" name="_csrf" value="tok">"#, with);
+    #[cfg(not(feature = "csrf"))]
+    assert_eq!("&#x2F;|&lt;b&gt;|notice:&lt;b&gt;;alert:No;|", with);
+}

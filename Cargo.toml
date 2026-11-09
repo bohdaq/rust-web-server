@@ -171,7 +171,7 @@ macros = ["dep:rws-macros", "rws-server/macros", "rws-proxy/macros"]
 # The `rws` binary allocates with mimalloc instead of the system allocator
 # (the library never sets a global allocator).
 mimalloc = ["dep:mimalloc", "rws-proxy/mimalloc"]
-tera   = ["dep:tera", "dep:serde", "dep:serde_json"]
+tera   = ["dep:tera", "serde"]
 model-sqlite   = ["dep:sqlx", "sqlx/sqlite",   "sqlx/runtime-tokio", "http2", "rws-server/model-sqlite", "rws-proxy/model-sqlite"]
 model-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/runtime-tokio-rustls", "http2", "rws-server/model-postgres", "rws-proxy/model-postgres"]
 model-mysql    = ["dep:sqlx", "sqlx/mysql",    "sqlx/runtime-tokio-rustls", "http2", "rws-server/model-mysql", "rws-proxy/model-mysql"]

@@ -1,4 +1,5 @@
 pub(crate) mod matcher;
+pub(crate) mod names;
 #[cfg(test)]
 mod tests;
 
@@ -9,6 +10,8 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::server::ConnectionInfo;
 use matcher::Segment;
+
+pub use names::{build_path, name_route, named_pattern, named_routes, url_for};
 
 /// Named path-segment values extracted from a matched route pattern.
 ///
@@ -350,6 +353,11 @@ impl Router {
     /// wins. Each is also printed once to stderr when it is registered.
     pub fn route_conflicts(&self) -> Vec<RouteConflict> {
         conflicts(self.routes.iter().map(|r| (r.method.as_str(), r.segments.as_slice())))
+    }
+
+    /// The pattern of the route registered last (`:name` form).
+    pub(crate) fn last_pattern(&self) -> Option<String> {
+        self.routes.last().map(|r| matcher::segments_to_pattern(&r.segments))
     }
 
     fn last_route_conflict(&self) -> Option<RouteConflict> {

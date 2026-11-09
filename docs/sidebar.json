@@ -233,6 +233,11 @@
         "label": "Server-Sent Events",
         "link": "/features/sse/"
       },
+
+      {
+        "label": "Channels",
+        "link": "/features/channels/"
+      },
       {
         "label": "Auth",
         "link": "/features/auth/"
