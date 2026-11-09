@@ -89,9 +89,10 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 
 /// Run `work` on the dedicated runtime and wait for it — from any thread,
 /// inside a runtime or not.
-pub(crate) fn run<F>(work: F) -> Result<String, String>
+pub(crate) fn run<F, T>(work: F) -> Result<T, String>
 where
-    F: Future<Output = Result<String, DbError>> + Send + 'static,
+    F: Future<Output = Result<T, DbError>> + Send + 'static,
+    T: Send + 'static,
 {
     let (tx, rx) = std::sync::mpsc::channel();
     runtime().spawn(async move {

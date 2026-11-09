@@ -51,6 +51,28 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   - **`events::EventBus`**: typed in-process events, forwarded to MCP
     notifications or channel topics.
 
+- **Defaults** (roadmap #95):
+  - **`RWS_ENV` profiles**: `RwsEnv::shows_error_details()` (dev, test) and
+    `reloads_templates()` (dev); `template::render` re-reads templates
+    before each render in dev.
+  - **`error_pages::ErrorPages`**: panics and app errors as a page with the
+    message, location, request and backtrace (or problem details with
+    `location`/`backtrace`) in dev and test, a bare `500` in prod.
+  - **`cache::ValueCache`**: `fetch_or` / `try_fetch_or` / `fetch_or_async`
+    with a TTL per entry.
+  - **Container lifecycle**: the `Lifecycle` trait, `register_managed`,
+    `on_start` / `on_stop`, `start` / `stop`.
+
+- **ORM**: nested eager loading — `with_nested(relation, |n| n.with(…))`
+  on `QueryBuilder`/`EagerQuery`, read with `Loaded::related_loaded` (one
+  query per relation per level); `rws gen migration <name> --from-models`
+  (`generator::plan_model_migration`) writes the additive migration from
+  the `#[derive(Model)]` structs to the database (`CREATE TABLE`, `ADD
+  COLUMN`; anything else is a note).
+- **`AuthFlows::on_signup`**, and `starters/fullstack` now has accounts
+  (`/auth`, a guarded `/api/account`), a welcome email sent by a job,
+  `FlashLayer`, `ErrorPages` and mail previews in dev.
+
 ### Fixed
 
 - **`PersistentJobQueue` on PostgreSQL and MySQL**: its SQL used `?`

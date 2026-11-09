@@ -199,6 +199,7 @@ impl core::clone::Clone for rust_web_server::dev_mcp::DevTools
 impl core::clone::Clone for rust_web_server::early_hints::EarlyHintsLayer
 impl core::clone::Clone for rust_web_server::entry_point::Config
 impl core::clone::Clone for rust_web_server::entry_point::RwsEnv
+impl core::clone::Clone for rust_web_server::error_pages::ErrorPages
 impl core::clone::Clone for rust_web_server::events::EventBus
 impl core::clone::Clone for rust_web_server::events::SubscriptionId
 impl core::clone::Clone for rust_web_server::extract::RequestId
@@ -1106,6 +1107,7 @@ impl core::fmt::Debug for rust_web_server::entry_point::Config
 impl core::fmt::Debug for rust_web_server::entry_point::RwsEnv
 impl core::fmt::Debug for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::fmt::Debug for rust_web_server::error::AppError
+impl core::fmt::Debug for rust_web_server::error_pages::ErrorPages
 impl core::fmt::Debug for rust_web_server::events::SubscriptionId
 impl core::fmt::Debug for rust_web_server::extract::Body
 impl core::fmt::Debug for rust_web_server::extract::BodyText
@@ -1423,6 +1425,7 @@ impl core::marker::Copy for rust_web_server::compression::dictionary::Dictionary
 impl core::marker::Copy for rust_web_server::core::base64::Alphabet
 impl core::marker::Copy for rust_web_server::core::base64::Decoder
 impl core::marker::Copy for rust_web_server::entry_point::RwsEnv
+impl core::marker::Copy for rust_web_server::error_pages::ErrorPages
 impl core::marker::Copy for rust_web_server::events::SubscriptionId
 impl core::marker::Copy for rust_web_server::flash::FlashLayer
 impl core::marker::Copy for rust_web_server::generator::BaseType
@@ -1566,6 +1569,7 @@ impl core::marker::Freeze for rust_web_server::entry_point::RwsEnv
 impl core::marker::Freeze for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Freeze for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Freeze for rust_web_server::error::AppError
+impl core::marker::Freeze for rust_web_server::error_pages::ErrorPages
 impl core::marker::Freeze for rust_web_server::events::EventBus
 impl core::marker::Freeze for rust_web_server::events::SubscriptionId
 impl core::marker::Freeze for rust_web_server::ext::date_time_ext::DateTimeExt
@@ -2057,6 +2061,7 @@ impl core::marker::Send for rust_web_server::entry_point::RwsEnv
 impl core::marker::Send for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Send for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Send for rust_web_server::error::AppError
+impl core::marker::Send for rust_web_server::error_pages::ErrorPages
 impl core::marker::Send for rust_web_server::events::EventBus
 impl core::marker::Send for rust_web_server::events::SubscriptionId
 impl core::marker::Send for rust_web_server::ext::date_time_ext::DateTimeExt
@@ -2804,6 +2809,7 @@ impl core::marker::Sync for rust_web_server::entry_point::RwsEnv
 impl core::marker::Sync for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Sync for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Sync for rust_web_server::error::AppError
+impl core::marker::Sync for rust_web_server::error_pages::ErrorPages
 impl core::marker::Sync for rust_web_server::events::EventBus
 impl core::marker::Sync for rust_web_server::events::SubscriptionId
 impl core::marker::Sync for rust_web_server::ext::date_time_ext::DateTimeExt
@@ -3308,6 +3314,7 @@ impl core::marker::Unpin for rust_web_server::entry_point::RwsEnv
 impl core::marker::Unpin for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::Unpin for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::Unpin for rust_web_server::error::AppError
+impl core::marker::Unpin for rust_web_server::error_pages::ErrorPages
 impl core::marker::Unpin for rust_web_server::events::EventBus
 impl core::marker::Unpin for rust_web_server::events::SubscriptionId
 impl core::marker::Unpin for rust_web_server::ext::date_time_ext::DateTimeExt
@@ -3818,6 +3825,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::entry_point::RwsEnv
 impl core::marker::UnsafeUnpin for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::marker::UnsafeUnpin for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::marker::UnsafeUnpin for rust_web_server::error::AppError
+impl core::marker::UnsafeUnpin for rust_web_server::error_pages::ErrorPages
 impl core::marker::UnsafeUnpin for rust_web_server::events::EventBus
 impl core::marker::UnsafeUnpin for rust_web_server::events::SubscriptionId
 impl core::marker::UnsafeUnpin for rust_web_server::ext::date_time_ext::DateTimeExt
@@ -4326,6 +4334,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::R
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::error::AppError
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::error_pages::ErrorPages
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::events::EventBus
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::events::SubscriptionId
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::ext::date_time_ext::DateTimeExt
@@ -4793,6 +4802,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::RwsE
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::command_line_args::CommandLineArgument
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::entry_point::config_file::ConfigSettings
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::error::AppError
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::error_pages::ErrorPages
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::events::EventBus
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::events::SubscriptionId
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::ext::date_time_ext::DateTimeExt
@@ -5302,6 +5312,7 @@ impl rust_web_server::error::IntoResponse for alloc::string::String
 impl rust_web_server::error::IntoResponse for rust_web_server::error::AppError
 impl rust_web_server::error::IntoResponse for rust_web_server::flash::Redirect
 impl rust_web_server::error::IntoResponse for rust_web_server::response::Response
+impl rust_web_server::error_pages::ErrorPages
 impl rust_web_server::events::EventBus
 impl rust_web_server::ext::date_time_ext::DateTimeExt
 impl rust_web_server::ext::string_ext::StringExt
@@ -5418,6 +5429,7 @@ impl rust_web_server::middleware::Middleware for rust_web_server::cache::CacheLa
 impl rust_web_server::middleware::Middleware for rust_web_server::canary::CanaryLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::circuit_breaker::RetryLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::early_hints::EarlyHintsLayer
+impl rust_web_server::middleware::Middleware for rust_web_server::error_pages::ErrorPages
 impl rust_web_server::middleware::Middleware for rust_web_server::flash::FlashLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::ip_filter::IpFilter
 impl rust_web_server::middleware::Middleware for rust_web_server::maintenance::MaintenanceLayer
@@ -5987,13 +5999,21 @@ impl<O> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::rela
 impl<O> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::relation::HasOne<O> where core::marker::PhantomData<O>: core::panic::unwind_safe::RefUnwindSafe
 impl<O> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::relation::BelongsTo<O> where core::marker::PhantomData<O>: core::panic::unwind_safe::UnwindSafe
 impl<O> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::relation::HasOne<O> where core::marker::PhantomData<O>: core::panic::unwind_safe::UnwindSafe
+impl<R: rust_web_server::model::Model + 'static> rust_web_server::model::eager::Nested<R>
 impl<R: rust_web_server::model::Model> core::clone::Clone for rust_web_server::model::relation::BelongsToMany<R>
 impl<R: rust_web_server::model::Model> core::fmt::Debug for rust_web_server::model::relation::BelongsToMany<R>
 impl<R: rust_web_server::model::Model> rust_web_server::model::relation::BelongsToMany<R>
+impl<R> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::eager::Nested<R>
+impl<R> !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::eager::Nested<R>
+impl<R> core::marker::Freeze for rust_web_server::model::eager::Nested<R> where alloc::vec::Vec<alloc::boxed::Box<dyn Loader<R>>>: core::marker::Freeze
 impl<R> core::marker::Freeze for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Freeze
+impl<R> core::marker::Send for rust_web_server::model::eager::Nested<R> where alloc::vec::Vec<alloc::boxed::Box<dyn Loader<R>>>: core::marker::Send
 impl<R> core::marker::Send for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Send
+impl<R> core::marker::Sync for rust_web_server::model::eager::Nested<R> where alloc::vec::Vec<alloc::boxed::Box<dyn Loader<R>>>: core::marker::Sync
 impl<R> core::marker::Sync for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Sync
+impl<R> core::marker::Unpin for rust_web_server::model::eager::Nested<R> where alloc::vec::Vec<alloc::boxed::Box<dyn Loader<R>>>: core::marker::Unpin
 impl<R> core::marker::Unpin for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rust_web_server::model::eager::Nested<R> where alloc::vec::Vec<alloc::boxed::Box<dyn Loader<R>>>: core::marker::UnsafeUnpin
 impl<R> core::marker::UnsafeUnpin for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::marker::UnsafeUnpin
 impl<R> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::panic::unwind_safe::RefUnwindSafe
 impl<R> core::panic::unwind_safe::UnwindSafe for rust_web_server::model::relation::BelongsToMany<R> where core::marker::PhantomData<fn() -> R>: core::panic::unwind_safe::UnwindSafe
@@ -6234,6 +6254,15 @@ impl<T> core::panic::unwind_safe::UnwindSafe for rust_web_server::validate::Vali
 impl<T> rust_web_server::pagination::CursorPage<T>
 impl<T> rust_web_server::pagination::Page<T>
 impl<T> rust_web_server::test_client::factory::FactoryValue for core::option::Option<T>
+impl<V: core::clone::Clone> rust_web_server::cache::ValueCache<V>
+impl<V> core::clone::Clone for rust_web_server::cache::ValueCache<V>
+impl<V> core::marker::Freeze for rust_web_server::cache::ValueCache<V> where alloc::rcs::arc::Arc<std::sync::poison::mutex::Mutex<Inner<V>>>: core::marker::Freeze
+impl<V> core::marker::Send for rust_web_server::cache::ValueCache<V> where alloc::rcs::arc::Arc<std::sync::poison::mutex::Mutex<Inner<V>>>: core::marker::Send
+impl<V> core::marker::Sync for rust_web_server::cache::ValueCache<V> where alloc::rcs::arc::Arc<std::sync::poison::mutex::Mutex<Inner<V>>>: core::marker::Sync
+impl<V> core::marker::Unpin for rust_web_server::cache::ValueCache<V> where alloc::rcs::arc::Arc<std::sync::poison::mutex::Mutex<Inner<V>>>: core::marker::Unpin
+impl<V> core::marker::UnsafeUnpin for rust_web_server::cache::ValueCache<V> where alloc::rcs::arc::Arc<std::sync::poison::mutex::Mutex<Inner<V>>>: core::marker::UnsafeUnpin
+impl<V> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::cache::ValueCache<V> where alloc::rcs::arc::Arc<std::sync::poison::mutex::Mutex<Inner<V>>>: core::panic::unwind_safe::RefUnwindSafe
+impl<V> core::panic::unwind_safe::UnwindSafe for rust_web_server::cache::ValueCache<V> where alloc::rcs::arc::Arc<std::sync::poison::mutex::Mutex<Inner<V>>>: core::panic::unwind_safe::UnwindSafe
 impl<const N: usize> core::convert::From<&[u8; N]> for rust_web_server::request::Body
 pub async fn rust_web_server::acme::AcmeManager::provision(&self) -> core::result::Result<(), alloc::string::String>
 pub async fn rust_web_server::acme::AcmeManager::provision_if_needed(&self) -> core::result::Result<(), alloc::string::String>
@@ -6241,6 +6270,8 @@ pub async fn rust_web_server::acme::AcmeManager::provision_until_ready(&self)
 pub async fn rust_web_server::acme::AcmeManager::run_renewal_loop(self)
 pub async fn rust_web_server::acme::on_demand::ensure(&str)
 pub async fn rust_web_server::authz::scope_identity<F: core::future::future::Future>(rust_web_server::authz::Identity, F) -> <F as core::future::future::Future>::Output
+pub async fn rust_web_server::cache::ValueCache<V>::fetch_or_async<F, Fut>(&self, &str, core::time::Duration, F) -> V where F: core::ops::function::FnOnce() -> Fut, Fut: core::future::future::Future<Output = V>
+pub async fn rust_web_server::cache::ValueCache<V>::try_fetch_or_async<E, F, Fut>(&self, &str, core::time::Duration, F) -> core::result::Result<V, E> where F: core::ops::function::FnOnce() -> Fut, Fut: core::future::future::Future<Output = core::result::Result<V, E>>
 pub async fn rust_web_server::gateway_api::controller::reconcile(&kube_client::client::Client, &rust_web_server::gateway_api::controller::Stores, &rust_web_server::gateway_api::controller::Options) -> core::result::Result<(), alloc::string::String>
 pub async fn rust_web_server::gateway_api::controller::run(kube_client::client::Client, rust_web_server::gateway_api::controller::Options, alloc::rcs::arc::Arc<tokio::sync::notify::Notify>)
 pub async fn rust_web_server::gateway_api::l4::serve_tcp(tokio::net::tcp::stream::TcpStream, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
@@ -7841,6 +7872,18 @@ pub fn rust_web_server::cache::Purge::clone(&self) -> Self
 pub fn rust_web_server::cache::Purge::eq(&self, &Self) -> bool
 pub fn rust_web_server::cache::Purge::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::cache::Purge::from_target(&str) -> rust_web_server::cache::Purge
+pub fn rust_web_server::cache::ValueCache<V>::clear(&self)
+pub fn rust_web_server::cache::ValueCache<V>::clone(&self) -> Self
+pub fn rust_web_server::cache::ValueCache<V>::fetch_or(&self, &str, core::time::Duration, impl core::ops::function::FnOnce() -> V) -> V
+pub fn rust_web_server::cache::ValueCache<V>::get(&self, &str) -> core::option::Option<V>
+pub fn rust_web_server::cache::ValueCache<V>::invalidate(&self, &str) -> bool
+pub fn rust_web_server::cache::ValueCache<V>::invalidate_prefix(&self, &str) -> usize
+pub fn rust_web_server::cache::ValueCache<V>::is_empty(&self) -> bool
+pub fn rust_web_server::cache::ValueCache<V>::len(&self) -> usize
+pub fn rust_web_server::cache::ValueCache<V>::new(usize) -> Self
+pub fn rust_web_server::cache::ValueCache<V>::put(&self, &str, V, core::time::Duration)
+pub fn rust_web_server::cache::ValueCache<V>::stats(&self) -> (u64, u64)
+pub fn rust_web_server::cache::ValueCache<V>::try_fetch_or<E>(&self, &str, core::time::Duration, impl core::ops::function::FnOnce() -> core::result::Result<V, E>) -> core::result::Result<V, E>
 pub fn rust_web_server::cache::registry::get(&str) -> core::option::Option<rust_web_server::cache::CacheLayer>
 pub fn rust_web_server::cache::registry::list() -> alloc::vec::Vec<(alloc::string::String, rust_web_server::cache::CacheLayer)>
 pub fn rust_web_server::cache::registry::register(impl core::convert::Into<alloc::string::String>, rust_web_server::cache::CacheLayer)
@@ -8087,12 +8130,20 @@ pub fn rust_web_server::di::Container::get<T>(&self) -> core::option::Option<all
 pub fn rust_web_server::di::Container::get_named<T>(&self, &str) -> core::option::Option<alloc::rcs::arc::Arc<T>> where T: ?core::marker::Sized + 'static, alloc::rcs::arc::Arc<T>: core::clone::Clone
 pub fn rust_web_server::di::Container::into_arc(self) -> alloc::rcs::arc::Arc<Self>
 pub fn rust_web_server::di::Container::is_empty(&self) -> bool
+pub fn rust_web_server::di::Container::is_started(&self) -> bool
 pub fn rust_web_server::di::Container::len(&self) -> usize
 pub fn rust_web_server::di::Container::new() -> Self
+pub fn rust_web_server::di::Container::on_start(&mut self, &str, impl core::ops::function::Fn(&rust_web_server::di::Container) -> core::result::Result<(), alloc::string::String> + core::marker::Send + core::marker::Sync + 'static) -> &mut Self
+pub fn rust_web_server::di::Container::on_stop(&mut self, &str, impl core::ops::function::Fn(&rust_web_server::di::Container) + core::marker::Send + core::marker::Sync + 'static) -> &mut Self
 pub fn rust_web_server::di::Container::provide<T>(&mut self, alloc::rcs::arc::Arc<T>) -> &mut Self where T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::di::Container::provide_named<T>(&mut self, impl core::convert::Into<alloc::string::String>, alloc::rcs::arc::Arc<T>) -> &mut Self where T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::di::Container::register<T: core::marker::Send + core::marker::Sync + 'static>(&mut self, T) -> &mut Self
+pub fn rust_web_server::di::Container::register_managed<T: rust_web_server::di::Lifecycle + 'static>(&mut self, T) -> &mut Self
 pub fn rust_web_server::di::Container::register_named<T: core::marker::Send + core::marker::Sync + 'static>(&mut self, impl core::convert::Into<alloc::string::String>, T) -> &mut Self
+pub fn rust_web_server::di::Container::start(&self) -> core::result::Result<(), alloc::string::String>
+pub fn rust_web_server::di::Container::stop(&self)
+pub fn rust_web_server::di::Lifecycle::start(&self) -> core::result::Result<(), alloc::string::String>
+pub fn rust_web_server::di::Lifecycle::stop(&self)
 pub fn rust_web_server::disk_guard::has_room(&std::path::Path) -> bool
 pub fn rust_web_server::disk_guard::status() -> alloc::vec::Vec<(alloc::string::String, u64, u64, bool)>
 pub fn rust_web_server::early_hints::EarlyHintsLayer::clone(&self) -> Self
@@ -8113,6 +8164,8 @@ pub fn rust_web_server::entry_point::RwsEnv::eq(&self, &Self) -> bool
 pub fn rust_web_server::entry_point::RwsEnv::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::entry_point::RwsEnv::is_dev(self) -> bool
 pub fn rust_web_server::entry_point::RwsEnv::parse(&str) -> core::option::Option<rust_web_server::entry_point::RwsEnv>
+pub fn rust_web_server::entry_point::RwsEnv::reloads_templates(self) -> bool
+pub fn rust_web_server::entry_point::RwsEnv::shows_error_details(self) -> bool
 pub fn rust_web_server::entry_point::bootstrap()
 pub fn rust_web_server::entry_point::command_line_args::CommandLineArgument::_parse(alloc::vec::Vec<alloc::string::String>, alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>) -> alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>
 pub fn rust_web_server::entry_point::command_line_args::CommandLineArgument::get_command_line_arg_list() -> alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>
@@ -8142,6 +8195,11 @@ pub fn rust_web_server::error::problem(&rust_web_server::response::StatusCodeRea
 pub fn rust_web_server::error::problem::problem(&rust_web_server::response::StatusCodeReasonPhrase, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem::problem_with_text(&rust_web_server::response::StatusCodeReasonPhrase, &str, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem::text_errors() -> bool
+pub fn rust_web_server::error_pages::ErrorPages::clone(&self) -> Self
+pub fn rust_web_server::error_pages::ErrorPages::detailed(bool) -> Self
+pub fn rust_web_server::error_pages::ErrorPages::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::error_pages::ErrorPages::from_env() -> Self
+pub fn rust_web_server::error_pages::ErrorPages::shows_details(&self) -> bool
 pub fn rust_web_server::events::EventBus::clone(&self) -> Self
 pub fn rust_web_server::events::EventBus::default() -> Self
 pub fn rust_web_server::events::EventBus::forward_to_channel<E, T, M>(&self, rust_web_server::channels::Hub, T, M) -> rust_web_server::events::SubscriptionId where E: core::any::Any, T: core::ops::function::Fn(&E) -> alloc::string::String + core::marker::Send + core::marker::Sync + 'static, M: core::ops::function::Fn(&E) -> alloc::string::String + core::marker::Send + core::marker::Sync + 'static
@@ -8824,6 +8882,7 @@ pub fn rust_web_server::generator::RouteAction::parse(&str) -> core::option::Opt
 pub fn rust_web_server::generator::RouteAction::parse_list(&str) -> core::result::Result<alloc::vec::Vec<rust_web_server::generator::RouteAction>, rust_web_server::generator::GenError>
 pub fn rust_web_server::generator::parse_fields<S: core::convert::AsRef<str>>(&[S]) -> core::result::Result<alloc::vec::Vec<rust_web_server::generator::Field>, rust_web_server::generator::GenError>
 pub fn rust_web_server::generator::plan(impl core::convert::AsRef<std::path::Path>, &rust_web_server::generator::Generate) -> core::result::Result<rust_web_server::generator::Plan, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::plan_model_migration(impl core::convert::AsRef<std::path::Path>, &str, &rust_web_server::generator::ExistingColumns, core::option::Option<rust_web_server::generator::Db>) -> core::result::Result<rust_web_server::generator::Plan, rust_web_server::generator::GenError>
 pub fn rust_web_server::generator::requested(&[alloc::string::String]) -> core::option::Option<&[alloc::string::String]>
 pub fn rust_web_server::generator::run(&[alloc::string::String], &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
 pub fn rust_web_server::group::AsyncGroup<S>::delete<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(rust_web_server::request::Request, rust_web_server::router::PathParams, rust_web_server::server::ConnectionInfo, alloc::rcs::arc::Arc<S>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static
@@ -9395,6 +9454,7 @@ pub fn rust_web_server::model::connection::DbTls::eq(&self, &Self) -> bool
 pub fn rust_web_server::model::connection::DbTls::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::connection::DbTls::from_env() -> core::result::Result<rust_web_server::model::connection::DbTls, rust_web_server::model::DbError>
 pub fn rust_web_server::model::eager::EagerQuery<'a, T>::with<R: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<T, R>) -> Self
+pub fn rust_web_server::model::eager::EagerQuery<'a, T>::with_nested<R: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<T, R>, impl core::ops::function::FnOnce(rust_web_server::model::eager::Nested<R>) -> rust_web_server::model::eager::Nested<R>) -> Self
 pub fn rust_web_server::model::eager::Loaded<T>::deref(&self) -> &T
 pub fn rust_web_server::model::eager::Loaded<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::eager::Loaded<T>::into_inner(self) -> T
@@ -9402,7 +9462,10 @@ pub fn rust_web_server::model::eager::Loaded<T>::is_loaded<R: rust_web_server::m
 pub fn rust_web_server::model::eager::Loaded<T>::model(&self) -> &T
 pub fn rust_web_server::model::eager::Loaded<T>::one<R: rust_web_server::model::Model + 'static>(&self, &rust_web_server::model::eager::Relation<T, R>) -> core::option::Option<&R>
 pub fn rust_web_server::model::eager::Loaded<T>::related<R: rust_web_server::model::Model + 'static>(&self, &rust_web_server::model::eager::Relation<T, R>) -> &[R]
+pub fn rust_web_server::model::eager::Loaded<T>::related_loaded<R: rust_web_server::model::Model + 'static>(&self, &rust_web_server::model::eager::Relation<T, R>) -> &[rust_web_server::model::eager::Loaded<R>]
 pub fn rust_web_server::model::eager::Loaded<T>::take<R: rust_web_server::model::Model + 'static>(&mut self, &rust_web_server::model::eager::Relation<T, R>) -> alloc::vec::Vec<R>
+pub fn rust_web_server::model::eager::Nested<R>::with<S: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<R, S>) -> Self
+pub fn rust_web_server::model::eager::Nested<R>::with_nested<S: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<R, S>, impl core::ops::function::FnOnce(rust_web_server::model::eager::Nested<S>) -> rust_web_server::model::eager::Nested<S>) -> Self
 pub fn rust_web_server::model::eager::Relation<O, R>::belongs_to(&'static str) -> Self
 pub fn rust_web_server::model::eager::Relation<O, R>::belongs_to_many(&'static str, &'static str, &'static str) -> Self
 pub fn rust_web_server::model::eager::Relation<O, R>::clone(&self) -> Self
@@ -9441,6 +9504,7 @@ pub fn rust_web_server::model::query::QueryBuilder<'a, T>::where_not_null(self, 
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::where_null(self, &str) -> Self
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::with<R: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<T, R>) -> rust_web_server::model::eager::EagerQuery<'a, T> where T: 'static
 pub fn rust_web_server::model::query::QueryBuilder<'a, T>::with_deleted(self) -> Self
+pub fn rust_web_server::model::query::QueryBuilder<'a, T>::with_nested<R: rust_web_server::model::Model + core::clone::Clone + 'static>(self, rust_web_server::model::eager::Relation<T, R>, impl core::ops::function::FnOnce(rust_web_server::model::eager::Nested<R>) -> rust_web_server::model::eager::Nested<R>) -> rust_web_server::model::eager::EagerQuery<'a, T> where T: 'static
 pub fn rust_web_server::model::relation::BelongsTo<O>::clone(&self) -> Self
 pub fn rust_web_server::model::relation::BelongsTo<O>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::model::relation::BelongsTo<O>::new(rust_web_server::model::Value) -> Self
@@ -10674,6 +10738,7 @@ pub mod rust_web_server::entry_point::config_file
 pub mod rust_web_server::entry_point::environment_variables
 pub mod rust_web_server::error
 pub mod rust_web_server::error::problem
+pub mod rust_web_server::error_pages
 pub mod rust_web_server::events
 pub mod rust_web_server::ext
 pub mod rust_web_server::ext::date_time_ext
@@ -12562,6 +12627,7 @@ pub struct rust_web_server::body::form_urlencoded::FormUrlEncoded
 pub struct rust_web_server::body::multipart_form_data::FormMultipartData
 pub struct rust_web_server::body::multipart_form_data::Part
 pub struct rust_web_server::cache::CacheLayer
+pub struct rust_web_server::cache::ValueCache<V>
 pub struct rust_web_server::canary::CanaryLayer
 pub struct rust_web_server::canary::WeightedBackend
 pub struct rust_web_server::canary::WeightedPool
@@ -12592,6 +12658,7 @@ pub struct rust_web_server::early_hints::EarlyHintsLayer
 pub struct rust_web_server::entry_point::Config
 pub struct rust_web_server::entry_point::command_line_args::CommandLineArgument
 pub struct rust_web_server::entry_point::config_file::ConfigSettings
+pub struct rust_web_server::error_pages::ErrorPages
 pub struct rust_web_server::events::EventBus
 pub struct rust_web_server::events::SubscriptionId(_)
 pub struct rust_web_server::ext::date_time_ext::DateTimeExt
@@ -12791,6 +12858,7 @@ pub struct rust_web_server::model::MigrationStatus
 pub struct rust_web_server::model::ModelInfo
 pub struct rust_web_server::model::ModelRepository<'a, T: rust_web_server::model::Model, ID>
 pub struct rust_web_server::model::ModelRow
+pub struct rust_web_server::model::Nested<R: rust_web_server::model::Model>
 pub struct rust_web_server::model::QueryBuilder<'a, T: rust_web_server::model::Model>
 pub struct rust_web_server::model::Relation<O, R>
 pub struct rust_web_server::model::Replicas
@@ -12801,6 +12869,7 @@ pub struct rust_web_server::model::connection::DbConfig
 pub struct rust_web_server::model::connection::DbTls
 pub struct rust_web_server::model::eager::EagerQuery<'a, T: rust_web_server::model::Model>
 pub struct rust_web_server::model::eager::Loaded<T>
+pub struct rust_web_server::model::eager::Nested<R: rust_web_server::model::Model>
 pub struct rust_web_server::model::eager::Relation<O, R>
 pub struct rust_web_server::model::migration::MigrationStatus
 pub struct rust_web_server::model::pool::Replicas
@@ -13027,6 +13096,7 @@ pub trait rust_web_server::config_binding::FromEnvStr: core::marker::Sized
 pub trait rust_web_server::controller::Controller
 pub trait rust_web_server::core::New
 pub trait rust_web_server::dev_mcp::DevMcpExt: rust_web_server::application::Application + core::marker::Sized + core::marker::Send + core::marker::Sync + 'static
+pub trait rust_web_server::di::Lifecycle: core::marker::Send + core::marker::Sync
 pub trait rust_web_server::error::IntoResponse
 pub trait rust_web_server::extract::FromRequest: core::marker::Sized
 pub trait rust_web_server::handler::AsyncHandler<S>: rust_web_server::handler::RouteSpec + core::marker::Send + core::marker::Sync + 'static
@@ -13069,6 +13139,7 @@ pub type rust_web_server::gateway_api::resources::TlsRoute = kube_core::object::
 pub type rust_web_server::gateway_api::resources::UdpRoute = kube_core::object::Object<rust_web_server::gateway_api::types::L4RouteSpec, rust_web_server::gateway_api::types::RouteStatus>
 pub type rust_web_server::gateway_api::router::PortListeners = alloc::rcs::arc::Arc<std::sync::poison::rwlock::RwLock<alloc::rcs::arc::Arc<alloc::vec::Vec<rust_web_server::gateway_api::translate::ListenerConfig>>>>
 pub type rust_web_server::gateway_api::types::AllowedListeners = rust_web_server::gateway_api::types::RouteNamespacesHolder
+pub type rust_web_server::generator::ExistingColumns = alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>
 pub type rust_web_server::group::Guard<S> = alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(&rust_web_server::request::Request, &rust_web_server::server::ConnectionInfo, &S) -> core::result::Result<(), rust_web_server::response::Response> + core::marker::Send + core::marker::Sync)>
 pub type rust_web_server::handler::Form<T>::Target = T
 pub type rust_web_server::handler::HandlerFuture = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = rust_web_server::response::Response> + core::marker::Send + 'static)>>

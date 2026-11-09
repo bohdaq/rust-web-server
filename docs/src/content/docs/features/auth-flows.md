@@ -89,6 +89,7 @@ Emails are lower-cased and trimmed; passwords are hashed with Argon2id (`crypto:
 | `.after_login(path)`, `.after_logout(path)` | `/` |
 | `.rate_limit(max, window_secs)` | 10 per 60 s per IP and action; `0` turns it off |
 | `.templates(Arc<TeraEngine>)` (`tera`) | the built-in pages and plain-text emails |
+| `.on_signup(\|user\| …)` | none; called with each new account (a welcome email, a default workspace); enqueue anything slow |
 
 ## Your own pages and emails
 

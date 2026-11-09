@@ -188,6 +188,18 @@ body that isn't JSON) — through `TestClient`, no socket. The test builds the
 app with `app()`; when `app` takes arguments, with what the existing tests in
 `tests/` pass to `TestClient::new`, or `--app-expr`.
 
+### Migrations from the models
+
+`rws gen migration <name> --from-models` writes the migration that brings the database up to the `#[derive(Model)]` structs in `src/models/` (18.35.0): a `CREATE TABLE` for a model whose table isn't there, an `ALTER TABLE … ADD COLUMN` for a field whose column isn't. It reads the database like [`rws db`](/database/migrations/#from-the-command-line-rws-db) (`--database-url`, else `DATABASE_URL`, else `RWS_DB_*`) and writes SQL for the `model-*` feature in `Cargo.toml` (or `--db`):
+
+```sh
+rws gen model Post title:String          # later: add `pub summary: Option<String>` to the struct
+rws gen migration add_post_summary --from-models --dry-run
+# migrations/0003_add_post_summary.sql:  ALTER TABLE posts ADD COLUMN summary TEXT;
+```
+
+It is **additive only**: nothing is dropped, renamed or retyped. Columns the database has and the model doesn't, fields whose type has no SQL mapping (anything but integers, floats, `bool`, `String`, `Timestamp`, `Uuid`, `Attachment` and their `Option`s) and a missing primary key are listed as notes to write by hand. A new required column gets a `DEFAULT` (`0`, `FALSE`, `''`) so existing rows can take it; `#[column(name = …)]`, `#[ignore]` and `#[table(name = …)]` are followed. When the database already matches, nothing is written. As a library: `generator::plan_model_migration(dir, name, &existing_columns, db)`.
+
 ## Conflicts, dry runs, JSON
 
 ```text

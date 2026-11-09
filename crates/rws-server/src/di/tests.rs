@@ -261,3 +261,83 @@ fn shared_arc_container_resolves_trait_objects_from_thread() {
 
 // ── Integration: use as AppWithState ──────────────────────────────────────────
 
+
+// ── Lifecycle (18.35.0) ──────────────────────────────────────────────────────
+
+mod lifecycle {
+    use std::sync::{Arc, Mutex};
+
+    use crate::di::{Container, Lifecycle};
+
+    struct Pool {
+        log: Arc<Mutex<Vec<String>>>,
+        fail: bool,
+    }
+
+    impl Lifecycle for Pool {
+        fn start(&self) -> Result<(), String> {
+            self.log.lock().unwrap().push("pool start".into());
+            if self.fail { Err("no database".into()) } else { Ok(()) }
+        }
+        fn stop(&self) {
+            self.log.lock().unwrap().push("pool stop".into());
+        }
+    }
+
+    struct Plain;
+    impl Lifecycle for Plain {}
+
+    fn container(fail: bool) -> (Container, Arc<Mutex<Vec<String>>>) {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut c = Container::new();
+        let (a, b, d) = (Arc::clone(&log), Arc::clone(&log), Arc::clone(&log));
+        c.on_start("config", move |_| {
+            a.lock().unwrap().push("config start".into());
+            Ok(())
+        })
+        .on_stop("config", move |_| b.lock().unwrap().push("config stop".into()))
+        .register_managed(Pool { log: Arc::clone(&log), fail })
+        .on_stop("flush", move |c| d.lock().unwrap().push(format!("flush stop, pool registered: {}", c.contains::<Pool>())));
+        (c, log)
+    }
+
+    #[test]
+    fn start_in_order_stop_in_reverse() {
+        let (c, log) = container(false);
+        assert!(!c.is_started());
+        c.start().unwrap();
+        assert!(c.is_started());
+        c.start().unwrap(); // already started: nothing runs
+        c.stop();
+        c.stop(); // already stopped: nothing runs
+        assert!(!c.is_started());
+        assert_eq!(
+            vec!["config start", "pool start", "flush stop, pool registered: true", "pool stop", "config stop"],
+            *log.lock().unwrap()
+        );
+    }
+
+    #[test]
+    fn a_failed_start_stops_what_started_before_it() {
+        let (c, log) = container(true);
+        let err = c.start().unwrap_err();
+        assert!(err.ends_with("Pool: no database"), "{err}");
+        assert!(!c.is_started());
+        // The pool's own stop doesn't run (it never started); the config's does.
+        assert_eq!(vec!["config start", "pool start", "config stop"], *log.lock().unwrap());
+        c.stop();
+        assert_eq!(3, log.lock().unwrap().len());
+    }
+
+    #[test]
+    fn default_hooks_do_nothing_and_services_resolve() {
+        let mut c = Container::new();
+        c.register_managed(Plain);
+        assert!(c.get::<Plain>().is_some());
+        c.start().unwrap();
+        c.stop();
+        let empty = Container::new();
+        empty.start().unwrap();
+        assert!(empty.is_started());
+    }
+}

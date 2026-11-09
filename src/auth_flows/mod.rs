@@ -174,6 +174,7 @@ struct Inner {
     after_login: String,
     after_logout: String,
     limiter: Option<Arc<RateLimiter>>,
+    on_signup: Vec<Arc<dyn Fn(&AuthUser) + Send + Sync>>,
     #[cfg(feature = "tera")]
     templates: Option<Arc<crate::template::TeraEngine>>,
 }
@@ -216,6 +217,7 @@ impl AuthFlows {
                 after_login: "/".into(),
                 after_logout: "/".into(),
                 limiter: Some(Arc::new(RateLimiter::new(10, 60))),
+                on_signup: Vec::new(),
                 #[cfg(feature = "tera")]
                 templates: None,
             }),
@@ -279,6 +281,13 @@ impl AuthFlows {
     pub fn rate_limit(self, max: u32, window_secs: u64) -> Self {
         let limiter = (max > 0).then(|| Arc::new(RateLimiter::new(max, window_secs)));
         self.edit(|i| i.limiter = limiter)
+    }
+
+    /// Call `hook` with each new account, after it's created (a welcome
+    /// email, a default workspace). Runs on the request's thread: enqueue
+    /// anything slow.
+    pub fn on_signup(self, hook: impl Fn(&AuthUser) + Send + Sync + 'static) -> Self {
+        self.edit(|i| i.on_signup.push(Arc::new(hook)))
     }
 
     /// Render the pages from `engine`'s `auth/login.html`, `auth/signup.html`,
@@ -629,6 +638,9 @@ impl Ctx<'_> {
             Err(e) => return self.internal(e),
         };
         self.flows.send(&user, "confirm", &self.flows.link("/confirm", "confirm", &user, CONFIRM_TTL));
+        for hook in &self.i().on_signup {
+            hook(&user);
+        }
         if self.i().require_confirmation {
             if self.json {
                 json(STATUS_CODE_REASON_PHRASE.n201_created, serde_json::json!({ "user": user_json(&user), "confirmation_required": true }))

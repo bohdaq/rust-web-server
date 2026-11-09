@@ -24,6 +24,8 @@ Generators:
   route <resource> [field:type...]  src/routes/<resource>.rs: typed handlers and register(app)
         [--methods list,show,create,update,remove] [--prefix /api]
   migration <name>                migrations/NNNN_<name>.sql + .down.sql to fill in
+        [--from-models [--database-url <url>] [--db …]]  written from the models: CREATE TABLE /
+                                  ADD COLUMN for what the database (DATABASE_URL / RWS_DB_*) lacks
   test <resource> [--app-expr 'app(...)']  tests/<resource>.rs: TestClient against app()
 
 Field types: i64, i32, f64, bool, String, Option<T> (T one of those).
@@ -49,10 +51,26 @@ pub fn run(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
         Ok(Parsed::Run(cli)) => cli,
         Err(e) => return fail(&e, args.iter().any(|a| a == "--json"), out, err),
     };
-    let plan = match plan(&parsed.dir, &parsed.request) {
+    let planned = match &parsed.from_models {
+        Some((url, db)) => match (&parsed.request, existing_columns(url.clone())) {
+            (Generate::Migration { name }, Ok(existing)) => super::plan_model_migration(&parsed.dir, name, &existing, *db),
+            (_, Err(e)) => Err(GenError::refused(e)),
+            _ => Err(GenError::usage("--from-models applies to rws gen migration only")),
+        },
+        None => plan(&parsed.dir, &parsed.request),
+    };
+    let plan = match planned {
         Ok(plan) => plan,
         Err(e) => return fail(&e, parsed.json, out, err),
     };
+    if parsed.from_models.is_some() && plan.changes.is_empty() {
+        if parsed.json {
+            let _ = writeln!(out, "{}", plan.to_json(false));
+        } else {
+            let _ = write!(out, "{}", plan.render(false));
+        }
+        return EXIT_OK;
+    }
     if plan.has_conflicts() || parsed.dry_run || plan.is_unchanged() {
         if parsed.json {
             let _ = writeln!(out, "{}", plan.to_json(false));
@@ -99,6 +117,30 @@ struct Cli {
     dir: PathBuf,
     dry_run: bool,
     json: bool,
+    /// `--from-models`: the database URL (`--database-url`) and `--db`.
+    from_models: Option<(Option<String>, Option<Db>)>,
+}
+
+/// The database's tables and columns, for `--from-models`: `url`, else
+/// `DATABASE_URL`, else the `RWS_DB_*` variables (as `rws db`).
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+fn existing_columns(url: Option<String>) -> Result<super::ExistingColumns, String> {
+    use crate::model::DbPool;
+    let url = url.or_else(|| std::env::var("DATABASE_URL").ok().filter(|u| !u.trim().is_empty()));
+    crate::dev_mcp::db::run(async move {
+        let pool = match &url {
+            Some(url) => DbPool::connect(url).await?,
+            None => DbPool::from_env().await.map_err(|e| crate::model::DbError::new(format!("{} (or give --database-url / DATABASE_URL)", e.0)))?,
+        };
+        let schema = pool.schema().await;
+        pool.close().await;
+        Ok(schema?.tables.into_iter().map(|t| (t.name, t.columns.into_iter().map(|c| c.name).collect())).collect())
+    })
+}
+
+#[cfg(not(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
+fn existing_columns(_url: Option<String>) -> Result<super::ExistingColumns, String> {
+    Err("--from-models reads the database: this rws was built without a database driver (cargo install rust-web-server --features model-sqlite,model-postgres,model-mysql)".into())
 }
 
 enum Parsed {
@@ -112,6 +154,7 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
     let (mut dry_run, mut json) = (false, false);
     let (mut db, mut methods, mut prefix, mut app_expr) = (None, None, None, None);
     let (mut timestamps, mut soft_delete) = (false, false);
+    let (mut from_models, mut database_url) = (false, None);
     let mut i = 0;
     while i < args.len() {
         let arg = args[i].as_str();
@@ -148,6 +191,8 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
             "--methods" => methods = Some(value("--methods")?),
             "--prefix" => prefix = Some(value("--prefix")?),
             "--app-expr" => app_expr = Some(value("--app-expr")?),
+            "--from-models" => from_models = true,
+            "--database-url" => database_url = Some(value("--database-url")?),
             other => return Err(GenError::usage(format!("unknown option {other}"))),
         }
     }
@@ -183,7 +228,7 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
             Generate::Route { resource: need_name("resource (e.g. posts)")?, fields: parse_fields(rest)?, actions, prefix: prefix.unwrap_or_default() }
         }
         "migration" | "test" => {
-            only("--db", db.is_some(), "model")?;
+            only("--db", db.is_some() && !(kind == "migration" && from_models), "model (and migration --from-models)")?;
             only("--timestamps", timestamps, "model")?;
             only("--soft-delete", soft_delete, "model")?;
             only("--methods", methods.is_some(), "route")?;
@@ -200,7 +245,10 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
         }
         other => return Err(GenError::usage(format!("unknown generator `{other}`: use model, route, migration or test"))),
     };
-    Ok(Parsed::Run(Cli { request, dir, dry_run, json }))
+    only("--from-models", from_models && kind != "migration", "migration")?;
+    only("--database-url", database_url.is_some() && !from_models, "migration --from-models")?;
+    let from_models = from_models.then_some((database_url, db));
+    Ok(Parsed::Run(Cli { request, dir, dry_run, json, from_models }))
 }
 
 /// `rws gen …` asked for: the arguments after `gen`.

@@ -206,6 +206,32 @@ let app = routes! {
 Every type registered with `register` or `provide` must implement `Send + Sync + 'static`. `Arc<T>` satisfies those bounds whenever `T: Send + Sync`, making it the natural wrapper for shared services.
 :::
 
+## Lifecycle hooks
+
+Services that need starting and stopping — a pool to warm, a background thread to join — implement `Lifecycle` and are registered with `register_managed`; plain closures go in with `on_start` / `on_stop` (18.35.0):
+
+```rust
+use rust_web_server::di::{Container, Lifecycle};
+
+struct SearchIndex { /* … */ }
+
+impl Lifecycle for SearchIndex {
+    fn start(&self) -> Result<(), String> { /* load the index */ Ok(()) }
+    fn stop(&self) { /* flush it */ }
+}
+
+let mut c = Container::new();
+c.register_managed(SearchIndex::open("index/")?)
+    .on_start("migrations", |c| run_migrations(&c.get::<DbPool>().unwrap()))
+    .on_stop("metrics", |_| flush_metrics());
+
+c.start()?;           // in registration order
+// … serve …
+c.stop();             // in reverse order
+```
+
+`start()` runs the start hooks in registration order; if one fails, the stop hooks of those before it run (in reverse) and the error is `"<hook name>: <message>"`. `stop()` runs the stop hooks of what started, in reverse. Both do nothing when repeated; `is_started()` tells which state the container is in. A service's `stop` only runs if its `start` did. Call `start` before serving and `stop` after the server returns.
+
 ## Inspection helpers
 
 ```rust

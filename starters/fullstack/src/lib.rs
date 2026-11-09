@@ -1,21 +1,29 @@
 //! A full-stack app on rust-web-server: a JSON API under `/api` (typed
-//! handlers), the lit frontend (built into `frontend/dist`) served as
-//! static files, and PostgreSQL when `PGHOST` is set — an in-memory store
-//! otherwise, so `cargo run` and `cargo test` need no database.
+//! handlers), accounts under `/auth` (sign-up, login, password reset,
+//! email confirmation; src/accounts.rs), the lit frontend (built into
+//! `frontend/dist`) served as static files, and PostgreSQL when `PGHOST` is
+//! set — an in-memory store otherwise, so `cargo run` and `cargo test` need
+//! no database.
 //!
 //! The conventional rws layout (`rws.app.toml`): this file builds the app
 //! (`app()`), `src/routes/` holds the handlers, `src/models/` the
 //! `#[derive(Model)]` types, `migrations/` the SQL, `src/main.rs` only
 //! serves it, `tests/` tests it. See AGENTS.md.
 
+pub mod accounts;
 pub mod models;
 pub mod routes;
 pub mod store;
 
 use rust_web_server::async_state::AsyncAppWithState;
 use rust_web_server::dev_mcp::DevTools;
+use rust_web_server::entry_point::RwsEnv;
+use rust_web_server::error_pages::ErrorPages;
+use rust_web_server::flash::FlashLayer;
+use rust_web_server::middleware::WithMiddleware;
 use rust_web_server::prelude::*;
 
+pub use accounts::Accounts;
 pub use models::Note;
 pub use store::Store;
 
@@ -24,7 +32,17 @@ pub use store::Store;
 pub fn app(store: Store) -> AsyncAppWithState<Store> {
     let app = App::with_async_state(store);
     let app = routes::health::register(app);
+    let app = routes::account::register(app);
     routes::notes::register(app)
+}
+
+/// What `main` serves: `app()` behind the account flows (`/auth`), flash
+/// messages, error pages (details with `RWS_ENV=dev` or `test`) and, in
+/// development, the mail previews at `/_mail`.
+pub fn site(store: Store, accounts: &Accounts) -> WithMiddleware<AsyncAppWithState<Store>> {
+    let site = WithMiddleware::new(app(store)).wrap(accounts.auth.clone()).wrap(FlashLayer::new());
+    let site = if RwsEnv::current().is_dev() { site.wrap(Accounts::previews()) } else { site };
+    site.wrap(ErrorPages::from_env())
 }
 
 /// What the dev MCP endpoint (`/mcp`, with `RWS_ENV=dev` or `MCP_TOKEN`

@@ -221,3 +221,28 @@ let app = App::with_state(cache_handle)
 :::note[Middleware ordering]
 `.wrap()` layers are applied in push order — the first `.wrap()` call is the outermost layer. Place `CacheLayer` last (innermost wrap position) if you want rate limiting or auth to run before the cache is consulted.
 :::
+
+## Caching values: `fetch_or`
+
+`CacheLayer` caches whole responses. `cache::ValueCache<V>` caches values your code computes — an expensive query, a rendered fragment, an API answer — each for its own time (18.35.0):
+
+```rust
+use std::time::Duration;
+use rust_web_server::cache::ValueCache;
+
+let cache: ValueCache<Vec<Product>> = ValueCache::new(10_000);   // at most 10 000 entries
+
+let featured = cache.fetch_or("products:featured", Duration::from_secs(300), || load_featured(&db));
+// async: cache.fetch_or_async(key, ttl, || async { … }).await
+// fallible, errors not cached: cache.try_fetch_or(key, ttl, || db.query(…))?
+```
+
+| Method | What it does |
+|---|---|
+| `fetch_or(key, ttl, compute)` | The cached value, or `compute()` stored for `ttl` and returned |
+| `try_fetch_or`, `fetch_or_async`, `try_fetch_or_async` | The same for a fallible or async computation; an `Err` isn't stored |
+| `get`, `put(key, value, ttl)` | Read or write one entry |
+| `invalidate(key)`, `invalidate_prefix("user:42:")`, `clear()` | Remove entries when the data changes |
+| `len`, `stats()` | Entries held; `(hits, misses)` |
+
+When it's full, expired entries go first, then the oldest. A `ValueCache` is cheap to clone and all clones share the entries: put one in the app state. The value is computed outside the lock, so two requests missing the same key at the same moment both compute it. It's per process: replicas each have their own.

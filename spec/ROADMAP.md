@@ -290,7 +290,7 @@ Rws as a Rails/Spring-class framework built agent-first: the app explains itself
 - **#90** **ORM** — generic/UUID keys, timestamps, eager `with()`, many-to-many, scopes, soft delete, optimistic locking, seeds, read replicas, schema dump as JSON.
 - **#91** **`rws db migrate|rollback|status|seed`**.
 
-*Part 1 released in 18.30.0 (2026-11-04), with `spa_fallback_routes` (SPA fallback per path prefix): `i32`/`String`/`Uuid` keys, `#[timestamps]`, `#[soft_delete]`, `#[version]` (optimistic locking), SQL seeds (`DbPool::seed`), `rws db` (#91), and the CI job `model-databases` running the model, `TestDb` and `rws db` tests on SQLite, PostgreSQL 16 and MySQL 8.4. Part 2 released in 18.31.0 (2026-11-05): eager `with()` (`Relation`, `Loaded`), many-to-many (`BelongsToMany`), scopes (`QueryBuilder::scope`, `where_in`), Rust seeders (`Seeders`, `DbPool::seed_with`, `db_cli::run_with_seeders`), read replicas (`DbPool::with_replicas`, `RWS_DB_REPLICA_URLS`), the schema as JSON (`DbPool::schema`, `rws db schema --json`, the dev MCP `db_schema`), `rws gen model --timestamps --soft-delete`; their tests run in `model-databases` too. Not done: nested eager loading (`with` on a relation's relations).*
+*Part 1 released in 18.30.0 (2026-11-04), with `spa_fallback_routes` (SPA fallback per path prefix): `i32`/`String`/`Uuid` keys, `#[timestamps]`, `#[soft_delete]`, `#[version]` (optimistic locking), SQL seeds (`DbPool::seed`), `rws db` (#91), and the CI job `model-databases` running the model, `TestDb` and `rws db` tests on SQLite, PostgreSQL 16 and MySQL 8.4. Part 2 released in 18.31.0 (2026-11-05): eager `with()` (`Relation`, `Loaded`), many-to-many (`BelongsToMany`), scopes (`QueryBuilder::scope`, `where_in`), Rust seeders (`Seeders`, `DbPool::seed_with`, `db_cli::run_with_seeders`), read replicas (`DbPool::with_replicas`, `RWS_DB_REPLICA_URLS`), the schema as JSON (`DbPool::schema`, `rws db schema --json`, the dev MCP `db_schema`), `rws gen model --timestamps --soft-delete`; their tests run in `model-databases` too. Nested eager loading (`with_nested`, `Loaded::related_loaded`) on branch `framework-18-31` (2026-11-10).*
 
 **Done when:** SQLite, PostgreSQL and MySQL pass the new model tests in CI.
 
@@ -299,7 +299,7 @@ Rws as a Rails/Spring-class framework built agent-first: the app explains itself
 - **#92** ✅ *branch `framework-18-31` (2026-11-10): `auth_flows::AuthFlows` middleware (JSON + forms, built-in pages or Tera), signed stateless sessions and links, `UserStore` (`MemoryUserStore`, `DbUserStore`), `CurrentUser`, guards.* **Auth flows** — sign-up, login, password reset, email confirmation (JSON and Tera).
 - **#93** ✅ *branch `framework-18-31` (2026-11-10): `EnqueueOptions` (run_at, queues, priority, unique), dead-letter API, cross-replica `schedule` (CAS on `rws_job_schedules`), `Mail`/attachments/`Deliver`/`TestMailbox`, `deliver_later` + `Mail::enqueue`, `EmailBuilder::render`, `MailPreviews`, `events::EventBus` (→ MCP notify, → channels); the persistent queue fixed for PostgreSQL/MySQL.* **Jobs, mail and events** — `run_at`, queues, unique jobs, dead-letter, persistent cron across replicas; templated mail, previews, `deliver_later`; a typed `EventBus`.
 - **#94** ✅ *branch `framework-18-31` (2026-11-10): `group` (guards, per-group middleware on `AppWithState`; nested), `resource`, named routes + `router::url_for`, `flash` (`Redirect`, `Flash`, `FlashLayer`), template helpers (`url_for`, `vite`, `vite_asset`, `page_context`), `vite::Vite`, `channels::Hub`, `attachment::Attachment`; `Form<T>` already shipped in 18.28. No separate `nest`: groups nest.* **Web layer** — `resource()` routing, `nest`/`group`, route guards, `Form<T>`, flash messages, view helpers, Vite manifest helper, channels over WebSocket/SSE, attachments on models.
-- **#95** **Defaults** — `RWS_ENV` profiles, problem+json by default, a dev error page, a `fetch_or` cache, DI lifecycle hooks.
+- **#95** ✅ *branch `framework-18-31` (2026-11-10): `RwsEnv::shows_error_details`/`reloads_templates` (dev template reload), `error_pages::ErrorPages`, `cache::ValueCache::fetch_or`, `di::Lifecycle` + `Container::start/stop`; problem+json was already the default (18.17).* **Defaults** — `RWS_ENV` profiles, problem+json by default, a dev error page, a `fetch_or` cache, DI lifecycle hooks.
 
 **Done when:** `starters/fullstack` uses the auth flows, a job, a mail and the web layer, and passes in CI.
 
@@ -326,6 +326,15 @@ Plan and gap review for developers and enterprises: [ADOPTION.md](ADOPTION.md) (
 - **#107** **Observability recipes** — Datadog, Splunk, Elastic, New Relic.
 
 **Done when:** `ci/e2e/otlp.sh` receives logs; a release build reproduces bit for bit; the compatibility e2e passes for 18.31 → 18.33. Non-code items (second maintainer, independent audit, commercial support) are listed in [ADOPTION.md](ADOPTION.md#outside-the-code).
+
+## 18.35.0 — Framework completeness
+
+What a Rails/Django-class framework has beyond 18.31's building blocks (asked for 2026-11-09).
+
+- **#108** ✅ *branch `framework-18-31` (2026-11-10)* **Migrations from models** — `rws gen migration <name> --from-models`: diff the `#[derive(Model)]` structs against the live schema (`DbPool::schema`), write `CREATE TABLE` / `ADD COLUMN` only; drops, renames and type changes are notes, never generated.
+- **#109** **Model admin** — CRUD pages over registered models (`Repository` + `DbPool::schema`), behind a guard; a distinct name from the proxy's admin UI.
+
+**Done when:** both have docs, tests on SQLite/PostgreSQL/MySQL, and a starter uses them.
 
 ## 19.0.0 — Breaking changes
 

@@ -71,6 +71,7 @@ pub mod flash;
 pub mod vite;
 pub mod channels;
 pub mod events;
+pub mod error_pages;
 pub mod handler;
 pub mod schema;
 pub mod state;

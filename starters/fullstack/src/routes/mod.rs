@@ -3,5 +3,6 @@
 //! route's `{parameters}` against the `Path` argument at compile time) and
 //! a `register` that adds them to the app.
 
+pub mod account;
 pub mod health;
 pub mod notes;

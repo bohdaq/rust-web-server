@@ -26,6 +26,21 @@
 //! }
 //! ```
 //!
+//! A relation's own relations load with [`EagerQuery::with_nested`]
+//! (18.35.0): one more query per nested relation, and
+//! [`Loaded::related_loaded`] gives the related rows with theirs:
+//!
+//! ```rust,ignore
+//! // Four queries: authors, their posts, the posts' comments, the posts' labels.
+//! let authors = Author::query(&pool)
+//!     .with_nested(Author::posts(), |posts| posts.with(Post::comments()).with(Post::labels()))
+//!     .fetch_all()
+//!     .await?;
+//! for post in authors[0].related_loaded(&Author::posts()) {
+//!     println!("{}: {} comments", post.title, post.related(&Post::comments()).len());
+//! }
+//! ```
+//!
 //! Related rows that are soft-deleted (`#[soft_delete]`) are left out, as
 //! everywhere else. Keys are sent in batches of [`IN_BATCH`], so a result
 //! set larger than that costs one query per batch.
@@ -317,6 +332,14 @@ impl<T: Model> Loaded<T> {
         self.related(relation).first()
     }
 
+    /// The rows of `relation` with the relations
+    /// [`with_nested`](EagerQuery::with_nested) loaded for them (empty when
+    /// it was loaded without, or not at all).
+    pub fn related_loaded<R: Model + 'static>(&self, relation: &Relation<T, R>) -> &[Loaded<R>] {
+        let key = nested_key(&relation.key());
+        self.relations.iter().find(|(k, _)| *k == key).and_then(|(_, v)| v.downcast_ref::<Vec<Loaded<R>>>()).map(Vec::as_slice).unwrap_or(&[])
+    }
+
     /// Whether the query loaded `relation`.
     pub fn is_loaded<R: Model + 'static>(&self, relation: &Relation<T, R>) -> bool {
         self.get(relation).is_some()
@@ -357,11 +380,14 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Loaded<T> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 type Erased = Box<dyn Any + Send + Sync>;
+/// What a loader answers: for each owner, its entries by key.
+type PerOwner = Vec<Vec<(String, Erased)>>;
 
-/// A relation of `O` with its related type erased.
+/// A relation of `O` with its related type erased: what it loads for each
+/// owner, under one or more keys.
 trait Loader<O>: Send + Sync {
     fn key(&self) -> String;
-    fn load<'a>(&'a self, pool: &'a DbPool, owners: &'a [O]) -> BoxFuture<'a, Result<Vec<Erased>, DbError>>;
+    fn load<'a>(&'a self, pool: &'a DbPool, owners: &'a [O]) -> BoxFuture<'a, Result<PerOwner, DbError>>;
 }
 
 impl<O: Model + 'static, R: Model + Clone + 'static> Loader<O> for Relation<O, R> {
@@ -369,11 +395,75 @@ impl<O: Model + 'static, R: Model + Clone + 'static> Loader<O> for Relation<O, R
         Relation::key(self)
     }
 
-    fn load<'a>(&'a self, pool: &'a DbPool, owners: &'a [O]) -> BoxFuture<'a, Result<Vec<Erased>, DbError>> {
+    fn load<'a>(&'a self, pool: &'a DbPool, owners: &'a [O]) -> BoxFuture<'a, Result<PerOwner, DbError>> {
         Box::pin(async move {
+            let key = Relation::key(self);
             let related = self.load_for(pool, owners).await?;
-            Ok(related.into_iter().map(|r| Box::new(r) as Erased).collect())
+            Ok(related.into_iter().map(|r| vec![(key.clone(), Box::new(r) as Erased)]).collect())
         })
+    }
+}
+
+/// The key a relation's rows *with their own relations* are kept under.
+fn nested_key(key: &str) -> String {
+    format!("nested:{key}")
+}
+
+/// A relation loaded with relations of its own ([`EagerQuery::with_nested`]).
+struct NestedLoader<O, R: Model> {
+    relation: Relation<O, R>,
+    loaders: Vec<Box<dyn Loader<R>>>,
+}
+
+impl<O: Model + 'static, R: Model + Clone + 'static> Loader<O> for NestedLoader<O, R> {
+    fn key(&self) -> String {
+        nested_key(&Relation::key(&self.relation))
+    }
+
+    fn load<'a>(&'a self, pool: &'a DbPool, owners: &'a [O]) -> BoxFuture<'a, Result<PerOwner, DbError>> {
+        Box::pin(async move {
+            let key = Relation::key(&self.relation);
+            let per_owner = self.relation.load_for(pool, owners).await?;
+            // Every owner's rows in one list, their relations loaded at once,
+            // then back to their owners.
+            let counts: Vec<usize> = per_owner.iter().map(Vec::len).collect();
+            let flat: Vec<R> = per_owner.iter().flatten().cloned().collect();
+            let mut loaded = attach(pool, flat, &self.loaders).await?.into_iter();
+            let mut out = Vec::with_capacity(owners.len());
+            for (plain, n) in per_owner.into_iter().zip(counts) {
+                let nested: Vec<Loaded<R>> = loaded.by_ref().take(n).collect();
+                out.push(vec![(key.clone(), Box::new(plain) as Erased), (nested_key(&key), Box::new(nested) as Erased)]);
+            }
+            Ok(out)
+        })
+    }
+}
+
+/// The relations to load for a relation's rows: built in
+/// [`EagerQuery::with_nested`]'s closure.
+pub struct Nested<R: Model> {
+    loaders: Vec<Box<dyn Loader<R>>>,
+}
+
+impl<R: Model + 'static> Nested<R> {
+    /// Load `relation` for the related rows too.
+    pub fn with<S: Model + Clone + 'static>(mut self, relation: Relation<R, S>) -> Self {
+        let key = relation.key();
+        if !self.loaders.iter().any(|l| l.key() == key) {
+            self.loaders.push(Box::new(relation));
+        }
+        self
+    }
+
+    /// Load `relation` for the related rows, with relations of its own.
+    pub fn with_nested<S: Model + Clone + 'static>(mut self, relation: Relation<R, S>, nested: impl FnOnce(Nested<S>) -> Nested<S>) -> Self {
+        let loaders = nested(Nested { loaders: Vec::new() }).loaders;
+        let loader = NestedLoader { relation, loaders };
+        let key = Loader::<R>::key(&loader);
+        if !self.loaders.iter().any(|l| l.key() == key) {
+            self.loaders.push(Box::new(loader));
+        }
+        self
     }
 }
 
@@ -395,6 +485,20 @@ impl<'a, T: Model + 'static> EagerQuery<'a, T> {
         let key = relation.key();
         if !self.loaders.iter().any(|l| l.key() == key) {
             self.loaders.push(Box::new(relation));
+        }
+        self
+    }
+
+    /// Load `relation`, and for its rows the relations `nested` names
+    /// (18.35.0): `.with_nested(Author::posts(), |p| p.with(Post::comments()))`.
+    /// Read them with [`Loaded::related_loaded`]; [`Loaded::related`] still
+    /// gives the plain rows.
+    pub fn with_nested<R: Model + Clone + 'static>(mut self, relation: Relation<T, R>, nested: impl FnOnce(Nested<R>) -> Nested<R>) -> Self {
+        let loaders = nested(Nested { loaders: Vec::new() }).loaders;
+        let loader = NestedLoader { relation, loaders };
+        let key = Loader::<T>::key(&loader);
+        if !self.loaders.iter().any(|l| l.key() == key) {
+            self.loaders.push(Box::new(loader));
         }
         self
     }
@@ -428,9 +532,8 @@ async fn attach<T: Model>(pool: &DbPool, models: Vec<T>, loaders: &[Box<dyn Load
     let mut relations: Vec<Vec<(String, Erased)>> = models.iter().map(|_| Vec::with_capacity(loaders.len())).collect();
     if !models.is_empty() {
         for loader in loaders {
-            let key = loader.key();
-            for (slot, related) in relations.iter_mut().zip(loader.load(pool, &models).await?) {
-                slot.push((key.clone(), related));
+            for (slot, entries) in relations.iter_mut().zip(loader.load(pool, &models).await?) {
+                slot.extend(entries);
             }
         }
     }

@@ -1962,6 +1962,16 @@ config-file key or flag: set it where the process starts.
 |----------|---------|-------------|
 | `RWS_ENV` | `prod` | `dev` (or `development`), `test`, or `prod` (or `production`); anything else counts as `prod`. With `dev`, [`app.dev_mcp()`](/mcp/dev-tools/) mounts its MCP endpoint without a token; otherwise only when `MCP_TOKEN` is set (since 18.28.0). Read in code with `entry_point::RwsEnv::current()`. |
 
+What else follows from it (18.35.0):
+
+| | `dev` | `test` | `prod` |
+|---|---|---|---|
+| [`ErrorPages::from_env()`](/building-apps/error-handling/#error-pages) shows panic messages, locations and backtraces | yes | yes | no: a bare `500` |
+| [`template::render`](/building-apps/templates/) re-reads the templates before each render | yes | no | no |
+| `dev_mcp()` without a token | yes | no | no |
+
+`RwsEnv::shows_error_details()` and `reloads_templates()` answer these for your own code.
+
 ## Database
 
 Database variables are only used when the `model-sqlite`, `model-postgres`, or
@@ -3557,6 +3567,18 @@ body that isn't JSON) — through `TestClient`, no socket. The test builds the
 app with `app()`; when `app` takes arguments, with what the existing tests in
 `tests/` pass to `TestClient::new`, or `--app-expr`.
 
+### Migrations from the models
+
+`rws gen migration <name> --from-models` writes the migration that brings the database up to the `#[derive(Model)]` structs in `src/models/` (18.35.0): a `CREATE TABLE` for a model whose table isn't there, an `ALTER TABLE … ADD COLUMN` for a field whose column isn't. It reads the database like [`rws db`](/database/migrations/#from-the-command-line-rws-db) (`--database-url`, else `DATABASE_URL`, else `RWS_DB_*`) and writes SQL for the `model-*` feature in `Cargo.toml` (or `--db`):
+
+```sh
+rws gen model Post title:String          # later: add `pub summary: Option` to the struct
+rws gen migration add_post_summary --from-models --dry-run
+# migrations/0003_add_post_summary.sql:  ALTER TABLE posts ADD COLUMN summary TEXT;
+```
+
+It is **additive only**: nothing is dropped, renamed or retyped. Columns the database has and the model doesn't, fields whose type has no SQL mapping (anything but integers, floats, `bool`, `String`, `Timestamp`, `Uuid`, `Attachment` and their `Option`s) and a missing primary key are listed as notes to write by hand. A new required column gets a `DEFAULT` (`0`, `FALSE`, `''`) so existing rows can take it; `#[column(name = …)]`, `#[ignore]` and `#[table(name = …)]` are followed. When the database already matches, nothing is written. As a library: `generator::plan_model_migration(dir, name, &existing_columns, db)`.
+
 ## Conflicts, dry runs, JSON
 
 ```text
@@ -4878,6 +4900,23 @@ fn handler(...) -> Response {
     do_something().unwrap_or_else(|e: ApiError| e.into_response())
 }
 ```
+
+## Error pages
+
+A handler that panics, or an app that returns `Err`, is answered by the server with a bare `500`. `ErrorPages` decides what the client sees instead, by [`RWS_ENV`](/configuration/env-vars/#environment-kind) (18.35.0):
+
+```rust
+use rust_web_server::error_pages::ErrorPages;
+
+let app = App::with_state(db).get("/", home).wrap(ErrorPages::from_env());
+```
+
+| `RWS_ENV` | A browser (`Accept: text/html`) | Anything else |
+|---|---|---|
+| `dev`, `test` | A page with the panic message, where it happened, the request (cookie and authorization headers hidden) and the backtrace | Problem details whose `detail` is the message, plus `location` and `backtrace` (an array of lines) |
+| `prod` (or unset) | `500` problem details without a detail | the same |
+
+Either way the details go to stderr. `ErrorPages::detailed(bool)` sets it regardless of `RWS_ENV`. With details on, every request goes through the layer on the blocking pool (async handlers too) so their panics can be caught; with them off, requests pass straight through. The backtrace is captured by a panic hook the layer adds in front of the existing one (once per process); a panic in an async handler shows its message, and its backtrace when it ran on the same thread.
 
 ## AppError variant reference
 
@@ -7136,6 +7175,32 @@ let app = routes! {
 :::note[Thread safety]
 Every type registered with `register` or `provide` must implement `Send + Sync + 'static`. `Arc` satisfies those bounds whenever `T: Send + Sync`, making it the natural wrapper for shared services.
 :::
+
+## Lifecycle hooks
+
+Services that need starting and stopping — a pool to warm, a background thread to join — implement `Lifecycle` and are registered with `register_managed`; plain closures go in with `on_start` / `on_stop` (18.35.0):
+
+```rust
+use rust_web_server::di::{Container, Lifecycle};
+
+struct SearchIndex { /* … */ }
+
+impl Lifecycle for SearchIndex {
+    fn start(&self) -> Result<(), String> { /* load the index */ Ok(()) }
+    fn stop(&self) { /* flush it */ }
+}
+
+let mut c = Container::new();
+c.register_managed(SearchIndex::open("index/")?)
+    .on_start("migrations", |c| run_migrations(&c.get::().unwrap()))
+    .on_stop("metrics", |_| flush_metrics());
+
+c.start()?;           // in registration order
+// … serve …
+c.stop();             // in reverse order
+```
+
+`start()` runs the start hooks in registration order; if one fails, the stop hooks of those before it run (in reverse) and the error is `"<hook name>: <message>"`. `stop()` runs the stop hooks of what started, in reverse. Both do nothing when repeated; `is_started()` tells which state the container is in. A service's `stop` only runs if its `start` did. Call `start` before serving and `stop` after the server returns.
 
 ## Inspection helpers
 
@@ -10179,6 +10244,7 @@ Emails are lower-cased and trimmed; passwords are hashed with Argon2id (`crypto:
 | `.after_login(path)`, `.after_logout(path)` | `/` |
 | `.rate_limit(max, window_secs)` | 10 per 60 s per IP and action; `0` turns it off |
 | `.templates(Arc)` (`tera`) | the built-in pages and plain-text emails |
+| `.on_signup(\|user\| …)` | none; called with each new account (a welcome email, a default workspace); enqueue anything slow |
 
 ## Your own pages and emails
 
@@ -12227,6 +12293,31 @@ let app = App::with_state(cache_handle)
 :::note[Middleware ordering]
 `.wrap()` layers are applied in push order — the first `.wrap()` call is the outermost layer. Place `CacheLayer` last (innermost wrap position) if you want rate limiting or auth to run before the cache is consulted.
 :::
+
+## Caching values: `fetch_or`
+
+`CacheLayer` caches whole responses. `cache::ValueCache` caches values your code computes — an expensive query, a rendered fragment, an API answer — each for its own time (18.35.0):
+
+```rust
+use std::time::Duration;
+use rust_web_server::cache::ValueCache;
+
+let cache: ValueCache> = ValueCache::new(10_000);   // at most 10 000 entries
+
+let featured = cache.fetch_or("products:featured", Duration::from_secs(300), || load_featured(&db));
+// async: cache.fetch_or_async(key, ttl, || async { … }).await
+// fallible, errors not cached: cache.try_fetch_or(key, ttl, || db.query(…))?
+```
+
+| Method | What it does |
+|---|---|
+| `fetch_or(key, ttl, compute)` | The cached value, or `compute()` stored for `ttl` and returned |
+| `try_fetch_or`, `fetch_or_async`, `try_fetch_or_async` | The same for a fallible or async computation; an `Err` isn't stored |
+| `get`, `put(key, value, ttl)` | Read or write one entry |
+| `invalidate(key)`, `invalidate_prefix("user:42:")`, `clear()` | Remove entries when the data changes |
+| `len`, `stats()` | Entries held; `(hits, misses)` |
+
+When it's full, expired entries go first, then the oldest. A `ValueCache` is cheap to clone and all clones share the entries: put one in the app state. The value is computed outside the lock, so two requests missing the same key at the same moment both compute it. It's per process: replicas each have their own.
 
 ---
 
@@ -19241,6 +19332,26 @@ Related rows come in primary-key order, soft-deleted ones (`#[soft_delete]`) lef
 
 Nested loading (comments' authors) is a second step: collect the comments and call `Comment::author().load_for(&pool, &comments)`.
 
+### Nested relations
+
+A relation's own relations load with `with_nested(relation, |nested| …)` — one more query per nested relation, whatever the number of rows (18.35.0):
+
+```rust
+// Four queries: the authors, their posts, the posts' comments, the posts' labels.
+let authors = Author::query(&pool)
+    .with_nested(Author::posts(), |posts| posts.with(Post::comments()).with(Post::labels()))
+    .with(Author::profile())
+    .fetch_all()
+    .await?;
+
+for post in authors[0].related_loaded(&Author::posts()) {          // &[Loaded]
+    let comments: &[Comment] = post.related(&Post::comments());
+    println!("{}: {} comments", post.title, comments.len());
+}
+```
+
+`related_loaded` gives the related rows with their relations; `related` still gives the plain rows. Nesting goes as deep as the closures do (`posts.with_nested(Post::author(), |a| a.with(Author::profile()))`).
+
 ## Many-to-many: `BelongsToMany`
 
 `BelongsToMany` is one owner's links through a join table (18.30.0). It loads the linked rows and adds and removes the links:
@@ -24723,8 +24834,12 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Middleware` | `middleware` | Layer trait: `handle(request, connection, next)`. `runs_inline` / `is_passthrough` (default `false`) declare a layer non-blocking or a no-op for a request. `layer_name()` (default: the type's name, 18.28.0) is how tools list it. See [Middleware](/building-apps/middleware/) |
 | `WithMiddleware` | `middleware` | Wraps any `Application` with a layer stack; `app.wrap(layer)`, first-pushed is outermost |
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
+| `Lifecycle` | `di` | `start`/`stop` for services registered with `Container::register_managed`; `Container::on_start`/`on_stop`/`start`/`stop`/`is_started` (18.35.0). See [Lifecycle hooks](/building-apps/dependency-injection/#lifecycle-hooks) |
+| `ErrorPages` | `error_pages` | Middleware: panics and app errors as a detailed page / problem details in `dev`/`test`, a bare `500` in `prod` (`from_env`, `detailed`) (18.35.0). See [Error pages](/building-apps/error-handling/#error-pages) |
+| `ValueCache` | `cache` | In-memory values with per-entry TTL: `fetch_or`, `try_fetch_or`, `fetch_or_async`, `invalidate_prefix` (18.35.0). See [Caching values](/features/caching/#caching-values-fetch_or) |
 | `AppManifest` | `app_manifest` | `rws.app.toml`, parsed: `name`, `paths`, `file`, `warnings`; `load(dir)` (conventional when absent; name from `Cargo.toml`), `parse(text)` / `FromStr`, `conventional(name)`, `layout(dir)` (18.28.0). See [Project layout](/building-apps/project-layout/) |
 | `Generate` / `plan` / `Plan` | `generator` | `rws gen model|route|migration|test` as a library (18.29.0): `Generate::{Model, Route, Migration, Test}` (`Model`'s `timestamps` / `soft_delete`, 18.30.0), `plan(dir, &request)` reads the project and answers a `Plan` (`changes`, `notes`, `status()`, `has_conflicts()`, `render(diffs)`, `to_json(written)`), `Plan::apply(dir)` writes it — never overwriting a file; `run(args, out, err)` is the command line (`EXIT_OK`/`EXIT_CONFLICT`/`EXIT_USAGE`). See [Generators](/building-apps/generators/) |
+| `plan_model_migration` / `ExistingColumns` | `generator` | The additive migration from the models to a database's tables and columns: `rws gen migration <name> --from-models` (18.35.0). See [Migrations from the models](/building-apps/generators/#migrations-from-the-models) |
 | `db_cli::run` / `run_with_seeders` / `requested` | `db_cli` | `rws db migrate|rollback [N]|status|seed|schema` (18.30.0): `run(args, out, err)` answers the exit code (`EXIT_OK`, `EXIT_FAILED`, `EXIT_USAGE`); `--database-url` / `DATABASE_URL` / `RWS_DB_*`, `--dir`, `--migrations`, `--seeds`, `--json`; `run_with_seeders(args, &Seeders, out, err)` for an app's own binary, whose `db seed` runs Rust seeders after the SQL files. See [`rws db`](/database/migrations/#from-the-command-line-rws-db) |
 | `FileChange` / `ChangeKind` / `GenError` | `generator` | One file of a plan (`path`, `kind` — `Create`, `Edit`, `Unchanged`, `Conflict` — `content`, `original`, `diff`); why a generator refused (`usage`, `message`, `to_json()`) |
 | `Field` / `FieldType` / `BaseType` / `Db` / `RouteAction` | `generator` | `name:type` (`Field::parse`, `parse_fields`; types `i64`, `i32`, `f64`, `bool`, `String`, `Option`); the database a migration is written for (`sqlite`, `postgres`, `mysql`); the routes `gen route` writes (`List`, `Show`, `Create`, `Update`, `Remove`; `parse_list("list,show")`) |
@@ -25061,6 +25176,7 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `BelongsToMany` / `SyncChanges` | `model` | One owner's many-to-many links through a join table: `load`, `ids`, `attach`, `detach`, `detach_all`, `sync` (answers the `SyncChanges`: `attached`, `detached`) (18.30.0). See [Many-to-many](/database/relations/#many-to-many-belongstomany) |
 | `Relation` / `RelationKind` | `model` (`model::eager`) | How `O` reaches `R`: `has_many(fk)`, `has_one(fk)`, `belongs_to(fk)`, `belongs_to_many(join, owner_key, related_key)`; `load(&pool, &owner)`, `load_for(&pool, &owners)` — one query per 500 keys (18.30.0). See [Eager loading](/database/relations/#eager-loading-with-with) |
 | `EagerQuery` / `Loaded` | `model` (`model::eager`) | From `QueryBuilder::with(relation)`: `.with(…)` more, `fetch_all` / `fetch_one` / `paginate` answer `Loaded` — derefs to the model; `related(&rel)`, `one(&rel)`, `take(&rel)`, `is_loaded(&rel)`, `into_inner()` (18.30.0) |
+| `Nested` | `model` | The relations to load for a relation's rows: `with_nested(relation, \|n\| n.with(…))` on `QueryBuilder`/`EagerQuery`; read with `Loaded::related_loaded` (18.35.0). See [Nested relations](/database/relations/#nested-relations) |
 | `MigrationStatus` | `model` | Applied/pending state from `DbPool::migration_status`. See [Migrations](/database/migrations/) |
 | `ModelInfo` | `model` | What a `Model` type maps to — `type_name`, `table`, `columns`, `primary_key`, `auto_increment`; `ModelInfo::of::()`, `short_name()` (18.28.0). What `DevTools::model::()` reports. See [dev tools](/mcp/dev-tools/) |
 | `Page` | `pagination` (re-exported from `model`) | Offset page: totals, `has_next`/`has_prev`, `.map(f)`, `.link_header(base_url)`; usable without the model layer. See [Pagination](/database/pagination/) |

@@ -224,6 +224,15 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
         super::EagerQuery::new(self).with(relation)
     }
 
+    /// Load `relation` with relations of its own (18.35.0); see
+    /// [`EagerQuery::with_nested`](super::EagerQuery::with_nested).
+    pub fn with_nested<R: Model + Clone + 'static>(self, relation: super::Relation<T, R>, nested: impl FnOnce(super::Nested<R>) -> super::Nested<R>) -> super::EagerQuery<'a, T>
+    where
+        T: 'static,
+    {
+        super::EagerQuery::new(self).with_nested(relation, nested)
+    }
+
     /// The pool the query runs on.
     pub(crate) fn pool(&self) -> &'a DbPool {
         self.pool

@@ -62,7 +62,7 @@ pub use backend::Backend;
 pub use connection::{DbConfig, DbSslMode, DbTls};
 pub use migration::MigrationStatus;
 pub use db_schema::{ColumnSchema, DbSchema, ForeignKeySchema, IndexSchema, TableSchema};
-pub use eager::{EagerQuery, Loaded, Relation, RelationKind};
+pub use eager::{EagerQuery, Loaded, Nested, Relation, RelationKind};
 pub use pool::{DbPool, DbTransaction, Replicas};
 pub use query::{Order, QueryBuilder};
 pub use relation::{BelongsTo, BelongsToMany, HasMany, HasOne, SyncChanges};

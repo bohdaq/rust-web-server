@@ -196,6 +196,51 @@ mod on_backends {
     }
 
     #[tokio::test]
+    async fn nested_relations_load_one_query_per_level() {
+        for db in dbs().await {
+            let pool = &db.pool;
+            let (ann, bo) = (author(pool, "ann").await, author(pool, "bo").await);
+            let a1 = post(pool, "a1", Some(ann.id), true).await;
+            let a2 = post(pool, "a2", Some(ann.id), true).await;
+            let b1 = post(pool, "b1", Some(bo.id), true).await;
+            comment(pool, a1.id, "on a1").await;
+            comment(pool, a2.id, "on a2, first").await;
+            comment(pool, a2.id, "on a2, second").await;
+            Profile::repository(pool).save(&Profile { id: 0, author_id: bo.id, bio: "bo's".into() }).await.unwrap();
+
+            // authors → posts → (comments, author → profile)
+            let authors = Author::query(pool)
+                .order_by("id", Order::Asc)
+                .with_nested(Author::posts(), |posts| {
+                    posts.with(Post::comments()).with_nested(Post::author(), |author| author.with(Author::profile())).with(Post::comments())
+                })
+                .with(Author::profile())
+                .fetch_all()
+                .await
+                .unwrap_or_else(|e| panic!("[{}] {e}", db.name));
+            let ann_posts = authors[0].related_loaded(&Author::posts());
+            assert_eq!(vec!["a1", "a2"], ann_posts.iter().map(|p| p.title.as_str()).collect::<Vec<_>>(), "[{}]", db.name);
+            assert_eq!(vec!["on a1"], bodies(ann_posts[0].related(&Post::comments())), "[{}]", db.name);
+            assert_eq!(vec!["on a2, first", "on a2, second"], bodies(ann_posts[1].related(&Post::comments())));
+            // The plain rows are there too.
+            assert_eq!(2, authors[0].related(&Author::posts()).len());
+            let bo_posts = authors[1].related_loaded(&Author::posts());
+            assert_eq!((1, b1.id), (bo_posts.len(), bo_posts[0].id));
+            assert!(bo_posts[0].related(&Post::comments()).is_empty());
+            // Three levels down: the post's author's profile.
+            let back = bo_posts[0].related_loaded(&Post::author());
+            assert_eq!(Some("bo's"), back[0].one(&Author::profile()).map(|p| p.bio.as_str()), "[{}]", db.name);
+            assert_eq!(Some("bo's"), authors[1].one(&Author::profile()).map(|p| p.bio.as_str()));
+            // Loaded without nesting: no nested rows.
+            let plain = Author::query(pool).with(Author::posts()).fetch_all().await.unwrap();
+            assert!(plain[0].related_loaded(&Author::posts()).is_empty() && !plain[0].related(&Author::posts()).is_empty());
+            // From a QueryBuilder too, and on an empty result.
+            assert!(Author::query(pool).where_eq("name", "nobody").with_nested(Author::posts(), |p| p.with(Post::comments())).fetch_all().await.unwrap().is_empty());
+            db.finish().await;
+        }
+    }
+
+    #[tokio::test]
     async fn eager_loading_batches_large_result_sets() {
         for db in dbs().await {
             let pool = &db.pool;

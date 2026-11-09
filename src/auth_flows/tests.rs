@@ -319,3 +319,13 @@ fn the_database_store() {
     assert_eq!(201, json_post(&client, "/auth/signup", r#"{"email":"k@example.com","password":"long enough"}"#).status());
     assert_eq!(200, json_post(&client, "/auth/login", r#"{"email":"k@example.com","password":"long enough"}"#).status());
 }
+
+#[test]
+fn signup_hooks_see_each_new_account() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let s = Arc::clone(&seen);
+    let (client, _, _) = setup(move |a| a.on_signup(move |user| s.lock().unwrap().push(user.email.clone())));
+    json_post(&client, "/auth/signup", r#"{"email":"l@example.com","password":"long enough"}"#);
+    json_post(&client, "/auth/signup", r#"{"email":"l@example.com","password":"long enough"}"#); // taken: no hook
+    assert_eq!(vec!["l@example.com".to_string()], *seen.lock().unwrap());
+}

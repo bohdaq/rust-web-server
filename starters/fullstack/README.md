@@ -1,14 +1,15 @@
 # {{project-name}}
 
 A full-stack app on [rust-web-server](https://rws8.tech): a lit frontend, a
-JSON API and PostgreSQL, deployed to a [kube-dc](https://kube-dc.com) project
+JSON API, accounts (sign-up, login, password reset at `/auth/login`) and
+PostgreSQL, deployed to a [kube-dc](https://kube-dc.com) project
 by GitHub Actions.
 
 ```sh
 (cd frontend && npm ci && npm run build)
 cargo test
 cargo run          # http://127.0.0.1:7878 — notes kept in memory without PGHOST
-RWS_ENV=dev cargo run   # plus the dev MCP endpoint for coding agents at /mcp
+RWS_ENV=dev cargo run   # plus the dev MCP endpoint at /mcp, mail previews at /_mail
 ```
 
 The layout is rws's conventional one (`rws.app.toml`): `src/main.rs` serves
@@ -30,6 +31,10 @@ in another (http://127.0.0.1:5173, `/api` proxied to the app).
    are kept in memory. `<app>` is the repository name in lower case. For a
    database with another name, set the repository variable
    `KUBE_DC_DB_SECRET` to its Secret (`<database>-owner`).
+   **Accounts.** Create the Secret `<app>-auth` with a signing secret
+   (`kubectl create secret generic <app>-auth --from-literal=secret=$(openssl rand -hex 32)`);
+   without it sessions end whenever the pod restarts. For real email add
+   the `RWS_SMTP_*` settings and `APP_URL` to `deploy/app.yaml`.
 3. **Machine identity.** Organization → Access → Machine identities: create
    one in an Organization group with the `developer` role in both projects
    (`admin` if the image is private: the pull Secret needs it), and open

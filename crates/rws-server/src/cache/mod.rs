@@ -36,6 +36,8 @@
 
 #[cfg(test)]
 mod tests;
+mod value;
+pub use value::ValueCache;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(hidden)]
 pub mod disk;

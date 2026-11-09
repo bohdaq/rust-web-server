@@ -3,9 +3,12 @@
 //!
 //! Read from the process environment only (no config-file key, no flag):
 //! it says how the rest of the configuration should be treated, so it is
-//! set where the process is started. Today it decides whether
-//! `dev_mcp()` mounts its tools without a token; the profiles of
-//! roadmap item #95 build on the same setting.
+//! set where the process is started. It decides whether `dev_mcp()`
+//! mounts its tools without a token and, since 18.35.0 (#95), the
+//! defaults that differ between a developer's machine and production:
+//! [`shows_error_details`](RwsEnv::shows_error_details) (the error pages of
+//! `ErrorPages`) and [`reloads_templates`](RwsEnv::reloads_templates)
+//! (templates re-read before each render).
 
 /// The environment kind named by `RWS_ENV`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -53,6 +56,19 @@ impl RwsEnv {
     pub fn is_dev(self) -> bool {
         self == RwsEnv::Dev
     }
+
+    /// Whether errors show their details (the panic message, where it
+    /// happened, the backtrace) to the client: in `dev` and `test`, never in
+    /// `prod` (18.35.0).
+    pub fn shows_error_details(self) -> bool {
+        self != RwsEnv::Prod
+    }
+
+    /// Whether templates are re-read from disk before each render, so an
+    /// edit shows on the next reload of the page: in `dev` (18.35.0).
+    pub fn reloads_templates(self) -> bool {
+        self == RwsEnv::Dev
+    }
 }
 
 impl std::fmt::Display for RwsEnv {
@@ -64,6 +80,12 @@ impl std::fmt::Display for RwsEnv {
 #[cfg(test)]
 mod tests {
     use super::RwsEnv;
+
+    #[test]
+    fn profile_defaults_per_environment() {
+        assert!(RwsEnv::Dev.shows_error_details() && RwsEnv::Test.shows_error_details() && !RwsEnv::Prod.shows_error_details());
+        assert!(RwsEnv::Dev.reloads_templates() && !RwsEnv::Test.reloads_templates() && !RwsEnv::Prod.reloads_templates());
+    }
 
     #[test]
     fn parses_the_three_names_and_their_long_forms() {

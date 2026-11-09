@@ -221,8 +221,20 @@ pub fn try_global() -> Option<std::sync::RwLockReadGuard<'static, TeraEngine>> {
 }
 
 /// Render `template_name` with `ctx` using the global engine and return a `200 OK` HTML response.
+///
+/// With `RWS_ENV=dev` the templates are re-read from disk first (18.35.0),
+/// so an edit shows on the next page load.
 pub fn render(template_name: &str, ctx: &Context) -> Result<Response, String> {
+    if reloads_on_render() {
+        reload_if_initialized();
+    }
     global().response(template_name, ctx)
+}
+
+/// `RWS_ENV=dev`, read once.
+fn reloads_on_render() -> bool {
+    static RELOAD: OnceLock<bool> = OnceLock::new();
+    *RELOAD.get_or_init(|| crate::entry_point::RwsEnv::current().reloads_templates())
 }
 
 /// Reload the global template engine's templates from disk.

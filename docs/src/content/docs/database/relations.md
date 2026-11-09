@@ -157,6 +157,26 @@ Related rows come in primary-key order, soft-deleted ones (`#[soft_delete]`) lef
 
 Nested loading (comments' authors) is a second step: collect the comments and call `Comment::author().load_for(&pool, &comments)`.
 
+### Nested relations
+
+A relation's own relations load with `with_nested(relation, |nested| …)` — one more query per nested relation, whatever the number of rows (18.35.0):
+
+```rust
+// Four queries: the authors, their posts, the posts' comments, the posts' labels.
+let authors = Author::query(&pool)
+    .with_nested(Author::posts(), |posts| posts.with(Post::comments()).with(Post::labels()))
+    .with(Author::profile())
+    .fetch_all()
+    .await?;
+
+for post in authors[0].related_loaded(&Author::posts()) {          // &[Loaded<Post>]
+    let comments: &[Comment] = post.related(&Post::comments());
+    println!("{}: {} comments", post.title, comments.len());
+}
+```
+
+`related_loaded` gives the related rows with their relations; `related` still gives the plain rows. Nesting goes as deep as the closures do (`posts.with_nested(Post::author(), |a| a.with(Author::profile()))`).
+
 ## Many-to-many: `BelongsToMany`
 
 `BelongsToMany<R>` is one owner's links through a join table (18.30.0). It loads the linked rows and adds and removes the links:

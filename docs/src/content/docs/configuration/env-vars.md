@@ -249,6 +249,16 @@ config-file key or flag: set it where the process starts.
 |----------|---------|-------------|
 | `RWS_ENV` | `prod` | `dev` (or `development`), `test`, or `prod` (or `production`); anything else counts as `prod`. With `dev`, [`app.dev_mcp()`](/mcp/dev-tools/) mounts its MCP endpoint without a token; otherwise only when `MCP_TOKEN` is set (since 18.28.0). Read in code with `entry_point::RwsEnv::current()`. |
 
+What else follows from it (18.35.0):
+
+| | `dev` | `test` | `prod` |
+|---|---|---|---|
+| [`ErrorPages::from_env()`](/building-apps/error-handling/#error-pages) shows panic messages, locations and backtraces | yes | yes | no: a bare `500` |
+| [`template::render`](/building-apps/templates/) re-reads the templates before each render | yes | no | no |
+| `dev_mcp()` without a token | yes | no | no |
+
+`RwsEnv::shows_error_details()` and `reloads_templates()` answer these for your own code.
+
 ## Database
 
 Database variables are only used when the `model-sqlite`, `model-postgres`, or

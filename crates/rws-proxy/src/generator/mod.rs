@@ -53,6 +53,7 @@ use crate::core::json::escape as json_escape;
 
 mod cli;
 mod diff;
+mod from_models;
 mod names;
 mod scan;
 mod templates;
@@ -60,6 +61,7 @@ mod templates;
 mod tests;
 
 pub use cli::{requested, run, EXIT_CONFLICT, EXIT_OK, EXIT_USAGE};
+pub use from_models::{plan_model_migration, ExistingColumns};
 pub use names::{parse_fields, BaseType, Field, FieldType, FIELD_TYPES, MAX_NAME_LEN};
 
 use names::{check_snake, check_type_name, pluralize, singularize, to_camel, to_snake};
@@ -916,6 +918,7 @@ pub fn fuzz(input: &str) {
     let _ = scan::test_client_app_expr(input);
     let _ = scan::declared_routes(input);
     let _ = scan::struct_fields(input, "NewPost");
+    from_models::fuzz_models(input);
     for line in input.lines().take(64) {
         let _ = Field::parse(line);
         let _ = scan::migration_number(line);

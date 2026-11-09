@@ -125,6 +125,23 @@ fn handler(...) -> Response {
 }
 ```
 
+## Error pages
+
+A handler that panics, or an app that returns `Err`, is answered by the server with a bare `500`. `ErrorPages` decides what the client sees instead, by [`RWS_ENV`](/configuration/env-vars/#environment-kind) (18.35.0):
+
+```rust
+use rust_web_server::error_pages::ErrorPages;
+
+let app = App::with_state(db).get("/", home).wrap(ErrorPages::from_env());
+```
+
+| `RWS_ENV` | A browser (`Accept: text/html`) | Anything else |
+|---|---|---|
+| `dev`, `test` | A page with the panic message, where it happened, the request (cookie and authorization headers hidden) and the backtrace | Problem details whose `detail` is the message, plus `location` and `backtrace` (an array of lines) |
+| `prod` (or unset) | `500` problem details without a detail | the same |
+
+Either way the details go to stderr. `ErrorPages::detailed(bool)` sets it regardless of `RWS_ENV`. With details on, every request goes through the layer on the blocking pool (async handlers too) so their panics can be caught; with them off, requests pass straight through. The backtrace is captured by a panic hook the layer adds in front of the existing one (once per process); a panic in an async handler shows its message, and its backtrace when it ran on the same thread.
+
 ## AppError variant reference
 
 | Variant | Status | Body |

@@ -11,7 +11,7 @@ name = "app"
 path = "src/main.rs"
 
 [dependencies]
-rust-web-server = { version = "18.28", features = ["serde", "macros", "model-postgres"] }
+rust-web-server = { version = "18.35", features = ["serde", "macros", "model-postgres", "crypto", "mailer", "jobs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", default-features = false, features = ["postgres"] }

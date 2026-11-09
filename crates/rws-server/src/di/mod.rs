@@ -112,6 +112,35 @@ pub struct Container {
     services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     /// Named services: key = (TypeId of T, name), value = Box<dyn Any> holding Arc<T>.
     named: HashMap<(TypeId, String), Box<dyn Any + Send + Sync>>,
+    /// Lifecycle hooks, in registration order (18.35.0).
+    hooks: Vec<Hook>,
+    /// How many hooks [`start`](Container::start) ran; [`stop`](Container::stop) undoes those.
+    /// Behind `Arc`s: a container stays `Freeze` (no interior mutability inline).
+    started: Arc<std::sync::atomic::AtomicUsize>,
+    running: Arc<std::sync::atomic::AtomicBool>,
+}
+
+type StartHook = Box<dyn Fn(&Container) -> Result<(), String> + Send + Sync>;
+type StopHook = Box<dyn Fn(&Container) + Send + Sync>;
+
+struct Hook {
+    name: String,
+    start: Option<StartHook>,
+    stop: Option<StopHook>,
+}
+
+/// A service with a start and a stop: a connection pool to warm, a
+/// background thread to join (18.35.0). Register it with
+/// [`Container::register_managed`]; both default to doing nothing.
+pub trait Lifecycle: Send + Sync {
+    /// Called by [`Container::start`], in registration order.
+    fn start(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Called by [`Container::stop`], in reverse order — only if `start`
+    /// succeeded.
+    fn stop(&self) {}
 }
 
 impl Default for Container {
@@ -126,6 +155,9 @@ impl Container {
         Container {
             services: HashMap::new(),
             named: HashMap::new(),
+            hooks: Vec::new(),
+            started: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -254,6 +286,84 @@ impl Container {
     /// Returns `true` if no services have been registered.
     pub fn is_empty(&self) -> bool {
         self.services.is_empty()
+    }
+
+    // ── Lifecycle (18.35.0) ──────────────────────────────────────────────────────
+
+    /// Run `hook` at [`start`](Self::start), after the hooks registered
+    /// before it. An `Err` stops the start.
+    pub fn on_start(&mut self, name: &str, hook: impl Fn(&Container) -> Result<(), String> + Send + Sync + 'static) -> &mut Self {
+        self.hooks.push(Hook { name: name.to_string(), start: Some(Box::new(hook)), stop: None });
+        self
+    }
+
+    /// Run `hook` at [`stop`](Self::stop), before the hooks registered
+    /// before it (stops run in reverse).
+    pub fn on_stop(&mut self, name: &str, hook: impl Fn(&Container) + Send + Sync + 'static) -> &mut Self {
+        self.hooks.push(Hook { name: name.to_string(), start: None, stop: Some(Box::new(hook)) });
+        self
+    }
+
+    /// Register `service` (as [`register`](Self::register)) with its
+    /// [`Lifecycle`] `start`/`stop` as hooks.
+    pub fn register_managed<T: Lifecycle + 'static>(&mut self, service: T) -> &mut Self {
+        self.register(service);
+        let name = std::any::type_name::<T>().to_string();
+        self.hooks.push(Hook {
+            name,
+            start: Some(Box::new(|c: &Container| c.get::<T>().map_or(Ok(()), |s| s.start()))),
+            stop: Some(Box::new(|c: &Container| {
+                if let Some(s) = c.get::<T>() {
+                    s.stop();
+                }
+            })),
+        });
+        self
+    }
+
+    /// Run the start hooks in registration order. When one fails, the stop
+    /// hooks of those before it run (in reverse) and the error names the
+    /// hook: `"<name>: <error>"`. Calling it again after a success does
+    /// nothing until [`stop`](Self::stop).
+    pub fn start(&self) -> Result<(), String> {
+        use std::sync::atomic::Ordering;
+        if self.running.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        for (i, hook) in self.hooks.iter().enumerate() {
+            if let Some(start) = &hook.start {
+                if let Err(e) = start(self) {
+                    self.stop_first(i);
+                    return Err(format!("{}: {e}", hook.name));
+                }
+            }
+        }
+        self.started.store(self.hooks.len(), Ordering::SeqCst);
+        self.running.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    /// Run the stop hooks of everything [`start`](Self::start) started, in
+    /// reverse order. Does nothing when not started; safe to call twice.
+    pub fn stop(&self) {
+        if self.running.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            let n = self.started.swap(0, std::sync::atomic::Ordering::SeqCst);
+            self.stop_first(n);
+        }
+    }
+
+    fn stop_first(&self, n: usize) {
+        for hook in self.hooks[..n.min(self.hooks.len())].iter().rev() {
+            if let Some(stop) = &hook.stop {
+                stop(self);
+            }
+        }
+    }
+
+    /// Whether [`start`](Self::start) succeeded and [`stop`](Self::stop)
+    /// hasn't run since.
+    pub fn is_started(&self) -> bool {
+        self.running.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     // ── Sharing ─────────────────────────────────────────────────────────────────

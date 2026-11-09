@@ -18,6 +18,11 @@ endpoint's `layout` tool reads it). Put new code where it says:
   `routes/mod.rs` and `app()`.
 - `src/models/<table>.rs`: `#[derive(Model)]` types, one per table.
 - `src/store.rs`: the `Store` (PostgreSQL or in memory).
+- `src/accounts.rs`: `Accounts` — rws's `AuthFlows` (sign-up, login,
+  logout, password reset, email confirmation under `/auth`), the welcome
+  email sent by a background `JobQueue`, and the mail transport (SMTP with
+  `RWS_SMTP_HOST`, else in memory). `site()` in `src/lib.rs` puts `app()`
+  behind it, `FlashLayer` and `ErrorPages`.
 - `migrations/`: SQL files applied in order at startup
   (`NNNN_name.sql`, with `NNNN_name.down.sql` to roll back; PostgreSQL
   dialect, `$1` placeholders). Never rename an applied file.
@@ -50,7 +55,8 @@ endpoint's `layout` tool reads it). Put new code where it says:
   (`claude mcp add --transport http app-dev http://127.0.0.1:7878/mcp`):
   `routes`, `models`, `layout`, `config`, `recent_errors`, and with
   PostgreSQL `db_schema`, `migrations`, `migrations_run`,
-  `migrations_rollback_last`. Outside `RWS_ENV=dev` only with `MCP_TOKEN`
+  `migrations_rollback_last`; mail previews at `/_mail`; error pages
+  with backtraces. Outside `RWS_ENV=dev` only with `MCP_TOKEN`
   set (and requires it); never set `RWS_ENV=dev` in `deploy/`.
 
 ## rws in brief
@@ -62,6 +68,11 @@ Docs: https://rws8.tech, one file: https://rws8.tech/llms-full.txt.
   registered with `App::with_async_state(store).route(remove)`. Arguments
   are extractors (`Path`, `Json`, `Query`, `State`, …); the attribute checks
   `{id}` against `Path` at compile time.
+- Accounts: a route that needs a signed-in user takes a `CurrentUser`
+  argument, or goes in a group with `.guard(signed_in)` (see
+  `src/routes/account.rs`). Settings: `AUTH_SECRET` (32+ bytes; random
+  without it, so sessions end on restart), `APP_URL` (links in emails).
+  https://rws8.tech/features/auth-flows/
 - Errors: `AppError::BadRequest(msg)` & co. answer problem details
   (`application/problem+json`, the message in `detail`, which the frontend
   shows).
