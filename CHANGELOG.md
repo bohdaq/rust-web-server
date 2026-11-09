@@ -29,6 +29,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   - **Attachments on models** (`attachment`, any `storage-*` feature): a
     file in a `Storage` backend as one `TEXT` column, from a multipart
     upload with `Attachment::from_multipart`.
+- **Sign-up and login** (`auth_flows`, roadmap #92; `crypto` + `mailer` +
+  `serde`): `AuthFlows`, a middleware with sign-up, login, logout, password
+  reset and email confirmation as JSON or HTML forms (built-in pages or
+  your Tera templates); signed stateless sessions (a password change ends
+  them) and single-use reset links; rate limits per IP; `CurrentUser`,
+  `signed_in` and `signed_in_or_redirect`; `UserStore` with
+  `MemoryUserStore` and `DbUserStore` (`rws_users`).
 - **Jobs, mail and events** (roadmap #93):
   - **`PersistentJobQueue`**: `enqueue_with(type, payload, EnqueueOptions)` —
     `run_at`/`run_in`, named `queue`s (`queues(&[…])` limits a process),

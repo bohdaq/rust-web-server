@@ -229,6 +229,8 @@ pub use rws_server::sso;
 // can't work in a wasi:http guest, not just ungated. spec/WASM_SHIM.md.
 #[cfg(all(feature = "mailer", not(target_arch = "wasm32")))]
 pub mod mailer;
+#[cfg(all(feature = "crypto", feature = "mailer", feature = "serde", not(target_arch = "wasm32")))]
+pub mod auth_flows;
 #[cfg(feature = "jobs")]
 pub mod jobs;
 // Also compiled under `secrets` — `secrets::aws_secrets_manager`/`azure_key_vault`

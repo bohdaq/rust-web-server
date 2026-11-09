@@ -260,8 +260,7 @@ let app = app.wrap(previews);
 
 | Use case | Setup |
 |---|---|
-| Password reset | Generate a CSPRNG token with `crypto::generate_token(32)`, store it in the DB, email the link |
-| Email verification | Same pattern — send a link containing the token; verify on callback |
+| Password reset, email confirmation | Built in: [sign-up and login](/features/auth-flows/) |
 | Transactional notifications | Order confirmation, invoice, shipping notification |
 | Alerts | Background scheduler job sends alert emails on threshold events |
 

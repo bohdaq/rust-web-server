@@ -146,6 +146,9 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `Purge` / `cache::registry` | `cache` | What `CacheLayer::purge` removes (`All`, `Exact(target)`, `Prefix(target)`), and the named caches the admin API lists and purges (18.11.0). See [Purging](/features/caching/#purging) |
 | `MetricsLayer` | `metrics` | Per-route Prometheus counters and latency histograms. See [Metrics](/features/metrics/) |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, body, and status rewriting; `.request_uri_regex_rewrite` needs `rewrite-regex`. See [Rewrite](/features/rewrite/) |
+| `AuthFlows` | `auth_flows` (`crypto` + `mailer` + `serde`) | Sign-up, login, logout, password reset and email confirmation as one middleware, JSON or forms; signed stateless sessions and links (18.35.0). See [Sign-up and login](/features/auth-flows/) |
+| `CurrentUser` / `signed_in` / `signed_in_or_redirect` | `auth_flows` | The signed-in account as a handler argument, and route guards (18.35.0) |
+| `UserStore` / `AuthUser` / `MemoryUserStore` / `DbUserStore` | `auth_flows` (`DbUserStore`: a `model-*` feature) | Where accounts live: your own table, memory, or `rws_users` (18.35.0) |
 | `BasicAuthLayer` | `auth` (`auth`) | HTTP Basic authentication via a closure or `from_htpasswd_file` (plain or rws's `{SHA256}` scheme — not Apache `{SHA}`/`$apr1$`/bcrypt). See [Auth](/features/auth/) |
 | `JwtLayer` | `auth` (`auth`) | HS256 Bearer JWT validation; `::rs256`/`::es256` verify against a static public key (`auth-asymmetric`) |
 | `Identity` / `with_identity` / `scope_identity` | `authz` | The authenticated caller (`user:alice`), set by every authenticator for the rest of the request — not a header; `Identity::current()` (18.14.0). See [Authorization](/features/authorization/) |

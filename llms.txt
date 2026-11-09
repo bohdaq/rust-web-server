@@ -89,6 +89,7 @@ Use it as:
 - [Channels](https://rws8.tech/docs/features/channels.md): Publish messages to named topics and push them to browsers over SSE or WebSocket with channels::Hub.
 - [Events](https://rws8.tech/docs/features/events.md): A typed in-process event bus — publish values, subscribe by type, forward to MCP notifications or channels.
 - [Authentication](https://rws8.tech/docs/features/auth.md): HTTP Basic Auth, HS256/RS256/ES256 JWT, and forward-auth middleware with helper functions for issuing and verifying tokens.
+- [Sign-up and login](https://rws8.tech/docs/features/auth-flows.md): Account flows as one middleware — sign-up, login, logout, password reset and email confirmation, as JSON or HTML forms.
 - [Authorization](https://rws8.tech/docs/features/authorization.md): Who the caller is, from any authenticator — and, as relationship-based access control, what they may do.
 - [OAuth2 / OIDC SSO](https://rws8.tech/docs/features/sso.md): Authorization code flow with PKCE, session management, RS256/ES256 JWT verification via JWKS, and rws as its own OAuth 2.0 Authorization Server.
 - [SAML 2.0 SSO](https://rws8.tech/docs/features/saml.md): SAML 2.0 Service Provider — ACS handler, XML signature verification, and attribute mapping, for enterprise IdPs that don't speak OIDC.

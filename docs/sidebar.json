@@ -248,6 +248,10 @@
         "link": "/features/auth/"
       },
       {
+        "label": "Sign-up and login",
+        "link": "/features/auth-flows/"
+      },
+      {
         "label": "Authorization",
         "link": "/features/authorization/"
       },
