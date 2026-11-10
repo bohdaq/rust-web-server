@@ -71,13 +71,28 @@ kubectl create namespace "$NS" >/dev/null
 "$CARGO_TARGET_DIR/release/operator" --manifests --image "$IMAGE" --namespace "$NS" > "$WORK/manifests.yaml"
 kubectl apply -f "$WORK/manifests.yaml" >/dev/null
 kubectl wait --for condition=established crd/greetings.example.com --timeout=60s >/dev/null
-kubectl -n "$NS" rollout status deploy/rws-starter-operator --timeout=180s >/dev/null || fail "the operator didn't become ready"
+# Both replicas ready (the webhook CA is installed only then). Polled:
+# `rollout status` right after creating a Deployment can return before its
+# controller has looked at it.
+for _ in $(seq 1 180); do
+  ready=$(kubectl -n "$NS" get deploy rws-starter-operator -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+  [ "$ready" = 2 ] && break
+  sleep 1
+done
+[ "$ready" = 2 ] || fail "the operator didn't become ready ($ready of 2)"
 echo "ok: --manifests applied; two replicas ready (the webhook CA installed)"
 
 greeting() { # <name> <message>
   printf 'apiVersion: example.com/v1\nkind: Greeting\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  message: "%s"\n' "$1" "$NS" "$2"
 }
-if out=$(greeting empty "" | kubectl apply -f - 2>&1); then fail "a Greeting without a message was accepted"; fi
+# The Service routes to the pods a moment after they're ready: until then
+# the API server can't reach the webhooks at all.
+for _ in $(seq 1 60); do
+  if out=$(greeting empty "" | kubectl apply -f - 2>&1); then fail "a Greeting without a message was accepted"; fi
+  echo "$out" | grep -q "spec.message is required" && break
+  echo "$out" | grep -qE "connection refused|no endpoints available" || fail "not the webhook's refusal: $out"
+  sleep 1
+done
 echo "$out" | grep -q "spec.message is required" || fail "not the webhook's refusal: $out"
 echo "ok: the API server called the validating webhook: $(echo "$out" | sed -n 's/.*denied the request: //p')"
 

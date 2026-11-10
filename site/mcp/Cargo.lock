@@ -1707,6 +1707,7 @@ dependencies = [
  "kube",
  "rcgen",
  "rustls",
+ "rws-k8s",
  "rws-proxy",
  "rws-server",
  "serde",
@@ -1726,6 +1727,16 @@ dependencies = [
  "rws-base",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rws-k8s"
+version = "18.34.1"
+dependencies = [
+ "k8s-openapi",
+ "kube",
+ "rws-server",
+ "tokio",
 ]
 
 [[package]]
