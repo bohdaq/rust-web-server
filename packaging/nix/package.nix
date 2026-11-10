@@ -7,6 +7,9 @@
   fetchFromGitHub,
   cmake,
   perl,
+  aws-lc,
+  pkg-config,
+  zstd,
 }:
 
 rustPlatform.buildRustPackage (finalAttrs: {
@@ -22,10 +25,16 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   cargoHash = lib.fakeHash;
 
-  # aws-lc-sys (TLS) builds with cmake and perl.
+  # nixpkgs' cargo hook links system libraries: aws-lc-sys (TLS) the aws-lc
+  # package (AWS_LC_SYS_USE_SYSTEM=1), zstd-sys zstd through pkg-config.
   nativeBuildInputs = [
     cmake
     perl
+    pkg-config
+  ];
+  buildInputs = [
+    aws-lc
+    zstd
   ];
 
   cargoBuildFlags = [

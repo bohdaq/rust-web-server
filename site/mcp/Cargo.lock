@@ -1532,7 +1532,7 @@ dependencies = [
 
 [[package]]
 name = "rust-web-server"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -1664,7 +1664,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rws-acme"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "aws-lc-rs",
  "http",
@@ -1679,7 +1679,7 @@ dependencies = [
 
 [[package]]
 name = "rws-base"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "file-ext",
  "url-build-parse",
@@ -1698,7 +1698,7 @@ dependencies = [
 
 [[package]]
 name = "rws-gateway-api"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "bytes",
  "futures-util",
@@ -1719,7 +1719,7 @@ dependencies = [
 
 [[package]]
 name = "rws-http"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "file-ext",
  "flate2",
@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "rws-k8s"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "k8s-openapi",
  "kube",
@@ -1750,7 +1750,7 @@ dependencies = [
 
 [[package]]
 name = "rws-proxy"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -1767,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "rws-server"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -1793,7 +1793,7 @@ dependencies = [
 
 [[package]]
 name = "rws-tower"
-version = "18.35.0"
+version = "18.35.1"
 dependencies = [
  "bytes",
  "http",

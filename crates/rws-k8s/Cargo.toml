@@ -20,8 +20,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 default = ["k8s"]
 # The client and leader election only (what the Gateway API controller uses).
 leader = ["dep:kube", "dep:k8s-openapi", "dep:tokio"]
+# serde for this crate's types. Also a feature so that `--features serde` at
+# the workspace root (cargo-auditable passes the binary's features to
+# `cargo metadata`) doesn't fail on the optional `serde` dependency.
+serde = ["dep:serde", "dep:serde_json"]
 # Everything.
-k8s = ["leader", "kube?/runtime", "kube?/derive", "kube?/admission", "kube?/jsonpatch", "k8s-openapi?/schemars", "dep:futures-util", "dep:serde", "dep:serde_json", "dep:schemars", "dep:rcgen", "dep:json-patch", "rws-server/http2", "rws-server/serde"]
+k8s = ["leader", "serde", "kube?/runtime", "kube?/derive", "kube?/admission", "kube?/jsonpatch", "k8s-openapi?/schemars", "dep:futures-util", "dep:schemars", "dep:rcgen", "dep:json-patch", "rws-server/http2", "rws-server/serde"]
 
 [dependencies]
 rws-server.workspace = true

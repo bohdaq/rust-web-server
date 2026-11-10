@@ -153,6 +153,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked --all-features
+      # Every facade feature through `cargo metadata`, as cargo-auditable runs it.
+      - run: ci/feature_metadata.sh
 
   # The workflow files themselves: a YAML or expression error silences CI
   # (it happened for three commits in 18.23).

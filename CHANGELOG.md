@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## 18.35.1 — 2026-11-11
+
+### Fixed
+
+- **The Linux musl binaries build again.** 18.35.0's `x86_64` and
+  `aarch64` musl builds failed (cargo-auditable's `cargo metadata
+  --features serde` stopped at `rws-k8s`, which had an optional `serde`
+  dependency but no such feature), so 18.35.0 has no musl binaries,
+  Docker image, Homebrew formula, packages or chart. `rws-k8s` now has a
+  `serde` feature, and CI runs every feature through `cargo metadata`.
+- **Nix package:** nixpkgs' Rust builds now link aws-lc and zstd from the
+  system; the expression lists them.
+
 ## 18.35.0 — 2026-11-10
 
 ### Added
