@@ -146,7 +146,22 @@ impl App {
     /// streamed from the blocking pool). Uploads and form posts aren't.
     #[doc(hidden)]
     pub fn is_inline_request(request: &Request) -> bool {
-        request.method == crate::request::METHOD.get || request.method == crate::request::METHOD.head
+        let read = request.method == crate::request::METHOD.get || request.method == crate::request::METHOD.head;
+        // A probe whose checks may block (a database ping) runs off the event loop.
+        read && !App::probe_request(request).is_some_and(|(probe, _)| crate::health::has_checks(probe))
+    }
+
+    /// The probe the `health` registry answers for `request`, and whether
+    /// `?verbose` was asked for.
+    fn probe_request(request: &Request) -> Option<(crate::health::Probe, bool)> {
+        if request.method != crate::request::METHOD.get && request.method != crate::request::METHOD.head {
+            return None;
+        }
+        let (path, query) = request.request_uri.split_once('?').unwrap_or((&request.request_uri, ""));
+        let probe = crate::health::probe_for_path(path)?;
+        let verbose = query.split('&').any(|p| p == "verbose" || p.starts_with("verbose="));
+        let legacy = path == "/healthz" || path == "/readyz";
+        (!legacy || verbose || crate::health::has_checks(probe)).then_some((probe, verbose))
     }
 }
 
@@ -171,6 +186,13 @@ impl Application for App {
             "",
             Some(header_list),
         );
+
+        // Probes with registered checks, `?verbose`, `/livez`, `/startupz`
+        // (18.36.0): the `health` registry answers. Without checks
+        // `/healthz` and `/readyz` keep their controllers' answers.
+        if let Some((probe, verbose)) = App::probe_request(request) {
+            return Ok(crate::health::respond(probe, verbose));
+        }
 
         let controllers = [
             entry::<IndexController>(),

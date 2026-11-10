@@ -1747,6 +1747,7 @@ order.
 | `RWS_CONFIG_CLIENT_IP` | `forwarded` | `forwarded` / `peer` | Which address is the client: behind a `trusted_proxies` peer, the first untrusted address from the right of `X-Forwarded-For` (or `Forwarded: for=`); `peer` keeps the TCP peer. Rate limits, IP filters, the blocklist, WAF, `ip_hash` and logs use it (since 18.27.0). See [The client address](/proxy/reverse-proxy/#the-client-address). |
 | `RWS_CONFIG_METRICS_ALLOW` | loopback + private ranges | list of addresses / CIDR | Clients `GET /metrics` answers (the client as [`client_ip`](/proxy/reverse-proxy/#the-client-address) sees it); others get `404` (since 18.27.0). `*` everyone, `none` no one. |
 | `RWS_CONFIG_SHUTDOWN_DELAY_SECS` | `5` | seconds | On SIGTERM, `/readyz` answers `503` at once but rws keeps accepting this long before it drains, so a load balancer takes it out of rotation first; `0` drains at once (since 18.27.0). See [Graceful shutdown](/deployment/kubernetes/#graceful-shutdown). |
+| `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS` | `25` | seconds | After the delay and the listeners closing, how long rws waits for requests whose handlers are still running before it exits (since 18.36.0). See [Graceful shutdown](/deployment/kubernetes/#graceful-shutdown). |
 | `RWS_CONFIG_FORWARDED_HEADER` | `add` | string | Proxied requests carry RFC 7239 `Forwarded` beside `X-Forwarded-*` (since 18.20.0); `off` leaves it out and passes the client's through. |
 | `RWS_CONFIG_TLS_CLIENT_CRL_FILE` | (empty) | paths | Certificate revocation lists for client certificates (mTLS), PEM or DER, comma-separated; revoked certificates fail the handshake (since 18.20.0). See [mTLS](/features/mtls/#revoked-certificates-crls). |
 | `RWS_CONFIG_TLS_CLIENT_CRL_STRICT` | `false` | boolean | Refuse a CRL past its `nextUpdate` and certificates no CRL covers. |
@@ -2309,6 +2310,7 @@ forwarded_header        = "add"      # RWS_CONFIG_FORWARDED_HEADER: RFC 7239 For
 trusted_proxies         = ["10.0.0.0/8"]  # RWS_CONFIG_TRUSTED_PROXIES: whose X-Forwarded-*/Forwarded to believe (default: loopback + private ranges)
 client_ip               = "forwarded"     # RWS_CONFIG_CLIENT_IP: the client behind a trusted proxy (default) or "peer"
 shutdown_delay_secs     = 5               # RWS_CONFIG_SHUTDOWN_DELAY_SECS: on SIGTERM, not ready but still serving this long before draining
+shutdown_timeout_secs   = 25              # RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS: then wait at most this long for handlers still running
 metrics_allow           = ["10.0.0.0/8"]  # RWS_CONFIG_METRICS_ALLOW: who GET /metrics answers (default: loopback + private ranges); "*" anyone
 tls_client_crl_file     = "/etc/rws/clients.crl.pem"  # RWS_CONFIG_TLS_CLIENT_CRL_FILE: revoked client certificates (PEM or DER, comma-separated)
 tls_client_crl_strict   = false      # RWS_CONFIG_TLS_CLIENT_CRL_STRICT: refuse stale CRLs and certificates no CRL covers
@@ -22935,14 +22937,37 @@ Send `docker kill --signal=SIGHUP <container>` to reload TLS certificates, CORS 
 
 ## Health endpoints
 
-`rust-web-server` exposes two dedicated health endpoints that map directly to Kubernetes probe semantics:
+`rust-web-server` exposes one endpoint per Kubernetes probe:
 
-| Endpoint | Purpose | Probe type |
+| Endpoint | Probe | `200` when |
 |---|---|---|
-| `GET /healthz` | Always returns `200 OK` while the process is running | Liveness |
-| `GET /readyz` | Returns `200 OK` when ready, `503` during startup and SIGTERM drain | Readiness |
+| `GET /livez` (also `GET /healthz`) | Liveness | Every liveness check passes — with none registered, while the process answers |
+| `GET /readyz` | Readiness | The server is up and not shutting down, and every readiness check passes; `503` during startup and the SIGTERM drain |
+| `GET /startupz` | Startup | Every startup check has passed once (then it stays `200`) |
 
-The `SERVER_READY` flag is set to `true` after `Server::setup()` completes and cleared as soon as a shutdown signal is received, so Kubernetes stops routing traffic before in-flight requests finish draining.
+### Health checks
+
+Register what "alive", "ready" and "started" mean for your app with the `health` module (18.36.0):
+
+```rust
+use rust_web_server::health;
+
+health::database("db", pool.clone());                    // readiness: SELECT 1 (model-* features)
+health::readiness("payments-api", || ping_payments());   // Err(message) takes the pod out of the Service
+health::startup("search-index", || if index_loaded() { Ok(()) } else { Err("loading".into()) });
+health::liveness("worker", || if worker_alive() { Ok(()) } else { Err("the worker thread died".into()) });
+```
+
+Checks run concurrently, each within `health::set_timeout` (default 2 s; a slower check fails), off the event loop, so a check may block. `?verbose` gives one line per check, as the Kubernetes API server's own probes do:
+
+```text
+$ curl -s localhost:7878/readyz?verbose
+[+]db ok
+[-]payments-api failed: connection refused
+readyz check failed
+```
+
+Without `?verbose` the body is `OK`, or the failed checks. `health::register_async(probe, name, || async { … })` takes an async check; `health::report(probe)` runs them from code. Keep liveness checks to what a restart fixes: a database outage belongs in readiness, or every pod restarts at once.
 
 ## Graceful shutdown
 
@@ -22951,10 +22976,10 @@ When Kubernetes sends `SIGTERM`, the server:
 1. Clears `SERVER_READY` — `/readyz` begins returning `503`, Kubernetes stops sending new traffic.
 2. Keeps accepting for `shutdown_delay_secs` (default 5, since 18.27.0): endpoint removal reaches kube-proxy and ingress controllers a moment after the pod is told to stop, and until then they still send it requests. Before 18.27 rws stopped accepting at once and those got a `502`/`503` from the load balancer.
 3. Stops accepting new TCP connections.
-4. Waits for all in-flight requests to complete (thread-pool drain on `http1`; tokio task drain on `http2`/`http3`).
+4. Waits for the requests whose handlers are still running, at most `shutdown_timeout_secs` (default 25, since 18.36.0; `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`) — the thread pool's drain on `http1`. Before 18.36 the async servers returned at once and a handler still running was cut off when the process exited. Idle keep-alive connections don't hold it up.
 5. Exits cleanly.
 
-Ctrl+C (SIGINT) skips the delay. Set `terminationGracePeriodSeconds` to at least `30` (the delay counts toward it) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
+Ctrl+C (SIGINT) skips the delay and the wait. Set `terminationGracePeriodSeconds` to at least the delay plus the timeout (`30` with the defaults) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
 :::tip[Helm chart]
 The manifests below are also a Helm chart, published with every release (since 18.2.0):
@@ -24890,6 +24915,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `AsyncAppWithState` | `async_state` (`http2`) | Same with `async fn` handlers. Entry point `App::with_async_state(S)` |
 | `Middleware` | `middleware` | Layer trait: `handle(request, connection, next)`. `runs_inline` / `is_passthrough` (default `false`) declare a layer non-blocking or a no-op for a request. `layer_name()` (default: the type's name, 18.28.0) is how tools list it. See [Middleware](/building-apps/middleware/) |
 | `WithMiddleware` | `middleware` | Wraps any `Application` with a layer stack; `app.wrap(layer)`, first-pushed is outermost |
+| `health` (`Probe`, `Registry`, `Report`) | `health` | Liveness, readiness and startup checks for `/livez`, `/readyz`, `/startupz`: `readiness(name, f)`, `liveness`, `startup`, `register_async`, `database(name, pool)`, `report`, `set_timeout` (18.36.0). See [Health checks](/deployment/kubernetes/#health-checks) |
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
 | `Lifecycle` | `di` | `start`/`stop` for services registered with `Container::register_managed`; `Container::on_start`/`on_stop`/`start`/`stop`/`is_started` (18.35.0). See [Lifecycle hooks](/building-apps/dependency-injection/#lifecycle-hooks) |
 | `ErrorPages` | `error_pages` | Middleware: panics and app errors as a detailed page / problem details in `dev`/`test`, a bare `500` in `prod` (`from_env`, `detailed`) (18.35.0). See [Error pages](/building-apps/error-handling/#error-pages) |

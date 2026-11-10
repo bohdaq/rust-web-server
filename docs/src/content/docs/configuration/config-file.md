@@ -280,6 +280,7 @@ forwarded_header        = "add"      # RWS_CONFIG_FORWARDED_HEADER: RFC 7239 For
 trusted_proxies         = ["10.0.0.0/8"]  # RWS_CONFIG_TRUSTED_PROXIES: whose X-Forwarded-*/Forwarded to believe (default: loopback + private ranges)
 client_ip               = "forwarded"     # RWS_CONFIG_CLIENT_IP: the client behind a trusted proxy (default) or "peer"
 shutdown_delay_secs     = 5               # RWS_CONFIG_SHUTDOWN_DELAY_SECS: on SIGTERM, not ready but still serving this long before draining
+shutdown_timeout_secs   = 25              # RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS: then wait at most this long for handlers still running
 metrics_allow           = ["10.0.0.0/8"]  # RWS_CONFIG_METRICS_ALLOW: who GET /metrics answers (default: loopback + private ranges); "*" anyone
 tls_client_crl_file     = "/etc/rws/clients.crl.pem"  # RWS_CONFIG_TLS_CLIENT_CRL_FILE: revoked client certificates (PEM or DER, comma-separated)
 tls_client_crl_strict   = false      # RWS_CONFIG_TLS_CLIENT_CRL_STRICT: refuse stale CRLs and certificates no CRL covers

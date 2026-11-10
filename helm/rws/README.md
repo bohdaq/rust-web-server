@@ -76,6 +76,7 @@ CI (`.github/workflows/helm.yml`) runs both for several value sets and installs 
 | `resources` | `100m`/`64Mi` requests, `500m`/`256Mi` limits | Container resource requests/limits. With `gatewayAPI.enabled` the CPU limit is left out (a gateway shouldn't be throttled). |
 | `livenessProbe.*` | path `/healthz`, see `values.yaml` | Liveness probe settings. |
 | `readinessProbe.*` | path `/readyz`, see `values.yaml` | Readiness probe settings. |
+| `startupProbe.enabled` / `startupProbe.*` | `false`, path `/startupz` | A startup probe on the app's startup checks (`health::startup`, 18.36.0). |
 | `podDisruptionBudget.enabled` | `true` | Create a PodDisruptionBudget. |
 | `podDisruptionBudget.minAvailable` | `2` | Minimum available pods during voluntary disruptions. |
 | `autoscaling.enabled` | `false` | Create a HorizontalPodAutoscaler (and omit `Deployment.spec.replicas`). |

@@ -116,6 +116,7 @@ pub use rws_server::flash;
 #[cfg(not(target_arch = "wasm32"))]
 pub use rws_server::channels;
 pub use rws_server::events;
+pub use rws_server::health;
 pub use rws_server::error_pages;
 #[cfg(feature = "serde")]
 pub use rws_server::vite;

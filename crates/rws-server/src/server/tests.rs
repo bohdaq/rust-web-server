@@ -934,3 +934,25 @@ fn pipe_stream_head_keeps_the_length_and_sends_no_body() {
     assert!(head.contains("Content-Length: 300000\r\n"), "{head}");
     assert!(rest.is_empty());
 }
+
+#[cfg(feature = "http2")]
+#[test]
+fn drain_waits_for_requests_in_flight() {
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+    runtime.block_on(async {
+        // One that finishes after 100 ms.
+        let guard = crate::metrics::InFlight::start();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            drop(guard);
+        });
+        let started = std::time::Instant::now();
+        assert_eq!(0, super::drain_requests_within(std::time::Duration::from_secs(5)).await);
+        assert!(started.elapsed() >= std::time::Duration::from_millis(90));
+        release.join().unwrap();
+        // One that doesn't finish in time.
+        let stuck = crate::metrics::InFlight::start();
+        assert!(super::drain_requests_within(std::time::Duration::from_millis(50)).await >= 1);
+        drop(stuck);
+    });
+}

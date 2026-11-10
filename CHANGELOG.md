@@ -9,6 +9,19 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **Health checks** (`health`): `health::readiness` / `liveness` /
+  `startup` (and `register_async`, `database(name, pool)`) register checks
+  that `/readyz`, `/livez` (`/healthz`) and the new `/startupz` run —
+  concurrently, with a timeout, off the event loop; `?verbose` lists each
+  check. Without checks `/healthz` and `/readyz` answer as before. The Helm
+  chart has an optional `startupProbe`.
+- **Graceful drain**: after SIGTERM's delay the async servers stop
+  accepting, then wait up to `shutdown_timeout_secs`
+  (`RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`, default 25) for handlers still
+  running; before, those were cut off when the process exited.
+
+### Added
+
 - **Web layer** (roadmap #94, `spec/AGENT_FIRST_FRAMEWORK.md`):
   - **Route groups and guards**: `app.group("/admin", |g| g.guard(signed_in).wrap(layer).get(…))`
     on `AppWithState` and `AsyncAppWithState` (async groups: guards, no

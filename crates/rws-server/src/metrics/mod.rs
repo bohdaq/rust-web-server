@@ -65,6 +65,26 @@ pub static ERRORS_TOTAL: AtomicU64 = AtomicU64::new(0);
 /// Number of currently open TCP/QUIC connections.
 pub static ACTIVE_CONNECTIONS: AtomicI64 = AtomicI64::new(0);
 
+/// Requests whose handler is running (18.36.0): what a graceful shutdown
+/// waits for (`server::drain_requests`).
+pub static REQUESTS_IN_FLIGHT: AtomicI64 = AtomicI64::new(0);
+
+/// Counts one request in [`REQUESTS_IN_FLIGHT`] until dropped.
+pub struct InFlight(());
+
+impl InFlight {
+    pub fn start() -> Self {
+        REQUESTS_IN_FLIGHT.fetch_add(1, Ordering::SeqCst);
+        InFlight(())
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        REQUESTS_IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// Jobs queued in the thread pool waiting for a free worker.
 pub static THREAD_POOL_QUEUED: AtomicI64 = AtomicI64::new(0);
 

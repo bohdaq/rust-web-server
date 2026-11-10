@@ -166,6 +166,15 @@ readinessProbe:
   timeoutSeconds: 2
   failureThreshold: 2
 
+# /startupz (18.36.0): holds liveness and readiness off until the app's
+# startup checks (rust_web_server::health::startup) pass. Off by default.
+startupProbe:
+  enabled: false
+  path: /startupz
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 60
+
 # An Ingress in front of the Service. With tls.enabled the pods speak HTTPS,
 # so the controller must too: the chart adds ingress-nginx's
 # backend-protocol annotation; set your controller's equivalent otherwise.

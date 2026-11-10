@@ -5,14 +5,37 @@ description: Deploy rust-web-server on Kubernetes with health probes, metrics sc
 
 ## Health endpoints
 
-`rust-web-server` exposes two dedicated health endpoints that map directly to Kubernetes probe semantics:
+`rust-web-server` exposes one endpoint per Kubernetes probe:
 
-| Endpoint | Purpose | Probe type |
+| Endpoint | Probe | `200` when |
 |---|---|---|
-| `GET /healthz` | Always returns `200 OK` while the process is running | Liveness |
-| `GET /readyz` | Returns `200 OK` when ready, `503` during startup and SIGTERM drain | Readiness |
+| `GET /livez` (also `GET /healthz`) | Liveness | Every liveness check passes — with none registered, while the process answers |
+| `GET /readyz` | Readiness | The server is up and not shutting down, and every readiness check passes; `503` during startup and the SIGTERM drain |
+| `GET /startupz` | Startup | Every startup check has passed once (then it stays `200`) |
 
-The `SERVER_READY` flag is set to `true` after `Server::setup()` completes and cleared as soon as a shutdown signal is received, so Kubernetes stops routing traffic before in-flight requests finish draining.
+### Health checks
+
+Register what "alive", "ready" and "started" mean for your app with the `health` module (18.36.0):
+
+```rust
+use rust_web_server::health;
+
+health::database("db", pool.clone());                    // readiness: SELECT 1 (model-* features)
+health::readiness("payments-api", || ping_payments());   // Err(message) takes the pod out of the Service
+health::startup("search-index", || if index_loaded() { Ok(()) } else { Err("loading".into()) });
+health::liveness("worker", || if worker_alive() { Ok(()) } else { Err("the worker thread died".into()) });
+```
+
+Checks run concurrently, each within `health::set_timeout` (default 2 s; a slower check fails), off the event loop, so a check may block. `?verbose` gives one line per check, as the Kubernetes API server's own probes do:
+
+```text
+$ curl -s localhost:7878/readyz?verbose
+[+]db ok
+[-]payments-api failed: connection refused
+readyz check failed
+```
+
+Without `?verbose` the body is `OK`, or the failed checks. `health::register_async(probe, name, || async { … })` takes an async check; `health::report(probe)` runs them from code. Keep liveness checks to what a restart fixes: a database outage belongs in readiness, or every pod restarts at once.
 
 ## Graceful shutdown
 
@@ -21,10 +44,10 @@ When Kubernetes sends `SIGTERM`, the server:
 1. Clears `SERVER_READY` — `/readyz` begins returning `503`, Kubernetes stops sending new traffic.
 2. Keeps accepting for `shutdown_delay_secs` (default 5, since 18.27.0): endpoint removal reaches kube-proxy and ingress controllers a moment after the pod is told to stop, and until then they still send it requests. Before 18.27 rws stopped accepting at once and those got a `502`/`503` from the load balancer.
 3. Stops accepting new TCP connections.
-4. Waits for all in-flight requests to complete (thread-pool drain on `http1`; tokio task drain on `http2`/`http3`).
+4. Waits for the requests whose handlers are still running, at most `shutdown_timeout_secs` (default 25, since 18.36.0; `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`) — the thread pool's drain on `http1`. Before 18.36 the async servers returned at once and a handler still running was cut off when the process exited. Idle keep-alive connections don't hold it up.
 5. Exits cleanly.
 
-Ctrl+C (SIGINT) skips the delay. Set `terminationGracePeriodSeconds` to at least `30` (the delay counts toward it) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
+Ctrl+C (SIGINT) skips the delay and the wait. Set `terminationGracePeriodSeconds` to at least the delay plus the timeout (`30` with the defaults) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
 :::tip[Helm chart]
 The manifests below are also a Helm chart, published with every release (since 18.2.0):

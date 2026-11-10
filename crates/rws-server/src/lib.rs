@@ -57,6 +57,7 @@ pub mod rsa_key;
 pub mod feature;
 pub mod maintenance;
 pub mod metrics;
+pub mod health;
 pub mod mcp;
 pub mod request_log;
 pub mod request_id;

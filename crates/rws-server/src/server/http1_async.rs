@@ -399,6 +399,8 @@ pub async fn execute_request<A: Application + Send + 'static>(
     connection: &ConnectionInfo,
     hints: Option<std::sync::Arc<crate::early_hints::Sink>>,
 ) -> Result<(Request, Result<Response, String>), String> {
+    // Counted while the handler runs: a graceful shutdown waits for it.
+    let _in_flight = crate::metrics::InFlight::start();
     let async_result = match app.execute_async(&request, connection) {
         Some(future) => {
             // `pin!` keeps the scoped future on the stack: no allocation.

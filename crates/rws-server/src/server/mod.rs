@@ -1195,6 +1195,38 @@ async fn sigterm() {
     }
 }
 
+/// Wait until no request is being handled (`metrics::REQUESTS_IN_FLIGHT`),
+/// at most `shutdown_timeout_secs` (18.36.0). The accept loops call it
+/// after they stop accepting, so handlers that started finish before the
+/// process exits. Returns how many were still running at the deadline.
+#[cfg(feature = "http2")]
+pub async fn drain_requests() -> i64 {
+    let timeout = std::time::Duration::from_secs(crate::server_config::ServerConfig::current().shutdown_timeout_secs);
+    drain_requests_within(timeout).await
+}
+
+#[cfg(feature = "http2")]
+pub(crate) async fn drain_requests_within(timeout: std::time::Duration) -> i64 {
+    use std::sync::atomic::Ordering;
+    let deadline = tokio::time::Instant::now() + timeout;
+    let mut announced = false;
+    loop {
+        let running = crate::metrics::REQUESTS_IN_FLIGHT.load(Ordering::SeqCst);
+        if running <= 0 {
+            return 0;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            eprintln!("Shutdown: {running} request(s) still running after {} s (shutdown_timeout_secs)", timeout.as_secs());
+            return running;
+        }
+        if !announced {
+            println!("Shutdown: waiting for {running} request(s) to finish");
+            announced = true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+}
+
 /// `true` for a SIGTERM, `false` for [`request_shutdown`] (no delay: no load
 /// balancer is waiting on that path).
 #[cfg(feature = "http2")]
@@ -1329,7 +1361,10 @@ impl Server {
                                 }
                                 Err(e) => accept_backoff(e).await,
                             },
-                            _ = per_core::stopped(&mut stop) => break,
+                            _ = per_core::stopped(&mut stop) => {
+                                drain_requests().await;
+                                break;
+                            }
                         }
                     }
                 }
@@ -1371,6 +1406,7 @@ impl Server {
                 _ = sigterm() => {
                     crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
                     println!("\nShutting down gracefully (SIGTERM).");
+                    drain_requests().await;
                     break;
                 }
                 _ = sighup() => {
@@ -1404,7 +1440,10 @@ impl Server {
                                 }
                                 Err(e) => accept_backoff(e).await,
                             },
-                            _ = per_core::stopped(&mut stop) => break,
+                            _ = per_core::stopped(&mut stop) => {
+                                drain_requests().await;
+                                break;
+                            }
                         }
                     }
                 }
@@ -1437,6 +1476,7 @@ impl Server {
                 _ = sigterm() => {
                     crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
                     println!("\nShutting down gracefully (SIGTERM).");
+                    drain_requests().await;
                     break;
                 }
                 _ = sighup() => {
@@ -1713,6 +1753,7 @@ impl Server {
                 _ = sigterm() => {
                     crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
                     println!("\nShutting down QUIC (SIGTERM).");
+                    drain_requests().await;
                     endpoint.close(0u32.into(), b"shutdown");
                     break;
                 }
