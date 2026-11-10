@@ -136,6 +136,41 @@ if (!has(traffic.entry_pages, (traffic.entry_pages ?? [])[0]?.[0], 1)) fail(`ent
 await page.goto(`${admin}/admin/#/traffic`);
 const live = await api("/traffic/live");
 if (live.visitors !== 2 || live.views_5m !== 4) fail(`live: ${JSON.stringify(live)}`);
+// 18.35: the script visitor is verified and in the visit feed; an app's
+// requests and events are the app's, not a bot's; a scanner's probe is
+// listed without its address; the owner link takes a browser out.
+{
+  const site = externalUrl.replace(/\/$/, "");
+  const ua = "HITOP/2.3.1 CFNetwork/3826.500.111 Darwin/25.0.0";
+  await fetch(`${site}/api/ping`, { headers: { "user-agent": ua } });
+  const event = await fetch(`${site}/_rws/e`, { method: "POST", headers: { "user-agent": ua }, body: JSON.stringify({ app: "HITOP", v: "2.3.1", p: "ios", n: "opened" }) });
+  if (event.status !== 204) fail(`app event: ${event.status}`);
+  const unknown = await fetch(`${site}/_rws/e`, { method: "POST", body: JSON.stringify({ app: "Other", n: "x" }) });
+  if (unknown.status !== 403) fail(`unknown app event: ${unknown.status}`);
+  await fetch(`${site}/.git/config`, { headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36" } });
+  const t = await api("/traffic?hours=24");
+  if (t.tiers?.verified !== 1) fail(`tiers: ${JSON.stringify(t.tiers)}`);
+  if (!(t.visits ?? []).some((v) => v.verified && v.pages.includes("/thanks/"))) fail(`visits: ${JSON.stringify(t.visits)}`);
+  if (t.totals.apps?.visitors !== 1) fail(`apps: ${JSON.stringify(t.totals.apps)}`);
+  if (!(t.apps?.events ?? []).some(([k, n]) => k === "HITOP\topened" && n === 1)) fail(`app events: ${JSON.stringify(t.apps)}`);
+  if (!(t.apps?.versions ?? []).some(([k]) => k === "HITOP\t2.3.1")) fail(`app versions: ${JSON.stringify(t.apps)}`);
+  if (!(t.probes?.paths ?? []).some(([k]) => k === "/.git/config")) fail(`probes: ${JSON.stringify(t.probes)}`);
+  const owner = await api("/traffic/owner");
+  if (!owner.path?.startsWith("/_rws/me?k=")) fail(`owner: ${JSON.stringify(owner)}`);
+  const me = await browser.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15" });
+  const mine = await me.newPage();
+  const res = await mine.goto(`${site}${owner.path}`);
+  if (res.status() !== 200 || !(await me.cookies()).some((c) => c.name === "rws_me")) fail("the owner link set no cookie");
+  await mine.goto(`${site}/app.html`);
+  await mine.waitForTimeout(300);
+  await me.close();
+  const after = await api("/traffic?hours=24");
+  if (after.totals.people.visitors !== 2) fail(`the owner counted as a person: ${JSON.stringify(after.totals)}`);
+  if ((after.totals.owner?.pages ?? 0) < 1) fail(`owner pages: ${JSON.stringify(after.totals.owner)}`);
+  console.log("ok: verified visitor, visit feed, app user and events, probe, owner link");
+  // The page loaded before these: show them now.
+  await page.reload();
+}
 const ranged = await api(`/traffic?from=${new Date().toISOString().slice(0, 10)}`);
 if (!Array.isArray(ranged.previous_series) || !Array.isArray(ranged.days)) fail(`range: ${JSON.stringify(Object.keys(ranged))}`);
 // The Traffic view (18.32 layout): key numbers, chart, cards, tabs.
@@ -147,6 +182,9 @@ await t2.getByRole("heading", { name: "Top pages", exact: true }).waitFor({ time
 await t2.getByRole("heading", { name: "Right now", exact: true }).waitFor({ timeout: 5000 }).catch(() => fail("no Right now card"));
 const visitorsShown = (await t2.locator(".t-kpi", { hasText: "Visitors" }).locator(".t-kpi-value").textContent()).trim();
 if (visitorsShown !== String(live.visitors)) console.log(`(visitors tile ${visitorsShown}, live ${live.visitors})`);
+await t2.locator(".t-tiers", { hasText: "Verified" }).waitFor({ timeout: 5000 }).catch(() => fail("no person tiers"));
+await t2.getByRole("tab", { name: "Visitors" }).click();
+await t2.locator(".t-visit").first().waitFor({ timeout: 5000 }).catch(() => fail("no visit in the feed"));
 for (const [tab, heading] of [["Pages", "Entry pages"], ["Sources", "Channels"], ["Audience", "Browsers"], ["Behaviour", "Goals"]]) {
   await t2.getByRole("tab", { name: tab }).click();
   await t2.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 5000 }).catch(() => fail(`no ${heading} on the ${tab} tab`));
@@ -158,7 +196,7 @@ if ((await t2.locator(".t-map svg path").count()) < 150) fail("no world map");
 const known = (ranged.countries ?? []).some(([code]) => /^[A-Z]{2}$/.test(code));
 if (known && (await t2.locator(".t-map path.on").count()) < 1) fail("the map shows no country");
 // Humans / AI agents / Bots / All.
-for (const [group, heading] of [["AI agents", "AI agents"], ["Bots", "By kind"], ["All", "Share of requests"]]) {
+for (const [group, heading] of [["Apps", "App events"], ["AI agents", "AI agents"], ["Bots", "Probes"], ["All", "Share of requests"]]) {
   await t2.locator(".t-seg button", { hasText: group }).click();
   await t2.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 5000 }).catch(() => fail(`no ${heading} for ${group}`));
 }

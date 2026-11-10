@@ -12,6 +12,7 @@ import "@lit-material/world-map";
 
 const TABS = [
   ["overview", "Overview"],
+  ["visitors", "Visitors"],
   ["pages", "Pages"],
   ["sources", "Sources"],
   ["audience", "Audience"],
@@ -22,11 +23,12 @@ const TABS = [
 // all three side by side.
 const GROUPS = [
   ["people", "Humans"],
+  ["apps", "Apps"],
   ["ai", "AI agents"],
   ["bots", "Bots"],
   ["all", "All"],
 ];
-const GROUP_NAMES = { people: "Humans", ai: "AI agents", bots: "Bots" };
+const GROUP_NAMES = { people: "Humans", apps: "Apps", ai: "AI agents", bots: "Bots" };
 
 const PRESETS = [
   ["today", "Today", 0],
@@ -46,7 +48,21 @@ const DIMS = {
   device: "Device",
 };
 
-const CHANNELS = { direct: "Direct", search: "Search", social: "Social", ai: "AI assistants", referral: "Other sites", campaign: "Campaigns", "(none)": "Direct" };
+const CHANNELS = { direct: "Direct", search: "Search", social: "Social", ai: "AI assistants", store: "App stores", referral: "Other sites", campaign: "Campaigns", "(none)": "Direct" };
+const PLATFORMS = { ios: "iOS", ipados: "iPadOS", macos: "macOS", apple: "iOS/macOS", android: "Android", windows: "Windows", linux: "Linux", chrome: "Chrome", edge: "Edge", firefox: "Firefox", safari: "Safari", web: "Web", other: "Other" };
+const DOWNLOAD_GROUPS = { people: "people", apps: "apps", bots: "bots, tools", ai: "AI", owner: "you", undecided: "undecided" };
+
+/** "a\tb" keys from the server, split. */
+const parts = (key) => key.split("\t");
+
+/** How long ago `t` (seconds) was. */
+function ago(t) {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - t));
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric" });
+}
 const DEVICES = { desktop: "Desktop", mobile: "Phone", tablet: "Tablet" };
 const SCREENS = { phone: "Phone (< 600 px)", tablet: "Tablet (600–1023 px)", laptop: "Laptop (1024–1439 px)", wide: "Wide (≥ 1440 px)", "(unknown)": "Unknown" };
 
@@ -98,6 +114,7 @@ export class RwsTraffic extends LitElement {
     notice: { state: true },
     off: { state: true },
     customOpen: { state: true },
+    owner: { state: true },
   };
 
   constructor() {
@@ -117,6 +134,7 @@ export class RwsTraffic extends LitElement {
     this.notice = "";
     this.off = false;
     this.customOpen = false;
+    this.owner = null;
     try {
       const saved = JSON.parse(localStorage.getItem("rws-traffic") ?? "{}");
       if (TABS.some(([id]) => id === saved.tab)) this.tab = saved.tab;
@@ -267,6 +285,19 @@ export class RwsTraffic extends LitElement {
   setTab(id) {
     this.tab = id;
     this.remember();
+  }
+
+  /** The owner link and the sites to open it on (GET /traffic/owner). */
+  async showOwner() {
+    if (this.owner) {
+      this.owner = null;
+      return;
+    }
+    try {
+      this.owner = await api("/traffic/owner");
+    } catch (e) {
+      this.notice = e.message ?? String(e);
+    }
   }
 
   setGroup(id) {
@@ -518,6 +549,7 @@ export class RwsTraffic extends LitElement {
     const live = this.live;
     return html`
       ${this.renderKpis()}
+      ${this.query ? nothing : this.renderTiers()}
       ${this.renderChart()}
       <div class="t-cards">
         ${this.card("Top pages", l.pages, { dim: "page", unit: "views" }, "pages")}
@@ -542,6 +574,76 @@ export class RwsTraffic extends LitElement {
       </div>`;
   }
 
+  /** How sure the count of people is, and the owner's own visits apart. */
+  renderTiers() {
+    const t = this.data;
+    const tiers = t.tiers ?? { verified: 0, page_only: 0, hosting: 0 };
+    const people = t.totals.people.visitors;
+    const likely = Math.max(0, people - tiers.verified);
+    const mine = t.totals.owner ?? { pages: 0, visitors: 0 };
+    const items = [
+      ...(t.script ? [["Verified", tiers.verified, "Ran the page script: a real browser showing the page"]] : []),
+      [t.script ? "Likely" : "People", t.script ? likely : people, "Loaded the page's styles or scripts, as a browser does"],
+      ["Page only", tiers.page_only, "A browser User-Agent that loaded no asset: counted as a bot"],
+      ["Server networks", tiers.hosting, "A browser User-Agent from a cloud or hosting network: counted as a bot"],
+    ];
+    return html`<div class="t-tiers" role="group" aria-label="How sure">
+      ${items.map(([label, n, hint]) => html`<span class="t-tier" title=${hint}><b>${num(n)}</b> ${label}</span>`)}
+      <span class="t-spacer"></span>
+      <span class="t-tier t-owner" title="Your own visits (admin sign-in, owner networks, or this browser's owner link) aren't in these numbers">
+        ${mine.pages ? html`<b>${num(mine.pages)}</b> of your page views not counted` : "Your visits aren't counted"}
+        <button class="t-more" @click=${() => this.showOwner()}>${this.owner ? "Hide" : "Exclude a browser…"}</button>
+      </span>
+    </div>
+    ${this.owner ? this.renderOwner() : nothing}`;
+  }
+
+  renderOwner() {
+    const o = this.owner;
+    // The configured sites, else names seen (not addresses, not localhost).
+    const sites = o.sites.length ? o.sites : (this.data?.hosts ?? []).filter((h) => /[a-z]/i.test(h) && h.includes(".") && !h.includes(":") && h !== "other");
+    return html`<section class="t-card t-wide" aria-label="Exclude a browser">
+      <header><h3>Exclude a browser</h3><span class="t-hint">Open the link in each browser and on each phone you use</span></header>
+      <p class="t-foot">Signing in here already excludes this browser for the day. A link sets a cookie on that site for a year, so visits from that browser count as yours even without signing in. Keep the links private.${o.networks ? " Your [traffic] owner_networks are excluded too." : ""}</p>
+      <ul class="t-links">
+        ${sites.map((h) => {
+          const url = `https://${h}${o.path}`;
+          return html`<li><a href=${url} target="_blank" rel="noopener noreferrer">${h}</a>
+            <button class="t-more" @click=${() => navigator.clipboard?.writeText(url)}>Copy link</button></li>`;
+        })}
+      </ul>
+    </section>`;
+  }
+
+  /** The recent-visitors feed: one card per visit, newest first. */
+  renderVisitors() {
+    const visits = this.data.visits ?? [];
+    if (!visits.length) {
+      return html`<lit-material-empty-state headline="No visits yet">Visits appear here when they end (after 30 quiet minutes), and while they're open.</lit-material-empty-state>`;
+    }
+    const many = !this.host && (this.data.hosts?.length ?? 0) > 1;
+    return html`<ol class="t-visits" aria-label="Recent visits">
+      ${visits.map((v) => {
+        const how = v.channel === "direct" || !v.channel ? "Direct" : `${CHANNELS[v.channel] ?? v.channel}${v.referrer ? ` · ${v.referrer}` : ""}`;
+        const device = [DEVICES[v.device] ?? v.device, v.os, v.browser].filter(Boolean).join(" · ");
+        const more = v.views - v.pages.length;
+        return html`<li class="t-visit">
+          <header>
+            <span class="t-visit-who">${v.country ? html`<span class="t-code">${v.country}</span>${countryName(v.country)}` : "Unknown country"}</span>
+            ${v.verified ? html`<lit-material-status status="ok">Verified</lit-material-status>` : nothing}
+            ${v.number > 1 ? html`<lit-material-status status="info">Visit ${v.number} today</lit-material-status>` : nothing}
+            <span class="t-spacer"></span>
+            <span class="t-hint">${ago(v.end)} · ${v.views === 1 ? "one page" : `${v.views} pages in ${secs(v.end - v.start)}`}</span>
+          </header>
+          <p class="t-visit-meta">${many ? html`<b>${v.host}</b> · ` : nothing}${how}${v.campaign ? ` · campaign ${v.campaign}` : ""} · ${device || "Unknown device"}</p>
+          <ol class="t-path">${v.pages.map((p) => html`<li>${p}</li>`)}${more > 0 ? html`<li>+${more} more</li>` : nothing}</ol>
+          ${v.events.length ? html`<p class="t-visit-meta">Events: ${v.events.join(", ")}</p>` : nothing}
+        </li>`;
+      })}
+    </ol>
+    <p class="t-foot">The last ${visits.length} visits kept (up to 300 across days). No addresses or User-Agents are kept; a person who comes back another day is a new visitor.</p>`;
+  }
+
   renderPages() {
     const l = this.lists();
     return html`<div class="t-cards">
@@ -549,7 +651,29 @@ export class RwsTraffic extends LitElement {
       ${l.entry.length ? this.card("Entry pages", l.entry, { dim: "page", unit: "sessions", hint: "Where sessions began" }) : nothing}
       ${l.exit.length ? this.card("Exit pages", l.exit, { dim: "page", unit: "sessions", hint: "Where sessions ended" }) : nothing}
       ${l.not_found.length ? this.card("Not found", l.not_found, { unit: "requests", hint: "Paths answered 404", pages: true }) : nothing}
+      ${this.query ? nothing : this.renderLandings()}
+      ${this.query ? nothing : this.renderDownloads()}
     </div>`;
+  }
+
+  /** Where visits from outside began, and from which source. */
+  renderLandings() {
+    const rows = (this.data.entries ?? []).map(([k, n]) => {
+      const [page, channel] = parts(k);
+      return [`${this.pageName(page)} · ${CHANNELS[channel] ?? channel}`, n];
+    });
+    return rows.length ? this.card("Landing pages by source", rows, { unit: "visits", hint: "First page of visits from outside" }) : nothing;
+  }
+
+  renderDownloads(only = null) {
+    const rows = (this.data.downloads ?? [])
+      .map(([k, n]) => {
+        const [page, group] = parts(k);
+        return [page, group, n];
+      })
+      .filter(([, g]) => !only || only.includes(g))
+      .map(([page, g, n]) => [`${this.pageName(page)} · ${DOWNLOAD_GROUPS[g] ?? g}`, n]);
+    return rows.length ? this.card("Downloads", rows, { unit: "downloads", hint: "Installers, packages, install scripts" }) : nothing;
   }
 
   renderSources() {
@@ -615,7 +739,7 @@ export class RwsTraffic extends LitElement {
     const has = before && (before.requests > 0 || before.visitors > 0);
     const tiles = [
       ["requests", "Requests", now.requests, has ? before.requests : null, "Everything they fetched"],
-      ["visitors", g === "ai" ? "Agents" : "Clients", now.visitors, has ? before.visitors : null, "Distinct clients, counted once a day"],
+      ["visitors", g === "ai" ? "Agents" : g === "apps" ? "Users" : "Clients", now.visitors, has ? before.visitors : null, "Distinct clients, counted once a day"],
       ["fetches", "Pages", now.pages, has ? before.pages : null, "HTML pages they fetched"],
     ];
     return html`<div class="t-kpis" role="group" aria-label="Key numbers">
@@ -642,6 +766,34 @@ export class RwsTraffic extends LitElement {
       <lit-material-line-chart label=${`Requests per ${hourly ? "hour" : "day"}`} unit="requests" height="240" .series=${series}
         .formatX=${(x) => (hourly ? new Date(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(x).toLocaleDateString([], { month: "short", day: "numeric" }))}></lit-material-line-chart>
     </section>`;
+  }
+
+  renderApps() {
+    const t = this.data;
+    const a = t.apps ?? { users: [], versions: [], events: [] };
+    const named = (rows, map = (x) => x) => rows.map(([k, n]) => {
+      const [app, rest] = parts(k);
+      return [`${app} · ${map(rest)}`, n];
+    });
+    if (!t.totals.apps?.requests && !a.users.length) {
+      return html`${this.groupKpis("apps")}
+        <lit-material-empty-state headline="No app traffic yet">
+          Native apps and browser extensions that call this server are counted here, not as bots. Name yours with
+          <code>[traffic] apps = ["MyApp=MyApp/", "MyApp=chrome-extension://&lt;id&gt;"]</code>, and have them send events to
+          <code>POST /_rws/e</code> with <code>{"app":"MyApp","v":"1.2","p":"ios","n":"opened"}</code>.
+        </lit-material-empty-state>
+        <div class="t-cards">${this.renderDownloads()}</div>`;
+    }
+    return html`
+      ${this.groupKpis("apps")}
+      ${this.groupChart(["apps"])}
+      <div class="t-cards">
+        ${this.card("Users by app and platform", named(a.users, (p) => PLATFORMS[p] ?? p), { unit: "users", hint: "Clients counted once a day" })}
+        ${this.card("Versions", named(a.versions), { unit: "users" })}
+        ${this.card("App events", named(a.events), { unit: "events", hint: "POST /_rws/e" })}
+        ${this.renderDownloads()}
+      </div>
+      <p class="t-foot">Apps are recognised by <code>[traffic] apps</code> (a User-Agent token or an extension origin), or by platform: Apple's and Android's networking stacks, Electron, extension origins. Unnamed ones are grouped by platform.</p>`;
   }
 
   renderRobots(g) {
@@ -675,13 +827,26 @@ export class RwsTraffic extends LitElement {
         ${this.card("By kind", kinds, { unit: "requests", hint: "Search, SEO, monitors, scanners…" })}
         ${this.card("Bots", t.bots.map((b) => [label(b), b.requests]), { unit: "requests" })}
         ${t.not_found.length ? this.card("Not found", t.not_found, { unit: "requests", hint: "404s, everyone (scanners mostly)", pages: true }) : nothing}
+        ${(t.crawl ?? []).length
+          ? this.card("Crawlers", t.crawl.map((c) => [c.name, c.pages + c.not_found, c]), { unit: "requests", value: (r) => `${num(r[2].pages)} pages${r[2].not_found ? ` · ${num(r[2].not_found)} 404` : ""}`, hint: "Named search, AI and other crawlers" })
+          : nothing}
+        ${(t.crawl_404 ?? []).length ? this.card("404s crawlers hit", t.crawl_404.map(([k, n]) => {
+            const [page, name] = parts(k);
+            return [`${this.pageName(page)} · ${name}`, n];
+          }), { unit: "requests", hint: "Fix or redirect these" }) : nothing}
+        ${(t.probes?.paths ?? []).length ? this.card("Probes", t.probes.paths, { unit: "requests", hint: "Scanners looking for secrets and admin pages" }) : nothing}
+        ${(t.probes?.sources ?? []).length ? this.card("Probe sources", t.probes.sources.map(([k, n]) => {
+            const [country, network, address] = parts(k);
+            return [[countryName(country), network === "-" ? "" : network, address ?? ""].filter(Boolean).join(" · "), n];
+          }), { unit: "requests", hint: "Country and network" }) : nothing}
+        ${this.renderDownloads(["bots"])}
       </div>
       <p class="t-foot">People are browsers that load a page's styles or scripts; a browser that never does is counted here as "browser, no assets". Spoofed: claims to be a known crawler from outside its network.</p>`;
   }
 
   renderAll() {
     const t = this.data;
-    const tiles = ["people", "ai", "bots"].map((g) => {
+    const tiles = ["people", "apps", "ai", "bots"].map((g) => {
       const now = t.totals[g];
       const before = t.previous?.[g];
       const delta = change(now.requests, before && before.requests ? before.requests : null);
@@ -690,11 +855,11 @@ export class RwsTraffic extends LitElement {
         <span class="t-kpi-delta">${num(now.requests)} requests${this.compare && delta ? ` · ${delta.text}` : ""}</span>
       </button>`;
     });
-    const total = ["people", "ai", "bots"].reduce((s, g) => s + t.totals[g].requests, 0) || 1;
-    const share = ["people", "ai", "bots"].map((g) => [GROUP_NAMES[g], t.totals[g].requests]);
+    const total = ["people", "apps", "ai", "bots"].reduce((s, g) => s + (t.totals[g]?.requests ?? 0), 0) || 1;
+    const share = ["people", "apps", "ai", "bots"].map((g) => [GROUP_NAMES[g], t.totals[g]?.requests ?? 0]);
     return html`
       <div class="t-kpis" role="group" aria-label="Groups">${tiles}</div>
-      ${this.groupChart(["people", "ai", "bots"])}
+      ${this.groupChart(["people", "apps", "ai", "bots"])}
       <div class="t-cards">
         ${this.card("Share of requests", share, { unit: "requests", value: (r) => `${num(r[1])} · ${pct(r[1] / total)}` })}
         ${this.card("Top pages (humans)", t.people_pages, { dim: "page", unit: "views", limit: 6 })}
@@ -727,9 +892,10 @@ export class RwsTraffic extends LitElement {
       : this.query === null && this.filtered && !this.notice
         ? html`<p class="t-none">Loading…</p>`
         : this.group !== "people"
-        ? this.group === "all" ? this.renderAll() : this.renderRobots(this.group)
+        ? this.group === "all" ? this.renderAll() : this.group === "apps" ? this.renderApps() : this.renderRobots(this.group)
         : ({
             overview: () => this.renderOverview(),
+            visitors: () => this.renderVisitors(),
             pages: () => this.renderPages(),
             sources: () => this.renderSources(),
             audience: () => this.renderAudience(),

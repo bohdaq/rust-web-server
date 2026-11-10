@@ -2,7 +2,8 @@
 # The admin UI (admin-ui/, embedded in crates/rws-proxy/src/admin/ui/) in headless Chromium
 # against the rws binary: sign-in, drain from the upstreams page, maintenance
 # mode, purging a response cache (from the page and with HTTP PURGE),
-# authorization tuples and a check, the Traffic page, the live log, and no
+# authorization tuples and a check, the Traffic page (apps, the owner link,
+# the visit feed), the live log, and no
 # CSP violations.
 #
 #   ci/e2e/admin_ui.sh <path-to-rws>
@@ -40,6 +41,7 @@ script = true
 # The test visits come from this machine, a CI runner (a cloud host).
 hosting_networks = false
 goals = ["event:signup", "/thanks/"]
+apps = ["HITOP=HITOP/"]
 
 [authz]
 [authz.type.doc]

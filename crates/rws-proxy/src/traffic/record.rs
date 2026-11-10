@@ -805,9 +805,12 @@ pub fn record(hit: &Hit<'_>) {
     }
     let recorder = recorder();
     let path = hit.path.split('?').next().unwrap_or(hit.path);
-    // rws's own paths (the script, its reports, app events, the owner
-    // link) are counted by what they report, not as requests.
-    if recorder.exclude.iter().any(|e| path == e) || path.starts_with("/_rws/") {
+    // rws's own endpoints (the script's reports, app events, the owner
+    // link) are counted by what they report, not as requests. The script
+    // itself is an asset like any: loading it shows a browser.
+    if recorder.exclude.iter().any(|e| path == e)
+        || (path.starts_with("/_rws/") && matches!(path, super::script::BEACON_PATH | super::script::APP_EVENTS_PATH | super::owner::PATH))
+    {
         return;
     }
     let day = hit.now / 86_400;

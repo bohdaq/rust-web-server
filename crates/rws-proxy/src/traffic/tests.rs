@@ -1132,3 +1132,16 @@ fn app_store_referrals_are_their_own_channel() {
     assert_eq!(channel_of("news.ycombinator.com"), "social");
 }
 
+
+#[test]
+fn loading_the_script_shows_a_browser_but_its_endpoints_are_not_requests() {
+    let _g = fresh();
+    // A page whose only asset is the script.
+    record(&hit("89.205.205.45", FIREFOX, "/app.html", T0));
+    record(&hit("89.205.205.45", FIREFOX, "/_rws/t.js", T0 + 1));
+    for path in ["/_rws/t", "/_rws/e", "/_rws/me"] {
+        record(&hit("89.205.205.45", FIREFOX, path, T0 + 2));
+    }
+    let json = summary(24, None, T0 + 10);
+    assert_eq!(totals(&json, "people"), (2, 1, 1), "the page and the script, nothing else: {json}");
+}

@@ -204,6 +204,21 @@ button.t-row:hover .t-name { text-decoration: underline; }
 .t-num { position: relative; font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex; align-items: center; gap: var(--space-75); }
 .t-more { font: inherit; font-size: var(--text-sm); color: var(--md-sys-color-primary); background: none; border: 0; cursor: pointer; padding: var(--space-75) var(--space-100) 0; }
 .t-card lit-material-sparkline { display: block; margin-bottom: var(--space-100); }
+/* 18.35: how sure the people count is, the owner, the visit feed */
+.t-tiers { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-75) var(--space-200); margin: var(--space-100) 0 0; font-size: var(--text-sm); color: var(--muted); }
+.t-tier b { color: var(--md-sys-color-on-surface); font-variant-numeric: tabular-nums; }
+.t-owner { display: inline-flex; align-items: center; gap: var(--space-100); }
+.t-links { list-style: none; margin: var(--space-100) 0 0; padding: 0; display: grid; gap: var(--space-75); }
+.t-links li { display: flex; align-items: center; gap: var(--space-100); min-width: 0; }
+.t-links a { overflow-wrap: anywhere; }
+.t-visits { list-style: none; margin: var(--space-200) 0 0; padding: 0; display: grid; gap: var(--space-100); }
+.t-visit { background: var(--panel); border: 1px solid var(--line); border-radius: var(--md-sys-shape-corner-large); padding: var(--space-100) var(--space-200); min-width: 0; }
+.t-visit header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-100); }
+.t-visit-who { font-weight: 500; }
+.t-visit-meta { margin: var(--space-75) 0 0; color: var(--muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.t-path { list-style: none; margin: var(--space-100) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-50) var(--space-75); font-family: var(--font-mono); font-size: var(--text-sm); }
+.t-path li { overflow-wrap: anywhere; min-width: 0; }
+.t-path li + li::before { content: "→"; margin-right: var(--space-75); color: var(--muted); font-family: inherit; }
 .t-foot { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); margin-top: var(--space-200); max-width: 720px; }
 .t-loading { display: grid; gap: var(--space-200); }
 @media (max-width: 599.98px) {
