@@ -244,6 +244,53 @@ impl WebhookCertificate {
         Ok(WebhookCertificate { ca_pem: ca.pem(), cert_pem: cert.pem(), key_pem: key.serialize_pem() })
     }
 
+    /// The certificate every replica of an operator uses: read from the
+    /// TLS Secret `secret` in `namespace`, or made and stored there by the
+    /// first replica to ask (a create race is settled by the API server:
+    /// the loser reads the winner's). Replicas that each made their own
+    /// would overwrite each other's `caBundle`. The pod needs `get` and
+    /// `create` on `secrets` in the namespace.
+    pub async fn shared(client: &kube::Client, namespace: &str, secret: &str, service: &str) -> super::Result<Self> {
+        use k8s_openapi::api::core::v1::Secret;
+        use kube::api::{Api, PostParams};
+        let api: Api<Secret> = Api::namespaced(client.clone(), namespace);
+        if let Some(existing) = api.get_opt(secret).await? {
+            return Self::from_secret(&existing).ok_or_else(|| super::Error::Other(format!("secret {namespace}/{secret} has no tls.crt, tls.key and ca.crt")));
+        }
+        let cert = Self::generate(service, namespace)?;
+        match api.create(&PostParams::default(), &cert.to_secret(secret, namespace)).await {
+            Ok(_) => Ok(cert),
+            Err(kube::Error::Api(status)) if status.is_already_exists() => {
+                let existing = api.get(secret).await?;
+                Self::from_secret(&existing).ok_or_else(|| super::Error::Other(format!("secret {namespace}/{secret} has no tls.crt, tls.key and ca.crt")))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// A `kubernetes.io/tls` Secret holding it (`tls.crt`, `tls.key`, `ca.crt`).
+    pub fn to_secret(&self, name: &str, namespace: &str) -> k8s_openapi::api::core::v1::Secret {
+        use k8s_openapi::ByteString;
+        k8s_openapi::api::core::v1::Secret {
+            metadata: k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta { name: Some(name.to_string()), namespace: Some(namespace.to_string()), ..Default::default() },
+            type_: Some("kubernetes.io/tls".to_string()),
+            data: Some(std::collections::BTreeMap::from([
+                ("tls.crt".to_string(), ByteString(self.cert_pem.clone().into_bytes())),
+                ("tls.key".to_string(), ByteString(self.key_pem.clone().into_bytes())),
+                ("ca.crt".to_string(), ByteString(self.ca_pem.clone().into_bytes())),
+            ])),
+            ..Default::default()
+        }
+    }
+
+    /// Read one from a Secret written by [`to_secret`](Self::to_secret)
+    /// (or cert-manager, whose Secrets have the same keys).
+    pub fn from_secret(secret: &k8s_openapi::api::core::v1::Secret) -> Option<Self> {
+        let data = secret.data.as_ref()?;
+        let text = |key: &str| data.get(key).and_then(|v| String::from_utf8(v.0.clone()).ok()).filter(|t| !t.is_empty());
+        Some(WebhookCertificate { cert_pem: text("tls.crt")?, key_pem: text("tls.key")?, ca_pem: text("ca.crt")? })
+    }
+
     /// Write `tls.crt`, `tls.key` and `ca.crt` into `dir` and point rws's
     /// TLS settings at them (`RWS_CONFIG_TLS_CERT_FILE`/`KEY_FILE`), so
     /// `Server::run_tls` serves them.

@@ -9,6 +9,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **`starters/operator`**: a Kubernetes operator — a `Greeting` custom
+  resource, a controller (owned ConfigMap, status, finalizer, leader
+  election), validating and mutating webhooks, `--manifests`, a Dockerfile;
+  `ci/e2e/operator.sh` deploys it into kind (CI job `kubernetes`) and checks
+  the API server calls its webhooks over TLS.
+- **`WebhookCertificate::shared`** (one certificate for all replicas, in a
+  Secret), `to_secret` / `from_secret`; **`k8s::client::offline()`**.
+
 - **Health checks** (`health`): `health::readiness` / `liveness` /
   `startup` (and `register_async`, `database(name, pool)`) register checks
   that `/readyz`, `/livez` (`/healthz`) and the new `/startupz` run —
@@ -111,6 +119,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `FlashLayer`, `ErrorPages` and mail previews in dev.
 
 ### Fixed
+
+- **`/readyz` of library apps answered `503` for good**: only the `rws`
+  binary marked the server ready. `Server::run`, `run_plain` and `run_tls`
+  now do as they start serving.
+- **`k8s::manifests::to_yaml` output crashed `kubectl apply`**: a stream
+  starting with `{` is read as JSON, and kubectl panics when a document over
+  2 KiB (a CRD) is followed by `---`. Each document now starts with `---`.
+- The Gateway API controller's leader election is `rws_k8s`'s
+  `LeaderElector` (the `leader` feature of rws-k8s); its behaviour and API
+  are unchanged.
 
 - **`PersistentJobQueue` on PostgreSQL and MySQL**: its SQL used `?`
   placeholders (PostgreSQL wants `$1`…) and a `TEXT` primary key (MySQL

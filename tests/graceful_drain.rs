@@ -29,6 +29,10 @@ fn in_flight_requests_finish_before_the_server_returns() {
     });
     tokio::runtime::Runtime::new().unwrap().block_on(async move {
         let server = tokio::spawn(Server::run_plain(listener, app));
+        // A library app is ready once it serves (before 18.36 only the rws
+        // binary said so, and /readyz stayed 503).
+        let ready = tokio::task::spawn_blocking(move || get(addr, "/readyz")).await.unwrap();
+        assert!(ready.starts_with("HTTP/1.1 200"), "{ready}");
         let slow = tokio::task::spawn_blocking(move || get(addr, "/slow"));
         tokio::time::sleep(Duration::from_millis(200)).await;
         let started = Instant::now();

@@ -26,7 +26,7 @@ license = "MIT"
 # pins together with `version` above.
 [workspace.dependencies]
 rws-gateway-api = { path = "crates/rws-gateway-api", version = "=18.34.1" }
-rws-k8s = { path = "crates/rws-k8s", version = "=18.34.1" }
+rws-k8s = { path = "crates/rws-k8s", version = "=18.34.1", default-features = false }
 rws-proxy = { path = "crates/rws-proxy", version = "=18.34.1" }
 rws-storage = { path = "crates/rws-storage", version = "=18.34.1" }
 rws-wasm-plugin = { path = "crates/rws-wasm-plugin", version = "=18.34.1" }

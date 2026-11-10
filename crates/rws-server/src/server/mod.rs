@@ -809,6 +809,7 @@ impl Server {
     pub fn run(listener: TcpListener,
                pool: ThreadPool,
                app: impl Application + Send + 'static + Clone) {
+        mark_serving();
         #[cfg(feature = "http1")]
         {
             use std::sync::Arc;
@@ -1195,6 +1196,13 @@ async fn sigterm() {
     }
 }
 
+/// `/readyz` answers `200` (with its checks passing) from here on: the
+/// accept loops call it as they start (18.36.0). Before, only the `rws`
+/// binary set it, so a library app's `/readyz` answered `503` for good.
+fn mark_serving() {
+    crate::metrics::SERVER_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// Wait until no request is being handled (`metrics::REQUESTS_IN_FLIGHT`),
 /// at most `shutdown_timeout_secs` (18.36.0). The accept loops call it
 /// after they stop accepting, so handlers that started finish before the
@@ -1339,6 +1347,7 @@ impl Server {
                 return;
             }
         };
+        mark_serving();
         // From now on this listener answers TLS-ALPN-01 challenges itself.
         if let Some(acme) = crate::tls::acme_hooks() {
             (acme.note_tls_listener)();
@@ -1427,6 +1436,7 @@ impl Server {
     /// pool. An accept error (e.g. out of file descriptors) backs off briefly
     /// and keeps serving instead of ending the loop.
     pub async fn run_plain(listener: TcpListener, app: impl Application + Send + 'static + Clone) {
+        mark_serving();
         #[cfg(unix)]
         if per_core::enabled() {
             let accept_loop = move |listener: tokio::net::TcpListener, mut stop: tokio::sync::watch::Receiver<bool>| {

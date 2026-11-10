@@ -16,6 +16,22 @@ pub async fn from_kubeconfig(path: &str) -> Result<kube::Client> {
     Ok(kube::Client::try_from(config)?)
 }
 
+/// A client that is never used to connect: for code that needs one to
+/// describe controllers (their RBAC rules) without a cluster, such as an
+/// operator's `--manifests`. Any request it makes fails.
+pub fn offline() -> kube::Client {
+    let make = || kube::Client::try_from(kube::Config::new("https://127.0.0.1:9".parse().expect("a valid URL"))).expect("a client for a local URL");
+    // The client spawns a task when it's built; outside a runtime, on one
+    // of its own (kept for the process: the task must not be dropped).
+    if tokio::runtime::Handle::try_current().is_ok() {
+        return make();
+    }
+    static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+    let runtime = RUNTIME.get_or_init(|| tokio::runtime::Builder::new_current_thread().build().expect("a runtime for an offline client"));
+    let _entered = runtime.enter();
+    make()
+}
+
 /// The namespace this pod runs in (the service account's), else the
 /// kubeconfig's current one, else `default`.
 pub fn current_namespace() -> String {

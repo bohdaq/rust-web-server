@@ -178,9 +178,12 @@ pub fn with_conversion_webhook(mut crd: Value, target: &WebhookTarget) -> Value 
     crd
 }
 
-/// Documents as a YAML stream (each as JSON, which YAML accepts).
+/// Documents as a YAML stream: each JSON document (which YAML accepts)
+/// after a `---` line. The stream starts with one too: kubectl reads a
+/// stream that starts with `{` as JSON, and panics when a document longer
+/// than its 2 KiB sniff buffer is followed by `---`.
 pub fn to_yaml(documents: &[Value]) -> String {
-    documents.iter().map(|d| serde_json::to_string_pretty(d).unwrap_or_default()).collect::<Vec<_>>().join("\n---\n") + "\n"
+    documents.iter().map(|d| format!("---\n{}\n", serde_json::to_string_pretty(d).unwrap_or_default())).collect()
 }
 
 /// When the program's arguments contain `--manifests`, print `documents`

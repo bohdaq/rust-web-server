@@ -112,7 +112,8 @@ jobs:
 
   # The Kubernetes framework (crates/rws-k8s, 18.36.0) against a real API
   # server: config watches, discovery, leader election, a controller with a
-  # CRD and a finalizer, generated manifests (server-side dry run). Each test
+  # CRD and a finalizer, generated manifests (server-side dry run), and the
+  # operator starter deployed into the cluster. Each test
   # makes a namespace of its own. RWS_TEST_REQUIRE_KUBERNETES turns a missing
   # cluster into a failure.
   kubernetes:
@@ -137,6 +138,12 @@ jobs:
           echo "RWS_TEST_KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
       - name: rws-k8s unit and cluster tests
         run: cargo test --locked -p rws-k8s
+      # starters/operator in the cluster: its image, its --manifests, the API
+      # server calling its webhooks over TLS, the controller, leader election.
+      - name: the operator starter end to end
+        run: |
+          export KUBECONFIG="$RWS_TEST_KUBECONFIG"
+          ci/e2e/operator.sh kind rws
 
   msrv:
     name: msrv (1.99, all features)

@@ -6551,6 +6551,7 @@ pub async fn rust_web_server::k8s::testing::TestCluster::namespace(&self, &str) 
 pub async fn rust_web_server::k8s::testing::TestNamespace::delete(self)
 pub async fn rust_web_server::k8s::testing::eventually<T, F, Fut>(core::time::Duration, F) -> core::option::Option<T> where F: core::ops::function::FnMut() -> Fut, Fut: core::future::future::Future<Output = core::option::Option<T>>
 pub async fn rust_web_server::k8s::webhook::WebhookCertificate::patch_ca_bundle(&self, &kube_client::client::Client, core::option::Option<&str>, core::option::Option<&str>, core::option::Option<&str>) -> rust_web_server::k8s::Result<()>
+pub async fn rust_web_server::k8s::webhook::WebhookCertificate::shared(&kube_client::client::Client, &str, &str, &str) -> rust_web_server::k8s::Result<Self>
 pub async fn rust_web_server::model::Repository::count(&self) -> core::result::Result<i64, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::Repository::delete_all_by_id(&self, &[ID]) -> core::result::Result<(), rust_web_server::model::DbError>
 pub async fn rust_web_server::model::Repository::delete_by_id(&self, ID) -> core::result::Result<(), rust_web_server::model::DbError>
@@ -9452,6 +9453,7 @@ pub fn rust_web_server::k8s::Scope::api<K: kube_core::resource::Resource<Scope =
 pub fn rust_web_server::k8s::api_for<K>(&kube_client::client::Client, &K) -> kube_client::api::Api<K> where K: kube_core::resource::Resource<DynamicType = ()>, <K as kube_core::resource::Resource>::Scope: rust_web_server::k8s::Scope
 pub fn rust_web_server::k8s::client::current_namespace() -> alloc::string::String
 pub fn rust_web_server::k8s::client::identity() -> alloc::string::String
+pub fn rust_web_server::k8s::client::offline() -> kube_client::client::Client
 pub fn rust_web_server::k8s::config::ConfigWatch::apply_to_env(&self, &str)
 pub fn rust_web_server::k8s::config::ConfigWatch::clone(&self) -> Self
 pub fn rust_web_server::k8s::config::ConfigWatch::exists(&self) -> bool
@@ -9520,9 +9522,11 @@ pub fn rust_web_server::k8s::testing::TestCluster::clone(&self) -> Self
 pub fn rust_web_server::k8s::testing::TestNamespace::api<K>(&self) -> kube_client::api::Api<K> where K: kube_core::resource::Resource<Scope = k8s_openapi::_resource::NamespaceResourceScope, DynamicType = ()>
 pub fn rust_web_server::k8s::testing::TestNamespace::name(&self) -> &str
 pub fn rust_web_server::k8s::webhook::WebhookCertificate::clone(&self) -> Self
+pub fn rust_web_server::k8s::webhook::WebhookCertificate::from_secret(&k8s_openapi::v1_32::api::core::v1::secret::Secret) -> core::option::Option<Self>
 pub fn rust_web_server::k8s::webhook::WebhookCertificate::generate(&str, &str) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::k8s::webhook::WebhookCertificate::generate_for(&str, alloc::vec::Vec<alloc::string::String>) -> core::result::Result<Self, alloc::string::String>
 pub fn rust_web_server::k8s::webhook::WebhookCertificate::install(&self, &str) -> core::result::Result<(), alloc::string::String>
+pub fn rust_web_server::k8s::webhook::WebhookCertificate::to_secret(&self, &str, &str) -> k8s_openapi::v1_32::api::core::v1::secret::Secret
 pub fn rust_web_server::k8s::webhook::Webhooks::clone(&self) -> Self
 pub fn rust_web_server::k8s::webhook::Webhooks::convert<F>(self, &str, F) -> Self where F: core::ops::function::Fn(serde_json::value::Value, &str) -> core::result::Result<serde_json::value::Value, alloc::string::String> + core::marker::Send + core::marker::Sync + 'static
 pub fn rust_web_server::k8s::webhook::Webhooks::default() -> Self

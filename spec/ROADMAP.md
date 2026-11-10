@@ -344,6 +344,7 @@ Plan, decisions and status: [K8S_FRAMEWORK.md](K8S_FRAMEWORK.md) (2026-11-10).
 - **#111** ✅ *branch `k8s-framework`* **The Kubernetes API from apps** — `ConfigWatch`, `k8s://` secrets, EndpointSlice discovery, `LeaderElector`.
 - **#112** ✅ *branch `k8s-framework`* **Operators** — controllers, webhooks, CRD/RBAC manifests, tests against a real API server (CI on kind).
 - **#113** ✅ *branch `k8s-framework`* **`rws gen deploy`**.
+- **#114** ✅ *branch `k8s-followups`* **Operator starter and an in-cluster webhook e2e** — `starters/operator`, `ci/e2e/operator.sh` (kind in CI); the gateway controller on `LeaderElector`.
 
 **Done when:** the `kubernetes` CI job passes on kind.
 

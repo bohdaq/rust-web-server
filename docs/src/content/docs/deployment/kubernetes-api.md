@@ -18,7 +18,7 @@ let kube = client::client().await?;          // in a pod: its service account; e
 let ns = client::current_namespace();        // POD_NAMESPACE, the service account's, the kubeconfig's, else "default"
 ```
 
-`client::from_kubeconfig(path)` reads a given file; `client::identity()` is this replica's name (`POD_NAME`, else `HOSTNAME`). [`rws gen deploy`](/deployment/kubernetes/#generate-the-manifests) sets `POD_NAME` and `POD_NAMESPACE` from the downward API.
+`client::from_kubeconfig(path)` reads a given file; `client::offline()` is a client that never connects (for an operator's `--manifests`, which describes its controllers without a cluster); `client::identity()` is this replica's name (`POD_NAME`, else `HOSTNAME`). [`rws gen deploy`](/deployment/kubernetes/#generate-the-manifests) sets `POD_NAME` and `POD_NAMESPACE` from the downward API.
 
 ## ConfigMaps and Secrets
 

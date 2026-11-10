@@ -24,7 +24,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 default = ["gateway-api"]
 # Test helpers rust-web-server's own tests use.
 test-support = []
-gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util", "rws-server/gateway-api", "rws-proxy/gateway-api"]
+gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util", "dep:rws-k8s", "rws-k8s?/leader", "rws-server/gateway-api", "rws-proxy/gateway-api"]
 # Named by the cfgs of the re-exports taken from rws-server.
 http-client = ["rws-server/http-client"]
 http2 = ["dep:rcgen", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "rws-server/http2", "rws-proxy/http2"]
@@ -33,6 +33,7 @@ serde = ["dep:serde", "dep:serde_json", "rws-server/serde", "rws-proxy/serde"]
 [dependencies]
 rws-server.workspace = true
 rws-proxy.workspace = true
+rws-k8s = { workspace = true, optional = true, default-features = false }
 tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"], optional = true }
 tokio-rustls = { version = "0.26", optional = true }

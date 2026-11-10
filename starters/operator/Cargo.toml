@@ -1,0 +1,22 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# One binary name for every generated project, so the Dockerfile never
+# changes with the project name.
+[[bin]]
+name = "operator"
+path = "src/main.rs"
+
+[dependencies]
+rust-web-server = { version = "18.36", features = ["k8s", "macros"] }
+# The derives (`CustomResource`, `JsonSchema`) need these crates by name;
+# the same versions rust-web-server uses.
+kube = { version = "4.2", default-features = false, features = ["derive"] }
+k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

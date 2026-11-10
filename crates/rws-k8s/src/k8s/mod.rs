@@ -17,15 +17,22 @@
 
 pub use k8s_openapi;
 pub use kube;
+#[cfg(feature = "k8s")]
 pub use schemars;
 
 pub mod client;
-pub mod config;
-pub mod controller;
-pub mod discovery;
 pub mod leader;
+#[cfg(feature = "k8s")]
+pub mod config;
+#[cfg(feature = "k8s")]
+pub mod controller;
+#[cfg(feature = "k8s")]
+pub mod discovery;
+#[cfg(feature = "k8s")]
 pub mod manifests;
+#[cfg(feature = "k8s")]
 pub mod testing;
+#[cfg(feature = "k8s")]
 pub mod webhook;
 
 /// One error type for the module: kube's errors and our own messages.

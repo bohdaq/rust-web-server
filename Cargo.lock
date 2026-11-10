@@ -3638,6 +3638,7 @@ dependencies = [
  "kube",
  "rcgen",
  "rustls",
+ "rws-k8s",
  "rws-proxy",
  "rws-server",
  "serde",

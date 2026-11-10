@@ -148,3 +148,15 @@ fn base64_decode(text: &str) -> Vec<u8> {
     }
     out
 }
+
+#[test]
+fn certificates_round_trip_through_a_secret() {
+    let cert = WebhookCertificate::generate("op", "ops").unwrap();
+    let secret = cert.to_secret("op-webhook-tls", "ops");
+    assert_eq!(Some("kubernetes.io/tls"), secret.type_.as_deref());
+    let back = WebhookCertificate::from_secret(&secret).unwrap();
+    assert_eq!((cert.ca_pem, cert.cert_pem, cert.key_pem), (back.ca_pem, back.cert_pem, back.key_pem));
+    let mut empty = secret.clone();
+    empty.data.as_mut().unwrap().remove("ca.crt");
+    assert!(WebhookCertificate::from_secret(&empty).is_none());
+}

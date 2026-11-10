@@ -66,6 +66,7 @@ fn webhook_configurations() {
 #[test]
 fn yaml_stream_and_base64() {
     let text = to_yaml(&[json!({"a": 1}), json!({"b": 2})]);
-    assert_eq!("{\n  \"a\": 1\n}\n---\n{\n  \"b\": 2\n}\n", text);
+    assert_eq!("---\n{\n  \"a\": 1\n}\n---\n{\n  \"b\": 2\n}\n", text);
+    assert_eq!("", to_yaml(&[]));
     assert_eq!(("", "Zg==", "Zm8=", "Zm9v", "Zm9vYg=="), (base64(b"").as_str(), base64(b"f").as_str(), base64(b"fo").as_str(), base64(b"foo").as_str(), base64(b"foob").as_str()));
 }

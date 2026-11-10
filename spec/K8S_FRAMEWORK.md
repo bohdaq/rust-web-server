@@ -12,7 +12,7 @@ Quarkus) and for operators (kubebuilder, controller-runtime). Asked for
 | 2 | Shutdown waits for handlers in flight | ✅ `server::drain_requests`, `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS` (25); `tests/graceful_drain.rs` |
 | 3 | ConfigMaps/Secrets from the API, live | ✅ `k8s::config::ConfigWatch`, `k8s://` references |
 | 4 | Service discovery through Kubernetes | ✅ `k8s::discovery::service_endpoints` (EndpointSlices → `BackendPool`) |
-| 5 | Leader election for apps | ✅ `k8s::leader::LeaderElector` (the gateway controller keeps its own copy for now) |
+| 5 | Leader election for apps | ✅ `k8s::leader::LeaderElector`; the Gateway API controller uses it too (rws-k8s feature `leader`) |
 | 6 | Deploy tooling | ✅ `rws gen deploy` |
 | 7 | Controller runtime | ✅ `k8s::controller` on kube-runtime: `Controller`, `Operator`, finalizers, backoff, metrics, leader election |
 | 8 | Admission and conversion webhooks | ✅ `k8s::webhook` + `WebhookCertificate` |
@@ -33,11 +33,23 @@ Quarkus) and for operators (kubebuilder, controller-runtime). Asked for
 - **`rws gen deploy` writes files, not a chart.** The Helm chart is for
   the `rws` server; apps get plain kustomize-ready YAML to own.
 
+## Follow-ups (2026-11-10, branch `k8s-followups`)
+
+- The Gateway API controller's Lease goes through `LeaderElector`; rws-k8s
+  is split into `leader` (client + leader election: kube client and
+  k8s-openapi only) and `k8s` (everything), so the gateway doesn't pull in
+  schemars, rcgen or kube's runtime/derive.
+- `starters/operator` and `ci/e2e/operator.sh`: the operator built into an
+  image, loaded into kind (k3d locally), installed from its own
+  `--manifests`; the API server calls the validating and mutating webhooks
+  over TLS with the CA the operator put into the configurations; owned
+  ConfigMap, status, finalizer, two replicas with one leading. It found
+  three bugs: library apps' `/readyz` never turned ready, `to_yaml` crashed
+  `kubectl apply` (now each document starts with `---`), and replicas each
+  generating a webhook CA overwrote each other's `caBundle`
+  (`WebhookCertificate::shared` keeps one in a Secret).
+
 ## Not done
 
-- A webhook end-to-end where the API server calls the webhook: covered by
-  real AdmissionReview/ConversionReview payloads and server-side dry runs
-  of the configurations, not by a cluster calling back (needs an image in
-  the cluster or a reachable host).
 - envtest's binaries (`kube-apiserver` + `etcd`) launched by the tests
   themselves: `TestCluster` takes any kubeconfig; kind in CI.

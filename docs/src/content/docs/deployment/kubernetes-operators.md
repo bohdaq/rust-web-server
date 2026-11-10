@@ -3,7 +3,13 @@ title: Operators
 description: Controllers with reconcile, requeue, finalizers and status; admission and conversion webhooks; CRDs and RBAC from Rust types; tests against a real API server.
 ---
 
-An operator watches custom resources and makes the cluster match them. The `k8s` feature (18.36.0) has the parts on top of [kube-rs](https://kube.rs)'s controller runtime: controllers with finalizers and status, an operator that runs them under leader election with metrics and a readiness check, admission and conversion webhooks with their certificate, CRD and RBAC manifests generated from the code, and tests against a real API server.
+An operator watches custom resources and makes the cluster match them. To start from a working one — a custom resource, a controller, webhooks, `--manifests`, tests — generate the starter:
+
+```sh
+cargo generate --git https://github.com/bohdaq/rust-web-server starters/operator
+```
+
+ The `k8s` feature (18.36.0) has the parts on top of [kube-rs](https://kube.rs)'s controller runtime: controllers with finalizers and status, an operator that runs them under leader election with metrics and a readiness check, admission and conversion webhooks with their certificate, CRD and RBAC manifests generated from the code, and tests against a real API server.
 
 ## A custom resource
 
@@ -104,7 +110,7 @@ let webhooks = Webhooks::new()
     .wrap(App::new());                                       // probes and metrics on the same server
 
 // The API server only calls webhooks over TLS it trusts.
-let cert = WebhookCertificate::generate("backup-operator", &namespace)?;
+let cert = WebhookCertificate::shared(&kube, &namespace, "backup-operator-webhook-tls", "backup-operator").await?;
 cert.install("/tmp/tls")?;                                    // RWS_CONFIG_TLS_CERT_FILE / KEY_FILE
 cert.patch_ca_bundle(&kube, Some("backup-operator"), None, None).await?;
 Server::run_tls(listener, pool, webhooks).await;
@@ -115,6 +121,8 @@ Server::run_tls(listener, pool, webhooks).await;
 | `validate::<K, _>(path, f)` | The request: `operation`, `object`, `old_object`, `user_info`, `name`, `namespace` | `Ok(())` allows, `Err(message)` denies (kubectl shows the message) |
 | `mutate::<K, _>(path, f)` | The object (on create and update) | The object changed; the JSON patch from old to new is computed for you |
 | `convert(path, f)` | Each object and the desired `apiVersion` | The object in that version (`apiVersion` set for you) |
+
+With more than one replica, use `WebhookCertificate::shared(&client, namespace, secret, service)`: the first replica makes the certificate and stores it in a `kubernetes.io/tls` Secret, the others read it (a create race is settled by the API server) — replicas each making their own would overwrite each other's `caBundle`, and the API server would reject every replica but one. The pod needs `get` and `create` on `secrets`; `to_secret`/`from_secret` convert (cert-manager's Secrets have the same keys).
 
 `WebhookCertificate::generate(service, namespace)` makes a CA and a serving certificate for `<service>.<namespace>.svc` (`generate_for(name, dns_names)` for others); `install(dir)` writes `tls.crt`, `tls.key`, `ca.crt` and points rws's TLS settings at them; `patch_ca_bundle` puts the CA into the webhook configurations (and a CRD's conversion webhook) at startup, so no cert-manager is needed. With cert-manager, mount its Secret and set the TLS settings instead.
 
@@ -142,7 +150,7 @@ manifests::print_on_request(|| {                // `backup-operator --manifests 
 | `Rbac::new(name, ns).rules(…).documents()` | ServiceAccount, ClusterRole (rules merged per resource), ClusterRoleBinding; `.leader_election()` adds the Lease rule |
 | `Operator::rules()` | What its controllers need: their kinds and status, what they own, events, the Lease |
 | `webhook_configuration(name, mutating, target, rules, fail_closed)` | A Validating/MutatingWebhookConfiguration |
-| `to_yaml(&docs)` | A YAML stream (each document as JSON, which YAML accepts) |
+| `to_yaml(&docs)` | A YAML stream: each document as JSON (which YAML accepts) after a `---` line |
 
 ## Testing against a real API server
 
@@ -169,4 +177,4 @@ kind create cluster --name test --kubeconfig /tmp/kubeconfig
 RWS_TEST_KUBECONFIG=/tmp/kubeconfig cargo test
 ```
 
-With `RWS_TEST_REQUIRE_KUBERNETES` set, a missing cluster fails the test instead of skipping it — for CI. rws's own CI runs its Kubernetes tests this way on kind. Never point it at a cluster that matters: the tests create and delete namespaces and cluster-wide CRDs.
+With `RWS_TEST_REQUIRE_KUBERNETES` set, a missing cluster fails the test instead of skipping it — for CI. rws's own CI runs its Kubernetes tests this way on kind, and deploys the operator starter into the cluster (`ci/e2e/operator.sh`): the API server calls its webhooks over TLS, its controller reconciles, one of two replicas leads. Never point it at a cluster that matters: the tests create and delete namespaces and cluster-wide CRDs.

@@ -212,3 +212,18 @@ async fn generated_manifests_are_accepted() {
     }
     ns.delete().await;
 }
+
+#[tokio::test]
+async fn replicas_share_one_webhook_certificate() {
+    let Some(cluster) = TestCluster::from_env().await else { return };
+    let ns = cluster.namespace("rws-webhook-cert").await.unwrap();
+    let (a, b) = tokio::join!(
+        rws_k8s::k8s::webhook::WebhookCertificate::shared(&cluster.client, ns.name(), "op-tls", "op"),
+        rws_k8s::k8s::webhook::WebhookCertificate::shared(&cluster.client, ns.name(), "op-tls", "op"),
+    );
+    let (a, b) = (a.unwrap(), b.unwrap());
+    assert_eq!(a.ca_pem, b.ca_pem, "both replicas use the stored one");
+    let again = rws_k8s::k8s::webhook::WebhookCertificate::shared(&cluster.client, ns.name(), "op-tls", "op").await.unwrap();
+    assert_eq!(a.cert_pem, again.cert_pem);
+    ns.delete().await;
+}

@@ -22,6 +22,7 @@ Copy a starter (each builds and passes its tests, and has its own `AGENTS.md`):
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/api   # JSON API + OpenAPI
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/mcp   # MCP server
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/fullstack   # lit frontend + API + PostgreSQL, deploys to kube-dc
+cargo generate --git https://github.com/bohdaq/rust-web-server starters/operator   # Kubernetes operator: CRD, controller, webhooks, manifests
 ```
 
 Or by hand: `rust-web-server = { version = "18", features = [...] }` and

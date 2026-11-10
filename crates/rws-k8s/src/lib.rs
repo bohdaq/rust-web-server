@@ -5,5 +5,5 @@
 //! Used through the facade's `k8s` module (`k8s` feature).
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-#[cfg(feature = "k8s")]
+#[cfg(feature = "leader")]
 pub mod k8s;

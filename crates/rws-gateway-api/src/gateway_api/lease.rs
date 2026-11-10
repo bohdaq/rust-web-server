@@ -2,15 +2,14 @@
 //! serves traffic, only the holder writes status and Services. The holder
 //! renews every [`RENEW`]; another replica takes over once a renewal is older
 //! than the lease's duration. Updates carry the Lease's `resourceVersion`,
-//! so two replicas can't both win.
+//! so two replicas can't both win. Since 18.36.0 the work is done by
+//! `rws_k8s`'s `LeaderElector`, shared with operators.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use k8s_openapi::api::coordination::v1::{Lease, LeaseSpec};
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::{MicroTime, ObjectMeta};
-use kube::api::{Api, PostParams};
+use k8s_openapi::api::coordination::v1::Lease;
 use kube::Client;
 use tokio::sync::Notify;
 
@@ -38,45 +37,20 @@ pub enum Decision {
 }
 
 pub fn decide(lease: Option<&Lease>, identity: &str, now: k8s_openapi::jiff::Timestamp) -> Decision {
-    let Some(spec) = lease.and_then(|l| l.spec.as_ref()) else {
-        return if lease.is_some() { Decision::Take } else { Decision::Create };
-    };
-    if spec.holder_identity.as_deref() == Some(identity) {
-        return Decision::Take;
-    }
-    let duration = spec.lease_duration_seconds.unwrap_or(DURATION.as_secs() as i32) as i64;
-    let renewed = spec.renew_time.as_ref().map(|t| t.0.as_second()).unwrap_or(0);
-    if spec.holder_identity.as_deref().unwrap_or("").is_empty() || renewed + duration < now.as_second() {
-        Decision::Take
-    } else {
-        Decision::Follow
+    match rws_k8s::k8s::leader::decide(lease, identity, now, DURATION) {
+        rws_k8s::k8s::leader::Decision::Create => Decision::Create,
+        rws_k8s::k8s::leader::Decision::Take => Decision::Take,
+        rws_k8s::k8s::leader::Decision::Follow => Decision::Follow,
     }
 }
 
-/// Hold or follow the Lease forever; `leader` says which, `gained` fires
-/// when this replica becomes the leader (so it can reconcile at once).
+/// Hold or follow the Lease forever (through `rws_k8s`'s `LeaderElector`,
+/// 18.36.0); `leader` says which, `gained` fires when this replica becomes
+/// the leader (so it can reconcile at once).
 pub async fn run(client: Client, settings: LeaseSettings, leader: Arc<AtomicBool>, gained: Arc<Notify>) {
-    let api: Api<Lease> = Api::namespaced(client, &settings.namespace);
+    let elector = rws_k8s::k8s::leader::LeaderElector::new(client, &settings.namespace, &settings.name).identity(&settings.identity).timing(DURATION, RENEW);
     loop {
-        let now = k8s_openapi::jiff::Timestamp::now();
-        let current = api.get_opt(&settings.name).await;
-        let holding = match current {
-            Err(e) => {
-                eprintln!("[gateway-api] lease: {e}");
-                false
-            }
-            Ok(current) => match decide(current.as_ref(), &settings.identity, now) {
-                Decision::Follow => false,
-                Decision::Create => {
-                    let lease = held(&settings, None, now);
-                    api.create(&PostParams::default(), &lease).await.is_ok()
-                }
-                Decision::Take => {
-                    let lease = held(&settings, current.as_ref(), now);
-                    api.replace(&settings.name, &PostParams::default(), &lease).await.is_ok()
-                }
-            },
-        };
+        let holding = elector.step().await;
         let was = leader.swap(holding, Ordering::SeqCst);
         if holding && !was {
             gained.notify_one();
@@ -87,30 +61,16 @@ pub async fn run(client: Client, settings: LeaseSettings, leader: Arc<AtomicBool
 
 /// The Lease held by this replica, based on `current` (keeping its
 /// `resourceVersion` and counting a change of holder).
+#[cfg(test)]
 fn held(settings: &LeaseSettings, current: Option<&Lease>, now: k8s_openapi::jiff::Timestamp) -> Lease {
-    let previous = current.and_then(|l| l.spec.clone()).unwrap_or_default();
-    let changed = previous.holder_identity.as_deref() != Some(settings.identity.as_str());
-    Lease {
-        metadata: ObjectMeta {
-            name: Some(settings.name.clone()),
-            namespace: Some(settings.namespace.clone()),
-            resource_version: current.and_then(|l| l.metadata.resource_version.clone()),
-            ..Default::default()
-        },
-        spec: Some(LeaseSpec {
-            holder_identity: Some(settings.identity.clone()),
-            lease_duration_seconds: Some(DURATION.as_secs() as i32),
-            acquire_time: if changed { Some(MicroTime(now)) } else { previous.acquire_time.clone() },
-            renew_time: Some(MicroTime(now)),
-            lease_transitions: Some(previous.lease_transitions.unwrap_or(0) + changed as i32),
-            ..Default::default()
-        }),
-    }
+    rws_k8s::k8s::leader::held(&settings.namespace, &settings.name, &settings.identity, DURATION, current, now)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use k8s_openapi::api::coordination::v1::LeaseSpec;
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::MicroTime;
 
     fn lease(holder: &str, renewed: i64) -> Lease {
         Lease {

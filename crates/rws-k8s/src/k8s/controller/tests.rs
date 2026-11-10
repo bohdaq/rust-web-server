@@ -31,3 +31,22 @@ fn metrics_text_lists_each_controller() {
     assert!(text.contains("rws_controller_reconciles_total{controller=\"ControllerTestKind\"} 3"), "{text}");
     assert!(text.contains("rws_controller_reconcile_errors_total{controller=\"ControllerTestKind\"} 1"), "{text}");
 }
+
+#[tokio::test]
+async fn rules_cover_the_kinds_and_the_lease() {
+    let client = crate::k8s::client::offline();
+    let operator = Operator::new(client.clone(), "t")
+        .leader_election("ns", "t")
+        .controller(Controller::new(Api::<Deployment>::all(client.clone())).owns(Api::<ConfigMap>::all(client)).reconcile(|_d: Arc<Deployment>, _c| async { Ok(Action::await_change()) }));
+    assert_eq!(vec!["Deployment".to_string()], operator.kinds());
+    let rules = operator.rules();
+    let has = |group: &str, resource: &str, verb: &str| rules.iter().any(|r| r.api_group == group && r.resources.iter().any(|x| x == resource) && r.verbs.iter().any(|v| v == verb));
+    assert!(has("apps", "deployments", "watch") && has("apps", "deployments/status", "patch"));
+    assert!(has("", "configmaps", "create") && has("coordination.k8s.io", "leases", "update") && has("events.k8s.io", "events", "create"));
+}
+
+#[test]
+fn an_offline_client_works_outside_a_runtime() {
+    let client = crate::k8s::client::offline();
+    let _ = Controller::new(Api::<ConfigMap>::all(client)).rules();
+}

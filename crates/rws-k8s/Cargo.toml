@@ -18,12 +18,15 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["k8s"]
-k8s = ["dep:kube", "dep:k8s-openapi", "dep:futures-util", "dep:tokio", "dep:serde", "dep:serde_json", "dep:schemars", "dep:rcgen", "dep:json-patch", "rws-server/http2", "rws-server/serde"]
+# The client and leader election only (what the Gateway API controller uses).
+leader = ["dep:kube", "dep:k8s-openapi", "dep:tokio"]
+# Everything.
+k8s = ["leader", "kube?/runtime", "kube?/derive", "kube?/admission", "kube?/jsonpatch", "k8s-openapi?/schemars", "dep:futures-util", "dep:serde", "dep:serde_json", "dep:schemars", "dep:rcgen", "dep:json-patch", "rws-server/http2", "rws-server/serde"]
 
 [dependencies]
 rws-server.workspace = true
-kube = { version = "4.2", default-features = false, features = ["client", "runtime", "derive", "admission", "jsonpatch", "rustls-tls", "aws-lc-rs"], optional = true }
-k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32", "std", "schemars"], optional = true }
+kube = { version = "4.2", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs"], optional = true }
+k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32", "std"], optional = true }
 futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
