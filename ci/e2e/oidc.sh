@@ -58,6 +58,11 @@ http.server.ThreadingHTTPServer(("127.0.0.1", 18503), H).serve_forever()
 PY
 python3 -I echo.py 18502 & PIDS+=($!)
 python3 -I auth.py & PIDS+=($!)
+# Wait for both: on a slow runner rws could otherwise start first and
+# answer the first /healthz with a 502.
+for port in 18502 18503; do
+  for _ in $(seq 1 100); do curl -s -o /dev/null "http://127.0.0.1:$port/" && break; sleep 0.1; done
+done
 
 export OIDC_SECRET=rws-e2e-secret
 export OIDC_COOKIE="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
