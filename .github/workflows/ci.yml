@@ -101,8 +101,8 @@ jobs:
         run: cargo test --locked -p rws-server --features "http2 test-support macros serde model-sqlite model-postgres model-mysql" --lib -- model test_client
       - name: rws db and the traffic database on SQLite, PostgreSQL and MySQL
         run: cargo test --locked -p rws-proxy --features "http2 serde model-sqlite model-postgres model-mysql" --lib -- db_cli dev_mcp traffic
-      - name: the persistent job queue on SQLite, PostgreSQL and MySQL
-        run: cargo test --locked -p rust-web-server --no-default-features --features "http2 jobs model-sqlite model-postgres model-mysql" --lib -- jobs::
+      - name: the persistent job queue and the model admin on SQLite, PostgreSQL and MySQL
+        run: cargo test --locked -p rust-web-server --no-default-features --features "http2 jobs model-sqlite model-postgres model-mysql" --lib -- jobs:: model_admin
       - name: what ran
         if: always()
         run: |

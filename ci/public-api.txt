@@ -70,6 +70,7 @@ impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::pool::
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::pool::DbTransaction
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::pool::Replicas
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model::seed::Seeders
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::model_admin::ModelAdmin
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::otel::Span
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::proxy::GrpcProxy
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::proxy::H2ReverseProxy
@@ -113,6 +114,7 @@ impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::pool::DbP
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::pool::DbTransaction
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::pool::Replicas
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model::seed::Seeders
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::model_admin::ModelAdmin
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::GrpcProxy
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::H2ReverseProxy
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::proxy::H3ReverseProxy
@@ -359,6 +361,7 @@ impl core::clone::Clone for rust_web_server::model::query::Order
 impl core::clone::Clone for rust_web_server::model::seed::Seeders
 impl core::clone::Clone for rust_web_server::model::timestamp::Timestamp
 impl core::clone::Clone for rust_web_server::model::uuid::Uuid
+impl core::clone::Clone for rust_web_server::model_admin::ModelAdmin
 impl core::clone::Clone for rust_web_server::null::Null
 impl core::clone::Clone for rust_web_server::openapi::OpenApiConfig
 impl core::clone::Clone for rust_web_server::openapi::Operation
@@ -1779,6 +1782,7 @@ impl core::marker::Freeze for rust_web_server::model::query::Order
 impl core::marker::Freeze for rust_web_server::model::seed::Seeders
 impl core::marker::Freeze for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Freeze for rust_web_server::model::uuid::Uuid
+impl core::marker::Freeze for rust_web_server::model_admin::ModelAdmin
 impl core::marker::Freeze for rust_web_server::null::Null
 impl core::marker::Freeze for rust_web_server::null::ParseNullError
 impl core::marker::Freeze for rust_web_server::openapi::OpenApiConfig
@@ -2275,6 +2279,7 @@ impl core::marker::Send for rust_web_server::model::query::Order
 impl core::marker::Send for rust_web_server::model::seed::Seeders
 impl core::marker::Send for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Send for rust_web_server::model::uuid::Uuid
+impl core::marker::Send for rust_web_server::model_admin::ModelAdmin
 impl core::marker::Send for rust_web_server::null::Null
 impl core::marker::Send for rust_web_server::null::ParseNullError
 impl core::marker::Send for rust_web_server::openapi::OpenApiConfig
@@ -3023,6 +3028,7 @@ impl core::marker::Sync for rust_web_server::model::query::Order
 impl core::marker::Sync for rust_web_server::model::seed::Seeders
 impl core::marker::Sync for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Sync for rust_web_server::model::uuid::Uuid
+impl core::marker::Sync for rust_web_server::model_admin::ModelAdmin
 impl core::marker::Sync for rust_web_server::null::Null
 impl core::marker::Sync for rust_web_server::null::ParseNullError
 impl core::marker::Sync for rust_web_server::openapi::OpenApiConfig
@@ -3528,6 +3534,7 @@ impl core::marker::Unpin for rust_web_server::model::query::Order
 impl core::marker::Unpin for rust_web_server::model::seed::Seeders
 impl core::marker::Unpin for rust_web_server::model::timestamp::Timestamp
 impl core::marker::Unpin for rust_web_server::model::uuid::Uuid
+impl core::marker::Unpin for rust_web_server::model_admin::ModelAdmin
 impl core::marker::Unpin for rust_web_server::null::Null
 impl core::marker::Unpin for rust_web_server::null::ParseNullError
 impl core::marker::Unpin for rust_web_server::openapi::OpenApiConfig
@@ -4039,6 +4046,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::model::query::Order
 impl core::marker::UnsafeUnpin for rust_web_server::model::seed::Seeders
 impl core::marker::UnsafeUnpin for rust_web_server::model::timestamp::Timestamp
 impl core::marker::UnsafeUnpin for rust_web_server::model::uuid::Uuid
+impl core::marker::UnsafeUnpin for rust_web_server::model_admin::ModelAdmin
 impl core::marker::UnsafeUnpin for rust_web_server::null::Null
 impl core::marker::UnsafeUnpin for rust_web_server::null::ParseNullError
 impl core::marker::UnsafeUnpin for rust_web_server::openapi::OpenApiConfig
@@ -5435,6 +5443,7 @@ impl rust_web_server::middleware::Middleware for rust_web_server::ip_filter::IpF
 impl rust_web_server::middleware::Middleware for rust_web_server::maintenance::MaintenanceLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::metrics::MetricsLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::middleware::RateLimitLayer
+impl rust_web_server::middleware::Middleware for rust_web_server::model_admin::ModelAdmin
 impl rust_web_server::middleware::Middleware for rust_web_server::otel::OtelLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::proxy::GrpcProxy
 impl rust_web_server::middleware::Middleware for rust_web_server::proxy::H2ReverseProxy
@@ -5497,6 +5506,7 @@ impl rust_web_server::model::repository::PrimaryKey for rust_web_server::model::
 impl rust_web_server::model::seed::Seeders
 impl rust_web_server::model::timestamp::Timestamp
 impl rust_web_server::model::uuid::Uuid
+impl rust_web_server::model_admin::ModelAdmin
 impl rust_web_server::openapi::OpenApiConfig
 impl rust_web_server::openapi::Operation
 impl rust_web_server::otel::CapturingExporter
@@ -7228,6 +7238,7 @@ pub const rust_web_server::mime_type::MimeType::XUL_SUFFIX: &'static str
 pub const rust_web_server::mime_type::MimeType::ZIP_SUFFIX: &'static str
 pub const rust_web_server::model::eager::IN_BATCH: usize
 pub const rust_web_server::model::uuid::Uuid::NIL: rust_web_server::model::uuid::Uuid
+pub const rust_web_server::model_admin::PAGE_SIZE: i64
 pub const rust_web_server::null::NULL: &'static rust_web_server::null::Null
 pub const rust_web_server::otel::baggage::MAX_BYTES: usize
 pub const rust_web_server::otel::baggage::MAX_MEMBERS: usize
@@ -9559,6 +9570,13 @@ pub fn rust_web_server::model::uuid::Uuid::parse(&str) -> core::result::Result<r
 pub fn rust_web_server::model::uuid::Uuid::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 pub fn rust_web_server::model::uuid::Uuid::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 pub fn rust_web_server::model::uuid::Uuid::version(&self) -> u8
+pub fn rust_web_server::model_admin::ModelAdmin::allow(self, impl core::ops::function::Fn(&rust_web_server::request::Request) -> bool + core::marker::Send + core::marker::Sync + 'static) -> Self
+pub fn rust_web_server::model_admin::ModelAdmin::clone(&self) -> Self
+pub fn rust_web_server::model_admin::ModelAdmin::model<T: rust_web_server::model::Model>(self) -> Self
+pub fn rust_web_server::model_admin::ModelAdmin::new(rust_web_server::model::pool::DbPool) -> Self
+pub fn rust_web_server::model_admin::ModelAdmin::prefix(self, &str) -> Self
+pub fn rust_web_server::model_admin::ModelAdmin::table(self, &str) -> Self
+pub fn rust_web_server::model_admin::ModelAdmin::title(self, &str) -> Self
 pub fn rust_web_server::null::Null::clone(&self) -> Self
 pub fn rust_web_server::null::Null::eq(&self, &Self) -> bool
 pub fn rust_web_server::null::Null::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -10813,6 +10831,7 @@ pub mod rust_web_server::model::repository
 pub mod rust_web_server::model::seed
 pub mod rust_web_server::model::timestamp
 pub mod rust_web_server::model::uuid
+pub mod rust_web_server::model_admin
 pub mod rust_web_server::null
 pub mod rust_web_server::openapi
 pub mod rust_web_server::otel
@@ -12882,6 +12901,7 @@ pub struct rust_web_server::model::repository::ModelRepository<'a, T: rust_web_s
 pub struct rust_web_server::model::seed::Seeders
 pub struct rust_web_server::model::timestamp::Timestamp(_)
 pub struct rust_web_server::model::uuid::Uuid(_)
+pub struct rust_web_server::model_admin::ModelAdmin
 pub struct rust_web_server::null::Null
 pub struct rust_web_server::null::ParseNullError
 pub struct rust_web_server::openapi::OpenApiConfig

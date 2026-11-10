@@ -71,7 +71,9 @@ Docs: https://rws8.tech, one file: https://rws8.tech/llms-full.txt.
 - Accounts: a route that needs a signed-in user takes a `CurrentUser`
   argument, or goes in a group with `.guard(signed_in)` (see
   `src/routes/account.rs`). Settings: `AUTH_SECRET` (32+ bytes; random
-  without it, so sessions end on restart), `APP_URL` (links in emails).
+  without it, so sessions end on restart), `APP_URL` (links in emails),
+  `ADMIN_EMAILS` (who gets the model admin at `/admin`, PostgreSQL only;
+  add a table to it in `site()`).
   https://rws8.tech/features/auth-flows/
 - Errors: `AppError::BadRequest(msg)` & co. answer problem details
   (`application/problem+json`, the message in `detail`, which the frontend

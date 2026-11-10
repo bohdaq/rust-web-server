@@ -55,3 +55,16 @@ fn the_welcome_email_previews() {
     let welcome = {{crate_name}}::accounts::welcome("ann@example.com").unwrap();
     assert_eq!(vec!["ann@example.com".to_string()], welcome.email.to);
 }
+
+/// With PostgreSQL (CI runs one): the model admin is there, for nobody
+/// without `ADMIN_EMAILS`.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_admin_is_closed_by_default() {
+    if std::env::var("PGHOST").is_err() {
+        return;
+    }
+    let store = Store::connect("migrations").await.expect("connect");
+    let accounts = Accounts::from_env(&store).await.expect("accounts");
+    let status = tokio::task::spawn_blocking(move || TestClient::new(site(store, &accounts)).get("/admin").send().status()).await.unwrap();
+    assert_eq!(403, status);
+}

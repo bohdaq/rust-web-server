@@ -19384,6 +19384,54 @@ Lazy loading hides database access behind field access, making it easy to accide
 
 ---
 
+# Model admin
+
+<https://rws8.tech/docs/database/model-admin/>
+
+`model_admin::ModelAdmin` gives the tables you register pages to list, search, show, create, edit and delete rows — Django's admin, for a `DbPool` (any `model-*` feature). It's a middleware, so it works in front of sync and async apps alike (18.35.0).
+
+```rust,no_run
+use rust_web_server::auth_flows::CurrentUser;
+use rust_web_server::model_admin::ModelAdmin;
+
+let admins = ["ann@example.com".to_string()];
+let admin = ModelAdmin::new(pool.clone())
+    .title("Notes admin")
+    .model::()                         // its #[table] name
+    .table("rws_users")                      // or a table by name
+    .allow(move |request| CurrentUser::of(request).is_some_and(|u| admins.contains(&u.email)));
+
+let site = WithMiddleware::new(app(pool))
+    .wrap(auth)                              // AuthFlows first: it tells who's asking
+    .wrap(admin)
+    .wrap(FlashLayer::new());
+```
+
+**Nobody gets in until `allow` says so**: without it every admin page answers `403`. The check runs for each request, after the layers outside the admin — put it inside [`AuthFlows`](/features/auth-flows/) to use `CurrentUser`, and behind [`CsrfLayer`](/features/csrf/), whose token the forms carry.
+
+## Pages
+
+| Path | Page |
+|---|---|
+| `/admin` | The tables, with their row counts |
+| `/admin/<table>?q=&page=` | 25 rows a page, newest key first; `q` searches the text columns (case-insensitive) |
+| `/admin/<table>/new`, `POST /admin/<table>` | A new row |
+| `/admin/<table>/<id>` | One row |
+| `/admin/<table>/<id>/edit`, `POST /admin/<table>/<id>` | Change it |
+| `POST /admin/<table>/<id>/delete` | Delete it |
+
+`.prefix("/backoffice")` moves them. Only registered tables are served; table names are letters, digits and `_`.
+
+## How it reads the database
+
+The columns, their types and the primary key come from the database itself ([`DbPool::schema`](/database/migrations/#the-schema-as-data)) each time a page is drawn, so a migration shows at once — no admin code per model. Form values are converted by the column's type: integers and floats are checked, a `BOOLEAN` column is a checkbox, an empty field is `NULL` for a nullable column; `created_at` / `updated_at` are set to now when the form leaves them empty. On an edit, a column the form doesn't send keeps its value. What the database refuses — `NOT NULL`, a unique index, a foreign key — comes back as an alert on the form, through a [flash message](/building-apps/forms-uploads/#flash-messages-and-redirects) (add `FlashLayer`).
+
+A table needs a one-column primary key to be edited; others are listed only. An integer key is left to the database when creating a row; any other key is a form field. On SQLite a column declared `INTEGER` is a number field even when it holds booleans (declare it `BOOLEAN` for a checkbox).
+
+Values are shown as text and escaped; long ones are cut to 80 characters in the list. The pages are plain HTML with a little inline CSS and no scripts beyond a delete confirmation.
+
+---
+
 # In-memory SQLite
 
 <https://rws8.tech/docs/database/in-memory/>
@@ -25177,6 +25225,7 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | `Relation` / `RelationKind` | `model` (`model::eager`) | How `O` reaches `R`: `has_many(fk)`, `has_one(fk)`, `belongs_to(fk)`, `belongs_to_many(join, owner_key, related_key)`; `load(&pool, &owner)`, `load_for(&pool, &owners)` — one query per 500 keys (18.30.0). See [Eager loading](/database/relations/#eager-loading-with-with) |
 | `EagerQuery` / `Loaded` | `model` (`model::eager`) | From `QueryBuilder::with(relation)`: `.with(…)` more, `fetch_all` / `fetch_one` / `paginate` answer `Loaded` — derefs to the model; `related(&rel)`, `one(&rel)`, `take(&rel)`, `is_loaded(&rel)`, `into_inner()` (18.30.0) |
 | `Nested` | `model` | The relations to load for a relation's rows: `with_nested(relation, \|n\| n.with(…))` on `QueryBuilder`/`EagerQuery`; read with `Loaded::related_loaded` (18.35.0). See [Nested relations](/database/relations/#nested-relations) |
+| `ModelAdmin` | `model_admin` (a `model-*` feature) | Middleware: list, search, create, edit and delete rows of registered tables, from the live schema; `allow(check)` required (18.35.0). See [Model admin](/database/model-admin/) |
 | `MigrationStatus` | `model` | Applied/pending state from `DbPool::migration_status`. See [Migrations](/database/migrations/) |
 | `ModelInfo` | `model` | What a `Model` type maps to — `type_name`, `table`, `columns`, `primary_key`, `auto_increment`; `ModelInfo::of::()`, `short_name()` (18.28.0). What `DevTools::model::()` reports. See [dev tools](/mcp/dev-tools/) |
 | `Page` | `pagination` (re-exported from `model`) | Offset page: totals, `has_next`/`has_prev`, `.map(f)`, `.link_header(base_url)`; usable without the model layer. See [Pagination](/database/pagination/) |

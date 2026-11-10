@@ -143,6 +143,7 @@ Use it as:
 - [Transactions](https://rws8.tech/docs/database/transactions.md): Group multiple async database operations into an atomic unit that rolls back automatically on error.
 - [Migrations](https://rws8.tech/docs/database/migrations.md): Manage schema changes with versioned SQL files that run once, are tracked in the database, and can be rolled back.
 - [Relations](https://rws8.tech/docs/database/relations.md): Load related records with HasMany, HasOne, BelongsTo and BelongsToMany, eager-load them for a whole result set with with(), and manage many-to-many links.
+- [Model admin](https://rws8.tech/docs/database/model-admin.md): Pages to list, search, create, edit and delete database rows — Django's admin for rws, as one middleware.
 - [In-memory SQLite](https://rws8.tech/docs/database/in-memory.md): Use DbPool::memory() for zero-config isolated SQLite databases ideal for tests and prototyping.
 
 ## MCP Server

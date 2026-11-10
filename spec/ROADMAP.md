@@ -332,7 +332,7 @@ Plan and gap review for developers and enterprises: [ADOPTION.md](ADOPTION.md) (
 What a Rails/Django-class framework has beyond 18.31's building blocks (asked for 2026-11-09).
 
 - **#108** ✅ *branch `framework-18-31` (2026-11-10)* **Migrations from models** — `rws gen migration <name> --from-models`: diff the `#[derive(Model)]` structs against the live schema (`DbPool::schema`), write `CREATE TABLE` / `ADD COLUMN` only; drops, renames and type changes are notes, never generated.
-- **#109** **Model admin** — CRUD pages over registered models (`Repository` + `DbPool::schema`), behind a guard; a distinct name from the proxy's admin UI.
+- **#109** ✅ *branch `framework-18-31` (2026-11-10): `model_admin::ModelAdmin` middleware, tested on SQLite/PostgreSQL/MySQL; the fullstack starter mounts it with `ADMIN_EMAILS`.* **Model admin** — CRUD pages over registered models (`Repository` + `DbPool::schema`), behind a guard; a distinct name from the proxy's admin UI.
 
 **Done when:** both have docs, tests on SQLite/PostgreSQL/MySQL, and a starter uses them.
 

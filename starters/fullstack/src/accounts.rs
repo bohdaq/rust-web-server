@@ -9,6 +9,7 @@
 //! | `AUTH_SECRET` (32+ bytes) | a random secret: sessions end when the app restarts |
 //! | `APP_URL` (`https://notes.example`) | `http://127.0.0.1:7878`, the start of the links in emails |
 //! | `RWS_SMTP_HOST`, `RWS_SMTP_FROM`, … | mail is kept in memory (`/_mail` previews with `RWS_ENV=dev`) |
+//! | `ADMIN_EMAILS` (`ann@example.com,bo@example.com`) | nobody gets into the model admin at `/admin` (PostgreSQL only) |
 //!
 //! Accounts live in the `rws_users` table with PostgreSQL, in memory otherwise.
 

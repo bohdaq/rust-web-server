@@ -16,7 +16,9 @@ pub mod routes;
 pub mod store;
 
 use rust_web_server::async_state::AsyncAppWithState;
+use rust_web_server::auth_flows::CurrentUser;
 use rust_web_server::dev_mcp::DevTools;
+use rust_web_server::model_admin::ModelAdmin;
 use rust_web_server::entry_point::RwsEnv;
 use rust_web_server::error_pages::ErrorPages;
 use rust_web_server::flash::FlashLayer;
@@ -37,10 +39,26 @@ pub fn app(store: Store) -> AsyncAppWithState<Store> {
 }
 
 /// What `main` serves: `app()` behind the account flows (`/auth`), flash
-/// messages, error pages (details with `RWS_ENV=dev` or `test`) and, in
-/// development, the mail previews at `/_mail`.
+/// messages, error pages (details with `RWS_ENV=dev` or `test`), with
+/// PostgreSQL the model admin at `/admin` for the accounts in
+/// `ADMIN_EMAILS` (comma-separated) and, in development, the mail
+/// previews at `/_mail`.
 pub fn site(store: Store, accounts: &Accounts) -> WithMiddleware<AsyncAppWithState<Store>> {
-    let site = WithMiddleware::new(app(store)).wrap(accounts.auth.clone()).wrap(FlashLayer::new());
+    let admin = store.pool().cloned().map(|pool| {
+        let admins: Vec<String> = std::env::var("ADMIN_EMAILS").unwrap_or_default().split(',').map(|e| e.trim().to_lowercase()).filter(|e| !e.is_empty()).collect();
+        ModelAdmin::new(pool)
+            .title("{{project-name}} admin")
+            .model::<Note>()
+            .table("rws_users")
+            .allow(move |request| CurrentUser::of(request).is_some_and(|u| admins.contains(&u.email)))
+    });
+    // AuthFlows first (outermost): the admin's check reads who's signed in.
+    let site = WithMiddleware::new(app(store)).wrap(accounts.auth.clone());
+    let site = match admin {
+        Some(admin) => site.wrap(admin),
+        None => site,
+    };
+    let site = site.wrap(FlashLayer::new());
     let site = if RwsEnv::current().is_dev() { site.wrap(Accounts::previews()) } else { site };
     site.wrap(ErrorPages::from_env())
 }

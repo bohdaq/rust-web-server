@@ -232,6 +232,8 @@ pub use rws_server::sso;
 pub mod mailer;
 #[cfg(all(feature = "crypto", feature = "mailer", feature = "serde", not(target_arch = "wasm32")))]
 pub mod auth_flows;
+#[cfg(all(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"), not(target_arch = "wasm32")))]
+pub mod model_admin;
 #[cfg(feature = "jobs")]
 pub mod jobs;
 // Also compiled under `secrets` — `secrets::aws_secrets_manager`/`azure_key_vault`
