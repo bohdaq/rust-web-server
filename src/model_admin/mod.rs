@@ -6,17 +6,17 @@
 //! ```rust,no_run
 //! # async fn example(pool: rust_web_server::model::DbPool) {
 //! use rust_web_server::app::App;
-//! use rust_web_server::auth_flows::CurrentUser;
 //! use rust_web_server::model_admin::ModelAdmin;
 //! # #[derive(rust_web_server::Model)] struct Post { #[primary_key(auto_increment)] id: i64, title: String }
 //!
 //! let admin = ModelAdmin::new(pool.clone())
 //!     .model::<Post>()                      // or .table("posts")
-//!     .allow(|request| CurrentUser::of(request).is_some_and(|u| u.email == "ann@example.com"));
+//!     .allow(|request| is_admin(request));     // e.g. auth_flows::CurrentUser::of(request) is an admin
 //! // Inside the layers it needs (the first wrapped is the outermost):
 //! // FlashLayer, CsrfLayer, AuthFlows, then the admin. Pages under /admin.
 //! let app = App::with_async_state(pool).wrap(admin);
 //! # }
+//! # fn is_admin(_: &rust_web_server::request::Request) -> bool { false }
 //! ```
 //!
 //! **Nobody gets in until [`allow`](ModelAdmin::allow) says so**: without it

@@ -59,6 +59,7 @@ fn subscribers_may_publish() {
     assert_eq!(1, *deleted.lock().unwrap());
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn events_forward_to_channels() {
     let bus = EventBus::new();

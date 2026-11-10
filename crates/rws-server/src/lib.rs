@@ -69,6 +69,8 @@ pub mod group;
 pub mod flash;
 #[cfg(feature = "serde")]
 pub mod vite;
+// SSE + WebSocket subscribers: not in a wasm32 build (no sockets).
+#[cfg(not(target_arch = "wasm32"))]
 pub mod channels;
 pub mod events;
 pub mod error_pages;

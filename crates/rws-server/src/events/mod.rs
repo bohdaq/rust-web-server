@@ -117,6 +117,7 @@ impl EventBus {
         self.subscribe(move |event: &E| server.notify(&method, Some(&params(event))))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Publish each `E` to the channel topic `topic(event)` as
     /// `message(event)` ([`Hub::publish`](crate::channels::Hub::publish)).
     pub fn forward_to_channel<E, T, M>(&self, hub: crate::channels::Hub, topic: T, message: M) -> SubscriptionId
