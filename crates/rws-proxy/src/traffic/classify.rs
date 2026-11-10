@@ -36,6 +36,9 @@ pub enum Kind {
     Scanner,
     /// Claims to be a crawler whose published network it isn't from.
     Spoofed,
+    /// A browser User-Agent from a cloud or server hosting network
+    /// (`traffic::hosting`): a program, not a person.
+    Hosting,
     /// A library or tool (`curl`, `python-requests`) or an unknown bot.
     Tool,
     NoUserAgent,
@@ -67,6 +70,7 @@ impl Kind {
             Kind::Archiver => "archiver",
             Kind::Scanner => "scanner",
             Kind::Spoofed => "spoofed",
+            Kind::Hosting => "hosting",
             Kind::Tool => "tool",
             Kind::NoUserAgent => "no-user-agent",
             Kind::Local => "local",
@@ -86,6 +90,7 @@ impl Kind {
             "feed" => Kind::Feed,
             "archiver" => Kind::Archiver,
             "scanner" => Kind::Scanner,
+            "hosting" => Kind::Hosting,
             _ => Kind::Tool,
         }
     }

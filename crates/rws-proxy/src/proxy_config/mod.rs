@@ -1341,6 +1341,9 @@ impl ConfigDrivenApp {
         match self.reload_from_str(&toml) {
             Ok(ReloadOutcome::Unchanged) => {}
             Ok(ReloadOutcome::Reloaded { routes, warnings }) => {
+                if crate::traffic::enabled() {
+                    crate::traffic::configure_sites(&toml);
+                }
                 for w in &warnings {
                     eprintln!("[proxy_config] Warning: {w}");
                 }

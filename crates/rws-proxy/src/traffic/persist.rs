@@ -12,6 +12,13 @@
 //! The audience and source lists (`countries` … `utm_campaign`, 18.31) are
 //! additive: older files load without them, older rws ignores them.
 //!
+//! The per-site lists (`site_visitors`, `site_ai_agents`, `site_bots`,
+//! `site_referrers`, 18.35) carry the host as the key's first
+//! tab-separated field; they replace `ai_agents`, `bots` and `referrers`,
+//! which only days saved before them have (shown for all sites). New
+//! names, so an older rws reading the file ignores them rather than
+//! showing a host as a bot's name.
+//!
 //! Unique-visitor keys are never saved: a restart within a day can count a
 //! returning visitor once more.
 
@@ -21,7 +28,20 @@ use std::path::Path;
 use super::record::{Counts, Day, Top, BEHAVIOUR, DIMS, DIM_SAVED, TOP_SAVED};
 use crate::mcp::json_rpc::{extract_raw, extract_str, split_array_elements};
 
-const LISTS: [&str; 8] = ["people_pages", "ai_pages", "ai_agents", "bots", "referrers", "not_found", "entry_pages", "exit_pages"];
+const LISTS: [&str; 12] = [
+    "people_pages",
+    "ai_pages",
+    "ai_agents",
+    "bots",
+    "referrers",
+    "not_found",
+    "entry_pages",
+    "exit_pages",
+    "site_visitors",
+    "site_ai_agents",
+    "site_bots",
+    "site_referrers",
+];
 
 fn quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -55,6 +75,10 @@ fn list<'a>(day: &'a Day, name: &str) -> &'a Top {
         "referrers" => &day.referrers,
         "entry_pages" => &day.entry_pages,
         "exit_pages" => &day.exit_pages,
+        "site_visitors" => &day.site_visitors,
+        "site_ai_agents" => &day.site_ai_agents,
+        "site_bots" => &day.site_bots,
+        "site_referrers" => &day.site_referrers,
         _ => &day.not_found,
     }
 }
@@ -74,6 +98,10 @@ fn list_mut<'a>(day: &'a mut Day, name: &str) -> &'a mut Top {
         "referrers" => &mut day.referrers,
         "entry_pages" => &mut day.entry_pages,
         "exit_pages" => &mut day.exit_pages,
+        "site_visitors" => &mut day.site_visitors,
+        "site_ai_agents" => &mut day.site_ai_agents,
+        "site_bots" => &mut day.site_bots,
+        "site_referrers" => &mut day.site_referrers,
         _ => &mut day.not_found,
     }
 }
@@ -98,7 +126,7 @@ pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; 3]>, days:
                 .chain(DIMS.iter())
                 .chain(BEHAVIOUR.iter())
                 .map(|name| {
-                    let keep = if DIMS.contains(name) || BEHAVIOUR.contains(name) { DIM_SAVED } else { TOP_SAVED };
+                    let keep = if DIMS.contains(name) || BEHAVIOUR.contains(name) || name.starts_with("site_") { DIM_SAVED } else { TOP_SAVED };
                     let entries: Vec<String> = list(day, name).sorted(keep).iter().map(|(k, v)| format!("[{},{v}]", quote(k))).collect();
                     format!("{}:[{}]", quote(name), entries.join(","))
                 })

@@ -243,6 +243,7 @@ retention_days   = 30                        # 1–90
 # persist        = "/var/lib/rws/traffic.json"  # default: traffic.json beside the certificate; "off"
 # exclude        = ["/healthz", "/readyz", "/metrics"]
 # geo_db         = "/var/lib/rws/geo.bin"    # a newer country table (ci/gen_geo.py); default: the built-in one
+# hosting_networks = true                    # browsers from cloud/server hosting count as bots (18.35)
 # script         = true                      # serve /_rws/t.js and take its reports at /_rws/t (default false)
 # goals          = ["/thanks/", "event:signup"]  # conversions: paths (prefix with *) or script events
 # database_url_env = "TRAFFIC_DATABASE_URL"  # keep every page view in PostgreSQL (the variable holding the URL)

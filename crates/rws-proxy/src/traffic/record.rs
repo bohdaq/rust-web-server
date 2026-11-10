@@ -2,7 +2,9 @@
 //! protocols and whether or not lines are written) lands in hourly counts
 //! per host and group, daily unique visitors, and daily top lists.
 //!
-//! Bounded by construction: [`MAX_HOSTS`] hosts (more go to `other`),
+//! Bounded by construction: every site the configuration routes
+//! ([`set_configured_hosts`], up to [`MAX_SLOTS`]) and [`MAX_HOSTS`] other
+//! Host headers (more go to `other`),
 //! hourly buckets for `retention_days`, top lists of [`TOP`] entries a day
 //! (the rest added to `(other)`), [`MAX_PENDING`] undecided browsers per
 //! shard, a classification cache of [`MAX_CACHE`] per shard. Unique
@@ -27,8 +29,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::{classify, Class, Group, Kind};
 
-/// Hosts counted separately; others are `other`.
+/// Host headers that aren't a configured site counted separately; others
+/// are `other`.
 pub const MAX_HOSTS: usize = 16;
+/// Host slots in all (the index is a `u8`; one is kept for `other`).
+pub const MAX_SLOTS: usize = 255;
 /// Entries a daily top list keeps.
 pub const TOP: usize = 200;
 /// Entries of each top list kept on disk and reported.
@@ -199,11 +204,21 @@ pub struct Day {
     pub visitors: [u64; 3],
     pub people_pages: Top,
     pub ai_pages: Top,
-    /// `name\toperator\tkind\tverified`.
+    /// `name\toperator\tkind\tverified`, all sites: days saved before
+    /// 18.35 only (now [`Day::site_ai_agents`]).
     pub ai_agents: Top,
-    /// `kind\tname`.
+    /// `kind\tname`, all sites: days saved before 18.35 only.
     pub bots: Top,
+    /// Referring hosts, all sites: days saved before 18.35 only.
     pub referrers: Top,
+    /// Unique visitors per site: `host\tgroup` (`0` people, `1` AI, `2` bots).
+    pub site_visitors: Top,
+    /// `host\tname\toperator\tkind\tverified`.
+    pub site_ai_agents: Top,
+    /// `host\tkind\tname`.
+    pub site_bots: Top,
+    /// `host\treferring host`.
+    pub site_referrers: Top,
     pub not_found: Top,
     /// The [`DIMS`] lists, in that order.
     pub dims: [Top; 8],
@@ -275,6 +290,10 @@ impl Day {
         self.ai_agents.merge(&other.ai_agents);
         self.bots.merge(&other.bots);
         self.referrers.merge(&other.referrers);
+        self.site_visitors.merge(&other.site_visitors);
+        self.site_ai_agents.merge(&other.site_ai_agents);
+        self.site_bots.merge(&other.site_bots);
+        self.site_referrers.merge(&other.site_referrers);
         self.not_found.merge(&other.not_found);
         for (mine, theirs) in self.behaviour.iter_mut().zip(&other.behaviour) {
             mine.merge(theirs);
@@ -330,11 +349,15 @@ struct Shard {
 struct Recorder {
     shards: Vec<Mutex<Shard>>,
     hosts: RwLock<Vec<String>>,
+    /// The sites the configuration routes (normalized, sorted).
+    configured: RwLock<Vec<String>>,
     /// A secret made at start and never saved; with the day it keys the
     /// visitor hash, so one day's visitors can't be matched to the next's.
     secret: RandomState,
     retention_days: u64,
     exclude: Vec<String>,
+    /// `[traffic] hosting_networks`.
+    hosting: bool,
 }
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
@@ -347,9 +370,11 @@ fn recorder() -> &'static Recorder {
     RECORDER.get_or_init(|| Recorder {
         shards: (0..SHARDS).map(|_| Mutex::new(Shard::default())).collect(),
         hosts: RwLock::new(Vec::new()),
+        configured: RwLock::new(Vec::new()),
         secret: RandomState::new(),
         retention_days: super::config::retention_days(),
         exclude: super::config::exclude(),
+        hosting: super::config::hosting_networks(),
     })
 }
 
@@ -406,11 +431,27 @@ fn host_index_slow(host: &str) -> u8 {
     if let Some(i) = recorder.hosts.read().unwrap_or_else(|e| e.into_inner()).iter().position(|h| *h == host) {
         return i as u8;
     }
+    let configured = recorder.configured.read().unwrap_or_else(|e| e.into_inner());
     let mut hosts = recorder.hosts.write().unwrap_or_else(|e| e.into_inner());
+    host_slot(&mut hosts, &configured, host)
+}
+
+/// The slot of `host` (normalized), added when there's room: a configured
+/// site always gets one; another Host header while fewer than
+/// [`MAX_HOSTS`] such are counted (with no configured sites, the first
+/// [`MAX_HOSTS`] hosts seen); the rest share `other`.
+fn host_slot(hosts: &mut Vec<String>, configured: &[String], host: String) -> u8 {
     if let Some(i) = hosts.iter().position(|h| *h == host) {
         return i as u8;
     }
-    if hosts.len() < MAX_HOSTS {
+    let room = host != "other"
+        && hosts.len() < MAX_SLOTS
+        && if configured.is_empty() {
+            hosts.len() < MAX_HOSTS
+        } else {
+            configured.binary_search(&host).is_ok() || hosts.iter().filter(|h| *h != "other" && configured.binary_search(h).is_err()).count() < MAX_HOSTS
+        };
+    if room {
         hosts.push(host);
         return (hosts.len() - 1) as u8;
     }
@@ -419,6 +460,36 @@ fn host_index_slow(host: &str) -> u8 {
     }
     hosts.push("other".to_string());
     (hosts.len() - 1) as u8
+}
+
+/// The most configured sites counted separately.
+const MAX_CONFIGURED: usize = MAX_SLOTS - MAX_HOSTS - 1;
+
+/// The sites the configuration routes (`[[route]] match.host`): each gets
+/// its own counts, ahead of whatever else arrives in a Host header, and is
+/// listed first on the Traffic page. Set at start and on every reload.
+pub fn set_configured_hosts<I: IntoIterator<Item = String>>(hosts: I) {
+    let mut list: Vec<String> = hosts.into_iter().map(|h| normalize_host(&h)).filter(|h| h != "(none)" && h != "other" && !h.contains('*')).collect();
+    list.sort();
+    list.dedup();
+    list.truncate(MAX_CONFIGURED);
+    let mut configured = recorder().configured.write().unwrap_or_else(|e| e.into_inner());
+    if *configured != list {
+        *configured = list;
+        // Hosts that went to `other` may have a slot now.
+        HOSTS_GENERATION.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// The configured sites ([`set_configured_hosts`]), sorted.
+#[doc(hidden)]
+pub fn configured_hosts() -> Vec<String> {
+    recorder().configured.read().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// The name of host slot `i`.
+fn host_name(i: u8) -> String {
+    recorder().hosts.read().unwrap_or_else(|e| e.into_inner()).get(i as usize).cloned().unwrap_or_else(|| "other".to_string())
 }
 
 #[doc(hidden)]
@@ -651,6 +722,15 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
         Some(cached) => cached.clone(),
         None => {
             let class = classify(hit.ip, hit.user_agent, "/");
+            // A browser from a hosting network is a program (looked up once
+            // per visitor: the class is cached).
+            let class = match (class.kind, recorder.hosting) {
+                (Kind::Browser, true) => match super::hosting::provider(hit.ip) {
+                    Some(provider) => Class { kind: Kind::Hosting, name: provider, operator: "", verified: false },
+                    None => class,
+                },
+                _ => class,
+            };
             // Country and device only for browsers: they're shown for people.
             let audience = (class.kind == Kind::Browser).then(|| Audience {
                 country: super::geo::country(hit.ip),
@@ -668,7 +748,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
         }
     };
     let class = cached.class;
-    let scanner = super::classify::scanner_path(hit.path) && matches!(class.kind, Kind::Browser | Kind::Tool | Kind::NoUserAgent);
+    let scanner = super::classify::scanner_path(hit.path) && matches!(class.kind, Kind::Browser | Kind::Hosting | Kind::Tool | Kind::NoUserAgent);
     let class = if scanner { Class { kind: Kind::Scanner, name: "", operator: "", verified: false } } else { class };
     let page = is_page(hit).then(|| page_key(hit.host, path));
     let not_found = (hit.status == 404).then(|| page_key(hit.host, path));
@@ -690,7 +770,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                 }
                 None if is_asset(path) => {
                     shard.seen.insert(visitor, Group::Person);
-                    shard.day(day).visitors[PEOPLE] += 1;
+                    shard.new_visitor(day, host, PEOPLE);
                     if let Some(audience) = &cached.audience {
                         shard.count_audience(day, &normalize_host(hit.host), audience);
                     }
@@ -706,7 +786,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                     if shard.pending.len() >= MAX_PENDING && !shard.pending.contains_key(&visitor) {
                         // Too many undecided at once: count this one as a bot.
                         shard.seen.insert(visitor, Group::Bot);
-                        shard.day(day).visitors[BOTS] += 1;
+                        shard.new_visitor(day, host, BOTS);
                         shard.count(BOTS, hour, host, &browser_without_assets(), page, not_found, visitor);
                         Some(BOTS)
                     } else {
@@ -720,7 +800,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                             // font: automation, not someone reading pages.
                             let pending = shard.pending.remove(&visitor).expect("just added");
                             shard.seen.insert(visitor, Group::Bot);
-                            shard.day(day).visitors[BOTS] += 1;
+                            shard.new_visitor(day, host, BOTS);
                             for d in pending.requests {
                                 shard.count(BOTS, d.hour, d.host, &browser_without_assets(), d.page, d.not_found, visitor);
                             }
@@ -733,7 +813,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
         group => {
             let g = slot(group).expect("counted group");
             if shard.seen.insert(visitor, group).is_none() {
-                shard.day(day).visitors[g] += 1;
+                shard.new_visitor(day, host, g);
             }
             shard.count(g, hour, host, &class, page, not_found, visitor);
             // A scanner request isn't the visitor's usual class: not cached.
@@ -750,6 +830,14 @@ fn browser_without_assets() -> Class {
 impl Shard {
     fn day(&mut self, day: u64) -> &mut Day {
         self.days.entry(day).or_default()
+    }
+
+    /// A visitor first seen today, in group `g`, on host slot `host`.
+    fn new_visitor(&mut self, day: u64, host: u8, g: usize) {
+        let name = host_name(host);
+        let day = self.day(day);
+        day.visitors[g] += 1;
+        day.site_visitors.add_capped(&format!("{name}\t{g}"), 1, DIM_TOP);
     }
 
     /// A new day: forget today's visitors and cache; drop what's past retention.
@@ -882,7 +970,8 @@ impl Shard {
         if let Some(page) = page {
             day.people_pages.add(&page, 1);
             if let Some(referrer) = referrer {
-                day.referrers.add(&referrer, 1);
+                let host = page.split('/').next().unwrap_or("");
+                day.site_referrers.add_capped(&format!("{host}\t{referrer}"), 1, DIM_TOP);
             }
         }
         if let Some(path) = not_found {
@@ -895,15 +984,16 @@ impl Shard {
         let counts = &mut self.hours.entry((hour, host)).or_default()[g];
         counts.requests += 1;
         counts.pages += page.is_some() as u64;
+        let name = host_name(host);
         let day = self.day(hour / 24);
         if g == AI {
-            day.ai_agents.add(&format!("{}\t{}\t{}\t{}", or_unknown(class.name), class.operator, class.kind.label(), class.verified), 1);
+            day.site_ai_agents.add_capped(&format!("{name}\t{}\t{}\t{}\t{}", or_unknown(class.name), class.operator, class.kind.label(), class.verified), 1, DIM_TOP);
             if let Some(page) = page {
                 day.ai_pages.add(&page, 1);
             }
         } else {
             let kind = if class.kind == Kind::Browser { "browser-no-assets" } else { class.kind.label() };
-            day.bots.add(&format!("{kind}\t{}", class.name), 1);
+            day.site_bots.add_capped(&format!("{name}\t{kind}\t{}", class.name), 1, DIM_TOP);
         }
         if let Some(path) = not_found {
             day.not_found.add(&path, 1);
@@ -925,8 +1015,9 @@ pub fn settle(now: u64) {
         for visitor in done {
             let Some(pending) = shard.pending.remove(&visitor) else { continue };
             let day = pending.requests.first().map_or(now / 86_400, |d| d.hour / 24);
+            let host = pending.requests.first().map_or(0, |d| d.host);
             if shard.seen.insert(visitor, Group::Bot).is_none() {
-                shard.day(day).visitors[BOTS] += 1;
+                shard.new_visitor(day, host, BOTS);
             }
             for d in pending.requests {
                 shard.count(BOTS, d.hour, d.host, &browser_without_assets(), d.page, d.not_found, visitor);
@@ -1181,19 +1272,18 @@ pub fn recent(now: u64) -> Vec<Recent> {
 #[doc(hidden)]
 pub fn restore(hosts: Vec<String>, hours: BTreeMap<(u64, u8), [Counts; 3]>, days: BTreeMap<u64, Day>) {
     let recorder = recorder();
+    let configured = recorder.configured.read().unwrap_or_else(|e| e.into_inner());
     let mut known = recorder.hosts.write().unwrap_or_else(|e| e.into_inner());
-    let map: Vec<u8> = hosts
-        .iter()
-        .map(|h| match known.iter().position(|k| k == h) {
-            Some(i) => i as u8,
-            None if known.len() < MAX_HOSTS + 1 => {
-                known.push(h.clone());
-                (known.len() - 1) as u8
-            }
-            None => 0,
-        })
-        .collect();
+    // Configured sites first, so the hosts saved before them can't take
+    // their slots.
+    let mut order: Vec<usize> = (0..hosts.len()).collect();
+    order.sort_by_key(|i| configured.binary_search(&hosts[*i]).is_err());
+    let mut map = vec![0u8; hosts.len()];
+    for i in order {
+        map[i] = host_slot(&mut known, &configured, hosts[i].clone());
+    }
     drop(known);
+    drop(configured);
     HOSTS_GENERATION.fetch_add(1, Ordering::Relaxed);
     let mut shard = recorder.shards[0].lock().unwrap_or_else(|e| e.into_inner());
     for ((hour, host), counts) in hours {
@@ -1227,4 +1317,5 @@ pub fn reset_for_tests() {
         *shard.lock().unwrap_or_else(|e| e.into_inner()) = Shard::default();
     }
     recorder.hosts.write().unwrap_or_else(|e| e.into_inner()).clear();
+    recorder.configured.write().unwrap_or_else(|e| e.into_inner()).clear();
 }

@@ -10,6 +10,7 @@ pub const RWS_CONFIG_TRAFFIC_GEO_DB: &str = "RWS_CONFIG_TRAFFIC_GEO_DB";
 pub const RWS_CONFIG_TRAFFIC_SCRIPT: &str = "RWS_CONFIG_TRAFFIC_SCRIPT";
 pub const RWS_CONFIG_TRAFFIC_GOALS: &str = "RWS_CONFIG_TRAFFIC_GOALS";
 pub const RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV: &str = "RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV";
+pub const RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS: &str = "RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS";
 
 fn read(key: &str) -> String {
     std::env::var(key).unwrap_or_default().trim().to_string()
@@ -70,6 +71,13 @@ pub fn geo_db() -> Option<PathBuf> {
 /// reports at `/_rws/t`. Default off.
 pub fn script() -> bool {
     matches!(read(RWS_CONFIG_TRAFFIC_SCRIPT).to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on")
+}
+
+/// `hosting_networks`: count browsers from cloud and server hosting
+/// networks as bots (`traffic::hosting`). Default on; `false` counts them
+/// as people when they load assets, as before 18.35.
+pub fn hosting_networks() -> bool {
+    !matches!(read(RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS).to_ascii_lowercase().as_str(), "false" | "0" | "no" | "off")
 }
 
 /// The most goals counted.

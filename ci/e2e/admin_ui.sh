@@ -37,6 +37,8 @@ token_env = "UI_E2E_ADMIN_TOKEN"
 
 [traffic]
 script = true
+# The test visits come from this machine, a CI runner (a cloud host).
+hosting_networks = false
 goals = ["event:signup", "/thanks/"]
 
 [authz]

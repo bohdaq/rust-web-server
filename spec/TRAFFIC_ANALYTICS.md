@@ -232,3 +232,25 @@ upstreamed with keyboard reading, selection, legend and a table); the
 generator and `world-map.js` are gone. Note on the
 live numbers: sessions started counting with 18.31.0, so a 7-day view
 spanning the upgrade shows few sessions next to many visitors.
+
+## Site picker and hosting networks (2026-11-08, after 18.34.1)
+
+User, from the live page: the site picker listed `168.119.17.57`,
+`127.0.0.1`, `(none)`, `mail.shareaudio.us`… but not bohdantsap.com, lit or
+git — "when I select it should show only that upstream's data and show
+configured upstreams first". And, after a log review showed most of the
+day's 67 "people" were cloud servers with browser User-Agents (AWS
+"iPhones" that ran the script, OVH, GCP, DigitalOcean), flag those.
+
+Causes: host slots were first come (16, then `other`), so junk Host
+headers took them; `Day.visitors`, `ai_agents`, `bots` and `referrers`
+carried no host, so a site's view showed all sites' visitors and bots;
+`pairs()` matched the host as a bare prefix and kept the shared `(other)`.
+
+| Part | Status |
+|---|---|
+| Configured sites | **done**: `record::set_configured_hosts` (route `match.host`, normalized, no wildcards, ≤ 238), set by `traffic::configure_sites` at `start()` *before* `persist::load` (start runs before `build_from_file`) and in `reload_from_file` (not `reload_from_str`: tests call it and traffic state is process-wide). `host_slot`: a configured site always gets a slot (`MAX_SLOTS` 255), other names while < `MAX_HOSTS` 16 non-configured, else `other`; with no configured sites the old first-come rule. `restore` places configured saved hosts first; overflow now maps to `other` (was index 0). JSON `hosts` = configured (all, busiest first) then others with traffic, `other` last; new `configured` array; UI `<optgroup>` *Sites* / *Other hosts* |
+| Per-site lists | **done**: new day lists `site_visitors` (`host\tgroup`), `site_ai_agents`, `site_bots`, `site_referrers` (`host\t…`), saved under new names with `DIM_SAVED`, so an older rws ignores them instead of showing a host as a bot name; the old all-site lists only load from older days and are added in for *All sites*. `on_host` matches `host/`; `(other)` only without a host. Pre-upgrade hourly totals of a site that was in `other` stay there |
+| Hosting networks | **done**: `ci/gen_hosting.py` (DB-IP ASN Lite, CC BY 4.0) → `hosting.bin` in geo.bin's format, a provider code per range (19 named providers + `DC` = other hosting by ASN list or name words), 45 852 IPv4 + 7 195 IPv6 ranges, 63 KB; excluded: Cloudflare/Akamai/Fastly/Apple (WARP, Private Relay), Google 15169, M247, Datacamp, PacketHub, Zscaler, Cogent. `Kind::Hosting` (label `hosting`, name = provider), decided on the classify cache miss for `Kind::Browser` only (verified crawlers keep their class), `[traffic] hosting_networks` (default on). Acceptance on the 2026-11-08 log: every ISP visitor (Ukrtelecom, Proximus, Türk Telekom, BT, Bell) and VPN user (Datacamp, M247) stays a person; AWS, GCP, OVH, DO, Hetzner, Shadowserver and the scanners flip. CI `gen_hosting.py --check` |
+| Verified | unit tests (configured priority + restart, per-site visitors/agents/bots/referrers, hosting lookups and counting), a local rws on a copy of the live `traffic.json` with the live route hosts (configured first, bohdantsap.com selectable, pages/sessions filtered) |
+| Release | not yet (next: 18.35) |

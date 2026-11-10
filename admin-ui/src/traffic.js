@@ -402,6 +402,15 @@ export class RwsTraffic extends LitElement {
     return { series, unit: m === "bounce" ? "%" : names[m].toLowerCase() };
   }
 
+  /** The site options: the configured sites, then other Host headers seen. */
+  hostOptions(hosts, configured) {
+    const option = (h) => html`<option value=${h} ?selected=${this.host === h}>${h === "other" ? "Other hosts (combined)" : h}</option>`;
+    const sites = hosts.filter((h) => configured.includes(h));
+    const rest = hosts.filter((h) => !configured.includes(h));
+    if (!sites.length || !rest.length) return hosts.map(option);
+    return html`<optgroup label="Sites">${sites.map(option)}</optgroup><optgroup label="Other hosts">${rest.map(option)}</optgroup>`;
+  }
+
   // ── sections ─────────────────────────────────────────────────────────────
 
   renderBar() {
@@ -421,7 +430,7 @@ export class RwsTraffic extends LitElement {
         ? html`<label class="t-select"><span class="t-sr">Site</span>
             <select @change=${(e) => this.setHost(e.target.value)}>
               <option value="" ?selected=${!this.host}>All sites</option>
-              ${hosts.map((h) => html`<option value=${h} ?selected=${this.host === h}>${h}</option>`)}
+              ${this.hostOptions(hosts, t?.configured ?? [])}
             </select></label>`
         : nothing}
       <label class="t-check"><input type="checkbox" .checked=${this.compare} @change=${(e) => { this.compare = e.target.checked; this.remember(); }}> Compare</label>

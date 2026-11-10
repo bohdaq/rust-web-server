@@ -43,7 +43,9 @@ Since 18.32.0 the page is an overview with tabs:
 - **The bar at the top**: the period (*Today*, *7 days*, *30 days* or a
   *Custom* range of whole UTC days), **who** — *Humans* (the analytics
   below), *AI agents*, *Bots* or *All* three side by side — the site when
-  there is more than one,
+  there is more than one (the sites your `[[route]]`s match first, then
+  other `Host` names seen; picking one shows only that site's numbers,
+  lists and visitors),
   **Compare** (the period before, drawn grey in the chart and as the change
   under each number), and how many people are online now.
 - **Overview**: visitors, page views, sessions, bounce rate and session
@@ -204,10 +206,20 @@ From each request's address, `User-Agent` and path, in this order:
 3. A `User-Agent` that claims one of those crawlers from anywhere else is
    **spoofed**, a bot.
 4. Paths only scanners ask for are scanners.
-5. Known AI agents ([ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt))
+5. A browser `User-Agent` from a cloud or server hosting network (AWS,
+   Google Cloud, Azure, OVHcloud, Hetzner, DigitalOcean… — since 18.35) is a
+   program — a link scanner, a preview, a headless crawler — and a bot of
+   kind **hosting**, named after the provider, even when it loads assets and
+   runs the script. The networks come from a table built into the binary
+   (**[DB-IP](https://db-ip.com)** "IP to ASN Lite", CC BY 4.0, ~60 KB,
+   refreshed each release with `ci/gen_hosting.py`). Consumer VPN and CDN
+   egress (Cloudflare WARP, iCloud Private Relay, VPN services) isn't
+   hosting: people browse from it. `[traffic] hosting_networks = false`
+   counts these browsers as people again.
+6. Known AI agents ([ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt))
    and crawlers ([crawler-user-agents](https://github.com/monperrus/crawler-user-agents))
    by name. Both lists and the networks are bundled and refreshed each release.
-6. A browser `User-Agent` waits: once it loads a `.css`, `.js`, `.mjs` or font
+7. A browser `User-Agent` waits: once it loads a `.css`, `.js`, `.mjs` or font
    it is a person and its earlier requests count as one. Without one within
    two minutes or 32 requests it is a bot ("browser, no assets").
 
@@ -216,15 +228,20 @@ and the `User-Agent`. The secret and the hashes are never saved: no addresses
 or `User-Agent`s are kept, in memory or in the file. A restart within a day
 can count a returning visitor once more.
 
-Counting costs about 160 ns per request; the country and device are worked
-out once per visitor per day. Memory and the file are bounded: at
-most 16 sites (the rest count as `other`) and 200 entries per list per day
-(the rest as `(other)`; 100 are saved).
+Counting costs about 160 ns per request; the country, device and hosting
+network are worked out once per visitor per day. Memory and the file are
+bounded: every site a `[[route]]` matches by `host` (up to 238) plus 16 other
+`Host` names (the rest count as `other`), and 200 entries per list per day
+(the rest as `(other)`; 100 are saved). Before 18.35 the first 16 names seen
+took the slots, so a site added later could end up in `other`; its counts
+from then stay there, while its pages and sessions show under the site.
 
 ## From the API or an AI client
 
 `GET /admin/api/v1/traffic?hours=168&host=example.com` returns the page's data
 (`hours` 1–2160, default 24; `host` optional); `404` when counting is off.
+`hosts` lists the sites to pick from, the configured ones (also in
+`configured`) first.
 `?from=2026-10-01&to=2026-10-07` (UTC days, inclusive; `to` defaults to
 today) asks for those days instead. Views over two days cover whole days.
 Besides the totals and lists, the answer has `series` (per hour or day:

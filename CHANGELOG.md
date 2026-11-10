@@ -9,6 +9,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **Traffic: browsers from hosting networks are bots.** A browser
+  `User-Agent` from AWS, Google Cloud, Azure, OVHcloud, Hetzner,
+  DigitalOcean or another cloud/server host (a link scanner, preview or
+  headless crawler — they load assets and even run the script) now counts
+  as a bot of kind `hosting`, named after the provider, not as a person.
+  The networks are a ~60 KB table built from DB-IP's ASN Lite
+  (`ci/gen_hosting.py`); consumer VPN and CDN egress is left out.
+  `[traffic] hosting_networks = false` turns it off.
 - **`starters/operator`**: a Kubernetes operator — a `Greeting` custom
   resource, a controller (owned ConfigMap, status, finalizer, leader
   election), validating and mutating webhooks, `--manifests`, a Dockerfile;
@@ -120,6 +128,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- **Traffic: the site picker.** The first 16 `Host` names seen took every
+  slot, so raw IPs, `(none)` and mail names crowded out real sites, which
+  then counted as `other`. Every site a `[[route]]` matches by `host` now
+  gets its own counts (read at start and on reload) and is listed first,
+  under *Sites*, then other names seen.
+- **Traffic: picking a site shows only that site.** Visitors, AI agents,
+  bots and referring sites were all sites' together; pages matched by
+  prefix (`example.com` also took `example.com.evil`) and included the
+  shared `(other)` row. Days counted before the upgrade keep their
+  all-site lists, shown under *All sites*.
 - **`/readyz` of library apps answered `503` for good**: only the `rws`
   binary marked the server ready. `Server::run`, `run_plain` and `run_tls`
   now do as they start serving.

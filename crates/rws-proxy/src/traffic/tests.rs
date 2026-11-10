@@ -74,7 +74,7 @@ fn scanners_missing_user_agents_and_this_machine() {
 #[test]
 fn every_kind_has_a_label_and_a_group() {
     for kind in [Kind::Browser, Kind::AiTraining, Kind::AiSearch, Kind::AiAssistant, Kind::AiAgent, Kind::SearchEngine, Kind::Seo, Kind::Monitoring,
-        Kind::SocialPreview, Kind::Feed, Kind::Archiver, Kind::Scanner, Kind::Spoofed, Kind::Tool, Kind::NoUserAgent, Kind::Local] {
+        Kind::SocialPreview, Kind::Feed, Kind::Archiver, Kind::Scanner, Kind::Spoofed, Kind::Hosting, Kind::Tool, Kind::NoUserAgent, Kind::Local] {
         assert!(!kind.label().is_empty());
         let _ = kind.group();
     }
@@ -203,6 +203,118 @@ fn lists_and_hosts_stay_bounded() {
     let json = summary(24, None, T0 + 60);
     let hosts = crate::mcp::json_rpc::split_array_elements(&crate::mcp::json_rpc::extract_raw(&json, "hosts").unwrap());
     assert!(hosts.len() <= super::record::MAX_HOSTS + 1 && hosts.iter().any(|h| h == "\"other\""), "{hosts:?}");
+}
+
+#[test]
+fn configured_sites_get_slots_first_and_are_listed_first() {
+    let _g = fresh();
+    // Junk Host headers arrive first and would take every slot.
+    for i in 0..40 {
+        let host = format!("10.0.0.{i}");
+        let mut h = hit("132.196.86.7", GPTBOT, "/", T0);
+        h.host = &host;
+        record(&h);
+    }
+    super::record::set_configured_hosts(["Site.Example:443".to_string(), "quiet.example".to_string(), "*.wild.example".to_string()]);
+    let mut site = hit("132.196.86.7", GPTBOT, "/docs/", T0);
+    site.host = "site.example";
+    record(&site);
+    let json = summary(24, None, T0 + 60);
+    let hosts = crate::mcp::json_rpc::split_array_elements(&crate::mcp::json_rpc::extract_raw(&json, "hosts").unwrap());
+    assert_eq!(hosts[..2], ["\"site.example\"", "\"quiet.example\""], "configured first, busiest first, even without traffic: {hosts:?}");
+    assert_eq!(hosts.last().map(String::as_str), Some("\"other\""));
+    assert!(json.contains(r#""configured":["quiet.example","site.example"]"#), "{json}");
+    let one = summary(24, Some("site.example"), T0 + 60);
+    assert_eq!(totals(&one, "ai").0, 1, "{one}");
+    assert_eq!(totals(&summary(24, Some("quiet.example"), T0 + 60), "ai").0, 0);
+
+    // A restart: saved junk hosts don't take a configured site's slot.
+    let names = super::record::host_names();
+    let (hours, days) = super::record::snapshot(T0 + 60);
+    reset_for_tests();
+    super::record::set_configured_hosts(["site.example".to_string(), "late.example".to_string()]);
+    super::record::restore(names, hours, days);
+    let mut late = hit("132.196.86.7", GPTBOT, "/", T0 + 61);
+    late.host = "late.example";
+    record(&late);
+    assert_eq!(totals(&summary(24, Some("late.example"), T0 + 120), "ai").0, 1);
+    assert_eq!(totals(&summary(24, Some("site.example"), T0 + 120), "ai").0, 1);
+}
+
+#[test]
+fn a_site_shows_only_its_own_visitors_agents_bots_and_referrers() {
+    let _g = fresh();
+    for (host, ip, referer) in [("a.example", "203.0.113.1", "https://news.example/x"), ("a.example.org", "203.0.113.2", "https://other.example/")] {
+        let mut page = hit(ip, CHROME, "/docs/", T0);
+        page.host = host;
+        page.referer = Some(referer);
+        record(&page);
+        let mut asset = hit(ip, CHROME, "/main.js", T0 + 1);
+        asset.host = host;
+        record(&asset);
+        let mut bot = hit("1.2.3.4", "curl/8.5.0", "/", T0 + 2);
+        bot.host = host;
+        record(&bot);
+    }
+    let mut gpt = hit("132.196.86.7", GPTBOT, "/x/", T0);
+    gpt.host = "a.example.org";
+    record(&gpt);
+    let a = summary(24, Some("a.example"), T0 + 60);
+    assert_eq!(totals(&a, "people").2, 1, "{a}");
+    assert_eq!(totals(&a, "bots").2, 1, "{a}");
+    assert!(a.contains(r#""people_pages":[["a.example/docs/",1]]"#), "no a.example.org pages: {a}");
+    assert!(a.contains(r#""referrers":[["news.example",1]]"#), "{a}");
+    assert!(a.contains(r#""ai_agents":[]"#), "{a}");
+    let org = summary(24, Some("a.example.org"), T0 + 60);
+    assert!(org.contains(r#""name":"GPTBot""#), "{org}");
+    assert!(org.contains(r#""referrers":[["other.example",1]]"#), "{org}");
+    let all = summary(24, None, T0 + 60);
+    assert_eq!(totals(&all, "people").2, 2);
+    assert!(all.contains(r#""bots":[{"kind":"tool","name":"curl","requests":2}]"#), "added up across sites: {all}");
+
+    // Saved and loaded, the per-site lists stay per site.
+    let text = super::persist::to_json(&super::record::host_names(), &super::record::snapshot(T0 + 60).0, &super::record::snapshot(T0 + 60).1);
+    assert!(text.contains("\"site_visitors\":[") && !text.contains("\"bots\":[[\"a.example"), "{text}");
+}
+
+#[test]
+#[cfg(feature = "geo")]
+fn hosting_networks_are_named_and_vpn_and_isp_networks_are_not() {
+    // Addresses from rws8.tech's log of 2026-11-08, with what they were.
+    for (addr, expected) in [
+        ("54.80.28.156", Some("AWS")),         // an "iPhone" that ran the script: a link scanner
+        ("35.188.140.12", Some("Google Cloud")),
+        ("144.217.86.46", Some("OVHcloud")),   // downloaded the CV
+        ("147.182.208.223", Some("DigitalOcean")),
+        ("88.99.48.186", Some("Hetzner")),
+        ("199.165.159.153", Some("other hosting")), // Shadowserver
+        ("45.138.12.180", Some("other hosting")),   // TC Datacenter, probing for secrets
+        ("37.54.23.252", None),     // Ukrtelecom: a phone using the "ask" box
+        ("109.138.199.255", None),  // Proximus
+        ("88.255.41.28", None),     // Türk Telekom
+        ("92.71.99.158", None),     // Datacamp: a consumer VPN
+        ("104.16.0.1", None),       // Cloudflare (WARP, Private Relay)
+        ("66.249.64.110", None),    // Googlebot: verified by name instead
+        ("2001:db8::1", None),
+    ] {
+        assert_eq!(super::hosting::provider(ip(addr)), expected, "{addr}");
+    }
+    assert_eq!(super::hosting::table().map(|t| t.len().0 > 10_000), Some(true));
+}
+
+#[test]
+#[cfg(feature = "geo")]
+fn a_browser_from_a_hosting_network_is_a_bot_even_when_it_loads_assets() {
+    let _g = fresh();
+    record(&hit("54.80.28.156", IPHONE, "/", T0));
+    record(&hit("54.80.28.156", IPHONE, "/app.js", T0 + 1));
+    record(&hit("37.54.23.252", CHROME, "/", T0));
+    record(&hit("37.54.23.252", CHROME, "/app.js", T0 + 1));
+    let json = summary(24, None, T0 + 60);
+    assert_eq!(totals(&json, "people").2, 1, "{json}");
+    assert_eq!(totals(&json, "bots").2, 1, "{json}");
+    assert!(json.contains(r#"{"kind":"hosting","name":"AWS","requests":1}"#), "{json}");
+    assert!(json.contains(r#""countries":[["UA",1]]"#), "no audience for hosting networks: {json}");
 }
 
 #[test]

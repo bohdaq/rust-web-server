@@ -179,6 +179,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `traffic::device::parse` / `Device` | `traffic` | A browser's family, operating system and device class from its `User-Agent` and client hints (18.31.0) |
 | `traffic::TrafficScriptLayer` | `traffic` | Serves the first-party traffic script (`/_rws/t.js`) and takes its reports (`/_rws/t`) when `[traffic] script` is on; passes every other request through (18.31.0) |
 | `traffic::geo::country` | `traffic` | The country of an address from the built-in DB-IP Lite table (`geo` feature) or `[traffic] geo_db` (18.31.0) |
+| `traffic::hosting::provider` | `traffic` | The cloud or server hosting provider of an address (`"AWS"`, `"other hosting"`) from the built-in DB-IP ASN Lite table (`geo` feature); browsers from one count as bots (18.35) |
+| `traffic::configure_sites` / `traffic::record::set_configured_hosts` | `traffic` | The sites the configuration's routes match, counted separately and listed first on the Traffic page (18.35) |
 | `RequestIdLayer` | `request_id` | Correlation-ID middleware — echoes or generates `X-Request-Id` (`generate_request_id()`, UUID-v4-shaped, not crypto-random). See [Request ID](/features/request-id/) |
 | `CsrfLayer` | `csrf` (`csrf`) | Double-submit cookie CSRF protection; 403 on mismatch. See [CSRF](/features/csrf/) |
 | `CsrfToken` | `csrf` (`csrf`) | Extractor for the current token in a GET handler; implements `Display` |

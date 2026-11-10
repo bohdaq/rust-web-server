@@ -1927,6 +1927,7 @@ don't use them.
 | `RWS_CONFIG_TRAFFIC_SCRIPT` | `false` | boolean | Serve the first-party traffic script at `/_rws/t.js` and take its reports at `/_rws/t` (since 18.31.0). See [The first-party script](/deployment/traffic/#the-first-party-script-optional). |
 | `RWS_CONFIG_TRAFFIC_GOALS` | (none) | comma list | Conversions to count: page paths (`/thanks/`, prefix `/docs/*`) or script events (`event:signup`); at most 32 (since 18.31.0). |
 | `RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV` | (none) | variable name | The environment variable holding a `postgres://` URL to keep every page view in (since 18.31.0; needs the `model-postgres` feature, in the release binaries but the FIPS one). See [Keeping every page view](/deployment/traffic/#keeping-every-page-view-in-postgresql-optional). |
+| `RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS` | `true` | boolean | Count browsers from cloud and server hosting networks (AWS, Google Cloud, OVHcloud, Hetzner…) as bots of kind `hosting` (since 18.35). `false`: as people when they load assets. See [How visitors are told apart](/deployment/traffic/#how-visitors-are-told-apart). |
 | `RWS_CONFIG_TRAFFIC_GEO_DB` | the built-in table | path | A country table in `ci/gen_geo.py`'s format to use instead of the built-in one (since 18.31.0). Unreadable: the built-in one, with a warning. |
 | `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
 
@@ -2275,6 +2276,7 @@ retention_days   = 30                        # 1–90
 # persist        = "/var/lib/rws/traffic.json"  # default: traffic.json beside the certificate; "off"
 # exclude        = ["/healthz", "/readyz", "/metrics"]
 # geo_db         = "/var/lib/rws/geo.bin"    # a newer country table (ci/gen_geo.py); default: the built-in one
+# hosting_networks = true                    # browsers from cloud/server hosting count as bots (18.35)
 # script         = true                      # serve /_rws/t.js and take its reports at /_rws/t (default false)
 # goals          = ["/thanks/", "event:signup"]  # conversions: paths (prefix with *) or script events
 # database_url_env = "TRAFFIC_DATABASE_URL"  # keep every page view in PostgreSQL (the variable holding the URL)
@@ -24646,7 +24648,9 @@ Since 18.32.0 the page is an overview with tabs:
 - **The bar at the top**: the period (*Today*, *7 days*, *30 days* or a
   *Custom* range of whole UTC days), **who** — *Humans* (the analytics
   below), *AI agents*, *Bots* or *All* three side by side — the site when
-  there is more than one,
+  there is more than one (the sites your `[[route]]`s match first, then
+  other `Host` names seen; picking one shows only that site's numbers,
+  lists and visitors),
   **Compare** (the period before, drawn grey in the chart and as the change
   under each number), and how many people are online now.
 - **Overview**: visitors, page views, sessions, bounce rate and session
@@ -24807,10 +24811,20 @@ From each request's address, `User-Agent` and path, in this order:
 3. A `User-Agent` that claims one of those crawlers from anywhere else is
    **spoofed**, a bot.
 4. Paths only scanners ask for are scanners.
-5. Known AI agents ([ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt))
+5. A browser `User-Agent` from a cloud or server hosting network (AWS,
+   Google Cloud, Azure, OVHcloud, Hetzner, DigitalOcean… — since 18.35) is a
+   program — a link scanner, a preview, a headless crawler — and a bot of
+   kind **hosting**, named after the provider, even when it loads assets and
+   runs the script. The networks come from a table built into the binary
+   (**[DB-IP](https://db-ip.com)** "IP to ASN Lite", CC BY 4.0, ~60 KB,
+   refreshed each release with `ci/gen_hosting.py`). Consumer VPN and CDN
+   egress (Cloudflare WARP, iCloud Private Relay, VPN services) isn't
+   hosting: people browse from it. `[traffic] hosting_networks = false`
+   counts these browsers as people again.
+6. Known AI agents ([ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt))
    and crawlers ([crawler-user-agents](https://github.com/monperrus/crawler-user-agents))
    by name. Both lists and the networks are bundled and refreshed each release.
-6. A browser `User-Agent` waits: once it loads a `.css`, `.js`, `.mjs` or font
+7. A browser `User-Agent` waits: once it loads a `.css`, `.js`, `.mjs` or font
    it is a person and its earlier requests count as one. Without one within
    two minutes or 32 requests it is a bot ("browser, no assets").
 
@@ -24819,15 +24833,20 @@ and the `User-Agent`. The secret and the hashes are never saved: no addresses
 or `User-Agent`s are kept, in memory or in the file. A restart within a day
 can count a returning visitor once more.
 
-Counting costs about 160 ns per request; the country and device are worked
-out once per visitor per day. Memory and the file are bounded: at
-most 16 sites (the rest count as `other`) and 200 entries per list per day
-(the rest as `(other)`; 100 are saved).
+Counting costs about 160 ns per request; the country, device and hosting
+network are worked out once per visitor per day. Memory and the file are
+bounded: every site a `[[route]]` matches by `host` (up to 238) plus 16 other
+`Host` names (the rest count as `other`), and 200 entries per list per day
+(the rest as `(other)`; 100 are saved). Before 18.35 the first 16 names seen
+took the slots, so a site added later could end up in `other`; its counts
+from then stay there, while its pages and sessions show under the site.
 
 ## From the API or an AI client
 
 `GET /admin/api/v1/traffic?hours=168&host=example.com` returns the page's data
 (`hours` 1–2160, default 24; `host` optional); `404` when counting is off.
+`hosts` lists the sites to pick from, the configured ones (also in
+`configured`) first.
 `?from=2026-10-01&to=2026-10-07` (UTC days, inclusive; `to` defaults to
 today) asks for those days instead. Views over two days cover whole days.
 Besides the totals and lists, the answer has `series` (per hour or day:
@@ -25371,6 +25390,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `traffic::device::parse` / `Device` | `traffic` | A browser's family, operating system and device class from its `User-Agent` and client hints (18.31.0) |
 | `traffic::TrafficScriptLayer` | `traffic` | Serves the first-party traffic script (`/_rws/t.js`) and takes its reports (`/_rws/t`) when `[traffic] script` is on; passes every other request through (18.31.0) |
 | `traffic::geo::country` | `traffic` | The country of an address from the built-in DB-IP Lite table (`geo` feature) or `[traffic] geo_db` (18.31.0) |
+| `traffic::hosting::provider` | `traffic` | The cloud or server hosting provider of an address (`"AWS"`, `"other hosting"`) from the built-in DB-IP ASN Lite table (`geo` feature); browsers from one count as bots (18.35) |
+| `traffic::configure_sites` / `traffic::record::set_configured_hosts` | `traffic` | The sites the configuration's routes match, counted separately and listed first on the Traffic page (18.35) |
 | `RequestIdLayer` | `request_id` | Correlation-ID middleware — echoes or generates `X-Request-Id` (`generate_request_id()`, UUID-v4-shaped, not crypto-random). See [Request ID](/features/request-id/) |
 | `CsrfLayer` | `csrf` (`csrf`) | Double-submit cookie CSRF protection; 403 on mismatch. See [CSRF](/features/csrf/) |
 | `CsrfToken` | `csrf` (`csrf`) | Extractor for the current token in a GET handler; implements `Display` |

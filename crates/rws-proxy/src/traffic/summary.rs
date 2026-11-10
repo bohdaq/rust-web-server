@@ -20,10 +20,19 @@ fn quote(s: &str) -> String {
     out
 }
 
+/// Whether a `host/path` key is `host`'s (any key when no host is given;
+/// the shared `(other)` entry only then).
+fn on_host(key: &str, host: Option<&str>) -> bool {
+    match host {
+        None => true,
+        Some(h) => key.len() > h.len() && key.as_bytes()[h.len()] == b'/' && key[..h.len()].eq_ignore_ascii_case(h),
+    }
+}
+
 fn pairs(top: &Top, n: usize, host: Option<&str>) -> String {
     let mut filtered = Top::default();
     for (key, count) in &top.0 {
-        if host.is_none_or(|h| key.starts_with(h) || key == "(other)") {
+        if on_host(key, host) {
             filtered.0.insert(key.clone(), *count);
         }
     }
@@ -37,7 +46,7 @@ fn dim(top: &Top, n: usize, host: Option<&str>) -> String {
     let mut merged = Top::default();
     for (key, count) in &top.0 {
         let (h, value) = key.split_once('\t').unwrap_or(("", key.as_str()));
-        if host.is_none_or(|wanted| h.eq_ignore_ascii_case(wanted)) || key == "(other)" {
+        if host.is_none_or(|wanted| h.eq_ignore_ascii_case(wanted)) || (host.is_none() && key == "(other)") {
             *merged.0.entry(value.to_string()).or_default() += count;
         }
     }
@@ -45,11 +54,49 @@ fn dim(top: &Top, n: usize, host: Option<&str>) -> String {
     format!("[{}]", rows.join(","))
 }
 
+/// A per-site list (`host\t…` keys) without the host: one site's, or all
+/// sites' added up, together with `legacy` (the all-sites list days saved
+/// before per-site lists have).
+fn site_list(site: &Top, legacy: &Top, host: Option<&str>) -> Top {
+    let mut out = Top::default();
+    for (key, n) in &site.0 {
+        let Some((h, rest)) = key.split_once('\t') else {
+            // The overflow entry: no site of its own.
+            if host.is_none() {
+                *out.0.entry(key.clone()).or_default() += n;
+            }
+            continue;
+        };
+        if host.is_none_or(|wanted| h.eq_ignore_ascii_case(wanted)) {
+            *out.0.entry(rest.to_string()).or_default() += n;
+        }
+    }
+    if host.is_none() {
+        out.merge(legacy);
+    }
+    out
+}
+
+/// A day's unique visitors per group: one site's, or all sites'.
+fn day_visitors(day: &Day, host: Option<&str>) -> [u64; 3] {
+    let Some(wanted) = host else { return day.visitors };
+    let mut out = [0u64; 3];
+    for (key, n) in &day.site_visitors.0 {
+        if let Some((h, g)) = key.rsplit_once('\t') {
+            if let (true, Ok(g @ 0..=2)) = (h.eq_ignore_ascii_case(wanted), g.parse::<usize>()) {
+                out[g] += n;
+            }
+        }
+    }
+    out
+}
+
 /// The JSON for the last `hours` hours (1–720), optionally one host's.
 pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
     let hours = hours.clamp(1, 24 * 90);
     let (buckets, days) = snapshot(now);
     let names = super::record::host_names();
+    let configured = super::record::configured_hosts();
     let host_index = host.and_then(|h| names.iter().position(|n| n.eq_ignore_ascii_case(h))).map(|i| i as u8);
     let wanted = |h: u8| host.is_none() || Some(h) == host_index;
     let this_hour = now / 3600;
@@ -137,7 +184,7 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         host_sessions(d, &mut s);
         let (key, offset) = if *day >= start_day { (*day, 0) } else { (*day + period_days, 3) };
         if let Some(row) = per_day.get_mut(&key) {
-            row[offset] += d.visitors[0];
+            row[offset] += day_visitors(d, host)[0];
             row[offset + 1] += s.sessions;
             row[offset + 2] += s.bounces;
         }
@@ -146,14 +193,15 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         } else if *day >= previous_day {
             host_sessions(d, &mut previous_sessions);
         }
+        let v = day_visitors(d, host);
         if *day >= start_day {
             lists.merge(d);
             for g in 0..3 {
-                visitors[g] += d.visitors[g];
+                visitors[g] += v[g];
             }
         } else if *day >= previous_day {
             for g in 0..3 {
-                previous_visitors[g] += d.visitors[g];
+                previous_visitors[g] += v[g];
             }
         }
     }
@@ -167,8 +215,7 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         .iter()
         .map(|(d, r)| format!(r#"{{"t":{},"visitors":{},"sessions":{},"bounces":{},"previous_visitors":{},"previous_sessions":{},"previous_bounces":{}}}"#, d * 86_400, r[0], r[1], r[2], r[3], r[4], r[5]))
         .collect();
-    let agents: Vec<String> = lists
-        .ai_agents
+    let agents: Vec<String> = site_list(&lists.site_ai_agents, &lists.ai_agents, host)
         .sorted(25)
         .iter()
         .map(|(key, n)| {
@@ -177,8 +224,7 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
             format!(r#"{{"name":{},"operator":{},"kind":{},"verified":{verified},"requests":{n}}}"#, quote(name), quote(operator), quote(kind))
         })
         .collect();
-    let bots: Vec<String> = lists
-        .bots
+    let bots: Vec<String> = site_list(&lists.site_bots, &lists.bots, host)
         .sorted(25)
         .iter()
         .map(|(key, n)| {
@@ -191,7 +237,7 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
     let mut on_page: Vec<(String, u64, u64)> = lists.behaviour[1]
         .0
         .iter()
-        .filter(|(k, _)| host.is_none_or(|h| k.starts_with(h)) && k.as_str() != "(other)")
+        .filter(|(k, _)| on_host(k, host) && k.as_str() != "(other)")
         .map(|(k, views)| (k.clone(), lists.behaviour[0].0.get(k).copied().unwrap_or(0) / (*views).max(1), *views))
         .collect();
     on_page.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
@@ -206,18 +252,11 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
     let session_json = |s: &Sessions| format!(r#"{{"sessions":{},"bounces":{},"duration":{},"pages":{}}}"#, s.sessions, s.bounces, s.duration, s.pages);
     let geo = super::geo::table().map_or("null".to_string(), |t| quote(&t.source));
     format!(
-        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{},"previous_series":[{}],"days":[{}],"script":{},"store":{},"time_on_page":[{}],{}}}"#,
+        r#"{{"hours":{hours},"bucket":"{}","since":{},"hosts":[{}],"configured":[{}],"host":{},"totals":{},"previous":{},"series":[{}],"people_pages":{},"ai_pages":{},"ai_agents":[{}],"bots":[{}],"referrers":{},"not_found":{},{},"geo_source":{geo},"sessions":{},"previous_sessions":{},"entry_pages":{},"exit_pages":{},"previous_series":[{}],"days":[{}],"script":{},"store":{},"time_on_page":[{}],{}}}"#,
         if daily { "day" } else { "hour" },
         first_hour.map_or("null".to_string(), |h| (h * 3600).to_string()),
-        // Only sites with counted traffic (this machine's own calls, which
-        // aren't counted, still register their Host).
-        names
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| buckets.iter().any(|((_, h), c)| *h as usize == *i && c.iter().any(|g| g.requests > 0)))
-            .map(|(_, n)| quote(n))
-            .collect::<Vec<_>>()
-            .join(","),
+        site_order(&names, &configured, &buckets).iter().map(|n| quote(n)).collect::<Vec<_>>().join(","),
+        configured.iter().map(|n| quote(n)).collect::<Vec<_>>().join(","),
         host.map_or("null".to_string(), quote),
         groups(&totals, &visitors),
         groups(&previous, &previous_visitors),
@@ -226,7 +265,7 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         pairs(&lists.ai_pages, 25, host),
         agents.join(","),
         bots.join(","),
-        pairs(&lists.referrers, 25, None),
+        pairs(&site_list(&lists.site_referrers, &lists.referrers, host), 25, None),
         pairs(&lists.not_found, 25, host),
         dims.join(","),
         session_json(&sessions),
@@ -240,6 +279,32 @@ pub fn json(hours: u64, host: Option<&str>, now: u64) -> String {
         on_page.join(","),
         behaviour.join(","),
     )
+}
+
+/// The sites to pick from: the configured ones first (all of them, the
+/// busiest first), then other hosts with counted traffic (this machine's
+/// own calls, which aren't counted, still register their Host), busiest
+/// first, and `other` last.
+fn site_order(names: &[String], configured: &[String], buckets: &BTreeMap<(u64, u8), [super::record::Counts; 3]>) -> Vec<String> {
+    let mut requests = vec![0u64; names.len()];
+    for ((_, h), c) in buckets {
+        if let Some(r) = requests.get_mut(*h as usize) {
+            *r += c.iter().map(|g| g.requests).sum::<u64>();
+        }
+    }
+    let traffic = |name: &str| names.iter().position(|n| n == name).map_or(0, |i| requests[i]);
+    let mut sites: Vec<(bool, u64, &str)> = configured.iter().map(|c| (false, traffic(c), c.as_str())).collect();
+    for name in names {
+        if name != "other" && configured.binary_search(name).is_err() && traffic(name) > 0 {
+            sites.push((true, traffic(name), name));
+        }
+    }
+    sites.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(b.2)));
+    let mut out: Vec<String> = sites.into_iter().map(|(_, _, n)| n.to_string()).collect();
+    if traffic("other") > 0 {
+        out.push("other".to_string());
+    }
+    out
 }
 
 /// The live view: people on the site in the last 5 minutes, page views per

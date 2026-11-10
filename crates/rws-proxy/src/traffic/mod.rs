@@ -20,6 +20,7 @@ pub mod config;
 mod data;
 pub mod device;
 pub mod geo;
+pub mod hosting;
 #[doc(hidden)]
 pub mod persist;
 pub mod record;
@@ -72,6 +73,9 @@ pub fn start() {
         geo::table();
     });
     start_store();
+    // Before loading the saved counts, so the configured sites keep slots.
+    #[cfg(not(target_arch = "wasm32"))]
+    configure_sites(&std::fs::read_to_string(crate::proxy_config::config_file_path()).unwrap_or_default());
     let Some(path) = config::persist_path() else { return };
     persist::load(&path);
     let _ = std::thread::Builder::new().name("rws-traffic".to_string()).spawn(move || loop {
@@ -80,6 +84,14 @@ pub fn start() {
             eprintln!("traffic: can't save {}: {e}", path.display());
         }
     });
+}
+
+/// Count the sites `toml`'s routes match (`[[route]] match.host`) on
+/// their own and list them first ([`record::set_configured_hosts`]).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn configure_sites(toml: &str) {
+    let config = crate::proxy_config::ProxyConfig::from_str(toml);
+    record::set_configured_hosts(config.routes.iter().filter_map(|r| r.match_.host.clone()));
 }
 
 /// Connect to `[traffic] database_url_env`'s PostgreSQL, when set.
