@@ -233,8 +233,8 @@ allowed_origins = ["https://ops.example.com"] # browser origins besides the list
 ## `[traffic]`
 
 Traffic insights for the admin UI (since 18.15.0): on whenever the admin API
-is, counting people, AI agents and bots per hour and day. No IP addresses or
-User-Agents are kept.
+is, counting people, apps, AI agents and bots (and the owner, apart) per hour
+and day. No IP addresses or User-Agents are kept.
 
 ```toml
 [traffic]
@@ -245,7 +245,10 @@ retention_days   = 30                        # 1–90
 # geo_db         = "/var/lib/rws/geo.bin"    # a newer country table (ci/gen_geo.py); default: the built-in one
 # hosting_networks = true                    # browsers from cloud/server hosting count as bots (18.35)
 # script         = true                      # serve /_rws/t.js and take its reports at /_rws/t (default false)
-# goals          = ["/thanks/", "event:signup"]  # conversions: paths (prefix with *) or script events
+# goals          = ["/thanks/", "event:signup", "req:/api/proxy"]  # conversions: paths (prefix with *), script events, requests (18.35)
+# apps           = ["MyApp=MyApp/", "MyApp=chrome-extension://<id>"]  # native apps and extensions: counted as Apps (18.35)
+# owner_networks = ["203.0.113.7", "198.51.100.0/24"]  # your own visits, counted apart (18.35)
+# probe_addresses = false                    # keep scanners' addresses in Probe sources (18.35)
 # database_url_env = "TRAFFIC_DATABASE_URL"  # keep every page view in PostgreSQL (the variable holding the URL)
 ```
 ## Other settings

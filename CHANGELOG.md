@@ -9,6 +9,37 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- **Traffic: apps and extensions are their own group.** Native apps and
+  browser extensions that call the server never load a page's assets, so
+  they used to count as bots. They're now **Apps**: named by `[traffic]
+  apps` (`"HITOP=HITOP/"` matches a `User-Agent` token and reads the
+  version after it; `"HITOP=chrome-extension://<id>"` an extension's
+  `Origin`) or by platform (Apple's `CFNetwork`/`NetworkingExtension`,
+  Android's `Dalvik`, Electron, extension origins). Apps report events with
+  `POST /_rws/e` (`{"app","v","p","n"}`; configured apps only, any origin,
+  500 a client a day). The page's *Apps* view shows users by app and
+  platform, versions and events. Referrals from app stores are their own
+  channel, *App stores*.
+- **Traffic: your own visits are counted apart.** A client that makes a
+  successful admin API call (the admin UI, signed in), comes from `[traffic]
+  owner_networks`, or holds the owner cookie (`/_rws/me?k=<key>`, links on
+  the page and from `GET /traffic/owner`) is the owner's from then on, on
+  every site; the page shows how many of your page views it left out.
+- **Traffic: how sure the people count is.** *Verified* (ran the script),
+  *Likely* (loaded assets), *Page only* and *Server networks* (counted as
+  bots) under the key numbers.
+- **Traffic: a Visitors tab.** The last visits, newest first: country,
+  device, channel, referring site and campaign, the pages in order, events,
+  verified, the visit number that day. Up to 300 kept across days, with no
+  address, `User-Agent` or visitor key.
+- **Traffic: landing pages by source, downloads, probes and crawlers.**
+  The first page of visits from outside per channel; installers, packages,
+  archives and `install.sh` fetched in full, by who fetched them; the
+  paths scanners asked for and their country and network
+  (`[traffic] probe_addresses = true` adds the address); each named
+  crawler's pages and 404s and the paths that 404 for them.
+- **Traffic: request goals.** `goals = ["req:/api/proxy"]` counts the
+  sessions that made that request (any method, not only a page view).
 - **Traffic: browsers from hosting networks are bots.** A browser
   `User-Agent` from AWS, Google Cloud, Azure, OVHcloud, Hetzner,
   DigitalOcean or another cloud/server host (a link scanner, preview or
@@ -128,6 +159,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- **Traffic: the admin UI's own page views.** Viewing the Traffic page
+  through a route that proxies the admin API counted its owner as a
+  visitor (`rws8.tech/admin/` was among the site's top pages); the owner
+  is now apart (above).
 - **Traffic: the site picker.** The first 16 `Host` names seen took every
   slot, so raw IPs, `(none)` and mail names crowded out real sites, which
   then counted as `other`. Every site a `[[route]]` matches by `host` now

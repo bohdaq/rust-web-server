@@ -254,3 +254,58 @@ carried no host, so a site's view showed all sites' visitors and bots;
 | Hosting networks | **done**: `ci/gen_hosting.py` (DB-IP ASN Lite, CC BY 4.0) → `hosting.bin` in geo.bin's format, a provider code per range (19 named providers + `DC` = other hosting by ASN list or name words), 45 852 IPv4 + 7 195 IPv6 ranges, 63 KB; excluded: Cloudflare/Akamai/Fastly/Apple (WARP, Private Relay), Google 15169, M247, Datacamp, PacketHub, Zscaler, Cogent. `Kind::Hosting` (label `hosting`, name = provider), decided on the classify cache miss for `Kind::Browser` only (verified crawlers keep their class), `[traffic] hosting_networks` (default on). Acceptance on the 2026-11-08 log: every ISP visitor (Ukrtelecom, Proximus, Türk Telekom, BT, Bell) and VPN user (Datacamp, M247) stays a person; AWS, GCP, OVH, DO, Hetzner, Shadowserver and the scanners flip. CI `gen_hosting.py --check` |
 | Verified | unit tests (configured priority + restart, per-site visitors/agents/bots/referrers, hosting lookups and counting), a local rws on a copy of the live `traffic.json` with the live route hosts (configured first, bohdantsap.com selectable, pages/sessions filtered) |
 | Release | not yet (next: 18.35) |
+
+## Who's real, apps and the owner (2026-11-10, after 18.34.1)
+
+User, after a log review of hitop.rws8.tech, rws8.tech and bohdantsap.com
+("did someone except me use the HITOP web app?") showed the questions the
+page couldn't answer: real outside visitors were a handful among the
+owner's own traffic, scanners and Googlebot, and answering took grepping
+the raw log. Asked for all eight proposals, "keeping in mind we ship
+extensions and mac/ios apps".
+
+Decisions (mine, within the request; change them if you disagree):
+- **Apps are a fourth counted group**, and **the owner a fifth**, kept
+  apart from all others (`record::GROUPS` = 5). The file stays readable by
+  older rws: `hours` rows keep 8 numbers; apps/owner hours go in
+  `app_hours`, their visitors in `more_visitors`, new lists under new
+  names, `visits` last in each day (its members' keys `events`/`pages`
+  would otherwise be found before the day's lists of those names by the
+  any-depth extractor).
+- **App names only from configuration** (`[traffic] apps`, ≤ 64, interned):
+  unconfigured apps get a platform name, since a request can claim any
+  name and `Class.name` is `&'static str`. `okhttp` isn't an app (on the
+  bundled crawler list; scrapers use it).
+- **App events at `/_rws/e`**, separate from `/_rws/t`: no same-origin
+  rule (native apps send no `Origin`, extensions their own), no "must be a
+  person" rule, but the app must be configured and a client gets 500 a day.
+- **The owner**: a successful admin API call (`X-Rws-Admin` + 2xx, checked
+  only for JSON responses to `/api/` paths) marks a host-independent
+  fingerprint (`hash(secret, day, ip, ua)`) for the day and re-decides that
+  client's visitor on every host (open session dropped; threads' cached
+  decisions invalidated by `OWNER_GENERATION`); `owner_networks` and the
+  `rws_me` cookie are checked on a visitor's first classification. Cookie
+  key = HMAC-SHA256(admin token, "rws-traffic-owner")[..16], random per
+  process without a token. Not retroactive within the day. The key is not
+  in `/traffic` (MCP reads it), only `GET /traffic/owner`.
+- **No address kept** except, opt-in, scanners' (`probe_addresses`).
+- **Tiers**: `verified` (first script report of a person that day),
+  `page-only` (browser decided a bot without assets), `hosting`; *likely* =
+  people − verified, computed by the page.
+- **Visits**: closed sessions (and open ones in a snapshot) with ≤ 20
+  paths, audience, channel, referrer, campaign, events (≤ 10), verified,
+  the visit number that day; ≤ 300 per shard-day, 300 saved across days,
+  100 reported.
+
+| Part | Status |
+|---|---|
+| Groups (apps, owner), persistence | **done** (17d55d72): old files load (`files_saved_before_apps_still_load`), save/load round trip of hours, visitors, lists and visits |
+| Apps: detection, `/_rws/e`, users/versions/events, store channel | **done**: `traffic::apps`; replay of the 400 distinct User-Agents seen on the hitop hosts 2026-10-25…11-10 — only `NetworkingExtension/… iOS/27.2` (the owner's iPhone) became an app, no bot or scanner changed class |
+| Owner | **done**: admin call, networks, cookie (`/_rws/me`, `?off`), `GET /traffic/owner`; page link list |
+| Tiers, visits feed | **done** |
+| Probes, crawl, entries by channel, downloads, `req:` goals | **done** |
+| UI | **done** (f80589bc): Apps group, Visitors tab, tier line + owner panel, landing pages by source, downloads, crawlers, 404s crawlers hit, probes, probe sources; screenshots 1280 px and 390 px (dark) checked |
+| Verified | unit tests (+8), `ci/e2e/admin_ui.sh` (verified visitor, visit feed, app requests + event + unknown app 403, probe, owner link takes a browser out, Visitors tab, Apps/Bots views), fuzz `traffic_classify` 60 s with an app-event seed; cost A/B (same run): decided visitor 146 → 163 ns |
+| Found on the way | excluding all of `/_rws/` from counting stopped `/_rws/t.js` from showing a browser (a page whose only asset is the script) — caught by the e2e; only the endpoints are excluded now |
+| Not done | apps' events in PostgreSQL (`store`), a toggle to show the owner's visits inside the totals (only "N of your page views not counted"), returning visitors across days (cookieless, by decision) |
+| Release | not yet (next: 18.35); bohdan-prod needs `[traffic] apps`/`owner_networks` set by the owner |

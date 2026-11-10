@@ -492,6 +492,7 @@ impl core::clone::Clone for rust_web_server::test_client::sse::SseFrame
 impl core::clone::Clone for rust_web_server::traffic::Class
 impl core::clone::Clone for rust_web_server::traffic::Group
 impl core::clone::Clone for rust_web_server::traffic::Kind
+impl core::clone::Clone for rust_web_server::traffic::apps::App
 impl core::clone::Clone for rust_web_server::traffic::device::Device
 impl core::clone::Clone for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::clone::Clone for rust_web_server::url::path::Part
@@ -620,6 +621,7 @@ impl core::cmp::Eq for rust_web_server::test_client::sse::SseFrame
 impl core::cmp::Eq for rust_web_server::traffic::Class
 impl core::cmp::Eq for rust_web_server::traffic::Group
 impl core::cmp::Eq for rust_web_server::traffic::Kind
+impl core::cmp::Eq for rust_web_server::traffic::apps::App
 impl core::cmp::Eq for rust_web_server::traffic::device::Device
 impl core::cmp::Eq for rust_web_server::vite::ChunkFiles
 impl core::cmp::Eq for rust_web_server::websocket::Frame
@@ -875,6 +877,7 @@ impl core::cmp::PartialEq for rust_web_server::test_client::sse::SseFrame
 impl core::cmp::PartialEq for rust_web_server::traffic::Class
 impl core::cmp::PartialEq for rust_web_server::traffic::Group
 impl core::cmp::PartialEq for rust_web_server::traffic::Kind
+impl core::cmp::PartialEq for rust_web_server::traffic::apps::App
 impl core::cmp::PartialEq for rust_web_server::traffic::device::Device
 impl core::cmp::PartialEq for rust_web_server::vite::ChunkFiles
 impl core::cmp::PartialEq for rust_web_server::waf::Action
@@ -1426,6 +1429,7 @@ impl core::fmt::Debug for rust_web_server::test_client::sse::SseParser
 impl core::fmt::Debug for rust_web_server::traffic::Class
 impl core::fmt::Debug for rust_web_server::traffic::Group
 impl core::fmt::Debug for rust_web_server::traffic::Kind
+impl core::fmt::Debug for rust_web_server::traffic::apps::App
 impl core::fmt::Debug for rust_web_server::traffic::device::Device
 impl core::fmt::Debug for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::fmt::Debug for rust_web_server::url::path::Part
@@ -2008,6 +2012,7 @@ impl core::marker::Freeze for rust_web_server::thread_pool::ThreadPool
 impl core::marker::Freeze for rust_web_server::traffic::Class
 impl core::marker::Freeze for rust_web_server::traffic::Group
 impl core::marker::Freeze for rust_web_server::traffic::Kind
+impl core::marker::Freeze for rust_web_server::traffic::apps::App
 impl core::marker::Freeze for rust_web_server::traffic::device::Device
 impl core::marker::Freeze for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::marker::Freeze for rust_web_server::udp_proxy::UdpProxy
@@ -2540,6 +2545,7 @@ impl core::marker::Send for rust_web_server::tower::Body
 impl core::marker::Send for rust_web_server::traffic::Class
 impl core::marker::Send for rust_web_server::traffic::Group
 impl core::marker::Send for rust_web_server::traffic::Kind
+impl core::marker::Send for rust_web_server::traffic::apps::App
 impl core::marker::Send for rust_web_server::traffic::device::Device
 impl core::marker::Send for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::marker::Send for rust_web_server::udp_proxy::UdpProxy
@@ -2801,6 +2807,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::test_client::sse::Ss
 impl core::marker::StructuralPartialEq for rust_web_server::traffic::Class
 impl core::marker::StructuralPartialEq for rust_web_server::traffic::Group
 impl core::marker::StructuralPartialEq for rust_web_server::traffic::Kind
+impl core::marker::StructuralPartialEq for rust_web_server::traffic::apps::App
 impl core::marker::StructuralPartialEq for rust_web_server::traffic::device::Device
 impl core::marker::StructuralPartialEq for rust_web_server::vite::ChunkFiles
 impl core::marker::StructuralPartialEq for rust_web_server::waf::Action
@@ -3314,6 +3321,7 @@ impl core::marker::Sync for rust_web_server::tower::Body
 impl core::marker::Sync for rust_web_server::traffic::Class
 impl core::marker::Sync for rust_web_server::traffic::Group
 impl core::marker::Sync for rust_web_server::traffic::Kind
+impl core::marker::Sync for rust_web_server::traffic::apps::App
 impl core::marker::Sync for rust_web_server::traffic::device::Device
 impl core::marker::Sync for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::marker::Sync for rust_web_server::udp_proxy::UdpProxy
@@ -3847,6 +3855,7 @@ impl core::marker::Unpin for rust_web_server::tower::Body
 impl core::marker::Unpin for rust_web_server::traffic::Class
 impl core::marker::Unpin for rust_web_server::traffic::Group
 impl core::marker::Unpin for rust_web_server::traffic::Kind
+impl core::marker::Unpin for rust_web_server::traffic::apps::App
 impl core::marker::Unpin for rust_web_server::traffic::device::Device
 impl core::marker::Unpin for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::marker::Unpin for rust_web_server::udp_proxy::UdpProxy
@@ -4381,6 +4390,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::tower::Body
 impl core::marker::UnsafeUnpin for rust_web_server::traffic::Class
 impl core::marker::UnsafeUnpin for rust_web_server::traffic::Group
 impl core::marker::UnsafeUnpin for rust_web_server::traffic::Kind
+impl core::marker::UnsafeUnpin for rust_web_server::traffic::apps::App
 impl core::marker::UnsafeUnpin for rust_web_server::traffic::device::Device
 impl core::marker::UnsafeUnpin for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::marker::UnsafeUnpin for rust_web_server::udp_proxy::UdpProxy
@@ -4872,6 +4882,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::tower::Body
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::traffic::Class
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::traffic::Group
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::traffic::Kind
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::traffic::apps::App
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::traffic::device::Device
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::udp_proxy::UdpProxy
@@ -5356,6 +5367,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::tower::Body
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::traffic::Class
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::traffic::Group
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::traffic::Kind
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::traffic::apps::App
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::traffic::device::Device
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::traffic::script::TrafficScriptLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::udp_proxy::UdpProxy
@@ -7550,20 +7562,28 @@ pub const rust_web_server::symbol::SYMBOL: rust_web_server::symbol::Symbol
 pub const rust_web_server::test_client::snapshot::UPDATE_VARIABLE: &str
 pub const rust_web_server::test_client::sse::MAX_EVENT_BYTES: usize
 pub const rust_web_server::test_client::websocket::DEFAULT_TIMEOUT: core::time::Duration
+pub const rust_web_server::traffic::apps::MAX_APPS: usize
 pub const rust_web_server::traffic::config::MAX_GOALS: usize
+pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_APPS: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_ENABLED: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_EXCLUDE: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_GEO_DB: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_GOALS: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS: &str
+pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_OWNER_NETWORKS: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_PERSIST: &str
+pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_PROBE_ADDRESSES: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_RETENTION_DAYS: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_SCRIPT: &str
+pub const rust_web_server::traffic::owner::COOKIE: &str
+pub const rust_web_server::traffic::owner::PATH: &str
 pub const rust_web_server::traffic::record::BEHAVIOUR: [&str; 7]
 pub const rust_web_server::traffic::record::DIMS: [&str; 8]
 pub const rust_web_server::traffic::record::DIM_SAVED: usize
 pub const rust_web_server::traffic::record::DIM_TOP: usize
+pub const rust_web_server::traffic::record::EXTRA: [&str; 11]
+pub const rust_web_server::traffic::record::GROUPS: usize
 pub const rust_web_server::traffic::record::LIVE_WINDOW: u64
 pub const rust_web_server::traffic::record::MAX_CACHE: usize
 pub const rust_web_server::traffic::record::MAX_ENGAGED_SECS: u64
@@ -7573,10 +7593,13 @@ pub const rust_web_server::traffic::record::MAX_PENDING: usize
 pub const rust_web_server::traffic::record::MAX_RECENT: usize
 pub const rust_web_server::traffic::record::MAX_REPORTS: u32
 pub const rust_web_server::traffic::record::MAX_SLOTS: usize
+pub const rust_web_server::traffic::record::MAX_VISITS: usize
 pub const rust_web_server::traffic::record::SESSION_GAP: u64
 pub const rust_web_server::traffic::record::TOP: usize
 pub const rust_web_server::traffic::record::TOP_SAVED: usize
 pub const rust_web_server::traffic::record::UNDECIDED: core::time::Duration
+pub const rust_web_server::traffic::record::VISIT_PAGES: usize
+pub const rust_web_server::traffic::script::APP_EVENTS_PATH: &str
 pub const rust_web_server::traffic::script::BEACON_PATH: &str
 pub const rust_web_server::traffic::script::MAX_BEACON: usize
 pub const rust_web_server::traffic::script::SCRIPT: &str
@@ -7910,6 +7933,7 @@ pub fn rust_web_server::admin::ops::set_flag(&str, bool) -> alloc::string::Strin
 pub fn rust_web_server::admin::ops::set_maintenance(bool) -> alloc::string::String
 pub fn rust_web_server::admin::ops::traffic_json(u64, core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_live_json(core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
+pub fn rust_web_server::admin::ops::traffic_owner_json() -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_query_json(&dyn core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_range_json(&str, &str, core::option::Option<&str>) -> core::result::Result<alloc::string::String, (u16, alloc::string::String)>
 pub fn rust_web_server::admin::ops::unblock(&str) -> alloc::string::String
@@ -10920,14 +10944,24 @@ pub fn rust_web_server::traffic::Kind::group(self) -> rust_web_server::traffic::
 pub fn rust_web_server::traffic::Kind::hash<__H: core::hash::Hasher>(&self, &mut __H)
 pub fn rust_web_server::traffic::Kind::label(self) -> &'static str
 pub fn rust_web_server::traffic::Kind::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+pub fn rust_web_server::traffic::apps::App::clone(&self) -> Self
+pub fn rust_web_server::traffic::apps::App::eq(&self, &Self) -> bool
+pub fn rust_web_server::traffic::apps::App::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::traffic::apps::any_configured() -> bool
+pub fn rust_web_server::traffic::apps::configured(&str) -> core::option::Option<&'static str>
+pub fn rust_web_server::traffic::apps::detect(core::option::Option<&str>, core::option::Option<&str>) -> core::option::Option<rust_web_server::traffic::apps::App>
+pub fn rust_web_server::traffic::apps::set_apps(&[alloc::string::String])
 pub fn rust_web_server::traffic::classify(core::net::ip_addr::IpAddr, core::option::Option<&str>, &str) -> rust_web_server::traffic::Class
+pub fn rust_web_server::traffic::config::apps() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::database_url() -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::traffic::config::enabled_setting() -> core::option::Option<bool>
 pub fn rust_web_server::traffic::config::exclude() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::geo_db() -> core::option::Option<std::path::PathBuf>
 pub fn rust_web_server::traffic::config::goals() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::hosting_networks() -> bool
+pub fn rust_web_server::traffic::config::owner_networks() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::persist_path() -> core::option::Option<std::path::PathBuf>
+pub fn rust_web_server::traffic::config::probe_addresses() -> bool
 pub fn rust_web_server::traffic::config::retention_days() -> u64
 pub fn rust_web_server::traffic::config::script() -> bool
 pub fn rust_web_server::traffic::configure_sites(&str)
@@ -10942,6 +10976,12 @@ pub fn rust_web_server::traffic::geo::country(core::net::ip_addr::IpAddr) -> cor
 pub fn rust_web_server::traffic::geo::table() -> core::option::Option<&'static Table>
 pub fn rust_web_server::traffic::hosting::provider(core::net::ip_addr::IpAddr) -> core::option::Option<&'static str>
 pub fn rust_web_server::traffic::hosting::table() -> core::option::Option<&'static super::geo::Table>
+pub fn rust_web_server::traffic::owner::has_cookie(&[rust_web_server::header::Header]) -> bool
+pub fn rust_web_server::traffic::owner::in_networks(core::net::ip_addr::IpAddr) -> bool
+pub fn rust_web_server::traffic::owner::is_admin_call(&[rust_web_server::header::Header], i16) -> bool
+pub fn rust_web_server::traffic::owner::key() -> &'static str
+pub fn rust_web_server::traffic::owner::key_matches(&str) -> bool
+pub fn rust_web_server::traffic::owner::set_networks(&[alloc::string::String])
 pub fn rust_web_server::traffic::record::enable()
 pub fn rust_web_server::traffic::record::enabled() -> bool
 pub fn rust_web_server::traffic::record::now() -> u64
@@ -11315,10 +11355,12 @@ pub mod rust_web_server::thread_pool
 pub mod rust_web_server::timeout
 pub mod rust_web_server::tower
 pub mod rust_web_server::traffic
+pub mod rust_web_server::traffic::apps
 pub mod rust_web_server::traffic::config
 pub mod rust_web_server::traffic::device
 pub mod rust_web_server::traffic::geo
 pub mod rust_web_server::traffic::hosting
+pub mod rust_web_server::traffic::owner
 pub mod rust_web_server::traffic::record
 pub mod rust_web_server::traffic::script
 pub mod rust_web_server::traffic::summary
@@ -12933,13 +12975,16 @@ pub rust_web_server::traffic::Class::name: &'static str
 pub rust_web_server::traffic::Class::operator: &'static str
 pub rust_web_server::traffic::Class::verified: bool
 pub rust_web_server::traffic::Group::Ai
+pub rust_web_server::traffic::Group::App
 pub rust_web_server::traffic::Group::Bot
 pub rust_web_server::traffic::Group::Internal
+pub rust_web_server::traffic::Group::Owner
 pub rust_web_server::traffic::Group::Person
 pub rust_web_server::traffic::Kind::AiAgent
 pub rust_web_server::traffic::Kind::AiAssistant
 pub rust_web_server::traffic::Kind::AiSearch
 pub rust_web_server::traffic::Kind::AiTraining
+pub rust_web_server::traffic::Kind::App
 pub rust_web_server::traffic::Kind::Archiver
 pub rust_web_server::traffic::Kind::Browser
 pub rust_web_server::traffic::Kind::Feed
@@ -12947,12 +12992,16 @@ pub rust_web_server::traffic::Kind::Hosting
 pub rust_web_server::traffic::Kind::Local
 pub rust_web_server::traffic::Kind::Monitoring
 pub rust_web_server::traffic::Kind::NoUserAgent
+pub rust_web_server::traffic::Kind::Owner
 pub rust_web_server::traffic::Kind::Scanner
 pub rust_web_server::traffic::Kind::SearchEngine
 pub rust_web_server::traffic::Kind::Seo
 pub rust_web_server::traffic::Kind::SocialPreview
 pub rust_web_server::traffic::Kind::Spoofed
 pub rust_web_server::traffic::Kind::Tool
+pub rust_web_server::traffic::apps::App::name: &'static str
+pub rust_web_server::traffic::apps::App::platform: &'static str
+pub rust_web_server::traffic::apps::App::version: core::option::Option<alloc::string::String>
 pub rust_web_server::traffic::device::Device::browser: &'static str
 pub rust_web_server::traffic::device::Device::class: &'static str
 pub rust_web_server::traffic::device::Device::os: &'static str
@@ -13564,6 +13613,7 @@ pub struct rust_web_server::tower::TowerLayer<L>
 pub struct rust_web_server::tower::TowerService<A>
 pub struct rust_web_server::traffic::Class
 pub struct rust_web_server::traffic::TrafficScriptLayer
+pub struct rust_web_server::traffic::apps::App
 pub struct rust_web_server::traffic::device::Device
 pub struct rust_web_server::traffic::script::TrafficScriptLayer
 pub struct rust_web_server::udp_proxy::UdpProxy

@@ -180,6 +180,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `traffic::TrafficScriptLayer` | `traffic` | Serves the first-party traffic script (`/_rws/t.js`) and takes its reports (`/_rws/t`) when `[traffic] script` is on; passes every other request through (18.31.0) |
 | `traffic::geo::country` | `traffic` | The country of an address from the built-in DB-IP Lite table (`geo` feature) or `[traffic] geo_db` (18.31.0) |
 | `traffic::hosting::provider` | `traffic` | The cloud or server hosting provider of an address (`"AWS"`, `"other hosting"`) from the built-in DB-IP ASN Lite table (`geo` feature); browsers from one count as bots (18.35) |
+| `traffic::apps::detect` / `App` / `set_apps` / `configured` | `traffic` | A native app or browser extension from its `User-Agent` and `Origin`: a configured `[traffic] apps` name, or a platform name (Apple or Android networking, Electron, extension origins); counted as **Apps**, not bots (18.35) |
+| `traffic::owner` (`in_networks`, `has_cookie`, `key`, `is_admin_call`) | `traffic` | Whether a request is the site owner's: a successful admin API call, `[traffic] owner_networks`, or the `rws_me` cookie set by `/_rws/me?k=<key>`; the owner's visits are counted apart (18.35) |
 | `traffic::configure_sites` / `traffic::record::set_configured_hosts` | `traffic` | The sites the configuration's routes match, counted separately and listed first on the Traffic page (18.35) |
 | `RequestIdLayer` | `request_id` | Correlation-ID middleware — echoes or generates `X-Request-Id` (`generate_request_id()`, UUID-v4-shaped, not crypto-random). See [Request ID](/features/request-id/) |
 | `CsrfLayer` | `csrf` (`csrf`) | Double-submit cookie CSRF protection; 403 on mismatch. See [CSRF](/features/csrf/) |

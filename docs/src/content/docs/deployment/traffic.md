@@ -4,15 +4,20 @@ description: See who visits your sites (people, AI agents and bots) on the admin
 ---
 
 The admin UI's **Traffic** page (since 18.15.0) shows who visited your sites
-over the last day, week or 30 days, in three groups:
+over the last day, week or 30 days, in four groups:
 
 - **People**: browsers that load the page's styles, scripts or fonts, as a
   browser does for a person.
+- **Apps** (since 18.35): your native apps and browser extensions calling
+  the server. They never load a page, so they'd otherwise look like bots.
 - **AI agents**: AI crawlers, AI search and assistants fetching a page for
   someone (GPTBot, ClaudeBot, PerplexityBot, ChatGPT-User…).
 - **Bots**: search engines, SEO tools, monitors, link previews, scanners
   probing for `/.env` or `/wp-login.php`, libraries like `curl`, and anything
   that claims to be a well-known crawler from outside that crawler's network.
+
+Your own visits are counted apart, so the groups show everyone else (since
+18.35, [Your own visits](#your-own-visits)).
 
 rws counts this from the requests it already serves: no JavaScript on your
 pages, no cookies, nothing sent anywhere.
@@ -42,7 +47,7 @@ Since 18.32.0 the page is an overview with tabs:
 
 - **The bar at the top**: the period (*Today*, *7 days*, *30 days* or a
   *Custom* range of whole UTC days), **who** — *Humans* (the analytics
-  below), *AI agents*, *Bots* or *All* three side by side — the site when
+  below), *Apps*, *AI agents*, *Bots* or *All* side by side — the site when
   there is more than one (the sites your `[[route]]`s match first, then
   other `Host` names seen; picking one shows only that site's numbers,
   lists and visitors),
@@ -50,10 +55,21 @@ Since 18.32.0 the page is an overview with tabs:
   under each number), and how many people are online now.
 - **Overview**: visitors, page views, sessions, bounce rate and session
   length — click one to chart it (per hour for *Today*, else per day) —
-  then cards of top pages, sources, a **world map** of countries, devices,
-  and *Right now*.
+  then a line of how sure the count of people is — **Verified** (ran the
+  [script](#the-first-party-script-optional)), **Likely** (loaded the page's
+  assets), **Page only** and **Server networks** (browser `User-Agent`s
+  counted as bots: no asset loaded, or a cloud network) — and how many of
+  your own page views were left out, then cards of top pages, sources, a
+  **world map** of countries, devices, and *Right now*.
   A card's **All →** opens its tab.
-- **Pages**: top, entry and exit pages, and paths answered `404`.
+- **Visitors** (since 18.35): the last visits, newest first — country,
+  device, how they arrived (channel, referring site, campaign), the pages
+  in order, events, **Verified**, and *Visit 2 today* when someone came
+  back. Up to 300 are kept across days, with no address or `User-Agent`.
+- **Pages**: top, entry and exit pages, paths answered `404`, **landing
+  pages by source** (the first page of visits from outside, per channel)
+  and **downloads** (installers, packages, archives and `install.sh`
+  fetched in full, by who fetched them).
 - **Sources**: channels, referring sites and UTM campaigns.
 - **Audience**: countries, browsers, operating systems and devices, with
   their share.
@@ -63,9 +79,13 @@ Since 18.32.0 the page is an overview with tabs:
   fetched with the change from the period before, a chart, the agents
   (with **Verified** when the request came from the network its operator
   publishes), the pages they read and what for (training, search,
-  assistants). **Bots**: the same numbers, bots by kind and by name, and
-  the paths answered `404`. **All**: humans, AI agents and bots in one
-  chart and their share of requests.
+  assistants). **Apps**: app users by app and platform, versions, the
+  events apps sent and downloads. **Bots**: the same numbers, bots by kind
+  and by name, the paths answered `404`, **crawlers** (named crawlers'
+  pages and 404s) with the **404s they hit**, **probes** (the paths
+  scanners asked for) and where they came from (country and network).
+  **All**: humans, apps, AI agents and bots in one chart and their share of
+  requests.
 
 **Click a row to filter** the page by it: by site always; by page, country,
 channel, campaign, browser, system or device with the
@@ -157,6 +177,99 @@ The release binaries include PostgreSQL support (the `model-postgres`
 feature), except the FIPS build: the database client's TLS brings crypto
 outside the validated module.
 
+## Your own visits
+
+Since 18.35 rws leaves the owner's visits out of everyone's numbers (and
+shows how many it left out). A client is yours when:
+
+- it made a **successful admin API call** — the admin UI does, signed in,
+  whether you opened it on the admin listener or through a route that
+  proxies it. From then on that day, its address and `User-Agent` are
+  yours on every site;
+- its address is in **`owner_networks`**:
+
+  ```toml
+  [traffic]
+  owner_networks = ["203.0.113.7", "198.51.100.0/24"]
+  ```
+
+- its browser has the **owner cookie**. *Exclude a browser…* on the
+  Overview lists a link per site, `https://<site>/_rws/me?k=<key>`: open it
+  in each browser and on each phone you use. It sets `rws_me` on that site
+  for a year (`HttpOnly`); `/_rws/me?off` removes it. The key is derived
+  from the admin token, so it changes when the token does (with OIDC
+  sign-in only, it's made at start and a restart ends it). Keep the links
+  private: anyone opening one is counted as you.
+
+Recognition starts when it happens: what you did earlier that day stays
+where it was counted. `GET /admin/api/v1/traffic/owner` returns the link's
+path and the sites.
+
+## Apps and extensions
+
+Native apps and browser extensions call your server without loading a
+page, so the browser test would count them as bots. Since 18.35 they are
+**Apps**, from:
+
+- **`apps`**: `name=pattern` pairs. A pattern with `://` matches the start
+  of the request's `Origin` (an extension); any other pattern is looked for
+  in the `User-Agent` (case doesn't matter), and after a pattern ending in
+  `/` the version is read:
+
+  ```toml
+  [traffic]
+  apps = [
+    "HITOP=HITOP/",                                   # HITOP/2.3.1 CFNetwork/… Darwin/…
+    "HITOP=chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+    "HITOP=safari-web-extension://",
+  ]
+  ```
+
+- **the platform**, for anything unnamed: an extension `Origin`
+  (`chrome-extension://`, `moz-extension://`, `safari-web-extension://`),
+  Apple's networking stack (`CFNetwork/… Darwin/…`, `NetworkingExtension/…`),
+  Android's (`Dalvik/`) and Electron. These are counted as *iOS/macOS app*,
+  *Chrome extension* and so on: a request can claim any name, so only
+  configured names are kept as names. `okhttp` isn't taken as an app —
+  scrapers use it too; name your Android app's `User-Agent` in `apps`.
+
+An app user is a client counted once a day, like a visitor. Apps can also
+report **events** — no script, any origin, nothing stored on the device:
+
+```sh
+curl -X POST https://example.com/_rws/e \
+  -d '{"app":"HITOP","v":"2.3.1","p":"ios","n":"request_sent"}'
+```
+
+`app` must be one of `apps`' names (else `403`); `n` is the event (≤ 64
+characters), `v` the version (≤ 32), `p` the platform (`ios`, `ipados`,
+`macos`, `visionos`, `watchos`, `android`, `windows`, `linux`, `chrome`,
+`edge`, `firefox`, `safari`, `web`; else `other`). `204` when taken, `400`
+when malformed; at most 500 events per client a day count. It answers
+`OPTIONS` and sends `Access-Control-Allow-Origin: *`, so an extension or a
+web view can post too. `/_rws/e` and `/_rws/me` are answered whenever
+traffic is counted, `script` or not.
+
+Referrals from app stores (App Store, Google Play, Chrome Web Store,
+Firefox and Edge add-ons, Microsoft Store, Snapcraft, Flathub, F-Droid) are
+their own channel, **App stores**. A goal can be any request a person
+makes, not only a page: `goals = ["req:/api/proxy"]` counts the visits
+that used a web app, not just opened it.
+
+## Downloads, probes and crawlers
+
+- **Downloads**: `GET`s answered `200` for `.dmg`, `.pkg`, `.zip`,
+  `.tar.gz`, `.tgz`, `.tar.xz`, `.exe`, `.msi`, `.msix`, `.deb`, `.rpm`,
+  `.AppImage`, `.apk`, `.aab`, `.ipa`, `.vsix`, `.xpi`, `.crx`, `.flatpak`,
+  `.snap`, `.7z`, `install.sh` and `install.ps1`, per file and by who
+  fetched them (people, apps, bots and tools, AI, you).
+- **Probes**: the paths scanners asked for, and where from — country and
+  network (the hosting provider, or `-`). `probe_addresses = true` adds
+  each scanner's address, to block it; no other address is ever kept.
+- **Crawlers**: each named crawler's (Googlebot, Bingbot, GPTBot…) page
+  fetches and `404`s, and the paths that answered them `404` — the ones
+  to fix or redirect.
+
 ## Sessions
 
 A person's page views 30 minutes or less apart are one **session**; a
@@ -228,7 +341,7 @@ and the `User-Agent`. The secret and the hashes are never saved: no addresses
 or `User-Agent`s are kept, in memory or in the file. A restart within a day
 can count a returning visitor once more.
 
-Counting costs about 160 ns per request; the country, device and hosting
+Counting costs about 170 ns per request; the country, device and hosting
 network are worked out once per visitor per day. Memory and the file are
 bounded: every site a `[[route]]` matches by `host` (up to 238) plus 16 other
 `Host` names (the rest count as `other`), and 200 entries per list per day
@@ -252,6 +365,15 @@ bounces per day, and the period before's). The
 the live view: `visitors` (people in the last 5 minutes), `views_5m`, a
 `series` of page views per minute for 30 minutes, the `pages` and
 `countries` of the people active now.
+
+Since 18.35 the answer also has `totals.apps` and `totals.owner` (and in
+`series`), `tiers` (`verified`, `page_only`, `hosting` visitors), `apps`
+(`users`, `versions`, `events`: `app\tplatform`, `app\tversion`,
+`app\tevent`), `probes` (`paths`, `sources`), `crawl` (`name`, `pages`,
+`not_found`), `crawl_404`, `entries` (`host/path\tchannel`), `downloads`
+(`host/path\tgroup`), `owner_pages` and `visits` (the last 100: `start`,
+`end`, `host`, `views`, `pages`, `country`, `browser`, `os`, `device`,
+`channel`, `referrer`, `campaign`, `verified`, `number`, `events`).
 
 MCP tool `traffic_summary` `{"hours": 24}` answers the same, so an AI client
 connected to the server can tell you who has been visiting; `{"live": true}`

@@ -533,6 +533,13 @@ pub mod fuzz_api {
         // A script report (18.31): parsed only once counting is on.
         crate::traffic::enable();
         crate::traffic::record::beacon(ip, "fuzz.example", Some(ua), path, 0);
+        // Apps (18.35): the User-Agent with the second line as an Origin,
+        // and the second line as an app's event (`{"app":"Fuzz",…}` is taken).
+        let _ = crate::traffic::apps::detect(Some(ua), Some(path));
+        if !crate::traffic::apps::any_configured() {
+            crate::traffic::apps::set_apps(&["Fuzz=fuzz/".to_string()]);
+        }
+        let _ = crate::traffic::record::app_event(ip, "fuzz.example", Some(ua), path, 0);
     }
 
     /// A country table as `[traffic] geo_db` loads it (18.31): inflated and
