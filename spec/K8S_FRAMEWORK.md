@@ -1,4 +1,4 @@
-# Kubernetes framework (18.36.0)
+# Kubernetes framework (18.35.0)
 
 rws as a framework for apps on Kubernetes (Spring Cloud Kubernetes,
 Quarkus) and for operators (kubebuilder, controller-runtime). Asked for

@@ -2,7 +2,7 @@
 //! serves traffic, only the holder writes status and Services. The holder
 //! renews every [`RENEW`]; another replica takes over once a renewal is older
 //! than the lease's duration. Updates carry the Lease's `resourceVersion`,
-//! so two replicas can't both win. Since 18.36.0 the work is done by
+//! so two replicas can't both win. Since 18.35.0 the work is done by
 //! `rws_k8s`'s `LeaderElector`, shared with operators.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,7 +45,7 @@ pub fn decide(lease: Option<&Lease>, identity: &str, now: k8s_openapi::jiff::Tim
 }
 
 /// Hold or follow the Lease forever (through `rws_k8s`'s `LeaderElector`,
-/// 18.36.0); `leader` says which, `gained` fires when this replica becomes
+/// 18.35.0); `leader` says which, `gained` fires when this replica becomes
 /// the leader (so it can reconcile at once).
 pub async fn run(client: Client, settings: LeaseSettings, leader: Arc<AtomicBool>, gained: Arc<Notify>) {
     let elector = rws_k8s::k8s::leader::LeaderElector::new(client, &settings.namespace, &settings.name).identity(&settings.identity).timing(DURATION, RENEW);

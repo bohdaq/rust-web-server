@@ -15,7 +15,7 @@ description: Deploy rust-web-server on Kubernetes with health probes, metrics sc
 
 ### Health checks
 
-Register what "alive", "ready" and "started" mean for your app with the `health` module (18.36.0):
+Register what "alive", "ready" and "started" mean for your app with the `health` module (18.35.0):
 
 ```rust
 use rust_web_server::health;
@@ -44,14 +44,14 @@ When Kubernetes sends `SIGTERM`, the server:
 1. Clears `SERVER_READY` — `/readyz` begins returning `503`, Kubernetes stops sending new traffic.
 2. Keeps accepting for `shutdown_delay_secs` (default 5, since 18.27.0): endpoint removal reaches kube-proxy and ingress controllers a moment after the pod is told to stop, and until then they still send it requests. Before 18.27 rws stopped accepting at once and those got a `502`/`503` from the load balancer.
 3. Stops accepting new TCP connections.
-4. Waits for the requests whose handlers are still running, at most `shutdown_timeout_secs` (default 25, since 18.36.0; `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`) — the thread pool's drain on `http1`. Before 18.36 the async servers returned at once and a handler still running was cut off when the process exited. Idle keep-alive connections don't hold it up.
+4. Waits for the requests whose handlers are still running, at most `shutdown_timeout_secs` (default 25, since 18.35.0; `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`) — the thread pool's drain on `http1`. Before 18.35 the async servers returned at once and a handler still running was cut off when the process exited. Idle keep-alive connections don't hold it up.
 5. Exits cleanly.
 
 Ctrl+C (SIGINT) skips the delay and the wait. Set `terminationGracePeriodSeconds` to at least the delay plus the timeout (`30` with the defaults) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
 ## Generate the manifests
 
-`rws gen deploy --image <image>` writes `deploy/k8s/` for the app in the current project (18.36.0): a Deployment with the startup, readiness and liveness probes above, `POD_NAME`/`POD_NAMESPACE` from the downward API, a 35 s grace period for the shutdown, a non-root read-only container; a Service; a PodDisruptionBudget; a HorizontalPodAutoscaler; a ServiceAccount; and a `kustomization.yaml`:
+`rws gen deploy --image <image>` writes `deploy/k8s/` for the app in the current project (18.35.0): a Deployment with the startup, readiness and liveness probes above, `POD_NAME`/`POD_NAMESPACE` from the downward API, a 35 s grace period for the shutdown, a non-root read-only container; a Service; a PodDisruptionBudget; a HorizontalPodAutoscaler; a ServiceAccount; and a `kustomization.yaml`:
 
 ```sh
 rws gen deploy --image ghcr.io/acme/notes:1.4.0 [--port 7878] [--replicas 2] [--max-replicas 10] [--out deploy/k8s]

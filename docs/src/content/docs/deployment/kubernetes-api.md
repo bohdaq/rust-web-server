@@ -3,10 +3,10 @@ title: Using the Kubernetes API
 description: ConfigMaps and Secrets kept current by a watch, k8s:// secret references, service discovery from EndpointSlices, and leader election — the k8s feature.
 ---
 
-The `k8s` feature (18.36.0) gives an app running in Kubernetes the API itself: configuration that changes without a restart, secrets read where they live, the pods behind a Service, and one replica at a time for singleton work. It builds on [kube-rs](https://kube.rs), which `rust_web_server::k8s` re-exports (`kube`, `k8s_openapi`, `schemars`).
+The `k8s` feature (18.35.0) gives an app running in Kubernetes the API itself: configuration that changes without a restart, secrets read where they live, the pods behind a Service, and one replica at a time for singleton work. It builds on [kube-rs](https://kube.rs), which `rust_web_server::k8s` re-exports (`kube`, `k8s_openapi`, `schemars`).
 
 ```toml
-rust-web-server = { version = "18.36", features = ["k8s"] }
+rust-web-server = { version = "18.35", features = ["k8s"] }
 ```
 
 ## A client

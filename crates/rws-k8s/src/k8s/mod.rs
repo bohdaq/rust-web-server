@@ -1,5 +1,5 @@
 //! Kubernetes integration and an operator framework (`k8s` feature,
-//! 18.36.0), on [kube-rs](https://kube.rs):
+//! 18.35.0), on [kube-rs](https://kube.rs):
 //!
 //! | Module | What |
 //! |---|---|

@@ -3409,7 +3409,7 @@ dependencies = [
 
 [[package]]
 name = "rust-web-server"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -3602,7 +3602,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rws-acme"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "aws-lc-rs",
  "hmac 0.12.1",
@@ -3618,7 +3618,7 @@ dependencies = [
 
 [[package]]
 name = "rws-base"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "file-ext",
  "rcgen",
@@ -3628,7 +3628,7 @@ dependencies = [
 
 [[package]]
 name = "rws-gateway-api"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -3651,7 +3651,7 @@ dependencies = [
 
 [[package]]
 name = "rws-http"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "brotli",
  "file-ext",
@@ -3665,7 +3665,7 @@ dependencies = [
 
 [[package]]
 name = "rws-k8s"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "futures-util",
  "json-patch",
@@ -3693,7 +3693,7 @@ dependencies = [
 
 [[package]]
 name = "rws-proxy"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -3717,7 +3717,7 @@ dependencies = [
 
 [[package]]
 name = "rws-server"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -3756,7 +3756,7 @@ dependencies = [
 
 [[package]]
 name = "rws-storage"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "aws-lc-rs",
  "hmac 0.12.1",
@@ -3767,7 +3767,7 @@ dependencies = [
 
 [[package]]
 name = "rws-tower"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "bytes",
  "http",
@@ -3784,7 +3784,7 @@ dependencies = [
 
 [[package]]
 name = "rws-wasm-plugin"
-version = "18.34.1"
+version = "18.35.0"
 dependencies = [
  "rws-server",
  "wasmtime",

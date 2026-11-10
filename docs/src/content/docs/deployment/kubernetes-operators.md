@@ -9,7 +9,7 @@ An operator watches custom resources and makes the cluster match them. To start 
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/operator
 ```
 
- The `k8s` feature (18.36.0) has the parts on top of [kube-rs](https://kube.rs)'s controller runtime: controllers with finalizers and status, an operator that runs them under leader election with metrics and a readiness check, admission and conversion webhooks with their certificate, CRD and RBAC manifests generated from the code, and tests against a real API server.
+ The `k8s` feature (18.35.0) has the parts on top of [kube-rs](https://kube.rs)'s controller runtime: controllers with finalizers and status, an operator that runs them under leader election with metrics and a readiness check, admission and conversion webhooks with their certificate, CRD and RBAC manifests generated from the code, and tests against a real API server.
 
 ## A custom resource
 

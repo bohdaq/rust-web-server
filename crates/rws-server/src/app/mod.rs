@@ -188,7 +188,7 @@ impl Application for App {
         );
 
         // Probes with registered checks, `?verbose`, `/livez`, `/startupz`
-        // (18.36.0): the `health` registry answers. Without checks
+        // (18.35.0): the `health` registry answers. Without checks
         // `/healthz` and `/readyz` keep their controllers' answers.
         if let Some((probe, verbose)) = App::probe_request(request) {
             return Ok(crate::health::respond(probe, verbose));

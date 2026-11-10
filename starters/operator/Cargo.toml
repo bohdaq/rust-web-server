@@ -11,7 +11,7 @@ name = "operator"
 path = "src/main.rs"
 
 [dependencies]
-rust-web-server = { version = "18.36", features = ["k8s", "macros"] }
+rust-web-server = { version = "18.35", features = ["k8s", "macros"] }
 # The derives (`CustomResource`, `JsonSchema`) need these crates by name;
 # the same versions rust-web-server uses.
 kube = { version = "4.2", default-features = false, features = ["derive"] }

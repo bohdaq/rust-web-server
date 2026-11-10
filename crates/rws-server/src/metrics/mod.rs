@@ -65,7 +65,7 @@ pub static ERRORS_TOTAL: AtomicU64 = AtomicU64::new(0);
 /// Number of currently open TCP/QUIC connections.
 pub static ACTIVE_CONNECTIONS: AtomicI64 = AtomicI64::new(0);
 
-/// Requests whose handler is running (18.36.0): what a graceful shutdown
+/// Requests whose handler is running (18.35.0): what a graceful shutdown
 /// waits for (`server::drain_requests`).
 pub static REQUESTS_IN_FLIGHT: AtomicI64 = AtomicI64::new(0);
 
@@ -299,7 +299,7 @@ pub mod section {
     pub const LLM: u16 = 80;
     pub const TLS: u16 = 90;
     pub const CIRCUIT_BREAKER: u16 = 100;
- /// Kubernetes controllers (`k8s::controller`, 18.36.0).
+ /// Kubernetes controllers (`k8s::controller`, 18.35.0).
  pub const CONTROLLERS: u16 = 110;
 }
 

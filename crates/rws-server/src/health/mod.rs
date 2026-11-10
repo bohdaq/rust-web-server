@@ -1,4 +1,4 @@
-//! Health checks for Kubernetes probes (18.36.0): register what "alive",
+//! Health checks for Kubernetes probes (18.35.0): register what "alive",
 //! "ready" and "started" mean for your app, and `/livez`, `/readyz` and
 //! `/startupz` run them.
 //!

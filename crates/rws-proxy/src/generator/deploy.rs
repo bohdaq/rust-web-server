@@ -1,4 +1,4 @@
-//! `rws gen deploy` (18.36.0): Kubernetes manifests for the app in
+//! `rws gen deploy` (18.35.0): Kubernetes manifests for the app in
 //! `deploy/k8s/` — a Deployment wired to rws's probes and graceful
 //! shutdown, a Service, a PodDisruptionBudget, a HorizontalPodAutoscaler
 //! and a ServiceAccount, with a `kustomization.yaml` listing them. Plain

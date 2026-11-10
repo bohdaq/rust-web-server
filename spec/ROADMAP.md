@@ -336,7 +336,7 @@ What a Rails/Django-class framework has beyond 18.31's building blocks (asked fo
 
 **Done when:** both have docs, tests on SQLite/PostgreSQL/MySQL, and a starter uses them.
 
-## 18.36.0 — Kubernetes framework
+## 18.35.0 — Kubernetes framework
 
 Plan, decisions and status: [K8S_FRAMEWORK.md](K8S_FRAMEWORK.md) (2026-11-10).
 

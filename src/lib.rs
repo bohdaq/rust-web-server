@@ -253,7 +253,7 @@ pub use rws_server::openapi;
 pub use rws_tower::tower;
 #[cfg(feature = "gateway-api")]
 pub use rws_gateway_api::gateway_api;
-/// Kubernetes integration and operator framework (`k8s` feature, 18.36.0).
+/// Kubernetes integration and operator framework (`k8s` feature, 18.35.0).
 #[cfg(feature = "k8s")]
 pub use rws_k8s::k8s;
 #[cfg(feature = "webhook")]

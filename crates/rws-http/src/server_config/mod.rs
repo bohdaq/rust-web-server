@@ -157,7 +157,7 @@ pub struct ServerConfig {
     /// answers `503` at once but connections are still accepted this long
     /// before draining, so a load balancer takes the pod out first. Default 5.
     pub shutdown_delay_secs: u64,
-    /// `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS` (18.36.0): after the delay and
+    /// `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS` (18.35.0): after the delay and
     /// the listeners closing, how long to wait for requests still being
     /// handled before exiting. Default 25 (Kubernetes' 30 s grace period
     /// minus the delay).

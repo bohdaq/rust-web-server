@@ -1197,14 +1197,14 @@ async fn sigterm() {
 }
 
 /// `/readyz` answers `200` (with its checks passing) from here on: the
-/// accept loops call it as they start (18.36.0). Before, only the `rws`
+/// accept loops call it as they start (18.35.0). Before, only the `rws`
 /// binary set it, so a library app's `/readyz` answered `503` for good.
 fn mark_serving() {
     crate::metrics::SERVER_READY.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Wait until no request is being handled (`metrics::REQUESTS_IN_FLIGHT`),
-/// at most `shutdown_timeout_secs` (18.36.0). The accept loops call it
+/// at most `shutdown_timeout_secs` (18.35.0). The accept loops call it
 /// after they stop accepting, so handlers that started finish before the
 /// process exits. Returns how many were still running at the deadline.
 #[cfg(feature = "http2")]

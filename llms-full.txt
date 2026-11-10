@@ -5,7 +5,7 @@
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.34.1
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.35.0
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
@@ -1749,7 +1749,7 @@ order.
 | `RWS_CONFIG_CLIENT_IP` | `forwarded` | `forwarded` / `peer` | Which address is the client: behind a `trusted_proxies` peer, the first untrusted address from the right of `X-Forwarded-For` (or `Forwarded: for=`); `peer` keeps the TCP peer. Rate limits, IP filters, the blocklist, WAF, `ip_hash` and logs use it (since 18.27.0). See [The client address](/proxy/reverse-proxy/#the-client-address). |
 | `RWS_CONFIG_METRICS_ALLOW` | loopback + private ranges | list of addresses / CIDR | Clients `GET /metrics` answers (the client as [`client_ip`](/proxy/reverse-proxy/#the-client-address) sees it); others get `404` (since 18.27.0). `*` everyone, `none` no one. |
 | `RWS_CONFIG_SHUTDOWN_DELAY_SECS` | `5` | seconds | On SIGTERM, `/readyz` answers `503` at once but rws keeps accepting this long before it drains, so a load balancer takes it out of rotation first; `0` drains at once (since 18.27.0). See [Graceful shutdown](/deployment/kubernetes/#graceful-shutdown). |
-| `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS` | `25` | seconds | After the delay and the listeners closing, how long rws waits for requests whose handlers are still running before it exits (since 18.36.0). See [Graceful shutdown](/deployment/kubernetes/#graceful-shutdown). |
+| `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS` | `25` | seconds | After the delay and the listeners closing, how long rws waits for requests whose handlers are still running before it exits (since 18.35.0). See [Graceful shutdown](/deployment/kubernetes/#graceful-shutdown). |
 | `RWS_CONFIG_FORWARDED_HEADER` | `add` | string | Proxied requests carry RFC 7239 `Forwarded` beside `X-Forwarded-*` (since 18.20.0); `off` leaves it out and passes the client's through. |
 | `RWS_CONFIG_TLS_CLIENT_CRL_FILE` | (empty) | paths | Certificate revocation lists for client certificates (mTLS), PEM or DER, comma-separated; revoked certificates fail the handshake (since 18.20.0). See [mTLS](/features/mtls/#revoked-certificates-crls). |
 | `RWS_CONFIG_TLS_CLIENT_CRL_STRICT` | `false` | boolean | Refuse a CRL past its `nextUpdate` and certificates no CRL covers. |
@@ -22957,7 +22957,7 @@ Send `docker kill --signal=SIGHUP <container>` to reload TLS certificates, CORS 
 
 ### Health checks
 
-Register what "alive", "ready" and "started" mean for your app with the `health` module (18.36.0):
+Register what "alive", "ready" and "started" mean for your app with the `health` module (18.35.0):
 
 ```rust
 use rust_web_server::health;
@@ -22986,14 +22986,14 @@ When Kubernetes sends `SIGTERM`, the server:
 1. Clears `SERVER_READY` — `/readyz` begins returning `503`, Kubernetes stops sending new traffic.
 2. Keeps accepting for `shutdown_delay_secs` (default 5, since 18.27.0): endpoint removal reaches kube-proxy and ingress controllers a moment after the pod is told to stop, and until then they still send it requests. Before 18.27 rws stopped accepting at once and those got a `502`/`503` from the load balancer.
 3. Stops accepting new TCP connections.
-4. Waits for the requests whose handlers are still running, at most `shutdown_timeout_secs` (default 25, since 18.36.0; `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`) — the thread pool's drain on `http1`. Before 18.36 the async servers returned at once and a handler still running was cut off when the process exited. Idle keep-alive connections don't hold it up.
+4. Waits for the requests whose handlers are still running, at most `shutdown_timeout_secs` (default 25, since 18.35.0; `RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`) — the thread pool's drain on `http1`. Before 18.35 the async servers returned at once and a handler still running was cut off when the process exited. Idle keep-alive connections don't hold it up.
 5. Exits cleanly.
 
 Ctrl+C (SIGINT) skips the delay and the wait. Set `terminationGracePeriodSeconds` to at least the delay plus the timeout (`30` with the defaults) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
 ## Generate the manifests
 
-`rws gen deploy --image <image>` writes `deploy/k8s/` for the app in the current project (18.36.0): a Deployment with the startup, readiness and liveness probes above, `POD_NAME`/`POD_NAMESPACE` from the downward API, a 35 s grace period for the shutdown, a non-root read-only container; a Service; a PodDisruptionBudget; a HorizontalPodAutoscaler; a ServiceAccount; and a `kustomization.yaml`:
+`rws gen deploy --image <image>` writes `deploy/k8s/` for the app in the current project (18.35.0): a Deployment with the startup, readiness and liveness probes above, `POD_NAME`/`POD_NAMESPACE` from the downward API, a 35 s grace period for the shutdown, a non-root read-only container; a Service; a PodDisruptionBudget; a HorizontalPodAutoscaler; a ServiceAccount; and a `kustomization.yaml`:
 
 ```sh
 rws gen deploy --image ghcr.io/acme/notes:1.4.0 [--port 7878] [--replicas 2] [--max-replicas 10] [--out deploy/k8s]
@@ -23516,10 +23516,10 @@ What this doesn't measure: many routes or Gateways, configuration churn, connect
 
 <https://rws8.tech/docs/deployment/kubernetes-api/>
 
-The `k8s` feature (18.36.0) gives an app running in Kubernetes the API itself: configuration that changes without a restart, secrets read where they live, the pods behind a Service, and one replica at a time for singleton work. It builds on [kube-rs](https://kube.rs), which `rust_web_server::k8s` re-exports (`kube`, `k8s_openapi`, `schemars`).
+The `k8s` feature (18.35.0) gives an app running in Kubernetes the API itself: configuration that changes without a restart, secrets read where they live, the pods behind a Service, and one replica at a time for singleton work. It builds on [kube-rs](https://kube.rs), which `rust_web_server::k8s` re-exports (`kube`, `k8s_openapi`, `schemars`).
 
 ```toml
-rust-web-server = { version = "18.36", features = ["k8s"] }
+rust-web-server = { version = "18.35", features = ["k8s"] }
 ```
 
 ## A client
@@ -23623,7 +23623,7 @@ An operator watches custom resources and makes the cluster match them. To start 
 cargo generate --git https://github.com/bohdaq/rust-web-server starters/operator
 ```
 
- The `k8s` feature (18.36.0) has the parts on top of [kube-rs](https://kube.rs)'s controller runtime: controllers with finalizers and status, an operator that runs them under leader election with metrics and a readiness check, admission and conversion webhooks with their certificate, CRD and RBAC manifests generated from the code, and tests against a real API server.
+ The `k8s` feature (18.35.0) has the parts on top of [kube-rs](https://kube.rs)'s controller runtime: controllers with finalizers and status, an operator that runs them under leader election with metrics and a readiness check, admission and conversion webhooks with their certificate, CRD and RBAC manifests generated from the code, and tests against a real API server.
 
 ## A custom resource
 
@@ -25359,14 +25359,14 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `AsyncAppWithState` | `async_state` (`http2`) | Same with `async fn` handlers. Entry point `App::with_async_state(S)` |
 | `Middleware` | `middleware` | Layer trait: `handle(request, connection, next)`. `runs_inline` / `is_passthrough` (default `false`) declare a layer non-blocking or a no-op for a request. `layer_name()` (default: the type's name, 18.28.0) is how tools list it. See [Middleware](/building-apps/middleware/) |
 | `WithMiddleware` | `middleware` | Wraps any `Application` with a layer stack; `app.wrap(layer)`, first-pushed is outermost |
-| `k8s::client` / `k8s::config::ConfigWatch` / `k8s::config::resolve` | `k8s` (`k8s`) | A Kubernetes client (in-cluster or kubeconfig); a ConfigMap's or Secret's data kept current by a watch (`get`, `on_change`, `apply_to_env`); `k8s://ns/name#key` secrets (18.36.0). See [Using the Kubernetes API](/deployment/kubernetes-api/) |
-| `k8s::discovery::service_endpoints` / `k8s::leader::LeaderElector` | `k8s` (`k8s`) | A Service's ready endpoints as a `BackendPool`; leader election over a Lease (`handle`, `wait_until_leader`, `release`) (18.36.0) |
-| `k8s::controller::{Controller, Operator, Context}` | `k8s` (`k8s`) | Controllers (`reconcile`, `owns`, `finalizer`, `on_error`) run by an `Operator` (leader election, metrics, readiness); `Context::patch_status`, `apply_owned`, `event` (18.36.0). See [Operators](/deployment/kubernetes-operators/) |
-| `k8s::webhook::{Webhooks, WebhookCertificate}` | `k8s` (`k8s`) | Validating, mutating and conversion webhooks as an rws app; a CA + serving certificate, `install`, `patch_ca_bundle` (18.36.0) |
-| `k8s::manifests` (`Rbac`, `Rule`, `crd`, `webhook_configuration`, `to_yaml`, `print_on_request`) | `k8s` (`k8s`) | CRDs, RBAC and webhook configurations from the code (18.36.0) |
-| `k8s::testing::{TestCluster, TestNamespace, eventually}` | `k8s` (`k8s`) | Tests against a real API server from `RWS_TEST_KUBECONFIG`, a namespace per test (18.36.0) |
-| `generator::plan_deploy` / `DeploySpec` | `generator` | `rws gen deploy`: Kubernetes manifests for the app (18.36.0). See [Generate the manifests](/deployment/kubernetes/#generate-the-manifests) |
-| `health` (`Probe`, `Registry`, `Report`) | `health` | Liveness, readiness and startup checks for `/livez`, `/readyz`, `/startupz`: `readiness(name, f)`, `liveness`, `startup`, `register_async`, `database(name, pool)`, `report`, `set_timeout` (18.36.0). See [Health checks](/deployment/kubernetes/#health-checks) |
+| `k8s::client` / `k8s::config::ConfigWatch` / `k8s::config::resolve` | `k8s` (`k8s`) | A Kubernetes client (in-cluster or kubeconfig); a ConfigMap's or Secret's data kept current by a watch (`get`, `on_change`, `apply_to_env`); `k8s://ns/name#key` secrets (18.35.0). See [Using the Kubernetes API](/deployment/kubernetes-api/) |
+| `k8s::discovery::service_endpoints` / `k8s::leader::LeaderElector` | `k8s` (`k8s`) | A Service's ready endpoints as a `BackendPool`; leader election over a Lease (`handle`, `wait_until_leader`, `release`) (18.35.0) |
+| `k8s::controller::{Controller, Operator, Context}` | `k8s` (`k8s`) | Controllers (`reconcile`, `owns`, `finalizer`, `on_error`) run by an `Operator` (leader election, metrics, readiness); `Context::patch_status`, `apply_owned`, `event` (18.35.0). See [Operators](/deployment/kubernetes-operators/) |
+| `k8s::webhook::{Webhooks, WebhookCertificate}` | `k8s` (`k8s`) | Validating, mutating and conversion webhooks as an rws app; a CA + serving certificate, `install`, `patch_ca_bundle` (18.35.0) |
+| `k8s::manifests` (`Rbac`, `Rule`, `crd`, `webhook_configuration`, `to_yaml`, `print_on_request`) | `k8s` (`k8s`) | CRDs, RBAC and webhook configurations from the code (18.35.0) |
+| `k8s::testing::{TestCluster, TestNamespace, eventually}` | `k8s` (`k8s`) | Tests against a real API server from `RWS_TEST_KUBECONFIG`, a namespace per test (18.35.0) |
+| `generator::plan_deploy` / `DeploySpec` | `generator` | `rws gen deploy`: Kubernetes manifests for the app (18.35.0). See [Generate the manifests](/deployment/kubernetes/#generate-the-manifests) |
+| `health` (`Probe`, `Registry`, `Report`) | `health` | Liveness, readiness and startup checks for `/livez`, `/readyz`, `/startupz`: `readiness(name, f)`, `liveness`, `startup`, `register_async`, `database(name, pool)`, `report`, `set_timeout` (18.35.0). See [Health checks](/deployment/kubernetes/#health-checks) |
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
 | `Lifecycle` | `di` | `start`/`stop` for services registered with `Container::register_managed`; `Container::on_start`/`on_stop`/`start`/`stop`/`is_started` (18.35.0). See [Lifecycle hooks](/building-apps/dependency-injection/#lifecycle-hooks) |
 | `ErrorPages` | `error_pages` | Middleware: panics and app errors as a detailed page / problem details in `dev`/`test`, a bare `500` in `prod` (`from_env`, `detailed`) (18.35.0). See [Error pages](/building-apps/error-handling/#error-pages) |

@@ -110,7 +110,7 @@ jobs:
           echo "PostgreSQL: $(docker exec "$(docker ps -qf ancestor=postgres:16)" psql -U rws -d rws_test -Atc 'select version()')"
           echo "MySQL: $(docker exec "$(docker ps -qf ancestor=mysql:8.4)" mysql -uroot -prws -Nse 'select version()' 2>/dev/null)"
 
-  # The Kubernetes framework (crates/rws-k8s, 18.36.0) against a real API
+  # The Kubernetes framework (crates/rws-k8s, 18.35.0) against a real API
   # server: config watches, discovery, leader election, a controller with a
   # CRD and a finalizer, generated manifests (server-side dry run), and the
   # operator starter deployed into the cluster. Each test
