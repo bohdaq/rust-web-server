@@ -52,15 +52,20 @@ pub fn site(store: Store, accounts: &Accounts) -> WithMiddleware<AsyncAppWithSta
             .table("rws_users")
             .allow(move |request| CurrentUser::of(request).is_some_and(|u| admins.contains(&u.email)))
     });
-    // AuthFlows first (outermost): the admin's check reads who's signed in.
-    let site = WithMiddleware::new(app(store)).wrap(accounts.auth.clone());
+    // The first layer wrapped is the outermost: error pages around
+    // everything; FlashLayer outside the pages /auth and /admin draw
+    // themselves, so it clears the messages they show; AuthFlows outside
+    // the admin, whose check reads who's signed in.
+    let site = app(store).wrap(ErrorPages::from_env()).wrap(FlashLayer::new()).wrap(accounts.auth.clone());
     let site = match admin {
         Some(admin) => site.wrap(admin),
         None => site,
     };
-    let site = site.wrap(FlashLayer::new());
-    let site = if RwsEnv::current().is_dev() { site.wrap(Accounts::previews()) } else { site };
-    site.wrap(ErrorPages::from_env())
+    if RwsEnv::current().is_dev() {
+        site.wrap(Accounts::previews())
+    } else {
+        site
+    }
 }
 
 /// What the dev MCP endpoint (`/mcp`, with `RWS_ENV=dev` or `MCP_TOKEN`

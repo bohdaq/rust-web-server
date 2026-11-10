@@ -238,6 +238,13 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
         self.add(route.method, &route.pattern, move |request, params, connection, state| handler(request, params, connection, state))
     }
 
+    /// Wrap this application in a middleware layer (18.35.0), as
+    /// [`AppWithState::wrap`](crate::state::AppWithState::wrap): the first
+    /// layer wrapped is the outermost.
+    pub fn wrap<M: crate::middleware::Middleware + 'static>(self, layer: M) -> crate::middleware::WithMiddleware<AsyncAppWithState<S>> {
+        crate::middleware::WithMiddleware::new(self).wrap(layer)
+    }
+
     /// Register an async `GET` handler for `pattern`.
     pub fn get<F, Fut>(self, pattern: &str, handler: F) -> Self
     where

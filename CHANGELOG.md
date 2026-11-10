@@ -73,6 +73,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   feature): pages to list, search, show, create, edit and delete rows of
   registered tables, read from the live schema; denied unless `allow` says
   otherwise.
+- **`AsyncAppWithState::wrap`**, as `AppWithState::wrap`.
 - **`AuthFlows::on_signup`**, and `starters/fullstack` now has accounts
   (`/auth`, a guarded `/api/account`), a welcome email sent by a job,
   `FlashLayer`, `ErrorPages` and mail previews in dev.

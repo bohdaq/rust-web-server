@@ -18,8 +18,8 @@ let auth = AuthFlows::new(secret.as_bytes(), "https://notes.example", store, Mai
 
 let app = App::with_async_state(pool)
     .group("/api", |api| api.guard(signed_in).route(list_notes))  // 401 without a session
-    .wrap(auth)
-    .wrap(FlashLayer::new());
+    .wrap(FlashLayer::new())   // first = outermost: it clears the flash the /auth pages show
+    .wrap(auth);
 
 #[get("/notes")]
 async fn list_notes(user: CurrentUser, State(pool): State<DbPool>) -> Result<Json<Vec<Note>>, AppError> {
@@ -45,7 +45,15 @@ A request with `Content-Type: application/json` gets JSON (errors as problem det
 | `POST /auth/confirm/resend` `email` | `202` | redirect to login |
 | `GET /auth/login`, `/auth/signup`, `/auth/password/forgot`, `/auth/password/reset?token=` | — | the forms |
 
-`{user}` is `{"id", "email", "confirmed"}`. Sign-ups, logins and the email requests are rate limited per client IP: 10 a minute each by default.
+`{user}` is `{"id", "email", "confirmed"}`. Sign-ups, logins and the email requests are rate limited per client IP: 10 a minute each by default. The address is the one a trusted proxy forwarded ([`trusted_proxies`](/configuration/env-vars/): loopback and private ranges by default), so behind a load balancer on a private network each client has its own budget; a balancer with a public address must be added to the list, or every request counts as its own.
+
+## Where it goes in the stack
+
+The first layer wrapped is the outermost. `AuthFlows` answers the `/auth` requests itself, so layers that must see them go before it: `FlashLayer` (to clear the messages the forms show), `CsrfLayer` (to give the forms their token and check the posts), `ErrorPages`. Layers that need to know who's signed in — a [`ModelAdmin`](/database/model-admin/), your own — go after it.
+
+```rust,no_run
+let app = app.wrap(ErrorPages::from_env()).wrap(FlashLayer::new()).wrap(CsrfLayer::new()).wrap(auth).wrap(admin);
+```
 
 ## In the app
 
@@ -100,7 +108,7 @@ With `.templates(engine)`, each of these that the engine has replaces the built-
 | `auth/login.html`, `auth/signup.html`, `auth/forgot.html`, `auth/reset.html` | [`page_context`](/building-apps/templates/#view-helpers) (`flash`, `notice`, `alert`, `csrf_field`, `path`) plus `prefix`, `token`, `return_to` |
 | `auth/mail/confirm.txt` / `.html`, `auth/mail/reset.txt` / `.html` | `link`, `app`, `email` |
 
-Forms post the field names in the table above. With [`CsrfLayer`](/features/csrf/) outside `AuthFlows` (`.wrap(auth).wrap(CsrfLayer::new())`), the built-in forms carry the token; your templates add `{{ csrf_field | safe }}`, and JSON clients send `X-CSRF-Token`.
+Forms post the field names in the table above. With [`CsrfLayer`](/features/csrf/) outside `AuthFlows` — wrapped before it, as the first layer wrapped is the outermost: `.wrap(FlashLayer::new()).wrap(CsrfLayer::new()).wrap(auth)` — the built-in forms carry the token; your templates add `{{ csrf_field | safe }}`, and JSON clients send `X-CSRF-Token`.
 
 ## Testing
 

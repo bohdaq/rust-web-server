@@ -329,3 +329,23 @@ fn signup_hooks_see_each_new_account() {
     json_post(&client, "/auth/signup", r#"{"email":"l@example.com","password":"long enough"}"#); // taken: no hook
     assert_eq!(vec!["l@example.com".to_string()], *seen.lock().unwrap());
 }
+
+/// The documented stack: FlashLayer and CsrfLayer wrapped before (outside)
+/// AuthFlows see the pages it draws.
+#[test]
+fn layers_outside_see_the_auth_pages() {
+    let auth = AuthFlows::new(SECRET, "https://app.example", MemoryUserStore::new(), TestMailbox::new());
+    let app = App::with_state(()).wrap(crate::flash::FlashLayer::new());
+    #[cfg(feature = "csrf")]
+    let app = app.wrap(crate::csrf::CsrfLayer::new());
+    let client = TestClient::new(app.wrap(auth));
+    let shown = client.get("/auth/login").header("Cookie", "rws_flash=alert=Please+sign+in").send();
+    assert!(shown.body_text().contains("Please+sign+in") || shown.body_text().contains("Please sign in"));
+    assert!(shown.headers().iter().any(|h| h.value.starts_with("rws_flash=;") && h.value.contains("Max-Age=0")), "the flash is cleared once shown");
+    #[cfg(feature = "csrf")]
+    {
+        assert!(shown.body_text().contains(r#"name="_csrf" value=""#), "{}", shown.body_text());
+        // A post without the token never reaches the flows.
+        assert_eq!(403, client.post("/auth/login").header("Content-Type", "application/x-www-form-urlencoded").body_text("email=a%40b.c&password=x").send().status());
+    }
+}

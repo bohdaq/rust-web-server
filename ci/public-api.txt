@@ -7728,6 +7728,7 @@ pub fn rust_web_server::async_state::AsyncAppWithState<S>::route_conflicts(&self
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::route_entries(&self) -> alloc::vec::Vec<rust_web_server::router::RouteInfo>
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::state(&self) -> &S
 pub fn rust_web_server::async_state::AsyncAppWithState<S>::with_config(self, rust_web_server::server_config::ServerConfig) -> Self
+pub fn rust_web_server::async_state::AsyncAppWithState<S>::wrap<M: rust_web_server::middleware::Middleware + 'static>(self, M) -> rust_web_server::middleware::WithMiddleware<rust_web_server::async_state::AsyncAppWithState<S>>
 pub fn rust_web_server::attachment::Attachment::clone(&self) -> Self
 pub fn rust_web_server::attachment::Attachment::decode(&str) -> core::option::Option<rust_web_server::attachment::Attachment>
 pub fn rust_web_server::attachment::Attachment::delete(&self, &dyn rust_web_server::storage::Storage) -> core::result::Result<(), rust_web_server::storage::StorageError>

@@ -13,14 +13,17 @@
 //! let admin = ModelAdmin::new(pool.clone())
 //!     .model::<Post>()                      // or .table("posts")
 //!     .allow(|request| CurrentUser::of(request).is_some_and(|u| u.email == "ann@example.com"));
-//! let app = App::with_async_state(pool).wrap(admin);   // pages under /admin
+//! // Inside the layers it needs (the first wrapped is the outermost):
+//! // FlashLayer, CsrfLayer, AuthFlows, then the admin. Pages under /admin.
+//! let app = App::with_async_state(pool).wrap(admin);
 //! # }
 //! ```
 //!
 //! **Nobody gets in until [`allow`](ModelAdmin::allow) says so**: without it
-//! every page answers `403`. Put it behind your sign-in ([`AuthFlows`]) and
-//! [`CsrfLayer`](crate::csrf::CsrfLayer) — the forms carry the CSRF field
-//! when the layer is there.
+//! every page answers `403`. Wrap it after your sign-in ([`AuthFlows`]),
+//! `FlashLayer` and [`CsrfLayer`](crate::csrf::CsrfLayer) — layers wrapped
+//! first are outside it and see its pages; the forms carry the CSRF field
+//! when that layer is there.
 //!
 //! The columns, their types and the primary key come from the database
 //! ([`DbPool::schema`](crate::model::DbPool::schema)), read when a page is

@@ -226,3 +226,15 @@ Done when: SQLite, PostgreSQL and MySQL pass the new model tests in CI.
 
 Done when: `starters/fullstack` uses the auth flows, a job, a mail and the
 web layer, and passes in CI.
+
+*Status (2026-11-10, branch `framework-18-31`, to ship as 18.35.0):* all
+four done — #94 `group`/`resource`/named routes/`flash`/view helpers/`vite`/
+`channels`/`attachment`; #93 `EnqueueOptions`, dead-letter, cross-replica
+`schedule`, `Mail`/`Deliver`/`TestMailbox`/`deliver_later`/`MailPreviews`,
+`EventBus`; #92 `auth_flows::AuthFlows`; #95 `RwsEnv` profile helpers,
+`ErrorPages`, `ValueCache`, `di::Lifecycle` (problem+json was already the
+default). `starters/fullstack` has accounts, a welcome mail sent by a job,
+`FlashLayer`, `ErrorPages` and the model admin. Beyond the plan: nested
+eager loading, `rws gen migration --from-models` (#108), `ModelAdmin` (#109).
+Layer order matters: `FlashLayer`/`CsrfLayer`/`ErrorPages` wrap before
+(outside) `AuthFlows` and `ModelAdmin`, which answer their own pages.

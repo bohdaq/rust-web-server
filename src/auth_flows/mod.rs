@@ -41,7 +41,9 @@
 //! **Links** in the emails carry signed tokens the same way: a reset link
 //! stops working once the password changes, and expires after an hour; a
 //! confirmation link after three days. Logins, sign-ups and the email
-//! requests are rate limited per client IP (10 a minute by default).
+//! requests are rate limited per client IP (10 a minute by default): the
+//! address a proxy in `trusted_proxies` (private ranges by default)
+//! forwarded, else the peer's.
 //!
 //! For every other request the middleware checks the session cookie and
 //! passes the account to the app as [`CurrentUser`] (a handler argument);
@@ -179,7 +181,8 @@ struct Inner {
     templates: Option<Arc<crate::template::TeraEngine>>,
 }
 
-/// The auth flows. A middleware: `app.wrap(auth)`. See the [module docs](self).
+/// The auth flows. A middleware: `app.wrap(auth)`, after (inside) `FlashLayer`
+/// and `CsrfLayer`, which must see the pages it draws. See the [module docs](self).
 #[derive(Clone)]
 pub struct AuthFlows {
     inner: Arc<Inner>,
@@ -404,9 +407,12 @@ impl AuthFlows {
         }
     }
 
-    fn limited(&self, connection: &ConnectionInfo, action: &str) -> bool {
+    /// Over the rate limit for `action`, per client address: the peer, or
+    /// behind a proxy listed in `trusted_proxies` the address it forwarded
+    /// ([`ip_filter::client_ip`](crate::ip_filter::client_ip)).
+    fn limited(&self, request: &Request, connection: &ConnectionInfo, action: &str) -> bool {
         match &self.inner.limiter {
-            Some(limiter) => !limiter.check(&format!("{}|{action}", connection.client.ip)),
+            Some(limiter) => !limiter.check(&format!("{}|{action}", crate::ip_filter::client_ip(request, &connection.client.ip))),
             None => false,
         }
     }
@@ -617,7 +623,7 @@ impl Ctx<'_> {
     }
 
     fn signup(&self, connection: &ConnectionInfo) -> Response {
-        if self.flows.limited(connection, "signup") {
+        if self.flows.limited(self.request, connection, "signup") {
             return self.too_many();
         }
         let email = match AuthFlows::validate_email(self.input.get("email")) {
@@ -653,7 +659,7 @@ impl Ctx<'_> {
     }
 
     fn login(&self, connection: &ConnectionInfo) -> Response {
-        if self.flows.limited(connection, "login") {
+        if self.flows.limited(self.request, connection, "login") {
             return self.too_many();
         }
         let email = self.input.get("email").trim().to_lowercase();
@@ -706,7 +712,7 @@ impl Ctx<'_> {
     }
 
     fn forgot(&self, connection: &ConnectionInfo) -> Response {
-        if self.flows.limited(connection, "email") {
+        if self.flows.limited(self.request, connection, "email") {
             return self.too_many();
         }
         let email = self.input.get("email").trim().to_lowercase();
@@ -763,7 +769,7 @@ impl Ctx<'_> {
     }
 
     fn resend(&self, connection: &ConnectionInfo) -> Response {
-        if self.flows.limited(connection, "email") {
+        if self.flows.limited(self.request, connection, "email") {
             return self.too_many();
         }
         let email = self.input.get("email").trim().to_lowercase();

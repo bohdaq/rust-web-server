@@ -12,6 +12,8 @@
 //! | `ADMIN_EMAILS` (`ann@example.com,bo@example.com`) | nobody gets into the model admin at `/admin` (PostgreSQL only) |
 //!
 //! Accounts live in the `rws_users` table with PostgreSQL, in memory otherwise.
+//! Sign-ins are rate limited per client address: the one the kube-dc
+//! gateway forwards (its private address is trusted by default).
 
 use std::sync::Arc;
 

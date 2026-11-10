@@ -16,13 +16,14 @@ let admin = ModelAdmin::new(pool.clone())
     .table("rws_users")                      // or a table by name
     .allow(move |request| CurrentUser::of(request).is_some_and(|u| admins.contains(&u.email)));
 
-let site = WithMiddleware::new(app(pool))
-    .wrap(auth)                              // AuthFlows first: it tells who's asking
-    .wrap(admin)
-    .wrap(FlashLayer::new());
+// The first layer wrapped is the outermost.
+let site = app(pool)
+    .wrap(FlashLayer::new())                 // clears the messages the admin pages show
+    .wrap(auth)                              // AuthFlows: who's asking
+    .wrap(admin);
 ```
 
-**Nobody gets in until `allow` says so**: without it every admin page answers `403`. The check runs for each request, after the layers outside the admin — put it inside [`AuthFlows`](/features/auth-flows/) to use `CurrentUser`, and behind [`CsrfLayer`](/features/csrf/), whose token the forms carry.
+**Nobody gets in until `allow` says so**: without it every admin page answers `403`. The check runs for each request, after the layers outside the admin — wrap it after [`AuthFlows`](/features/auth-flows/) (inside it) to use `CurrentUser`, and after [`FlashLayer`](/building-apps/forms-uploads/#flash-messages-and-redirects) and [`CsrfLayer`](/features/csrf/) (whose token the forms carry).
 
 ## Pages
 
