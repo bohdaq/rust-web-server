@@ -22,6 +22,8 @@ pub const SCRIPT_PATH: &str = "/_rws/t.js";
 pub const BEACON_PATH: &str = "/_rws/t";
 /// The largest report accepted.
 pub const MAX_BEACON: usize = 2048;
+/// Where the site's apps send events (18.35, [`super::record::app_event`]).
+pub const APP_EVENTS_PATH: &str = "/_rws/e";
 
 /// The script. No dependencies, no storage, ~1.6 KB (0.8 KB compressed). The first page view is
 /// already counted by the server, so it reports only what happens after:
@@ -63,12 +65,106 @@ impl TrafficScriptLayer {
     }
 
     fn mine(&self, request: &Request) -> bool {
-        if !self.on {
+        // Every other path: one byte compare.
+        if !request.request_uri.starts_with("/_rws/") {
             return false;
         }
         let path = request.request_uri.split(['?', '#']).next().unwrap_or("");
-        path == SCRIPT_PATH || path == BEACON_PATH
+        if self.on && (path == SCRIPT_PATH || path == BEACON_PATH) {
+            return true;
+        }
+        // App events and the owner link work whenever traffic is counted.
+        (path == APP_EVENTS_PATH || path == super::owner::PATH) && super::record::enabled()
     }
+}
+
+/// The client as the access log sees it (behind a trusted proxy, the
+/// forwarded address), so the visitor hash matches its other requests.
+fn client(request: &Request, connection: &ConnectionInfo) -> Option<std::net::IpAddr> {
+    let peer = &connection.client.ip;
+    let forwarded = request.header("x-forwarded-for").is_some() || request.header("forwarded").is_some();
+    let ip = if forwarded { crate::ip_filter::client_ip(request, peer).into_owned() } else { peer.clone() };
+    ip.trim_matches(['[', ']']).parse::<std::net::IpAddr>().ok()
+}
+
+/// `POST /_rws/e`: an app's event. Any origin (an extension's is its own,
+/// a native app sends none); `OPTIONS` answers a preflight.
+fn app_event(request: &Request, connection: &ConnectionInfo) -> Response {
+    let cors = |mut r: Response| {
+        r.headers.push(crate::header::Header::new("Access-Control-Allow-Origin", "*"));
+        r
+    };
+    if request.method == "OPTIONS" {
+        let mut r = cors(plain(STATUS_CODE_REASON_PHRASE.n204_no_content));
+        r.headers.push(crate::header::Header::new("Access-Control-Allow-Methods", "POST"));
+        r.headers.push(crate::header::Header::new("Access-Control-Allow-Headers", "content-type"));
+        r.headers.push(crate::header::Header::new("Access-Control-Max-Age", "86400"));
+        return r;
+    }
+    if request.method != "POST" {
+        return plain(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed);
+    }
+    if request.body.len() > MAX_BEACON {
+        return cors(plain(STATUS_CODE_REASON_PHRASE.n413_payload_too_large));
+    }
+    let header = |name: &str| request.header(name).map(|h| h.value.as_ref()).filter(|v: &&str| !v.is_empty());
+    let Some(ip) = client(request, connection) else { return cors(plain(STATUS_CODE_REASON_PHRASE.n400_bad_request)) };
+    let body = String::from_utf8_lossy(&request.body);
+    match super::record::app_event(ip, header("host").unwrap_or(""), header("user-agent"), &body, super::record::now()) {
+        Ok(()) => cors(plain(STATUS_CODE_REASON_PHRASE.n204_no_content)),
+        Err(super::record::AppEventError::Malformed) => cors(plain(STATUS_CODE_REASON_PHRASE.n400_bad_request)),
+        Err(super::record::AppEventError::UnknownApp) => cors(plain(STATUS_CODE_REASON_PHRASE.n403_forbidden)),
+    }
+}
+
+/// `GET /_rws/me?k=<key>`: this browser is the owner's (a cookie, for a
+/// year); `?off`: not any more.
+fn owner_link(request: &Request, connection: &ConnectionInfo) -> Response {
+    if request.method != "GET" && request.method != "HEAD" {
+        return plain(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed);
+    }
+    let query = request.request_uri.split_once('?').map_or("", |(_, q)| q.split('#').next().unwrap_or(q));
+    let off = query.split('&').any(|p| p == "off" || p.starts_with("off="));
+    let key = query.split('&').find_map(|p| p.strip_prefix("k=")).unwrap_or("");
+    let host = request.header("host").map(|h| h.value.as_ref()).unwrap_or("");
+    // From the request: escaped, it lands in HTML.
+    let host: String = host.split(':').next().unwrap_or(host).chars().take(253).map(|c| match c {
+        '&' => "&amp;".to_string(),
+        '<' => "&lt;".to_string(),
+        '>' => "&gt;".to_string(),
+        '"' => "&quot;".to_string(),
+        '\'' => "&#39;".to_string(),
+        c => c.to_string(),
+    }).collect();
+    let secure = connection.sni_hostname.is_some() || request.header("x-forwarded-proto").is_some_and(|h| h.value.eq_ignore_ascii_case("https"));
+    let attrs = format!("Path=/; HttpOnly; SameSite=Lax{}", if secure { "; Secure" } else { "" });
+    let (status, cookie, text) = if off {
+        (STATUS_CODE_REASON_PHRASE.n200_ok, Some(format!("{}=; Max-Age=0; {attrs}", super::owner::COOKIE)), format!("This browser's visits to {host} are counted like anyone's again."))
+    } else if super::owner::key_matches(key) {
+        if let Some(ip) = client(request, connection) {
+            super::record::mark_owner(ip, request.header("user-agent").map(|h| h.value.as_ref()), super::record::now());
+        }
+        (
+            STATUS_CODE_REASON_PHRASE.n200_ok,
+            Some(format!("{}={}; Max-Age=31536000; {attrs}", super::owner::COOKIE, super::owner::key())),
+            format!("This browser's visits to {host} are now counted as yours, apart from everyone else's. To undo, open /_rws/me?off."),
+        )
+    } else {
+        (STATUS_CODE_REASON_PHRASE.n403_forbidden, None, "That link isn't this site's owner link.".to_string())
+    };
+    let html = format!("<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><meta name=robots content=noindex><title>rws traffic</title><p style=\"font:16px system-ui;margin:2rem\">{text}</p>");
+    let mut response = Response::text(status, &html);
+    if let Some(range) = response.content_range_list.first_mut() {
+        range.content_type = "text/html; charset=utf-8".to_string();
+    }
+    response.headers.retain(|h| !h.name.eq_ignore_ascii_case("cache-control"));
+    response.headers.push(crate::header::Header::new("Cache-Control", "no-store"));
+    response.headers.push(crate::header::Header::new("Referrer-Policy", "no-referrer"));
+    response.headers.push(crate::header::Header::new("X-Robots-Tag", "noindex"));
+    if let Some(cookie) = cookie {
+        response.headers.push(crate::header::Header::new("Set-Cookie", cookie));
+    }
+    response
 }
 
 fn plain(status: &crate::response::StatusCodeReasonPhrase) -> Response {
@@ -83,6 +179,12 @@ impl Middleware for TrafficScriptLayer {
             return next.execute(request, connection);
         }
         let path = request.request_uri.split(['?', '#']).next().unwrap_or("");
+        if path == APP_EVENTS_PATH {
+            return Ok(app_event(request, connection));
+        }
+        if path == super::owner::PATH {
+            return Ok(owner_link(request, connection));
+        }
         if path == SCRIPT_PATH {
             if request.method != "GET" && request.method != "HEAD" {
                 return Ok(plain(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed));
@@ -104,12 +206,7 @@ impl Middleware for TrafficScriptLayer {
                 return Ok(plain(STATUS_CODE_REASON_PHRASE.n403_forbidden));
             }
         }
-        // The client as the access log sees it (behind a trusted proxy, the
-        // forwarded address), so the visitor hash matches its page views.
-        let peer = &connection.client.ip;
-        let forwarded = request.header("x-forwarded-for").is_some() || request.header("forwarded").is_some();
-        let ip = if forwarded { crate::ip_filter::client_ip(request, peer).into_owned() } else { peer.clone() };
-        if let Ok(ip) = ip.trim_matches(['[', ']']).parse::<std::net::IpAddr>() {
+        if let Some(ip) = client(request, connection) {
             let body = String::from_utf8_lossy(&request.body);
             super::record::beacon(ip, host, header("user-agent"), &body, super::record::now());
         }

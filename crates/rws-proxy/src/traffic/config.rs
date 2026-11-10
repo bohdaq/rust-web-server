@@ -11,6 +11,9 @@ pub const RWS_CONFIG_TRAFFIC_SCRIPT: &str = "RWS_CONFIG_TRAFFIC_SCRIPT";
 pub const RWS_CONFIG_TRAFFIC_GOALS: &str = "RWS_CONFIG_TRAFFIC_GOALS";
 pub const RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV: &str = "RWS_CONFIG_TRAFFIC_DATABASE_URL_ENV";
 pub const RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS: &str = "RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS";
+pub const RWS_CONFIG_TRAFFIC_APPS: &str = "RWS_CONFIG_TRAFFIC_APPS";
+pub const RWS_CONFIG_TRAFFIC_OWNER_NETWORKS: &str = "RWS_CONFIG_TRAFFIC_OWNER_NETWORKS";
+pub const RWS_CONFIG_TRAFFIC_PROBE_ADDRESSES: &str = "RWS_CONFIG_TRAFFIC_PROBE_ADDRESSES";
 
 fn read(key: &str) -> String {
     std::env::var(key).unwrap_or_default().trim().to_string()
@@ -100,4 +103,28 @@ pub fn database_url() -> Option<String> {
         return None;
     }
     std::env::var(&name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+fn list(key: &str) -> Vec<String> {
+    read(key).split(',').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect()
+}
+
+/// `apps`: the site's native apps and browser extensions, as
+/// `name=pattern` (`traffic::apps`): a `User-Agent` token (`HITOP/`) or an
+/// extension origin (`chrome-extension://<id>`).
+pub fn apps() -> Vec<String> {
+    list(RWS_CONFIG_TRAFFIC_APPS)
+}
+
+/// `owner_networks`: addresses or CIDR ranges whose requests are the
+/// owner's (`traffic::owner`), counted apart from everyone else's.
+pub fn owner_networks() -> Vec<String> {
+    list(RWS_CONFIG_TRAFFIC_OWNER_NETWORKS)
+}
+
+/// `probe_addresses`: keep the addresses of scanners (requests for
+/// `/.env`, `/.git/config`…) in the probes list, to block them. Default
+/// off: no address is kept, only country and network.
+pub fn probe_addresses() -> bool {
+    matches!(read(RWS_CONFIG_TRAFFIC_PROBE_ADDRESSES).to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on")
 }

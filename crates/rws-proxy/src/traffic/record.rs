@@ -50,16 +50,23 @@ pub const UNDECIDED: Duration = Duration::from_secs(120);
 const MAX_PENDING_REQUESTS: usize = 32;
 const SHARDS: usize = 16;
 
-/// The groups counted, as array indexes.
+/// The groups counted, as array indexes: people, AI agents, bots, the
+/// site's apps (18.35) and the owner (18.35).
 const PEOPLE: usize = 0;
 const AI: usize = 1;
 const BOTS: usize = 2;
+const APPS: usize = 3;
+const OWNER: usize = 4;
+/// How many groups are counted.
+pub const GROUPS: usize = 5;
 
 fn slot(group: Group) -> Option<usize> {
     match group {
         Group::Person => Some(PEOPLE),
         Group::Ai => Some(AI),
         Group::Bot => Some(BOTS),
+        Group::App => Some(APPS),
+        Group::Owner => Some(OWNER),
         Group::Internal => None,
     }
 }
@@ -201,7 +208,7 @@ impl Top {
 #[derive(Default, Debug, Clone)]
 #[doc(hidden)]
 pub struct Day {
-    pub visitors: [u64; 3],
+    pub visitors: [u64; GROUPS],
     pub people_pages: Top,
     pub ai_pages: Top,
     /// `name\toperator\tkind\tverified`, all sites: days saved before
@@ -229,6 +236,75 @@ pub struct Day {
     pub exit_pages: Top,
     /// The [`BEHAVIOUR`] lists, in that order.
     pub behaviour: [Top; 7],
+    /// The [`EXTRA`] lists (18.35), in that order.
+    pub extra: [Top; EXTRA.len()],
+    /// People's visits that ended this day (18.35): the recent-visitors
+    /// feed. Only the last [`MAX_VISITS`] are kept across all days.
+    pub visits: Vec<Visit>,
+}
+
+/// The per-day lists added in 18.35, all keyed by host first:
+/// - `site_apps`: app users, `host\tapp\tplatform`;
+/// - `app_versions`: app users, `host\tapp\tversion`;
+/// - `app_events`: events apps sent to `/_rws/e`, `host\tapp\tevent`;
+/// - `site_tiers`: visitors by how sure rws is they're a person,
+///   `host\ttier` (`verified` ran the script, `page-only` loaded no asset,
+///   `hosting` came from a server network);
+/// - `site_probes`: scanner requests, `host\tpath`;
+/// - `probe_sources`: scanner requests, `host\tcountry\tnetwork` (and the
+///   address with `[traffic] probe_addresses`);
+/// - `site_crawl`: named bots' and AI agents' page fetches and 404s,
+///   `host\tname\tpages|404`;
+/// - `crawl_404`: the paths named bots got a 404 for, `host/path\tname`;
+/// - `site_entries`: the first page of people's visits by channel,
+///   `host/path\tchannel`;
+/// - `downloads`: files downloaded (installers, packages, archives,
+///   `install.sh`), `host/path\tgroup`;
+/// - `owner_pages`: the owner's page views, `host/path`.
+pub const EXTRA: [&str; 11] =
+    ["site_apps", "app_versions", "app_events", "site_tiers", "site_probes", "probe_sources", "site_crawl", "crawl_404", "site_entries", "downloads", "owner_pages"];
+const SITE_APPS: usize = 0;
+const APP_VERSIONS: usize = 1;
+const APP_EVENTS: usize = 2;
+const SITE_TIERS: usize = 3;
+const SITE_PROBES: usize = 4;
+const PROBE_SOURCES: usize = 5;
+const SITE_CRAWL: usize = 6;
+const CRAWL_404: usize = 7;
+const SITE_ENTRIES: usize = 8;
+const DOWNLOADS: usize = 9;
+const OWNER_PAGES: usize = 10;
+
+/// Visits kept for the recent-visitors feed (across all days).
+pub const MAX_VISITS: usize = 300;
+/// Pages a visit lists.
+pub const VISIT_PAGES: usize = 20;
+
+/// One person's visit (a closed session, or an open one in a snapshot),
+/// for the recent-visitors feed: what they read and how they came, with
+/// no address, User-Agent or visitor key.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[doc(hidden)]
+pub struct Visit {
+    pub start: u64,
+    pub end: u64,
+    pub host: String,
+    /// Paths, in order (at most [`VISIT_PAGES`]).
+    pub pages: Vec<String>,
+    /// Page views in all (more than `pages` when it's long).
+    pub views: u64,
+    pub country: String,
+    pub browser: String,
+    pub os: String,
+    pub device: String,
+    pub channel: String,
+    pub referrer: String,
+    pub campaign: String,
+    /// The visitor ran the script (`[traffic] script`).
+    pub verified: bool,
+    /// This visitor's visit number today (2 = came back).
+    pub number: u32,
+    pub events: Vec<String>,
 }
 
 /// Sessions added up.
@@ -268,9 +344,40 @@ struct Session {
     utm: [Option<String>; 3],
     /// Script reports so far.
     reports: u32,
+    /// For the visit feed: paths in order (at most [`VISIT_PAGES`]), the
+    /// visitor's audience, the referring site, events, the visit number.
+    paths: Vec<String>,
+    visitor: u64,
+    audience: Option<Audience>,
+    referrer: Option<String>,
+    events: Vec<String>,
+    number: u32,
+    verified: bool,
 }
 
 impl Session {
+    fn visit(&self) -> Visit {
+        let host = self.exit.split('/').next().unwrap_or("").to_string();
+        let audience = self.audience.as_ref();
+        Visit {
+            start: self.start,
+            end: self.last,
+            host,
+            pages: self.paths.clone(),
+            views: self.pages,
+            country: audience.and_then(|a| a.country).map_or_else(String::new, |c| String::from_utf8_lossy(&c).into_owned()),
+            browser: audience.map_or("", |a| a.device.browser).to_string(),
+            os: audience.map_or("", |a| a.device.os).to_string(),
+            device: audience.map_or("", |a| a.device.class).to_string(),
+            channel: self.channel.unwrap_or("").to_string(),
+            referrer: self.referrer.clone().unwrap_or_default(),
+            campaign: self.utm[2].clone().or_else(|| self.utm[0].clone()).unwrap_or_default(),
+            verified: self.verified,
+            number: self.number,
+            events: self.events.clone(),
+        }
+    }
+
     fn totals(&self) -> Sessions {
         Sessions { sessions: 1, bounces: (self.pages == 1) as u64, duration: self.last - self.start, pages: self.pages }
     }
@@ -279,9 +386,13 @@ impl Session {
 impl Day {
     #[doc(hidden)]
     pub fn merge(&mut self, other: &Day) {
-        for g in 0..3 {
+        for g in 0..GROUPS {
             self.visitors[g] += other.visitors[g];
         }
+        for (mine, theirs) in self.extra.iter_mut().zip(&other.extra) {
+            mine.merge(theirs);
+        }
+        self.visits.extend(other.visits.iter().cloned());
         for (mine, theirs) in self.dims.iter_mut().zip(&other.dims) {
             mine.merge(theirs);
         }
@@ -328,12 +439,14 @@ struct Deferred {
 struct Cached {
     class: Class,
     audience: Option<Audience>,
+    /// For an app client: the version its User-Agent names.
+    app_version: Option<String>,
 }
 
 #[derive(Default)]
 struct Shard {
     /// `(hour, host)` → counts per group.
-    hours: BTreeMap<(u64, u8), [Counts; 3]>,
+    hours: BTreeMap<(u64, u8), [Counts; GROUPS]>,
     days: BTreeMap<u64, Day>,
     /// Today's visitors and the group each was counted in.
     seen: HashMap<u64, Group>,
@@ -344,6 +457,12 @@ struct Shard {
     /// People's page views of the last [`LIVE_WINDOW`], oldest first.
     recent: VecDeque<Recent>,
     today: u64,
+    /// Today's people who ran the script (18.35).
+    verified: std::collections::HashSet<u64>,
+    /// Visits each person started today.
+    visit_numbers: HashMap<u64, u32>,
+    /// Events each app client sent today (`/_rws/e`), to cap them.
+    app_reports: HashMap<u64, u32>,
 }
 
 struct Recorder {
@@ -358,12 +477,18 @@ struct Recorder {
     exclude: Vec<String>,
     /// `[traffic] hosting_networks`.
     hosting: bool,
+    /// Today's owner fingerprints (`hash(secret, day, ip, user-agent)`,
+    /// no host): `(day, set)`.
+    owners: Mutex<(u64, std::collections::HashSet<u64>)>,
 }
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 /// Bumped when host indexes change meaning (a restore, tests' resets).
 static HOSTS_GENERATION: AtomicU64 = AtomicU64::new(1);
 static CALLS: AtomicU64 = AtomicU64::new(0);
+/// Bumped when a client becomes the owner, so threads forget the group
+/// they had decided for it.
+static OWNER_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 fn recorder() -> &'static Recorder {
     static RECORDER: OnceLock<Recorder> = OnceLock::new();
@@ -375,6 +500,7 @@ fn recorder() -> &'static Recorder {
         retention_days: super::config::retention_days(),
         exclude: super::config::exclude(),
         hosting: super::config::hosting_networks(),
+        owners: Mutex::new((0, std::collections::HashSet::new())),
     })
 }
 
@@ -547,8 +673,15 @@ pub fn channel_of(referrer_host: &str) -> &'static str {
         "youtube.com", "tiktok.com", "pinterest.com", "news.ycombinator.com", "mastodon.social", "bsky.app", "threads.net", "vk.com", "telegram.org", "t.me", "discord.com",
         "whatsapp.com", "lobste.rs",
     ];
+    // App stores, before search: play.google.com isn't Google search.
+    const STORE: &[&str] = &[
+        "apps.apple.com", "itunes.apple.com", "play.google.com", "chromewebstore.google.com", "addons.mozilla.org", "microsoftedge.microsoft.com",
+        "apps.microsoft.com", "snapcraft.io", "flathub.org", "f-droid.org", "appgallery.huawei.com",
+    ];
     if AI.iter().any(|d| is(d)) {
         "ai"
+    } else if STORE.iter().any(|d| is(d)) || (h == "chrome.google.com") {
+        "store"
     } else if SEARCH.iter().any(|d| is(d)) || h.starts_with("google.") || h.contains(".google.") {
         "search"
     } else if SOCIAL.iter().any(|d| is(d)) {
@@ -625,8 +758,9 @@ fn arrival(hit: &Hit<'_>) -> Option<Arrival> {
 #[derive(Default)]
 struct Local {
     /// Visitor → (day, counted group slot), as decided by a shard.
-    decided: HashMap<u64, (u64, usize)>,
-    counts: BTreeMap<(u64, u8), [Counts; 3]>,
+    /// Visitor → (day, owner generation, counted group slot).
+    decided: HashMap<u64, (u64, u64, usize)>,
+    counts: BTreeMap<(u64, u8), [Counts; GROUPS]>,
 }
 
 /// How many decided visitors a thread remembers.
@@ -655,7 +789,7 @@ fn drain_locals() {
         let counts = std::mem::take(&mut local.lock().unwrap_or_else(|e| e.into_inner()).counts);
         for (key, c) in counts {
             let entry = target.hours.entry(key).or_default();
-            for g in 0..3 {
+            for g in 0..GROUPS {
                 entry[g].requests += c[g].requests;
                 entry[g].pages += c[g].pages;
             }
@@ -671,21 +805,31 @@ pub fn record(hit: &Hit<'_>) {
     }
     let recorder = recorder();
     let path = hit.path.split('?').next().unwrap_or(hit.path);
-    // The script's reports are counted by `beacon`, not as requests.
-    if recorder.exclude.iter().any(|e| path == e) || path == super::script::BEACON_PATH {
+    // rws's own paths (the script, its reports, app events, the owner
+    // link) are counted by what they report, not as requests.
+    if recorder.exclude.iter().any(|e| path == e) || path.starts_with("/_rws/") {
         return;
     }
     let day = hit.now / 86_400;
+    // A successful admin API call: this client is the owner from now on.
+    // (JSON first: it rules out almost every request without a search.)
+    let json = hit.content_type.is_some_and(|ct| ct.as_bytes().get(..16).is_some_and(|p| p.eq_ignore_ascii_case(b"application/json")));
+    if json && path.contains("/api/") && super::owner::is_admin_call(hit.headers, hit.status) {
+        mark_owner(hit.ip, hit.user_agent, hit.now);
+    }
     let hour = hit.now / 3_600;
     let host = host_index(hit.host);
     let visitor = visitor(day, host, hit.ip, hit.user_agent);
+    let generation = OWNER_GENERATION.load(Ordering::Relaxed);
+    let download = is_download(hit, path);
+    let request_goal = request_goals_configured() && (200..400).contains(&hit.status);
     // A decided visitor's non-page request: counted by this thread (no
     // scanner check — the visitor keeps the group it was decided in).
-    if hit.status != 404 && !is_page(hit) {
+    if hit.status != 404 && !download && !request_goal && !is_page(hit) {
         let counted = LOCAL.try_with(|local| {
             let mut local = local.lock().unwrap_or_else(|e| e.into_inner());
             match local.decided.get(&visitor) {
-                Some((d, g)) if *d == day => {
+                Some((d, gen, g)) if *d == day && *gen == generation => {
                     let g = *g;
                     local.counts.entry((hour, host)).or_default()[g].requests += 1;
                     true
@@ -697,14 +841,14 @@ pub fn record(hit: &Hit<'_>) {
             return;
         }
     }
-    let decided = record_shared(hit, day, hour, host, visitor, path);
+    let decided = record_shared(hit, day, hour, host, visitor, path, download);
     if let Some(g) = decided {
         let _ = LOCAL.try_with(|local| {
             let mut local = local.lock().unwrap_or_else(|e| e.into_inner());
             if local.decided.len() >= LOCAL_DECIDED {
                 local.decided.clear();
             }
-            local.decided.insert(visitor, (day, g));
+            local.decided.insert(visitor, (day, generation, g));
         });
     }
     if CALLS.fetch_add(1, Ordering::Relaxed) % 1024 == 0 {
@@ -713,7 +857,7 @@ pub fn record(hit: &Hit<'_>) {
 }
 
 /// The shared path; returns the visitor's group slot once it's decided.
-fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, path: &str) -> Option<usize> {
+fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, path: &str, download: bool) -> Option<usize> {
     let recorder = recorder();
     let mut shard = recorder.shards[(visitor % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
     shard.roll(day, recorder.retention_days);
@@ -722,6 +866,18 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
         Some(cached) => cached.clone(),
         None => {
             let class = classify(hit.ip, hit.user_agent, "/");
+            // The owner, then the site's apps, before the network checks:
+            // an app on a phone behind a cloud VPN is still the app.
+            let header = |name: &str| hit.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name)).map(|h| h.value.as_ref());
+            let owner = class.kind != Kind::Local
+                && (super::owner::in_networks(hit.ip) || super::owner::has_cookie(hit.headers) || is_owner(day, hit.ip, hit.user_agent));
+            let app = if owner || class.verified || class.kind == Kind::Local { None } else { super::apps::detect(hit.user_agent, header("origin")) };
+            let app_version = app.as_ref().and_then(|a| a.version.clone());
+            let class = match (owner, app) {
+                (true, _) => owner_class(),
+                (false, Some(app)) => Class { kind: Kind::App, name: app.name, operator: app.platform, verified: false },
+                (false, None) => class,
+            };
             // A browser from a hosting network is a program (looked up once
             // per visitor: the class is cached).
             let class = match (class.kind, recorder.hosting) {
@@ -739,7 +895,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                     super::device::parse(hit.user_agent.unwrap_or(""), hint("sec-ch-ua-platform"), hint("sec-ch-ua-mobile"))
                 },
             });
-            let cached = Cached { class, audience };
+            let cached = Cached { class, audience, app_version };
             if shard.cache.len() >= MAX_CACHE {
                 shard.cache.clear();
             }
@@ -801,6 +957,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                             let pending = shard.pending.remove(&visitor).expect("just added");
                             shard.seen.insert(visitor, Group::Bot);
                             shard.new_visitor(day, host, BOTS);
+                            shard.count_page_only(day, host);
                             for d in pending.requests {
                                 shard.count(BOTS, d.hour, d.host, &browser_without_assets(), d.page, d.not_found, visitor);
                             }
@@ -814,13 +971,113 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
             let g = slot(group).expect("counted group");
             if shard.seen.insert(visitor, group).is_none() {
                 shard.new_visitor(day, host, g);
+                let site = host_name(host);
+                if g == APPS {
+                    shard.count_app_user(day, &site, class.name, class.operator, cached.app_version.as_deref());
+                } else if class.kind == Kind::Hosting {
+                    shard.day(day).extra[SITE_TIERS].add_capped(&format!("{site}\thosting"), 1, DIM_TOP);
+                }
+            }
+            if scanner {
+                shard.count_probe(day, &host_name(host), path, hit.ip);
             }
             shard.count(g, hour, host, &class, page, not_found, visitor);
             // A scanner request isn't the visitor's usual class: not cached.
             (!scanner).then_some(g)
         }
     };
+    if download {
+        let label = decided.map_or("undecided", group_label);
+        shard.day(day).extra[DOWNLOADS].add_capped(&format!("{}\t{label}", page_key(hit.host, path)), 1, DIM_TOP);
+    }
+    if decided == Some(PEOPLE) && request_goals_configured() {
+        let reached = request_goals(path);
+        if let (true, Some(session)) = (reached != 0, shard.open.get_mut(&visitor)) {
+            session.goals |= reached;
+        }
+    }
     decided
+}
+
+/// The name of a counted group slot.
+fn group_label(g: usize) -> &'static str {
+    ["people", "ai", "bots", "apps", "owner"].get(g).copied().unwrap_or("other")
+}
+
+fn owner_class() -> Class {
+    Class { kind: Kind::Owner, name: "", operator: "", verified: false }
+}
+
+/// `hash(secret, day, ip, user-agent)`: a client on every site, for the
+/// owner's fingerprint.
+fn fingerprint(day: u64, ip: IpAddr, user_agent: Option<&str>) -> u64 {
+    let mut hasher = recorder().secret.build_hasher();
+    "owner".hash(&mut hasher);
+    day.hash(&mut hasher);
+    ip.hash(&mut hasher);
+    user_agent.unwrap_or("").hash(&mut hasher);
+    hasher.finish()
+}
+
+fn is_owner(day: u64, ip: IpAddr, user_agent: Option<&str>) -> bool {
+    let owners = recorder().owners.lock().unwrap_or_else(|e| e.into_inner());
+    owners.0 == day && owners.1.contains(&fingerprint(day, ip, user_agent))
+}
+
+/// Make the client at `ip` with `user_agent` the owner for the rest of
+/// the day, on every site: its visitors on each site are re-decided as the
+/// owner (an open visit is dropped, not counted).
+#[doc(hidden)]
+pub fn mark_owner(ip: IpAddr, user_agent: Option<&str>, now: u64) {
+    let day = now / 86_400;
+    let fp = fingerprint(day, ip, user_agent);
+    {
+        let mut owners = recorder().owners.lock().unwrap_or_else(|e| e.into_inner());
+        if owners.0 != day {
+            *owners = (day, std::collections::HashSet::new());
+        }
+        // Bounded: a day's owner clients are few; past 1024 something is off.
+        if owners.1.len() >= 1024 || !owners.1.insert(fp) {
+            return;
+        }
+    }
+    let slots = recorder().hosts.read().unwrap_or_else(|e| e.into_inner()).len();
+    for host in 0..slots.max(1) {
+        let v = visitor(day, host as u8, ip, user_agent);
+        let mut shard = recorder().shards[(v % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
+        if shard.today != day {
+            continue;
+        }
+        shard.pending.remove(&v);
+        shard.open.remove(&v);
+        shard.seen.insert(v, Group::Owner);
+        if shard.cache.len() >= MAX_CACHE {
+            shard.cache.clear();
+        }
+        shard.cache.insert(v, Cached { class: owner_class(), audience: None, app_version: None });
+    }
+    OWNER_GENERATION.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Extensions of files counted as downloads.
+const DOWNLOAD_EXTENSIONS: &[&str] = &[
+    ".dmg", ".pkg", ".zip", ".tar.gz", ".tgz", ".tar.xz", ".exe", ".msi", ".msix", ".deb", ".rpm", ".appimage", ".apk", ".aab", ".ipa", ".vsix", ".xpi",
+    ".crx", ".flatpak", ".snap", ".7z",
+];
+
+/// A downloaded file: an installer, package or archive, or an install
+/// script (`install.sh`, `install.ps1`), fetched in full.
+fn is_download(hit: &Hit<'_>, path: &str) -> bool {
+    if hit.status != 200 || hit.method != "GET" {
+        return false;
+    }
+    let last = path.rsplit('/').next().unwrap_or("").as_bytes();
+    // Pages, scripts, styles and fonts end in a byte no download ends in.
+    if !matches!(last.last().map(u8::to_ascii_lowercase), Some(b'g' | b'e' | b'p' | b'z' | b'b' | b'i' | b'x' | b'k' | b'a' | b'm' | b'h' | b'1')) {
+        return false;
+    }
+    let ends = |ext: &str| last.len() >= ext.len() && last[last.len() - ext.len()..].eq_ignore_ascii_case(ext.as_bytes());
+    DOWNLOAD_EXTENSIONS.iter().any(|ext| ends(ext)) || last.eq_ignore_ascii_case(b"install.sh") || last.eq_ignore_ascii_case(b"install.ps1")
 }
 
 fn browser_without_assets() -> Class {
@@ -850,6 +1107,9 @@ impl Shard {
         self.close_sessions(|_| true);
         self.seen.clear();
         self.cache.clear();
+        self.verified.clear();
+        self.visit_numbers.clear();
+        self.app_reports.clear();
         let oldest_day = day.saturating_sub(retention_days.saturating_sub(1));
         self.days.retain(|d, _| *d >= oldest_day);
         self.hours.retain(|(h, _), _| *h / 24 >= oldest_day);
@@ -877,6 +1137,37 @@ impl Shard {
         }));
     }
 
+    /// A person ran the script today: verified (counted once a day).
+    fn mark_verified(&mut self, visitor: u64, day: u64, host: &str) {
+        if self.verified.insert(visitor) {
+            self.day(day).extra[SITE_TIERS].add_capped(&format!("{host}\tverified"), 1, DIM_TOP);
+        }
+    }
+
+    /// A new app user: by app and platform, and by version when known.
+    fn count_app_user(&mut self, day: u64, host: &str, app: &str, platform: &str, version: Option<&str>) {
+        let day = self.day(day);
+        day.extra[SITE_APPS].add_capped(&format!("{host}\t{app}\t{platform}"), 1, DIM_TOP);
+        day.extra[APP_VERSIONS].add_capped(&format!("{host}\t{app}\t{}", version.unwrap_or("(unknown)")), 1, DIM_TOP);
+    }
+
+    /// A scanner's request: the path, and where it came from (country and
+    /// network; the address too with `[traffic] probe_addresses`).
+    fn count_probe(&mut self, day: u64, host: &str, path: &str, ip: IpAddr) {
+        let country = super::geo::country(ip).map_or("(unknown)".to_string(), |c| String::from_utf8_lossy(&c).into_owned());
+        let network = super::hosting::provider(ip).unwrap_or("-");
+        let source = if super::config::probe_addresses() { format!("{host}\t{country}\t{network}\t{}", ip.to_canonical()) } else { format!("{host}\t{country}\t{network}") };
+        let day = self.day(day);
+        day.extra[SITE_PROBES].add_capped(&format!("{host}\t{}", path.chars().take(200).collect::<String>()), 1, DIM_TOP);
+        day.extra[PROBE_SOURCES].add_capped(&source, 1, DIM_TOP);
+    }
+
+    /// A browser decided to be no person (it loaded no asset).
+    fn count_page_only(&mut self, day: u64, host: u8) {
+        let site = host_name(host);
+        self.day(day).extra[SITE_TIERS].add_capped(&format!("{site}\tpage-only"), 1, DIM_TOP);
+    }
+
     /// A new person's country, browser, OS and device class.
     fn count_audience(&mut self, day: u64, host: &str, audience: &Audience) {
         let day = self.day(day);
@@ -898,9 +1189,14 @@ impl Shard {
         }
     }
 
-    fn close(&mut self, session: Session) {
+    fn close(&mut self, mut session: Session) {
+        session.verified |= self.verified.contains(&session.visitor);
         let day = self.day(session.start / 86_400);
         add_session(day, &session);
+        if day.visits.len() >= MAX_VISITS {
+            day.visits.remove(0);
+        }
+        day.visits.push(session.visit());
     }
 
     /// A person's page view at `at`: continues their session, or ends it and
@@ -912,6 +1208,9 @@ impl Shard {
                 session.pages += 1;
                 session.exit = page.to_string();
                 session.goals |= page_goals(page);
+                if session.paths.len() < VISIT_PAGES {
+                    session.paths.push(path_of(page).to_string());
+                }
                 return false;
             }
             let ended = self.open.remove(&visitor).expect("just found");
@@ -924,7 +1223,32 @@ impl Shard {
             }
         }
         self.day(at / 86_400).entry_pages.add(page, 1);
-        self.open.insert(visitor, Session { start: at, last: at, pages: 1, exit: page.to_string(), goals: 0, reports: 0, channel: None, utm: Default::default() });
+        let audience = self.cache.get(&visitor).and_then(|c| c.audience.clone());
+        let number = {
+            let n = self.visit_numbers.entry(visitor).or_insert(0);
+            *n += 1;
+            *n
+        };
+        self.open.insert(
+            visitor,
+            Session {
+                start: at,
+                last: at,
+                pages: 1,
+                exit: page.to_string(),
+                goals: 0,
+                reports: 0,
+                channel: None,
+                utm: Default::default(),
+                paths: vec![path_of(page).to_string()],
+                visitor,
+                audience,
+                referrer: None,
+                events: Vec::new(),
+                number,
+                verified: false,
+            },
+        );
         if let Some(session) = self.open.get_mut(&visitor) {
             session.goals |= page_goals(page);
         }
@@ -948,6 +1272,7 @@ impl Shard {
         if let (Some(arrival), Some(session)) = (&arrival, self.open.get_mut(&visitor)) {
             session.channel = Some(arrival.channel);
             session.utm = arrival.utm.clone();
+            session.referrer = referrer.clone();
         }
         #[cfg(feature = "model-postgres")]
         if let (true, Some(page)) = (super::store::enabled(), &page) {
@@ -961,6 +1286,7 @@ impl Shard {
             // The page key starts with the host.
             let host = page.split('/').next().unwrap_or("");
             day.dims[CHANNELS].add_capped(&format!("{host}\t{}", arrival.channel), 1, DIM_TOP);
+            day.extra[SITE_ENTRIES].add_capped(&format!("{page}\t{}", arrival.channel), 1, DIM_TOP);
             for (i, value) in arrival.utm.iter().enumerate() {
                 if let Some(value) = value {
                     day.dims[UTM + i].add_capped(&format!("{host}\t{value}"), 1, DIM_TOP);
@@ -986,12 +1312,27 @@ impl Shard {
         counts.pages += page.is_some() as u64;
         let name = host_name(host);
         let day = self.day(hour / 24);
+        if (g == AI || g == BOTS) && !class.name.is_empty() && !matches!(class.kind, Kind::Hosting | Kind::Browser) {
+            // What named crawlers fetch: pages, and the paths that 404 for them.
+            if page.is_some() {
+                day.extra[SITE_CRAWL].add_capped(&format!("{name}\t{}\tpages", class.name), 1, DIM_TOP);
+            }
+            if let Some(path) = &not_found {
+                day.extra[SITE_CRAWL].add_capped(&format!("{name}\t{}\t404", class.name), 1, DIM_TOP);
+                day.extra[CRAWL_404].add_capped(&format!("{path}\t{}", class.name), 1, DIM_TOP);
+            }
+        }
         if g == AI {
             day.site_ai_agents.add_capped(&format!("{name}\t{}\t{}\t{}\t{}", or_unknown(class.name), class.operator, class.kind.label(), class.verified), 1, DIM_TOP);
             if let Some(page) = page {
                 day.ai_pages.add(&page, 1);
             }
-        } else {
+        } else if g == OWNER {
+            if let Some(page) = page {
+                day.extra[OWNER_PAGES].add(&page, 1);
+            }
+            // The owner's 404s are still the site's.
+        } else if g == BOTS {
             let kind = if class.kind == Kind::Browser { "browser-no-assets" } else { class.kind.label() };
             day.site_bots.add_capped(&format!("{name}\t{kind}\t{}", class.name), 1, DIM_TOP);
         }
@@ -1018,6 +1359,7 @@ pub fn settle(now: u64) {
             let host = pending.requests.first().map_or(0, |d| d.host);
             if shard.seen.insert(visitor, Group::Bot).is_none() {
                 shard.new_visitor(day, host, BOTS);
+                shard.count_page_only(day, host);
             }
             for d in pending.requests {
                 shard.count(BOTS, d.hour, d.host, &browser_without_assets(), d.page, d.not_found, visitor);
@@ -1029,16 +1371,16 @@ pub fn settle(now: u64) {
 /// Everything counted, merged across shards: `(hour, host) → counts` and
 /// `day → lists` (after settling quiet browsers as of `now`).
 #[doc(hidden)]
-pub fn snapshot(now: u64) -> (BTreeMap<(u64, u8), [Counts; 3]>, BTreeMap<u64, Day>) {
+pub fn snapshot(now: u64) -> (BTreeMap<(u64, u8), [Counts; GROUPS]>, BTreeMap<u64, Day>) {
     settle(now);
     drain_locals();
-    let mut hours: BTreeMap<(u64, u8), [Counts; 3]> = BTreeMap::new();
+    let mut hours: BTreeMap<(u64, u8), [Counts; GROUPS]> = BTreeMap::new();
     let mut days: BTreeMap<u64, Day> = BTreeMap::new();
     for shard in &recorder().shards {
         let shard = shard.lock().unwrap_or_else(|e| e.into_inner());
         for (key, counts) in &shard.hours {
             let entry = hours.entry(*key).or_default();
-            for g in 0..3 {
+            for g in 0..GROUPS {
                 entry[g].requests += counts[g].requests;
                 entry[g].pages += counts[g].pages;
             }
@@ -1048,7 +1390,11 @@ pub fn snapshot(now: u64) -> (BTreeMap<(u64, u8), [Counts; 3]>, BTreeMap<u64, Da
         }
         // Open sessions count as if they ended now (they stay open).
         for session in shard.open.values() {
-            add_session(days.entry(session.start / 86_400).or_default(), session);
+            let day = days.entry(session.start / 86_400).or_default();
+            add_session(day, session);
+            let mut visit = session.visit();
+            visit.verified |= shard.verified.contains(&session.visitor);
+            day.visits.push(visit);
         }
     }
     (hours, days)
@@ -1069,6 +1415,9 @@ fn add_session(day: &mut Day, session: &Session) {
     }
 }
 
+/// Whether any goal is a request goal: unknown (`u64::MAX`), 0 or 1.
+static REQUEST_GOALS: AtomicU64 = AtomicU64::new(u64::MAX);
+
 fn goals_lock() -> &'static RwLock<Vec<String>> {
     static GOALS_SET: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
     GOALS_SET.get_or_init(|| RwLock::new(super::config::goals()))
@@ -1084,6 +1433,12 @@ fn goals() -> std::sync::RwLockReadGuard<'static, Vec<String>> {
 #[doc(hidden)]
 pub fn set_goals_for_tests(goals: &[&str]) {
     *goals_lock().write().unwrap_or_else(|e| e.into_inner()) = goals.iter().map(|g| g.to_string()).collect();
+    REQUEST_GOALS.store(u64::MAX, Ordering::Relaxed);
+}
+
+/// The path of a page key (`host/path`).
+fn path_of(page: &str) -> &str {
+    page.find('/').map_or("/", |i| &page[i..])
 }
 
 /// The goals a page view (`host/path`) reaches.
@@ -1092,9 +1447,38 @@ fn page_goals(page: &str) -> u32 {
     let mut reached = 0;
     for (i, goal) in goals().iter().enumerate() {
         let hit = match goal.strip_suffix('*') {
-            _ if goal.starts_with("event:") => false,
+            _ if goal.starts_with("event:") || goal.starts_with("req:") => false,
             Some(prefix) => path.starts_with(prefix),
             None => path == goal,
+        };
+        if hit {
+            reached |= 1 << i;
+        }
+    }
+    reached
+}
+
+/// Whether any goal is a request (`req:/api/proxy`): then people's
+/// requests other than pages are checked against them.
+fn request_goals_configured() -> bool {
+    match REQUEST_GOALS.load(Ordering::Relaxed) {
+        u64::MAX => {
+            let any = goals().iter().any(|g| g.starts_with("req:"));
+            REQUEST_GOALS.store(any as u64, Ordering::Relaxed);
+            any
+        }
+        n => n == 1,
+    }
+}
+
+/// The request goals (`req:/path`, or `req:/prefix*`) a request path reaches.
+fn request_goals(path: &str) -> u32 {
+    let mut reached = 0;
+    for (i, goal) in goals().iter().enumerate() {
+        let Some(want) = goal.strip_prefix("req:") else { continue };
+        let hit = match want.strip_suffix('*') {
+            Some(prefix) => path.starts_with(prefix),
+            None => path == want,
         };
         if hit {
             reached |= 1 << i;
@@ -1153,8 +1537,12 @@ pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, 
         let from = get("r").and_then(json_string).filter(|r| r.starts_with('/')).unwrap_or_else(|| "/".to_string());
         let referer = format!("https://{host_name}{from}");
         let is_person = {
-            let shard = recorder().shards[(visitor % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
-            shard.seen.get(&visitor) == Some(&Group::Person)
+            let mut shard = recorder().shards[(visitor % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
+            let person = shard.seen.get(&visitor) == Some(&Group::Person);
+            if person {
+                shard.mark_verified(visitor, day, &host_name);
+            }
+            person
         };
         if is_person {
             record(&Hit {
@@ -1177,6 +1565,7 @@ pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, 
     if shard.seen.get(&visitor) != Some(&Group::Person) {
         return;
     }
+    shard.mark_verified(visitor, day, &host_name);
     if let Some(session) = shard.open.get_mut(&visitor) {
         session.reports += 1;
         if session.reports > MAX_REPORTS {
@@ -1227,9 +1616,10 @@ pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, 
                 .filter_map(|(k, v)| Some((k.chars().take(32).collect::<String>(), json_string(&v)?.chars().take(64).collect::<String>())))
                 .collect();
             let reached = event_goals(&name);
-            if reached != 0 {
-                if let Some(session) = shard.open.get_mut(&visitor) {
-                    session.goals |= reached;
+            if let Some(session) = shard.open.get_mut(&visitor) {
+                session.goals |= reached;
+                if session.events.len() < 10 {
+                    session.events.push(name.clone());
                 }
             }
             #[cfg(feature = "model-postgres")]
@@ -1253,6 +1643,68 @@ pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, 
     }
 }
 
+/// Platforms an app may report in an event (`p`); others are `other`.
+const APP_PLATFORMS: &[&str] = &["ios", "ipados", "macos", "visionos", "watchos", "android", "windows", "linux", "chrome", "edge", "firefox", "safari", "web", "other"];
+
+/// Why an app event was refused.
+#[derive(Debug, PartialEq, Eq)]
+#[doc(hidden)]
+pub enum AppEventError {
+    /// Not JSON, or without `app` and `n`.
+    Malformed,
+    /// `app` isn't one of `[traffic] apps`.
+    UnknownApp,
+}
+
+/// An event from one of the site's apps (`POST /_rws/e`, 18.35):
+/// `{"app":"HITOP","v":"2.3.1","p":"ios","n":"request_sent"}`. Native apps
+/// and extensions don't load pages, so unlike the script's reports these
+/// aren't tied to a person: the client counts as a user of `app` (by
+/// `p` platform and `v` version) and the event under its name. Only
+/// configured apps are taken, at most [`MAX_REPORTS`] events per client a
+/// day; nothing is stored in the app.
+#[doc(hidden)]
+pub fn app_event(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, now: u64) -> Result<(), AppEventError> {
+    if !enabled() {
+        return Ok(());
+    }
+    let members = crate::mcp::json_rpc::object_members(body).ok_or(AppEventError::Malformed)?;
+    let get = |key: &str| members.iter().find(|(k, _)| k == key).and_then(|(_, v)| json_string(v));
+    let clean = |v: String, n: usize| v.chars().filter(|c| !c.is_control() && *c != '\t').take(n).collect::<String>();
+    let app = get("app").ok_or(AppEventError::Malformed)?;
+    let name = get("n").map(|n| clean(n, 64)).filter(|n| !n.is_empty()).ok_or(AppEventError::Malformed)?;
+    let app = super::apps::configured(&app).ok_or(AppEventError::UnknownApp)?;
+    let platform = get("p").map(|p| p.to_ascii_lowercase()).map_or("other", |p| APP_PLATFORMS.iter().copied().find(|k| *k == p).unwrap_or("other"));
+    let version = get("v").map(|v| clean(v, 32)).filter(|v| !v.is_empty());
+    let day = now / 86_400;
+    let hour = now / 3_600;
+    let host = host_index(raw_host);
+    let visitor = visitor(day, host, ip, user_agent);
+    let site = host_name(host);
+    let recorder = recorder();
+    let mut shard = recorder.shards[(visitor % SHARDS as u64) as usize].lock().unwrap_or_else(|e| e.into_inner());
+    shard.roll(day, recorder.retention_days);
+    let reports = shard.app_reports.entry(visitor).or_insert(0);
+    *reports += 1;
+    if *reports > MAX_REPORTS {
+        return Ok(());
+    }
+    match shard.seen.get(&visitor).copied() {
+        // The owner's own app use stays the owner's.
+        Some(Group::Owner) => return Ok(()),
+        Some(Group::App) => {}
+        _ => {
+            if shard.seen.insert(visitor, Group::App).is_none() {
+                shard.new_visitor(day, host, APPS);
+            }
+            shard.count_app_user(day, &site, app, platform, version.as_deref());
+            shard.hours.entry((hour, host)).or_default()[APPS].requests += 1;
+        }
+    }
+    shard.day(day).extra[APP_EVENTS].add_capped(&format!("{site}\t{app}\t{name}"), 1, DIM_TOP);
+    Ok(())
+}
+
 /// People's page views of the last [`LIVE_WINDOW`] before `now`, from every
 /// shard (unordered). Visitor keys are the day's hashes: comparable within
 /// the result, meaningless outside it.
@@ -1270,7 +1722,7 @@ pub fn recent(now: u64) -> Vec<Recent> {
 /// Put back what [`snapshot`] gave (loading a saved file): counts are added
 /// to shard 0.
 #[doc(hidden)]
-pub fn restore(hosts: Vec<String>, hours: BTreeMap<(u64, u8), [Counts; 3]>, days: BTreeMap<u64, Day>) {
+pub fn restore(hosts: Vec<String>, hours: BTreeMap<(u64, u8), [Counts; GROUPS]>, days: BTreeMap<u64, Day>) {
     let recorder = recorder();
     let configured = recorder.configured.read().unwrap_or_else(|e| e.into_inner());
     let mut known = recorder.hosts.write().unwrap_or_else(|e| e.into_inner());
@@ -1289,7 +1741,7 @@ pub fn restore(hosts: Vec<String>, hours: BTreeMap<(u64, u8), [Counts; 3]>, days
     for ((hour, host), counts) in hours {
         let host = map.get(host as usize).copied().unwrap_or(0);
         let entry = shard.hours.entry((hour, host)).or_default();
-        for g in 0..3 {
+        for g in 0..GROUPS {
             entry[g].requests += counts[g].requests;
             entry[g].pages += counts[g].pages;
         }

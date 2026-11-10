@@ -561,6 +561,15 @@ impl AdminApi {
                 Err(e) => error(STATUS_CODE_REASON_PHRASE.n400_bad_request, &e),
             };
         }
+        if route == "/traffic/owner" {
+            if method != "GET" {
+                return wrong_method("GET");
+            }
+            return match ops::traffic_owner_json() {
+                Ok(body) => ok(body),
+                Err(e) => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+            };
+        }
         if route == "/traffic/live" {
             if method != "GET" {
                 return wrong_method("GET");

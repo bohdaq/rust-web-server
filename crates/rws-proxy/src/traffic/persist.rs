@@ -19,13 +19,20 @@
 //! names, so an older rws reading the file ignores them rather than
 //! showing a host as a bot's name.
 //!
+//! Apps and the owner (18.35) are counted groups 4 and 5. Their hourly
+//! counts go in `app_hours` (`[hour, host, apps req, apps pages, owner
+//! req, owner pages]`) and their visitors in `more_visitors` (`[apps,
+//! owner]`), so the `hours` rows keep their 8 numbers and an older rws
+//! still reads them. The [`EXTRA`] lists and the recent `visits` are new
+//! keys as well.
+//!
 //! Unique-visitor keys are never saved: a restart within a day can count a
 //! returning visitor once more.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use super::record::{Counts, Day, Top, BEHAVIOUR, DIMS, DIM_SAVED, TOP_SAVED};
+use super::record::{Counts, Day, Top, Visit, BEHAVIOUR, DIMS, DIM_SAVED, EXTRA, GROUPS, MAX_VISITS, TOP_SAVED, VISIT_PAGES};
 use crate::mcp::json_rpc::{extract_raw, extract_str, split_array_elements};
 
 const LISTS: [&str; 12] = [
@@ -67,6 +74,9 @@ fn list<'a>(day: &'a Day, name: &str) -> &'a Top {
     if let Some(i) = BEHAVIOUR.iter().position(|d| *d == name) {
         return &day.behaviour[i];
     }
+    if let Some(i) = EXTRA.iter().position(|d| *d == name) {
+        return &day.extra[i];
+    }
     match name {
         "people_pages" => &day.people_pages,
         "ai_pages" => &day.ai_pages,
@@ -90,6 +100,9 @@ fn list_mut<'a>(day: &'a mut Day, name: &str) -> &'a mut Top {
     if let Some(i) = BEHAVIOUR.iter().position(|d| *d == name) {
         return &mut day.behaviour[i];
     }
+    if let Some(i) = EXTRA.iter().position(|d| *d == name) {
+        return &mut day.extra[i];
+    }
     match name {
         "people_pages" => &mut day.people_pages,
         "ai_pages" => &mut day.ai_pages,
@@ -108,7 +121,7 @@ fn list_mut<'a>(day: &'a mut Day, name: &str) -> &'a mut Top {
 
 /// The counts as the saved file's text.
 #[doc(hidden)]
-pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; 3]>, days: &BTreeMap<u64, Day>) -> String {
+pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; GROUPS]>, days: &BTreeMap<u64, Day>) -> String {
     let mut out = String::from("{\"version\":1,\"hosts\":[");
     out.push_str(&hosts.iter().map(|h| quote(h)).collect::<Vec<_>>().join(","));
     out.push_str("],\"hours\":[");
@@ -117,7 +130,22 @@ pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; 3]>, days:
         .map(|((hour, host), c)| format!("[{hour},{host},{},{},{},{},{},{}]", c[0].requests, c[0].pages, c[1].requests, c[1].pages, c[2].requests, c[2].pages))
         .collect();
     out.push_str(&rows.join(","));
+    out.push_str("],\"app_hours\":[");
+    let rows: Vec<String> = hours
+        .iter()
+        .filter(|(_, c)| c[3].requests + c[3].pages + c[4].requests + c[4].pages > 0)
+        .map(|((hour, host), c)| format!("[{hour},{host},{},{},{},{}]", c[3].requests, c[3].pages, c[4].requests, c[4].pages))
+        .collect();
+    out.push_str(&rows.join(","));
     out.push_str("],\"days\":[");
+    // The newest visits, at most MAX_VISITS across all days.
+    let mut keep = MAX_VISITS;
+    let mut visits_kept: BTreeMap<u64, usize> = BTreeMap::new();
+    for (n, day) in days.iter().rev() {
+        let k = day.visits.len().min(keep);
+        visits_kept.insert(*n, k);
+        keep -= k;
+    }
     let days: Vec<String> = days
         .iter()
         .map(|(n, day)| {
@@ -125,27 +153,91 @@ pub fn to_json(hosts: &[String], hours: &BTreeMap<(u64, u8), [Counts; 3]>, days:
                 .iter()
                 .chain(DIMS.iter())
                 .chain(BEHAVIOUR.iter())
+                .chain(EXTRA.iter())
                 .map(|name| {
-                    let keep = if DIMS.contains(name) || BEHAVIOUR.contains(name) || name.starts_with("site_") { DIM_SAVED } else { TOP_SAVED };
+                    let keep = if DIMS.contains(name) || BEHAVIOUR.contains(name) || EXTRA.contains(name) || name.starts_with("site_") { DIM_SAVED } else { TOP_SAVED };
                     let entries: Vec<String> = list(day, name).sorted(keep).iter().map(|(k, v)| format!("[{},{v}]", quote(k))).collect();
                     format!("{}:[{}]", quote(name), entries.join(","))
                 })
                 .collect();
             let sessions: Vec<String> =
                 day.sessions.iter().map(|(host, t)| format!("[{},{},{},{},{}]", quote(host), t.sessions, t.bounces, t.duration, t.pages)).collect();
+            let mut visits = day.visits.clone();
+            visits.sort_by_key(|v| v.end);
+            let skip = visits.len() - visits_kept.get(n).copied().unwrap_or(0);
+            let visits: Vec<String> = visits[skip..].iter().map(visit_json).collect();
             format!(
-                "{{\"day\":{n},\"visitors\":[{},{},{}],\"sessions\":[{}],{}}}",
+                "{{\"day\":{n},\"visitors\":[{},{},{}],\"more_visitors\":[{},{}],\"sessions\":[{}],{},\"visits\":[{}]}}",
                 day.visitors[0],
                 day.visitors[1],
                 day.visitors[2],
+                day.visitors[3],
+                day.visitors[4],
                 sessions.join(","),
-                lists.join(",")
+                lists.join(","),
+                visits.join(",")
             )
         })
         .collect();
     out.push_str(&days.join(","));
     out.push_str("]}\n");
     out
+}
+
+fn strings(list: &[String]) -> String {
+    format!("[{}]", list.iter().map(|s| quote(s)).collect::<Vec<_>>().join(","))
+}
+
+/// A visit as saved (and as the API reports it).
+#[doc(hidden)]
+pub fn visit_json(v: &Visit) -> String {
+    format!(
+        r#"{{"start":{},"end":{},"host":{},"views":{},"pages":{},"country":{},"browser":{},"os":{},"device":{},"channel":{},"referrer":{},"campaign":{},"verified":{},"number":{},"events":{}}}"#,
+        v.start,
+        v.end,
+        quote(&v.host),
+        v.views,
+        strings(&v.pages),
+        quote(&v.country),
+        quote(&v.browser),
+        quote(&v.os),
+        quote(&v.device),
+        quote(&v.channel),
+        quote(&v.referrer),
+        quote(&v.campaign),
+        v.verified,
+        v.number,
+        strings(&v.events),
+    )
+}
+
+fn visit_from_json(object: &str) -> Option<Visit> {
+    let text = |key: &str| extract_str(object, key).unwrap_or_default().chars().take(300).collect::<String>();
+    let number = |key: &str| extract_raw(object, key).and_then(|v| v.trim().parse::<u64>().ok());
+    let list = |key: &str, n: usize| -> Vec<String> {
+        split_array_elements(&extract_raw(object, key).unwrap_or_default())
+            .iter()
+            .filter_map(|v| extract_str(&format!("{{\"v\":{v}}}"), "v"))
+            .take(n)
+            .collect()
+    };
+    Some(Visit {
+        start: number("start")?,
+        end: number("end")?,
+        host: text("host"),
+        views: number("views").unwrap_or(0),
+        pages: list("pages", VISIT_PAGES),
+        country: text("country"),
+        browser: text("browser"),
+        os: text("os"),
+        device: text("device"),
+        channel: text("channel"),
+        referrer: text("referrer"),
+        campaign: text("campaign"),
+        verified: extract_raw(object, "verified").is_some_and(|v| v.trim() == "true"),
+        number: number("number").unwrap_or(1) as u32,
+        events: list("events", 10),
+    })
 }
 
 fn numbers(json: &str) -> Vec<u64> {
@@ -155,7 +247,7 @@ fn numbers(json: &str) -> Vec<u64> {
 /// Read a saved file's text; `None` when it isn't one.
 #[allow(clippy::type_complexity)]
 #[doc(hidden)]
-pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts; 3]>, BTreeMap<u64, Day>)> {
+pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts; GROUPS]>, BTreeMap<u64, Day>)> {
     if extract_raw(text, "version")?.trim() != "1" {
         return None;
     }
@@ -167,10 +259,18 @@ pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts
     for row in split_array_elements(&extract_raw(text, "hours")?) {
         let n = numbers(&row);
         if n.len() == 8 && (n[1] as usize) < hosts.len() {
-            hours.insert(
-                (n[0], n[1] as u8),
-                [Counts { requests: n[2], pages: n[3] }, Counts { requests: n[4], pages: n[5] }, Counts { requests: n[6], pages: n[7] }],
-            );
+            let entry: &mut [Counts; GROUPS] = hours.entry((n[0], n[1] as u8)).or_default();
+            entry[0] = Counts { requests: n[2], pages: n[3] };
+            entry[1] = Counts { requests: n[4], pages: n[5] };
+            entry[2] = Counts { requests: n[6], pages: n[7] };
+        }
+    }
+    for row in split_array_elements(&extract_raw(text, "app_hours").unwrap_or_default()) {
+        let n = numbers(&row);
+        if n.len() == 6 && (n[1] as usize) < hosts.len() {
+            let entry: &mut [Counts; GROUPS] = hours.entry((n[0], n[1] as u8)).or_default();
+            entry[3] = Counts { requests: n[2], pages: n[3] };
+            entry[4] = Counts { requests: n[4], pages: n[5] };
         }
     }
     let mut days = BTreeMap::new();
@@ -181,6 +281,17 @@ pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts
         for (g, v) in visitors.iter().take(3).enumerate() {
             day.visitors[g] = *v;
         }
+        let more = numbers(&extract_raw(&object, "more_visitors").unwrap_or_default());
+        for (g, v) in more.iter().take(2).enumerate() {
+            day.visitors[3 + g] = *v;
+        }
+        // Last in the object: its members' keys (`events`, `pages`) are
+        // found after the day's lists of the same names.
+        for v in split_array_elements(&extract_raw(&object, "visits").unwrap_or_default()).iter().take(MAX_VISITS) {
+            if let Some(visit) = visit_from_json(v) {
+                day.visits.push(visit);
+            }
+        }
         for row in split_array_elements(&extract_raw(&object, "sessions").unwrap_or_default()) {
             let parts = split_array_elements(&row);
             let n: Vec<u64> = parts.iter().skip(1).filter_map(|v| v.trim().parse().ok()).collect();
@@ -188,7 +299,7 @@ pub fn from_json(text: &str) -> Option<(Vec<String>, BTreeMap<(u64, u8), [Counts
                 day.sessions.insert(host, super::record::Sessions { sessions: n[0], bounces: n[1], duration: n[2], pages: n[3] });
             }
         }
-        for name in LISTS.iter().chain(DIMS.iter()).chain(BEHAVIOUR.iter()) {
+        for name in LISTS.iter().chain(DIMS.iter()).chain(BEHAVIOUR.iter()).chain(EXTRA.iter()) {
             let raw = extract_raw(&object, name).unwrap_or_default();
             for pair in split_array_elements(&raw) {
                 let parts = split_array_elements(&pair);

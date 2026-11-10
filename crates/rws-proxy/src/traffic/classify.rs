@@ -12,6 +12,12 @@ pub enum Group {
     Ai,
     /// Everything else automated.
     Bot,
+    /// The site's own native apps and browser extensions (`[traffic] apps`,
+    /// or recognised by platform): counted as app users, not as bots.
+    App,
+    /// The site's owner (`traffic::owner`): counted apart, so the other
+    /// groups show everyone else.
+    Owner,
     /// This machine (health checks, updaters, the admin UI's own calls).
     Internal,
 }
@@ -41,6 +47,11 @@ pub enum Kind {
     Hosting,
     /// A library or tool (`curl`, `python-requests`) or an unknown bot.
     Tool,
+    /// A native app or browser extension (`traffic::apps`).
+    App,
+    /// The site's owner: signed in to the admin API, from a configured
+    /// network, or a browser marked with the owner link (`traffic::owner`).
+    Owner,
     NoUserAgent,
     Local,
 }
@@ -51,6 +62,8 @@ impl Kind {
             Kind::Browser => Group::Person,
             Kind::AiTraining | Kind::AiSearch | Kind::AiAssistant | Kind::AiAgent => Group::Ai,
             Kind::Local => Group::Internal,
+            Kind::App => Group::App,
+            Kind::Owner => Group::Owner,
             _ => Group::Bot,
         }
     }
@@ -74,6 +87,8 @@ impl Kind {
             Kind::Tool => "tool",
             Kind::NoUserAgent => "no-user-agent",
             Kind::Local => "local",
+            Kind::App => "app",
+            Kind::Owner => "owner",
         }
     }
 

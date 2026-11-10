@@ -892,3 +892,243 @@ fn zz_cost_parts() {
     });
     let _ = &mut h;
 }
+
+// ── apps, owner, tiers, visits, probes, crawl, downloads (18.35) ──────────────
+
+const HITOP_IOS: &str = "HITOP/2.3.1 CFNetwork/3826.500.111 Darwin/25.0.0";
+/// Seen on hitop.rws8.tech 2026-11-10 from the owner's iPhone.
+const NETWORKING_EXTENSION: &str = "NetworkingExtension/8625.2.8.10.6 Network/6681.42.3 iOS/27.2";
+
+fn with_headers<'a>(mut h: Hit<'a>, headers: &'a [crate::header::Header]) -> Hit<'a> {
+    h.headers = headers;
+    h
+}
+
+#[test]
+fn apps_and_extensions_are_recognised() {
+    let _g = fresh();
+    use super::apps::{detect, set_apps, App};
+    set_apps(&["HITOP=HITOP/".to_string(), "HITOP=chrome-extension://abcdefghijklmnop".to_string(), "bad".to_string(), "=x".to_string()]);
+    assert_eq!(detect(Some(HITOP_IOS), None), Some(App { name: "HITOP", platform: "apple", version: Some("2.3.1".to_string()) }));
+    let ext = detect(Some(CHROME), Some("chrome-extension://abcdefghijklmnop")).unwrap();
+    assert_eq!((ext.name, ext.platform, ext.version), ("HITOP", "chrome", None));
+    // Not configured: a name for the platform only.
+    assert_eq!(detect(Some(FIREFOX), Some("moz-extension://3f1c-uuid")).unwrap().name, "Firefox extension");
+    assert_eq!(detect(Some(CHROME), Some("chrome-extension://zzzz")).unwrap().name, "Chrome extension");
+    let ne = detect(Some(NETWORKING_EXTENSION), None).unwrap();
+    assert_eq!((ne.name, ne.platform), ("iOS/macOS app", "ios"));
+    assert_eq!(detect(Some("SomeApp/7 CFNetwork/1498 Darwin/23.0.0"), None).unwrap().name, "iOS/macOS app");
+    assert_eq!(detect(Some("Dalvik/2.1.0 (Linux; U; Android 14; Pixel 8)"), None).unwrap().platform, "android");
+    let electron = detect(Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) notes/1.0.0 Chrome/128.0 Electron/32.0.0 Safari/537.36"), None).unwrap();
+    assert_eq!((electron.name, electron.platform), ("Desktop app (Electron)", "windows"));
+    // Browsers, page origins and okhttp (scrapers use it too) aren't apps.
+    assert_eq!(detect(Some(CHROME), Some("https://example.com")), None);
+    assert_eq!(detect(Some(IPHONE), None), None);
+    assert_eq!(detect(Some("okhttp/4.12.0"), None), None);
+    assert_eq!(super::apps::configured("hitop"), Some("HITOP"));
+    assert_eq!(super::apps::configured("other"), None);
+    set_apps(&[]);
+}
+
+#[test]
+fn app_users_are_counted_as_apps_with_their_events() {
+    let _g = fresh();
+    super::apps::set_apps(&["HITOP=HITOP/".to_string()]);
+    // The iOS app calls the API: no page, no asset, never a person.
+    let api = |addr: &'static str, ua: &'static str, path: &'static str, at: u64| Hit { content_type: Some("application/json"), ..hit(addr, ua, path, at) };
+    record(&api("203.0.113.50", HITOP_IOS, "/api/proxy", T0));
+    record(&api("203.0.113.50", HITOP_IOS, "/api/proxy", T0 + 1));
+    // An extension fetch: a browser User-Agent with the extension's origin.
+    let origin = [crate::header::Header::new("Origin", "chrome-extension://xyz")];
+    record(&with_headers(api("203.0.113.51", CHROME, "/api/sync", T0 + 2), &origin));
+    // Its events: configured app only, well-formed only.
+    let ev = |body: &str| super::record::app_event(ip("203.0.113.50"), "example.com", Some(HITOP_IOS), body, T0 + 3);
+    assert_eq!(ev(r#"{"app":"hitop","v":"2.3.1","p":"ios","n":"request_sent"}"#), Ok(()));
+    assert_eq!(ev(r#"{"app":"HITOP","n":"request_sent"}"#), Ok(()));
+    assert_eq!(ev(r#"{"app":"Nope","n":"x"}"#), Err(super::record::AppEventError::UnknownApp));
+    assert_eq!(ev(r#"{"app":"HITOP"}"#), Err(super::record::AppEventError::Malformed));
+    assert_eq!(ev("not json"), Err(super::record::AppEventError::Malformed));
+    // An app user who only sent an event (another device).
+    assert_eq!(super::record::app_event(ip("203.0.113.52"), "example.com", Some("Custom/1"), r#"{"app":"HITOP","p":"macos","v":"2.4","n":"opened"}"#, T0 + 4), Ok(()));
+
+    let json = summary(24, None, T0 + 10 + UNDECIDED.as_secs());
+    // Three requests and the event-only device's first event; the events
+    // themselves aren't requests.
+    assert_eq!(totals(&json, "apps"), (4, 0, 3), "{json}");
+    assert_eq!(totals(&json, "people").2, 0);
+    assert_eq!(totals(&json, "bots"), (0, 0, 0), "no app is a bot: {json}");
+    let apps = crate::mcp::json_rpc::extract_raw(&json, "apps").unwrap();
+    let apps = crate::mcp::json_rpc::extract_raw(&json[json.rfind("\"apps\":{").unwrap()..], "apps").unwrap_or(apps);
+    assert!(apps.contains(r#"["HITOP\u0009apple",1]"#), "{apps}");
+    assert!(apps.contains(r#"["Chrome extension\u0009chrome",1]"#), "{apps}");
+    assert!(apps.contains(r#"["HITOP\u0009macos",1]"#), "{apps}");
+    assert!(apps.contains(r#"["HITOP\u00092.3.1",1]"#) && apps.contains(r#"["HITOP\u00092.4",1]"#), "versions: {apps}");
+    assert!(apps.contains(r#"["HITOP\u0009request_sent",2]"#) && apps.contains(r#"["HITOP\u0009opened",1]"#), "events: {apps}");
+    super::apps::set_apps(&[]);
+}
+
+#[test]
+fn the_owner_is_counted_apart_from_everyone() {
+    let _g = fresh();
+    let me = "31.179.213.122";
+    // Before the owner signs in to the admin UI, a person like any.
+    record(&hit(me, CHROME, "/", T0));
+    record(&hit(me, CHROME, "/a.css", T0 + 1));
+    // A successful admin API call (through the site's /admin/ route).
+    let admin = [crate::header::Header::new("X-Rws-Admin", "1")];
+    let mut call = with_headers(hit(me, CHROME, "/admin/api/v1/traffic", T0 + 2), &admin);
+    call.content_type = Some("application/json");
+    record(&call);
+    // A failed one (wrong token) doesn't make anyone the owner.
+    let mut denied = with_headers(hit("198.51.100.77", CHROME, "/admin/api/v1/traffic", T0 + 2), &admin);
+    denied.status = 401;
+    record(&denied);
+    // From then on, on any site, the owner's.
+    record(&hit(me, CHROME, "/docs/", T0 + 3));
+    let mut other_site = hit(me, CHROME, "/app/", T0 + 4);
+    other_site.host = "hitop.example";
+    record(&other_site);
+    // A configured network, and the owner cookie.
+    super::owner::set_networks(&["188.146.0.0/16".to_string()]);
+    record(&hit("188.146.170.111", IPHONE, "/", T0 + 5));
+    let cookie = [crate::header::Header::new("Cookie", format!("a=b; {}={}", super::owner::COOKIE, super::owner::key()))];
+    record(&with_headers(hit("85.223.51.214", FIREFOX, "/", T0 + 6), &cookie));
+    let wrong = [crate::header::Header::new("Cookie", format!("{}=nope", super::owner::COOKIE))];
+    record(&with_headers(hit("85.223.51.215", FIREFOX, "/", T0 + 6), &wrong));
+    record(&hit("85.223.51.215", FIREFOX, "/x.css", T0 + 7));
+    // Someone else.
+    record(&hit("89.205.205.45", IPHONE, "/", T0 + 8));
+    record(&hit("89.205.205.45", IPHONE, "/a.css", T0 + 9));
+
+    let json = summary(24, None, T0 + 10 + UNDECIDED.as_secs());
+    let (_, owner_pages, _) = totals(&json, "owner");
+    assert_eq!(owner_pages, 4, "/docs/, hitop /app/, the network's and the cookie's pages: {json}");
+    // People: the owner's first page (before signing in), the wrong cookie, the other visitor.
+    assert_eq!(totals(&json, "people").2, 3, "{json}");
+    assert!(json.contains(r#""owner_pages":[["#), "{json}");
+    assert!(!json.contains(super::owner::key()), "the owner key isn't in the summary (MCP reads it too)");
+    let owner = crate::admin::ops::traffic_owner_json().unwrap();
+    assert!(owner.contains(&format!(r#""path":"/_rws/me?k={}""#, super::owner::key())), "{owner}");
+    assert!(super::owner::key().len() == 32 && super::owner::key_matches(super::owner::key()) && !super::owner::key_matches("x"));
+    super::owner::set_networks(&[]);
+}
+
+#[test]
+fn tiers_visits_probes_crawl_entries_and_downloads() {
+    let _g = fresh();
+    super::record::set_goals_for_tests(&["req:/api/proxy"]);
+    // A person from a search engine, who runs the script, and makes an API call.
+    let mut first = hit("89.205.205.45", IPHONE, "/docs/mtls/", T0);
+    first.referer = Some("https://www.google.com/");
+    record(&first);
+    record(&hit("89.205.205.45", IPHONE, "/a.css", T0 + 1));
+    let mut second = hit("89.205.205.45", IPHONE, "/download/", T0 + 30);
+    second.referer = Some("https://example.com/docs/mtls/");
+    record(&second);
+    let mut call = hit("89.205.205.45", IPHONE, "/api/proxy", T0 + 31);
+    call.method = "POST";
+    record(&call);
+    record(&hit("89.205.205.45", IPHONE, "/download/hitop-2.3.dmg", T0 + 32));
+    super::record::beacon(ip("89.205.205.45"), "example.com", Some(IPHONE), r#"{"t":"event","p":"/download/","n":"download"}"#, T0 + 33);
+    // A page-only browser, a cloud "browser", a scanner, a crawler.
+    record(&hit("176.144.167.134", CHROME, "/", T0 + 2));
+    record(&hit("3.81.135.68", CHROME, "/", T0 + 3));
+    record(&hit("3.81.135.68", CHROME, "/a.css", T0 + 4));
+    let mut probe = hit("45.138.12.16", CHROME, "/.git/config", T0 + 5);
+    probe.status = 404;
+    record(&probe);
+    let mut missing = hit("192.178.4.10", GOOGLEBOT, "/old-page/", T0 + 6);
+    missing.status = 404;
+    record(&missing);
+    record(&hit("192.178.4.10", GOOGLEBOT, "/docs/", T0 + 7));
+    // curl fetching the install script.
+    record(&hit("198.51.100.9", "curl/8.5.0", "/install.sh", T0 + 8));
+
+    let json = summary(24, None, T0 + 40 + UNDECIDED.as_secs());
+    // Hosting networks are known with the `geo` feature (the bundled tables).
+    let hosting = cfg!(feature = "geo") as u8;
+    assert!(json.contains(&format!(r#""tiers":{{"verified":1,"page_only":1,"hosting":{hosting}}}"#)), "{json}");
+    assert!(json.contains(r#"["example.com/docs/mtls/\u0009search",1]"#), "{json}");
+    assert!(json.contains(r#"["example.com/download/hitop-2.3.dmg\u0009people",1]"#) && json.contains(r#"["example.com/install.sh\u0009bots",1]"#), "{json}");
+    assert!(json.contains(r#""paths":[["/.git/config",1]]"#), "{json}");
+    assert!(json.contains(r#""sources":[["(unknown)\u0009-",1]]"#) || json.contains(r#"\u0009other hosting",1]]"#), "no address kept: {json}");
+    assert!(!json.contains("45.138.12.16"), "{json}");
+    assert!(json.contains(r#""crawl":[{"name":"Googlebot","pages":1,"not_found":1}]"#), "{json}");
+    assert!(json.contains(r#""crawl_404":[["example.com/old-page/\u0009Googlebot",1]]"#), "{json}");
+    assert!(json.contains(r#""goals":[["req:/api/proxy",1]]"#), "the API call reached the goal: {json}");
+    let visits = &json[json.find(r#""visits":["#).unwrap()..];
+    assert!(visits.contains(r#""host":"example.com","views":2,"pages":["/docs/mtls/","/download/"],"#), "{visits}");
+    assert!(visits.contains(r#""channel":"search","referrer":"www.google.com","#), "{visits}");
+    assert!(visits.contains(r#""verified":true,"number":1,"events":["download"]"#), "{visits}");
+    assert!(!visits.contains("89.205"), "no address in a visit");
+
+    // Saved and loaded: the new lists, visits and app/owner hours survive;
+    // the hours rows keep 8 numbers for older rws.
+    let (hours, days) = super::record::snapshot(T0 + 40 + UNDECIDED.as_secs());
+    let hosts = super::record::host_names();
+    let text = super::persist::to_json(&hosts, &hours, &days);
+    let hours_raw = crate::mcp::json_rpc::extract_raw(&text, "hours").unwrap();
+    assert!(crate::mcp::json_rpc::split_array_elements(&hours_raw).iter().all(|r| crate::mcp::json_rpc::split_array_elements(r).len() == 8));
+    let (_, hours2, days2) = super::persist::from_json(&text).unwrap();
+    assert_eq!(hours2, hours);
+    let (a, b) = (days.values().next().unwrap(), days2.values().next().unwrap());
+    assert_eq!(a.visitors, b.visitors);
+    assert_eq!(a.extra.iter().map(|t| t.sorted(10)).collect::<Vec<_>>(), b.extra.iter().map(|t| t.sorted(10)).collect::<Vec<_>>());
+    let sorted = |v: &[super::record::Visit]| {
+        let mut v = v.to_vec();
+        v.sort_by_key(|v| (v.end, v.start));
+        v
+    };
+    assert_eq!(sorted(&a.visits), sorted(&b.visits));
+    super::record::set_goals_for_tests(&[]);
+}
+
+#[test]
+fn files_saved_before_apps_still_load() {
+    let _g = fresh();
+    let old = r#"{"version":1,"hosts":["example.com"],"hours":[[498000,0,5,2,1,1,3,0]],"days":[{"day":20757,"visitors":[2,1,3],"sessions":[],"people_pages":[["example.com/",2]]}]}"#;
+    let (_, hours, days) = super::persist::from_json(old).unwrap();
+    let c = hours[&(498000, 0)];
+    assert_eq!((c[0].requests, c[2].requests, c[3].requests, c[4].requests), (5, 3, 0, 0));
+    assert_eq!(days[&20757].visitors, [2, 1, 3, 0, 0]);
+    assert!(days[&20757].visits.is_empty());
+}
+
+#[test]
+fn the_layer_takes_app_events_and_sets_the_owner_cookie() {
+    let _g = fresh();
+    super::apps::set_apps(&["HITOP=HITOP/".to_string()]);
+    let layer = super::TrafficScriptLayer::new(false);
+    let post = |body: &str| format!("POST /_rws/e HTTP/1.1\r\nHost: example.com\r\nUser-Agent: {HITOP_IOS}\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+    let ok = through(&layer, &post(r#"{"app":"HITOP","n":"opened"}"#));
+    assert_eq!(ok.status_code, 204);
+    assert!(ok.headers.iter().any(|h| h.name == "Access-Control-Allow-Origin" && h.value == "*"));
+    assert_eq!(through(&layer, &post(r#"{"app":"Other","n":"opened"}"#)).status_code, 403);
+    assert_eq!(through(&layer, &post("{}")).status_code, 400);
+    assert_eq!(through(&layer, "OPTIONS /_rws/e HTTP/1.1\r\nHost: example.com\r\n\r\n").status_code, 204);
+    assert_eq!(through(&layer, "GET /_rws/e HTTP/1.1\r\nHost: example.com\r\n\r\n").status_code, 405);
+
+    let link = through(&layer, &format!("GET /_rws/me?k={} HTTP/1.1\r\nHost: <b>example.com\r\n\r\n", super::owner::key()));
+    assert_eq!(link.status_code, 200);
+    let cookie = link.headers.iter().find(|h| h.name == "Set-Cookie").unwrap().value.to_string();
+    assert!(cookie.starts_with(&format!("rws_me={};", super::owner::key())) && cookie.contains("HttpOnly"), "{cookie}");
+    assert!(body(&link).contains("&lt;b&gt;example.com") && !body(&link).contains("<b>"), "the Host header is escaped");
+    assert_eq!(through(&layer, "GET /_rws/me?k=wrong HTTP/1.1\r\nHost: example.com\r\n\r\n").status_code, 403);
+    let off = through(&layer, "GET /_rws/me?off HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    assert!(off.headers.iter().any(|h| h.name == "Set-Cookie" && h.value.contains("Max-Age=0")));
+    // Counting off: these paths are the app's again.
+    super::record::disable_for_tests();
+    assert_eq!(body(&through(&layer, &post("{}"))), "inner");
+    super::apps::set_apps(&[]);
+}
+
+#[test]
+fn app_store_referrals_are_their_own_channel() {
+    use super::record::channel_of;
+    for host in ["apps.apple.com", "play.google.com", "chromewebstore.google.com", "chrome.google.com", "addons.mozilla.org", "microsoftedge.microsoft.com"] {
+        assert_eq!(channel_of(host), "store", "{host}");
+    }
+    assert_eq!(channel_of("www.google.com"), "search");
+    assert_eq!(channel_of("news.ycombinator.com"), "social");
+}
+

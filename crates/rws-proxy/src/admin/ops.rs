@@ -373,6 +373,23 @@ pub fn traffic_live_json(host: Option<&str>) -> Result<String, String> {
     Ok(crate::traffic::summary::live_json(host.filter(|h| !h.is_empty()), crate::traffic::record::now()))
 }
 
+/// `GET /traffic/owner` (18.35): the owner link's path — opened on a site,
+/// it marks that browser as the owner's (`traffic::owner`) — and the sites
+/// to open it on.
+pub fn traffic_owner_json() -> Result<String, String> {
+    if !crate::traffic::enabled() {
+        return Err("traffic counting is off (on with the admin API unless [traffic] enabled = false)".to_string());
+    }
+    let sites: Vec<String> = crate::traffic::record::configured_hosts().iter().map(|h| format!("\"{}\"", json_escape(h))).collect();
+    Ok(format!(
+        r#"{{"path":"{}?k={}","sites":[{}],"networks":{}}}"#,
+        crate::traffic::owner::PATH,
+        crate::traffic::owner::key(),
+        sites.join(","),
+        !crate::traffic::config::owner_networks().is_empty()
+    ))
+}
+
 pub fn traffic_json(hours: u64, host: Option<&str>) -> Result<String, String> {
     if !crate::traffic::enabled() {
         return Err("traffic counting is off (on with the admin API unless [traffic] enabled = false)".to_string());

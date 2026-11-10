@@ -15,12 +15,14 @@
 //! whether it's a person is decided later, by whether that client loads the
 //! page's assets as a browser does.
 
+pub mod apps;
 mod classify;
 pub mod config;
 mod data;
 pub mod device;
 pub mod geo;
 pub mod hosting;
+pub mod owner;
 #[doc(hidden)]
 pub mod persist;
 pub mod record;
@@ -92,6 +94,9 @@ pub fn start() {
 pub fn configure_sites(toml: &str) {
     let config = crate::proxy_config::ProxyConfig::from_str(toml);
     record::set_configured_hosts(config.routes.iter().filter_map(|r| r.match_.host.clone()));
+    // `[traffic] apps` and `owner_networks` follow the file too.
+    apps::set_apps(&config::apps());
+    owner::set_networks(&config::owner_networks());
 }
 
 /// Connect to `[traffic] database_url_env`'s PostgreSQL, when set.
