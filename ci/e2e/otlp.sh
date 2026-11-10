@@ -212,6 +212,9 @@ http.server.ThreadingHTTPServer(("127.0.0.1", 9497), H).serve_forever()
 PY
 python3 backend.py &
 PIDS+=($!)
+# Listening before rws forwards to it (on a slow runner the first request
+# got a 502).
+for _ in $(seq 1 100); do curl -s -o /dev/null http://127.0.0.1:9497/ && break; sleep 0.1; done
 cat > rws.config.toml <<'TOML'
 [[upstream]]
 name = "echo"
