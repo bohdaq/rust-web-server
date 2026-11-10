@@ -12,7 +12,9 @@
 //! });
 //! health::startup("warm-up", || if warmed() { Ok(()) } else { Err("loading the index".into()) });
 //! # fn warmed() -> bool { true }
-//! assert!(health::report(health::Probe::Readiness).ok);
+//! // What /readyz?verbose answers (not ready here: no server is running).
+//! println!("{}", health::report(health::Probe::Readiness).body(true));
+//! assert!(health::report(health::Probe::Startup).ok);
 //! ```
 //!
 //! | Endpoint | Probe | `200` when |

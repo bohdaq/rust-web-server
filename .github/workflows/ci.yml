@@ -110,6 +110,34 @@ jobs:
           echo "PostgreSQL: $(docker exec "$(docker ps -qf ancestor=postgres:16)" psql -U rws -d rws_test -Atc 'select version()')"
           echo "MySQL: $(docker exec "$(docker ps -qf ancestor=mysql:8.4)" mysql -uroot -prws -Nse 'select version()' 2>/dev/null)"
 
+  # The Kubernetes framework (crates/rws-k8s, 18.36.0) against a real API
+  # server: config watches, discovery, leader election, a controller with a
+  # CRD and a finalizer, generated manifests (server-side dry run). Each test
+  # makes a namespace of its own. RWS_TEST_REQUIRE_KUBERNETES turns a missing
+  # cluster into a failure.
+  kubernetes:
+    name: kubernetes (kind)
+    runs-on: ubuntu-latest
+    env:
+      KIND_VERSION: v0.33.0
+      RWS_TEST_REQUIRE_KUBERNETES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: kubernetes
+      - name: a kind cluster
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$KIND_VERSION" --repo kubernetes-sigs/kind --pattern 'kind-linux-amd64' --dir "$RUNNER_TEMP"
+          install -m 0755 "$RUNNER_TEMP/kind-linux-amd64" /usr/local/bin/kind
+          kind create cluster --name rws --wait 120s --kubeconfig "$RUNNER_TEMP/kubeconfig"
+          echo "RWS_TEST_KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: rws-k8s unit and cluster tests
+        run: cargo test --locked -p rws-k8s
+
   msrv:
     name: msrv (1.99, all features)
     runs-on: ubuntu-latest

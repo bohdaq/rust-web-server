@@ -196,6 +196,7 @@ KMS; see [PKCS#11](/features/https-tls/#keys-in-an-hsm-or-cloud-kms-pkcs11).
 | `zstd` *(default)* | `zstd` content coding | `zstd` (C libzstd, built with the crate) |
 | `tower` | Tower layers as middleware, Tower services as apps, an app as a Tower service | `http2`, `tower-service`, `tower-layer`, `http-body` |
 | `gateway-api` | Kubernetes Gateway API controller | `http2`, `serde`, `kube`, `k8s-openapi` |
+| `k8s` | The Kubernetes API from an app (ConfigMaps, Secrets, discovery, leader election) and operators (controllers, webhooks, CRD/RBAC manifests, test clusters) | `http2`, `serde`, `kube`, `k8s-openapi`, `schemars` |
 | `wasm-plugins` | `WasmLayer`: middleware as WebAssembly modules | `wasmtime` |
 | `fips` | TLS on aws-lc's FIPS 140-3 module (needs CMake and Go) | `http2` |
 | `pkcs11` | TLS private keys on an HSM or cloud KMS | `http2`, `cryptoki` |

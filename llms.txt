@@ -173,6 +173,8 @@ Use it as:
 - [Kubernetes](https://rws8.tech/docs/deployment/kubernetes.md): Deploy rust-web-server on Kubernetes with health probes, metrics scraping, graceful shutdown, and autoscaling.
 - [Kubernetes Ingress](https://rws8.tech/docs/deployment/kubernetes-ingress.md): Use KubernetesIngressWatcher and IngressRouter to dynamically route traffic from Kubernetes Ingress rules.
 - [Kubernetes Gateway API](https://rws8.tech/docs/deployment/kubernetes-gateway-api.md): rws as a Kubernetes Gateway API controller — every route kind, the standard-channel extended features, shared and provisioned modes, and how to install it.
+- [Using the Kubernetes API](https://rws8.tech/docs/deployment/kubernetes-api.md): ConfigMaps and Secrets kept current by a watch, k8s:// secret references, service discovery from EndpointSlices, and leader election — the k8s feature.
+- [Operators](https://rws8.tech/docs/deployment/kubernetes-operators.md): Controllers with reconcile, requeue, finalizers and status; admission and conversion webhooks; CRDs and RBAC from Rust types; tests against a real API server.
 - [Observability](https://rws8.tech/docs/deployment/observability.md): Metrics, structured logs, distributed tracing, and health endpoints for rust-web-server.
 - [Admin API](https://rws8.tech/docs/deployment/admin.md): Inspect and change a running rws on a listener of its own, behind a bearer token, never on the public routes.
 - [Several replicas](https://rws8.tech/docs/deployment/cluster.md): Run rws on several machines behind a load balancer and keep runtime changes — the IP blocklist, maintenance mode, drained backends, feature flags and cache purges — the same on all of them through Redis.

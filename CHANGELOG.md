@@ -15,6 +15,25 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   concurrently, with a timeout, off the event loop; `?verbose` lists each
   check. Without checks `/healthz` and `/readyz` answer as before. The Helm
   chart has an optional `startupProbe`.
+- **Kubernetes framework** (`k8s` feature, new crate `rws-k8s`,
+  `spec/K8S_FRAMEWORK.md`), on kube-rs:
+  - `k8s::client`, `ConfigWatch` (ConfigMaps/Secrets kept current,
+    `apply_to_env`), `k8s://ns/name#key` secrets, service discovery from
+    EndpointSlices into a `BackendPool`, and a public `LeaderElector`.
+  - Operators: `Controller` (reconcile, owns, finalizers, error backoff),
+    `Operator` (several controllers, leader election, readiness check,
+    `rws_controller_*` metrics), `Context` (`patch_status`, `apply_owned`,
+    `event`).
+  - Webhooks: validating, mutating (JSON patch computed) and conversion, as
+    an rws app; `WebhookCertificate` (CA + serving cert, `patch_ca_bundle`).
+  - Manifests from the code: CRDs, RBAC (rules merged; `Operator::rules`),
+    webhook configurations, `--manifests`.
+  - `testing::TestCluster`: tests against a real API server
+    (`RWS_TEST_KUBECONFIG`), a namespace per test; CI job `kubernetes`
+    runs them on kind.
+- **`rws gen deploy --image <image>`**: `deploy/k8s/` with a Deployment
+  wired to the probes and graceful shutdown, Service, PDB, HPA,
+  ServiceAccount and kustomization.
 - **Graceful drain**: after SIGTERM's delay the async servers stop
   accepting, then wait up to `shutdown_timeout_secs`
   (`RWS_CONFIG_SHUTDOWN_TIMEOUT_SECS`, default 25) for handlers still

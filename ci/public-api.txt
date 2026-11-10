@@ -15,6 +15,8 @@ impl !core::marker::Freeze for rust_web_server::cluster::MemoryStore
 impl !core::marker::Freeze for rust_web_server::cluster::RedisStore
 impl !core::marker::Freeze for rust_web_server::feature::FeatureStore
 impl !core::marker::Freeze for rust_web_server::fleet::Fleet
+impl !core::marker::Freeze for rust_web_server::health::Registry
+impl !core::marker::Freeze for rust_web_server::k8s::Error
 impl !core::marker::Freeze for rust_web_server::log::syslog::Sender
 impl !core::marker::Freeze for rust_web_server::model::pool::Replicas
 impl !core::marker::Freeze for rust_web_server::otel::CapturingExporter
@@ -34,6 +36,7 @@ impl !core::marker::Freeze for rust_web_server::storage::S3Storage
 impl !core::marker::Freeze for rust_web_server::tower::Body
 impl !core::marker::Send for rust_web_server::otel::ContextGuard
 impl !core::marker::Send for rust_web_server::otel::Span
+impl !core::marker::Sync for rust_web_server::k8s::controller::Operator
 impl !core::marker::Sync for rust_web_server::otel::ContextGuard
 impl !core::marker::Sync for rust_web_server::otel::Span
 impl !core::marker::Sync for rust_web_server::response::Response
@@ -61,6 +64,13 @@ impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::translate::ListenerConfig
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::ingress::IngressRouter
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::ingress::KubernetesIngressWatcher
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::Error
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::controller::Context
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::controller::Operator
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::leader::LeaderElector
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::testing::TestCluster
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::testing::TestNamespace
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::webhook::Webhooks
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::McpContext
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::McpServer
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::TaskContext
@@ -105,6 +115,13 @@ impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::tra
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::translate::ListenerConfig
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::ingress::IngressRouter
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::ingress::KubernetesIngressWatcher
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::Error
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::controller::Context
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::controller::Operator
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::leader::LeaderElector
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::testing::TestCluster
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::testing::TestNamespace
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::webhook::Webhooks
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::McpContext
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::McpServer
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::TaskContext
@@ -301,6 +318,7 @@ impl core::clone::Clone for rust_web_server::gateway_api::types::TypedLocalRefer
 impl core::clone::Clone for rust_web_server::generator::BaseType
 impl core::clone::Clone for rust_web_server::generator::ChangeKind
 impl core::clone::Clone for rust_web_server::generator::Db
+impl core::clone::Clone for rust_web_server::generator::DeploySpec
 impl core::clone::Clone for rust_web_server::generator::Field
 impl core::clone::Clone for rust_web_server::generator::FieldType
 impl core::clone::Clone for rust_web_server::generator::FileChange
@@ -309,6 +327,9 @@ impl core::clone::Clone for rust_web_server::generator::Generate
 impl core::clone::Clone for rust_web_server::generator::Plan
 impl core::clone::Clone for rust_web_server::generator::RouteAction
 impl core::clone::Clone for rust_web_server::header::Header
+impl core::clone::Clone for rust_web_server::health::CheckResult
+impl core::clone::Clone for rust_web_server::health::Probe
+impl core::clone::Clone for rust_web_server::health::Report
 impl core::clone::Clone for rust_web_server::i18n::AcceptLanguage
 impl core::clone::Clone for rust_web_server::i18n::Catalog
 impl core::clone::Clone for rust_web_server::i18n::Catalogs
@@ -316,6 +337,15 @@ impl core::clone::Clone for rust_web_server::ingress::IngressRule
 impl core::clone::Clone for rust_web_server::ingress::PathType
 impl core::clone::Clone for rust_web_server::ip_filter::IpRangeEntry
 impl core::clone::Clone for rust_web_server::ip_filter::TrustedProxies
+impl core::clone::Clone for rust_web_server::k8s::config::ConfigWatch
+impl core::clone::Clone for rust_web_server::k8s::config::SecretRef
+impl core::clone::Clone for rust_web_server::k8s::leader::LeaderHandle
+impl core::clone::Clone for rust_web_server::k8s::manifests::Rule
+impl core::clone::Clone for rust_web_server::k8s::manifests::WebhookRule
+impl core::clone::Clone for rust_web_server::k8s::manifests::WebhookTarget
+impl core::clone::Clone for rust_web_server::k8s::testing::TestCluster
+impl core::clone::Clone for rust_web_server::k8s::webhook::WebhookCertificate
+impl core::clone::Clone for rust_web_server::k8s::webhook::Webhooks
 impl core::clone::Clone for rust_web_server::llm::Api
 impl core::clone::Clone for rust_web_server::llm::LlmProxy
 impl core::clone::Clone for rust_web_server::llm::Provider
@@ -527,6 +557,7 @@ impl core::cmp::Eq for rust_web_server::gateway_api::types::SupportedFeature
 impl core::cmp::Eq for rust_web_server::generator::BaseType
 impl core::cmp::Eq for rust_web_server::generator::ChangeKind
 impl core::cmp::Eq for rust_web_server::generator::Db
+impl core::cmp::Eq for rust_web_server::generator::DeploySpec
 impl core::cmp::Eq for rust_web_server::generator::Field
 impl core::cmp::Eq for rust_web_server::generator::FieldType
 impl core::cmp::Eq for rust_web_server::generator::FileChange
@@ -535,8 +566,14 @@ impl core::cmp::Eq for rust_web_server::generator::Generate
 impl core::cmp::Eq for rust_web_server::generator::Plan
 impl core::cmp::Eq for rust_web_server::generator::RouteAction
 impl core::cmp::Eq for rust_web_server::header::Header
+impl core::cmp::Eq for rust_web_server::health::CheckResult
+impl core::cmp::Eq for rust_web_server::health::Probe
+impl core::cmp::Eq for rust_web_server::health::Report
 impl core::cmp::Eq for rust_web_server::i18n::AcceptLanguage
 impl core::cmp::Eq for rust_web_server::ingress::PathType
+impl core::cmp::Eq for rust_web_server::k8s::config::SecretRef
+impl core::cmp::Eq for rust_web_server::k8s::leader::Decision
+impl core::cmp::Eq for rust_web_server::k8s::manifests::Rule
 impl core::cmp::Eq for rust_web_server::llm::Api
 impl core::cmp::Eq for rust_web_server::llm::usage::Usage
 impl core::cmp::Eq for rust_web_server::log::syslog::Target
@@ -594,6 +631,7 @@ impl core::cmp::Ord for rust_web_server::authz::rebac::Tuple
 impl core::cmp::Ord for rust_web_server::gateway_api::types::ParentReference
 impl core::cmp::Ord for rust_web_server::gateway_api::types::RouteGroupKind
 impl core::cmp::Ord for rust_web_server::gateway_api::types::SupportedFeature
+impl core::cmp::Ord for rust_web_server::k8s::manifests::Rule
 impl core::cmp::Ord for rust_web_server::mcp::LogLevel
 impl core::cmp::Ord for rust_web_server::model::timestamp::Timestamp
 impl core::cmp::Ord for rust_web_server::model::uuid::Uuid
@@ -742,6 +780,7 @@ impl core::cmp::PartialEq for rust_web_server::gateway_api::types::TypedLocalRef
 impl core::cmp::PartialEq for rust_web_server::generator::BaseType
 impl core::cmp::PartialEq for rust_web_server::generator::ChangeKind
 impl core::cmp::PartialEq for rust_web_server::generator::Db
+impl core::cmp::PartialEq for rust_web_server::generator::DeploySpec
 impl core::cmp::PartialEq for rust_web_server::generator::Field
 impl core::cmp::PartialEq for rust_web_server::generator::FieldType
 impl core::cmp::PartialEq for rust_web_server::generator::FileChange
@@ -750,11 +789,17 @@ impl core::cmp::PartialEq for rust_web_server::generator::Generate
 impl core::cmp::PartialEq for rust_web_server::generator::Plan
 impl core::cmp::PartialEq for rust_web_server::generator::RouteAction
 impl core::cmp::PartialEq for rust_web_server::header::Header
+impl core::cmp::PartialEq for rust_web_server::health::CheckResult
+impl core::cmp::PartialEq for rust_web_server::health::Probe
+impl core::cmp::PartialEq for rust_web_server::health::Report
 impl core::cmp::PartialEq for rust_web_server::i18n::AcceptLanguage
 impl core::cmp::PartialEq for rust_web_server::ingress::IngressRule
 impl core::cmp::PartialEq for rust_web_server::ingress::PathType
 impl core::cmp::PartialEq for rust_web_server::ip_filter::IpRangeEntry
 impl core::cmp::PartialEq for rust_web_server::ip_filter::TrustedProxies
+impl core::cmp::PartialEq for rust_web_server::k8s::config::SecretRef
+impl core::cmp::PartialEq for rust_web_server::k8s::leader::Decision
+impl core::cmp::PartialEq for rust_web_server::k8s::manifests::Rule
 impl core::cmp::PartialEq for rust_web_server::llm::Api
 impl core::cmp::PartialEq for rust_web_server::llm::usage::Usage
 impl core::cmp::PartialEq for rust_web_server::log::syslog::Target
@@ -855,6 +900,7 @@ impl core::cmp::PartialOrd for rust_web_server::authz::rebac::Tuple
 impl core::cmp::PartialOrd for rust_web_server::gateway_api::types::ParentReference
 impl core::cmp::PartialOrd for rust_web_server::gateway_api::types::RouteGroupKind
 impl core::cmp::PartialOrd for rust_web_server::gateway_api::types::SupportedFeature
+impl core::cmp::PartialOrd for rust_web_server::k8s::manifests::Rule
 impl core::cmp::PartialOrd for rust_web_server::mcp::LogLevel
 impl core::cmp::PartialOrd for rust_web_server::model::timestamp::Timestamp
 impl core::cmp::PartialOrd for rust_web_server::model::uuid::Uuid
@@ -862,10 +908,12 @@ impl core::cmp::PartialOrd for rust_web_server::traffic::Group
 impl core::cmp::PartialOrd for rust_web_server::traffic::Kind
 impl core::convert::AsRef<[u8]> for rust_web_server::request::Body
 impl core::convert::From<&[u8]> for rust_web_server::request::Body
+impl core::convert::From<&str> for rust_web_server::k8s::Error
 impl core::convert::From<&str> for rust_web_server::mcp::TaskError
 impl core::convert::From<&str> for rust_web_server::otel::AttributeValue
 impl core::convert::From<&str> for rust_web_server::request::Body
 impl core::convert::From<&str> for rust_web_server::sso::SsoError
+impl core::convert::From<alloc::string::String> for rust_web_server::k8s::Error
 impl core::convert::From<alloc::string::String> for rust_web_server::mcp::TaskError
 impl core::convert::From<alloc::string::String> for rust_web_server::otel::AttributeValue
 impl core::convert::From<alloc::string::String> for rust_web_server::request::Body
@@ -876,6 +924,7 @@ impl core::convert::From<bool> for rust_web_server::otel::AttributeValue
 impl core::convert::From<f64> for rust_web_server::otel::AttributeValue
 impl core::convert::From<i32> for rust_web_server::otel::AttributeValue
 impl core::convert::From<i64> for rust_web_server::otel::AttributeValue
+impl core::convert::From<kube_client::error::Error> for rust_web_server::k8s::Error
 impl core::convert::From<rust_web_server::core::base64::DecodeError> for alloc::string::String
 impl core::convert::From<u32> for rust_web_server::otel::AttributeValue
 impl core::default::Default for rust_web_server::admin::AdminConfig
@@ -972,10 +1021,12 @@ impl core::default::Default for rust_web_server::gateway_api::types::SupportedFe
 impl core::default::Default for rust_web_server::gateway_api::types::TlsConfig
 impl core::default::Default for rust_web_server::gateway_api::types::TlsPortConfig
 impl core::default::Default for rust_web_server::gateway_api::types::TypedLocalReference
+impl core::default::Default for rust_web_server::health::Registry
 impl core::default::Default for rust_web_server::http_client::AsyncClient
 impl core::default::Default for rust_web_server::http_client::Client
 impl core::default::Default for rust_web_server::i18n::AcceptLanguage
 impl core::default::Default for rust_web_server::i18n::Catalog
+impl core::default::Default for rust_web_server::k8s::webhook::Webhooks
 impl core::default::Default for rust_web_server::llm::LlmProxy
 impl core::default::Default for rust_web_server::llm::usage::Usage
 impl core::default::Default for rust_web_server::mcp::InputRequired
@@ -1041,6 +1092,7 @@ impl core::error::Error for rust_web_server::authz::rebac::AuthzError
 impl core::error::Error for rust_web_server::core::base64::DecodeError
 impl core::error::Error for rust_web_server::generator::GenError
 impl core::error::Error for rust_web_server::http_client::HttpClientError
+impl core::error::Error for rust_web_server::k8s::Error
 impl core::error::Error for rust_web_server::model::DbError
 impl core::error::Error for rust_web_server::sse::SseClosed
 impl core::error::Error for rust_web_server::sso::SsoError
@@ -1214,6 +1266,7 @@ impl core::fmt::Debug for rust_web_server::gateway_api::types::TypedLocalReferen
 impl core::fmt::Debug for rust_web_server::generator::BaseType
 impl core::fmt::Debug for rust_web_server::generator::ChangeKind
 impl core::fmt::Debug for rust_web_server::generator::Db
+impl core::fmt::Debug for rust_web_server::generator::DeploySpec
 impl core::fmt::Debug for rust_web_server::generator::Field
 impl core::fmt::Debug for rust_web_server::generator::FieldType
 impl core::fmt::Debug for rust_web_server::generator::FileChange
@@ -1222,6 +1275,9 @@ impl core::fmt::Debug for rust_web_server::generator::Generate
 impl core::fmt::Debug for rust_web_server::generator::Plan
 impl core::fmt::Debug for rust_web_server::generator::RouteAction
 impl core::fmt::Debug for rust_web_server::header::Header
+impl core::fmt::Debug for rust_web_server::health::CheckResult
+impl core::fmt::Debug for rust_web_server::health::Probe
+impl core::fmt::Debug for rust_web_server::health::Report
 impl core::fmt::Debug for rust_web_server::http_client::HttpClientError
 impl core::fmt::Debug for rust_web_server::http_client::Response
 impl core::fmt::Debug for rust_web_server::i18n::AcceptLanguage
@@ -1231,6 +1287,12 @@ impl core::fmt::Debug for rust_web_server::ingress::IngressRule
 impl core::fmt::Debug for rust_web_server::ingress::PathType
 impl core::fmt::Debug for rust_web_server::ip_filter::IpRangeEntry
 impl core::fmt::Debug for rust_web_server::ip_filter::TrustedProxies
+impl core::fmt::Debug for rust_web_server::k8s::Error
+impl core::fmt::Debug for rust_web_server::k8s::config::SecretRef
+impl core::fmt::Debug for rust_web_server::k8s::leader::Decision
+impl core::fmt::Debug for rust_web_server::k8s::manifests::Rule
+impl core::fmt::Debug for rust_web_server::k8s::manifests::WebhookRule
+impl core::fmt::Debug for rust_web_server::k8s::manifests::WebhookTarget
 impl core::fmt::Debug for rust_web_server::llm::Api
 impl core::fmt::Debug for rust_web_server::llm::Provider
 impl core::fmt::Debug for rust_web_server::llm::usage::Usage
@@ -1395,6 +1457,7 @@ impl core::fmt::Display for rust_web_server::generator::FieldType
 impl core::fmt::Display for rust_web_server::generator::GenError
 impl core::fmt::Display for rust_web_server::http_client::HttpClientError
 impl core::fmt::Display for rust_web_server::json::property::JSONValue
+impl core::fmt::Display for rust_web_server::k8s::Error
 impl core::fmt::Display for rust_web_server::model::DbError
 impl core::fmt::Display for rust_web_server::model::timestamp::Timestamp
 impl core::fmt::Display for rust_web_server::model::uuid::Uuid
@@ -1412,6 +1475,7 @@ impl core::hash::Hash for rust_web_server::authz::rebac::Tuple
 impl core::hash::Hash for rust_web_server::compression::Encoding
 impl core::hash::Hash for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::hash::Hash for rust_web_server::events::SubscriptionId
+impl core::hash::Hash for rust_web_server::health::Probe
 impl core::hash::Hash for rust_web_server::model::RelationKind
 impl core::hash::Hash for rust_web_server::model::timestamp::Timestamp
 impl core::hash::Hash for rust_web_server::model::uuid::Uuid
@@ -1436,6 +1500,7 @@ impl core::marker::Copy for rust_web_server::generator::ChangeKind
 impl core::marker::Copy for rust_web_server::generator::Db
 impl core::marker::Copy for rust_web_server::generator::FieldType
 impl core::marker::Copy for rust_web_server::generator::RouteAction
+impl core::marker::Copy for rust_web_server::health::Probe
 impl core::marker::Copy for rust_web_server::ingress::PathType
 impl core::marker::Copy for rust_web_server::llm::Api
 impl core::marker::Copy for rust_web_server::llm::usage::Usage
@@ -1687,6 +1752,7 @@ impl core::marker::Freeze for rust_web_server::gateway_api::types::TypedLocalRef
 impl core::marker::Freeze for rust_web_server::generator::BaseType
 impl core::marker::Freeze for rust_web_server::generator::ChangeKind
 impl core::marker::Freeze for rust_web_server::generator::Db
+impl core::marker::Freeze for rust_web_server::generator::DeploySpec
 impl core::marker::Freeze for rust_web_server::generator::Field
 impl core::marker::Freeze for rust_web_server::generator::FieldType
 impl core::marker::Freeze for rust_web_server::generator::FileChange
@@ -1697,6 +1763,9 @@ impl core::marker::Freeze for rust_web_server::generator::RouteAction
 impl core::marker::Freeze for rust_web_server::header::Header
 impl core::marker::Freeze for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Freeze for rust_web_server::header::content_disposition::DispositionType
+impl core::marker::Freeze for rust_web_server::health::CheckResult
+impl core::marker::Freeze for rust_web_server::health::Probe
+impl core::marker::Freeze for rust_web_server::health::Report
 impl core::marker::Freeze for rust_web_server::http::HTTP
 impl core::marker::Freeze for rust_web_server::http::Version
 impl core::marker::Freeze for rust_web_server::http_client::AsyncClient
@@ -1723,6 +1792,21 @@ impl core::marker::Freeze for rust_web_server::json::array::string::JSONArrayOfS
 impl core::marker::Freeze for rust_web_server::json::object::JSON
 impl core::marker::Freeze for rust_web_server::json::property::JSONProperty
 impl core::marker::Freeze for rust_web_server::json::property::JSONValue
+impl core::marker::Freeze for rust_web_server::k8s::config::ConfigWatch
+impl core::marker::Freeze for rust_web_server::k8s::config::SecretRef
+impl core::marker::Freeze for rust_web_server::k8s::controller::Context
+impl core::marker::Freeze for rust_web_server::k8s::controller::Operator
+impl core::marker::Freeze for rust_web_server::k8s::leader::Decision
+impl core::marker::Freeze for rust_web_server::k8s::leader::LeaderElector
+impl core::marker::Freeze for rust_web_server::k8s::leader::LeaderHandle
+impl core::marker::Freeze for rust_web_server::k8s::manifests::Rbac
+impl core::marker::Freeze for rust_web_server::k8s::manifests::Rule
+impl core::marker::Freeze for rust_web_server::k8s::manifests::WebhookRule
+impl core::marker::Freeze for rust_web_server::k8s::manifests::WebhookTarget
+impl core::marker::Freeze for rust_web_server::k8s::testing::TestCluster
+impl core::marker::Freeze for rust_web_server::k8s::testing::TestNamespace
+impl core::marker::Freeze for rust_web_server::k8s::webhook::WebhookCertificate
+impl core::marker::Freeze for rust_web_server::k8s::webhook::Webhooks
 impl core::marker::Freeze for rust_web_server::language::Lang
 impl core::marker::Freeze for rust_web_server::language::Language
 impl core::marker::Freeze for rust_web_server::llm::Api
@@ -1756,6 +1840,7 @@ impl core::marker::Freeze for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::Freeze for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::marker::Freeze for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::marker::Freeze for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::marker::Freeze for rust_web_server::metrics::InFlight
 impl core::marker::Freeze for rust_web_server::metrics::MetricsLayer
 impl core::marker::Freeze for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Freeze for rust_web_server::mime_type::MimeType
@@ -2182,6 +2267,7 @@ impl core::marker::Send for rust_web_server::gateway_api::types::TypedLocalRefer
 impl core::marker::Send for rust_web_server::generator::BaseType
 impl core::marker::Send for rust_web_server::generator::ChangeKind
 impl core::marker::Send for rust_web_server::generator::Db
+impl core::marker::Send for rust_web_server::generator::DeploySpec
 impl core::marker::Send for rust_web_server::generator::Field
 impl core::marker::Send for rust_web_server::generator::FieldType
 impl core::marker::Send for rust_web_server::generator::FileChange
@@ -2192,6 +2278,10 @@ impl core::marker::Send for rust_web_server::generator::RouteAction
 impl core::marker::Send for rust_web_server::header::Header
 impl core::marker::Send for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Send for rust_web_server::header::content_disposition::DispositionType
+impl core::marker::Send for rust_web_server::health::CheckResult
+impl core::marker::Send for rust_web_server::health::Probe
+impl core::marker::Send for rust_web_server::health::Registry
+impl core::marker::Send for rust_web_server::health::Report
 impl core::marker::Send for rust_web_server::http::HTTP
 impl core::marker::Send for rust_web_server::http::Version
 impl core::marker::Send for rust_web_server::http_client::AsyncClient
@@ -2218,6 +2308,22 @@ impl core::marker::Send for rust_web_server::json::array::string::JSONArrayOfStr
 impl core::marker::Send for rust_web_server::json::object::JSON
 impl core::marker::Send for rust_web_server::json::property::JSONProperty
 impl core::marker::Send for rust_web_server::json::property::JSONValue
+impl core::marker::Send for rust_web_server::k8s::Error
+impl core::marker::Send for rust_web_server::k8s::config::ConfigWatch
+impl core::marker::Send for rust_web_server::k8s::config::SecretRef
+impl core::marker::Send for rust_web_server::k8s::controller::Context
+impl core::marker::Send for rust_web_server::k8s::controller::Operator
+impl core::marker::Send for rust_web_server::k8s::leader::Decision
+impl core::marker::Send for rust_web_server::k8s::leader::LeaderElector
+impl core::marker::Send for rust_web_server::k8s::leader::LeaderHandle
+impl core::marker::Send for rust_web_server::k8s::manifests::Rbac
+impl core::marker::Send for rust_web_server::k8s::manifests::Rule
+impl core::marker::Send for rust_web_server::k8s::manifests::WebhookRule
+impl core::marker::Send for rust_web_server::k8s::manifests::WebhookTarget
+impl core::marker::Send for rust_web_server::k8s::testing::TestCluster
+impl core::marker::Send for rust_web_server::k8s::testing::TestNamespace
+impl core::marker::Send for rust_web_server::k8s::webhook::WebhookCertificate
+impl core::marker::Send for rust_web_server::k8s::webhook::Webhooks
 impl core::marker::Send for rust_web_server::language::Lang
 impl core::marker::Send for rust_web_server::language::Language
 impl core::marker::Send for rust_web_server::llm::Api
@@ -2252,6 +2358,7 @@ impl core::marker::Send for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::Send for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::marker::Send for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::marker::Send for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::marker::Send for rust_web_server::metrics::InFlight
 impl core::marker::Send for rust_web_server::metrics::MetricsLayer
 impl core::marker::Send for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Send for rust_web_server::mime_type::MimeType
@@ -2603,6 +2710,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::
 impl core::marker::StructuralPartialEq for rust_web_server::generator::BaseType
 impl core::marker::StructuralPartialEq for rust_web_server::generator::ChangeKind
 impl core::marker::StructuralPartialEq for rust_web_server::generator::Db
+impl core::marker::StructuralPartialEq for rust_web_server::generator::DeploySpec
 impl core::marker::StructuralPartialEq for rust_web_server::generator::Field
 impl core::marker::StructuralPartialEq for rust_web_server::generator::FieldType
 impl core::marker::StructuralPartialEq for rust_web_server::generator::FileChange
@@ -2611,11 +2719,17 @@ impl core::marker::StructuralPartialEq for rust_web_server::generator::Generate
 impl core::marker::StructuralPartialEq for rust_web_server::generator::Plan
 impl core::marker::StructuralPartialEq for rust_web_server::generator::RouteAction
 impl core::marker::StructuralPartialEq for rust_web_server::header::Header
+impl core::marker::StructuralPartialEq for rust_web_server::health::CheckResult
+impl core::marker::StructuralPartialEq for rust_web_server::health::Probe
+impl core::marker::StructuralPartialEq for rust_web_server::health::Report
 impl core::marker::StructuralPartialEq for rust_web_server::i18n::AcceptLanguage
 impl core::marker::StructuralPartialEq for rust_web_server::ingress::IngressRule
 impl core::marker::StructuralPartialEq for rust_web_server::ingress::PathType
 impl core::marker::StructuralPartialEq for rust_web_server::ip_filter::IpRangeEntry
 impl core::marker::StructuralPartialEq for rust_web_server::ip_filter::TrustedProxies
+impl core::marker::StructuralPartialEq for rust_web_server::k8s::config::SecretRef
+impl core::marker::StructuralPartialEq for rust_web_server::k8s::leader::Decision
+impl core::marker::StructuralPartialEq for rust_web_server::k8s::manifests::Rule
 impl core::marker::StructuralPartialEq for rust_web_server::llm::Api
 impl core::marker::StructuralPartialEq for rust_web_server::llm::usage::Usage
 impl core::marker::StructuralPartialEq for rust_web_server::log::syslog::Target
@@ -2931,6 +3045,7 @@ impl core::marker::Sync for rust_web_server::gateway_api::types::TypedLocalRefer
 impl core::marker::Sync for rust_web_server::generator::BaseType
 impl core::marker::Sync for rust_web_server::generator::ChangeKind
 impl core::marker::Sync for rust_web_server::generator::Db
+impl core::marker::Sync for rust_web_server::generator::DeploySpec
 impl core::marker::Sync for rust_web_server::generator::Field
 impl core::marker::Sync for rust_web_server::generator::FieldType
 impl core::marker::Sync for rust_web_server::generator::FileChange
@@ -2941,6 +3056,10 @@ impl core::marker::Sync for rust_web_server::generator::RouteAction
 impl core::marker::Sync for rust_web_server::header::Header
 impl core::marker::Sync for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Sync for rust_web_server::header::content_disposition::DispositionType
+impl core::marker::Sync for rust_web_server::health::CheckResult
+impl core::marker::Sync for rust_web_server::health::Probe
+impl core::marker::Sync for rust_web_server::health::Registry
+impl core::marker::Sync for rust_web_server::health::Report
 impl core::marker::Sync for rust_web_server::http::HTTP
 impl core::marker::Sync for rust_web_server::http::Version
 impl core::marker::Sync for rust_web_server::http_client::AsyncClient
@@ -2967,6 +3086,21 @@ impl core::marker::Sync for rust_web_server::json::array::string::JSONArrayOfStr
 impl core::marker::Sync for rust_web_server::json::object::JSON
 impl core::marker::Sync for rust_web_server::json::property::JSONProperty
 impl core::marker::Sync for rust_web_server::json::property::JSONValue
+impl core::marker::Sync for rust_web_server::k8s::Error
+impl core::marker::Sync for rust_web_server::k8s::config::ConfigWatch
+impl core::marker::Sync for rust_web_server::k8s::config::SecretRef
+impl core::marker::Sync for rust_web_server::k8s::controller::Context
+impl core::marker::Sync for rust_web_server::k8s::leader::Decision
+impl core::marker::Sync for rust_web_server::k8s::leader::LeaderElector
+impl core::marker::Sync for rust_web_server::k8s::leader::LeaderHandle
+impl core::marker::Sync for rust_web_server::k8s::manifests::Rbac
+impl core::marker::Sync for rust_web_server::k8s::manifests::Rule
+impl core::marker::Sync for rust_web_server::k8s::manifests::WebhookRule
+impl core::marker::Sync for rust_web_server::k8s::manifests::WebhookTarget
+impl core::marker::Sync for rust_web_server::k8s::testing::TestCluster
+impl core::marker::Sync for rust_web_server::k8s::testing::TestNamespace
+impl core::marker::Sync for rust_web_server::k8s::webhook::WebhookCertificate
+impl core::marker::Sync for rust_web_server::k8s::webhook::Webhooks
 impl core::marker::Sync for rust_web_server::language::Lang
 impl core::marker::Sync for rust_web_server::language::Language
 impl core::marker::Sync for rust_web_server::llm::Api
@@ -3001,6 +3135,7 @@ impl core::marker::Sync for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::Sync for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::marker::Sync for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::marker::Sync for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::marker::Sync for rust_web_server::metrics::InFlight
 impl core::marker::Sync for rust_web_server::metrics::MetricsLayer
 impl core::marker::Sync for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Sync for rust_web_server::mime_type::MimeType
@@ -3437,6 +3572,7 @@ impl core::marker::Unpin for rust_web_server::gateway_api::types::TypedLocalRefe
 impl core::marker::Unpin for rust_web_server::generator::BaseType
 impl core::marker::Unpin for rust_web_server::generator::ChangeKind
 impl core::marker::Unpin for rust_web_server::generator::Db
+impl core::marker::Unpin for rust_web_server::generator::DeploySpec
 impl core::marker::Unpin for rust_web_server::generator::Field
 impl core::marker::Unpin for rust_web_server::generator::FieldType
 impl core::marker::Unpin for rust_web_server::generator::FileChange
@@ -3447,6 +3583,10 @@ impl core::marker::Unpin for rust_web_server::generator::RouteAction
 impl core::marker::Unpin for rust_web_server::header::Header
 impl core::marker::Unpin for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::Unpin for rust_web_server::header::content_disposition::DispositionType
+impl core::marker::Unpin for rust_web_server::health::CheckResult
+impl core::marker::Unpin for rust_web_server::health::Probe
+impl core::marker::Unpin for rust_web_server::health::Registry
+impl core::marker::Unpin for rust_web_server::health::Report
 impl core::marker::Unpin for rust_web_server::http::HTTP
 impl core::marker::Unpin for rust_web_server::http::Version
 impl core::marker::Unpin for rust_web_server::http_client::AsyncClient
@@ -3473,6 +3613,22 @@ impl core::marker::Unpin for rust_web_server::json::array::string::JSONArrayOfSt
 impl core::marker::Unpin for rust_web_server::json::object::JSON
 impl core::marker::Unpin for rust_web_server::json::property::JSONProperty
 impl core::marker::Unpin for rust_web_server::json::property::JSONValue
+impl core::marker::Unpin for rust_web_server::k8s::Error
+impl core::marker::Unpin for rust_web_server::k8s::config::ConfigWatch
+impl core::marker::Unpin for rust_web_server::k8s::config::SecretRef
+impl core::marker::Unpin for rust_web_server::k8s::controller::Context
+impl core::marker::Unpin for rust_web_server::k8s::controller::Operator
+impl core::marker::Unpin for rust_web_server::k8s::leader::Decision
+impl core::marker::Unpin for rust_web_server::k8s::leader::LeaderElector
+impl core::marker::Unpin for rust_web_server::k8s::leader::LeaderHandle
+impl core::marker::Unpin for rust_web_server::k8s::manifests::Rbac
+impl core::marker::Unpin for rust_web_server::k8s::manifests::Rule
+impl core::marker::Unpin for rust_web_server::k8s::manifests::WebhookRule
+impl core::marker::Unpin for rust_web_server::k8s::manifests::WebhookTarget
+impl core::marker::Unpin for rust_web_server::k8s::testing::TestCluster
+impl core::marker::Unpin for rust_web_server::k8s::testing::TestNamespace
+impl core::marker::Unpin for rust_web_server::k8s::webhook::WebhookCertificate
+impl core::marker::Unpin for rust_web_server::k8s::webhook::Webhooks
 impl core::marker::Unpin for rust_web_server::language::Lang
 impl core::marker::Unpin for rust_web_server::language::Language
 impl core::marker::Unpin for rust_web_server::llm::Api
@@ -3507,6 +3663,7 @@ impl core::marker::Unpin for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::Unpin for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::marker::Unpin for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::marker::Unpin for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::marker::Unpin for rust_web_server::metrics::InFlight
 impl core::marker::Unpin for rust_web_server::metrics::MetricsLayer
 impl core::marker::Unpin for rust_web_server::middleware::RateLimitLayer
 impl core::marker::Unpin for rust_web_server::mime_type::MimeType
@@ -3949,6 +4106,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::TypedLoc
 impl core::marker::UnsafeUnpin for rust_web_server::generator::BaseType
 impl core::marker::UnsafeUnpin for rust_web_server::generator::ChangeKind
 impl core::marker::UnsafeUnpin for rust_web_server::generator::Db
+impl core::marker::UnsafeUnpin for rust_web_server::generator::DeploySpec
 impl core::marker::UnsafeUnpin for rust_web_server::generator::Field
 impl core::marker::UnsafeUnpin for rust_web_server::generator::FieldType
 impl core::marker::UnsafeUnpin for rust_web_server::generator::FileChange
@@ -3959,6 +4117,10 @@ impl core::marker::UnsafeUnpin for rust_web_server::generator::RouteAction
 impl core::marker::UnsafeUnpin for rust_web_server::header::Header
 impl core::marker::UnsafeUnpin for rust_web_server::header::content_disposition::ContentDisposition
 impl core::marker::UnsafeUnpin for rust_web_server::header::content_disposition::DispositionType
+impl core::marker::UnsafeUnpin for rust_web_server::health::CheckResult
+impl core::marker::UnsafeUnpin for rust_web_server::health::Probe
+impl core::marker::UnsafeUnpin for rust_web_server::health::Registry
+impl core::marker::UnsafeUnpin for rust_web_server::health::Report
 impl core::marker::UnsafeUnpin for rust_web_server::http::HTTP
 impl core::marker::UnsafeUnpin for rust_web_server::http::Version
 impl core::marker::UnsafeUnpin for rust_web_server::http_client::AsyncClient
@@ -3985,6 +4147,22 @@ impl core::marker::UnsafeUnpin for rust_web_server::json::array::string::JSONArr
 impl core::marker::UnsafeUnpin for rust_web_server::json::object::JSON
 impl core::marker::UnsafeUnpin for rust_web_server::json::property::JSONProperty
 impl core::marker::UnsafeUnpin for rust_web_server::json::property::JSONValue
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::Error
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::config::ConfigWatch
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::config::SecretRef
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::controller::Context
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::controller::Operator
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::leader::Decision
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::leader::LeaderElector
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::leader::LeaderHandle
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::manifests::Rbac
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::manifests::Rule
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::manifests::WebhookRule
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::manifests::WebhookTarget
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::testing::TestCluster
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::testing::TestNamespace
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::webhook::WebhookCertificate
+impl core::marker::UnsafeUnpin for rust_web_server::k8s::webhook::Webhooks
 impl core::marker::UnsafeUnpin for rust_web_server::language::Lang
 impl core::marker::UnsafeUnpin for rust_web_server::language::Language
 impl core::marker::UnsafeUnpin for rust_web_server::llm::Api
@@ -4019,6 +4197,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::mcp::openapi_tools::Location
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::marker::UnsafeUnpin for rust_web_server::metrics::InFlight
 impl core::marker::UnsafeUnpin for rust_web_server::metrics::MetricsLayer
 impl core::marker::UnsafeUnpin for rust_web_server::middleware::RateLimitLayer
 impl core::marker::UnsafeUnpin for rust_web_server::mime_type::MimeType
@@ -4232,6 +4411,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::websocket::WebSocketSender
 impl core::marker::UnsafeUnpin for rust_web_server::ws_proxy::WsProxy
 impl core::ops::deref::Deref for rust_web_server::request::Body
 impl core::ops::deref::Deref for rust_web_server::test_client::db::TestDb
+impl core::ops::drop::Drop for rust_web_server::metrics::InFlight
 impl core::ops::drop::Drop for rust_web_server::otel::ContextGuard
 impl core::ops::drop::Drop for rust_web_server::otel::DetachedSpan
 impl core::ops::drop::Drop for rust_web_server::otel::Span
@@ -4448,6 +4628,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::t
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::BaseType
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::ChangeKind
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::Db
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::DeploySpec
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::Field
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::FieldType
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::FileChange
@@ -4458,6 +4639,10 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::generator::Rou
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::header::Header
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::header::content_disposition::ContentDisposition
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::header::content_disposition::DispositionType
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::health::CheckResult
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::health::Probe
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::health::Registry
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::health::Report
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::http::HTTP
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::http::Version
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::http_client::AsyncClient
@@ -4482,6 +4667,15 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::json::array::s
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::json::object::JSON
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::json::property::JSONProperty
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::json::property::JSONValue
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::config::ConfigWatch
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::config::SecretRef
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::leader::Decision
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::leader::LeaderHandle
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::manifests::Rbac
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::manifests::Rule
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::manifests::WebhookRule
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::manifests::WebhookTarget
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::webhook::WebhookCertificate
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::language::Lang
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::language::Language
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::llm::Api
@@ -4511,6 +4705,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::openapi_t
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::metrics::InFlight
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::metrics::MetricsLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::middleware::RateLimitLayer
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mime_type::MimeType
@@ -4916,6 +5111,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::type
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::BaseType
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::ChangeKind
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::Db
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::DeploySpec
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::Field
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::FieldType
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::FileChange
@@ -4926,6 +5122,10 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::generator::RouteA
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::header::Header
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::header::content_disposition::ContentDisposition
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::header::content_disposition::DispositionType
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::health::CheckResult
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::health::Probe
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::health::Registry
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::health::Report
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::http::HTTP
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::http::Version
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::http_client::AsyncClient
@@ -4950,6 +5150,15 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::json::array::stri
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::json::object::JSON
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::json::property::JSONProperty
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::json::property::JSONValue
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::config::ConfigWatch
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::config::SecretRef
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::leader::Decision
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::leader::LeaderHandle
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::manifests::Rbac
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::manifests::Rule
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::manifests::WebhookRule
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::manifests::WebhookTarget
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::webhook::WebhookCertificate
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::language::Lang
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::language::Language
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::llm::Api
@@ -4979,6 +5188,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::openapi_tool
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::openapi_tools::OpenApiTool
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::openapi_tools::ToolOptions
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::openapi_tools::ToolRequest
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::metrics::InFlight
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::metrics::MetricsLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::middleware::RateLimitLayer
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mime_type::MimeType
@@ -5223,6 +5433,7 @@ impl rust_web_server::application::Application for rust_web_server::app::App
 impl rust_web_server::application::Application for rust_web_server::fastcgi::FastCgi
 impl rust_web_server::application::Application for rust_web_server::gateway_api::router::PortRouter
 impl rust_web_server::application::Application for rust_web_server::ingress::IngressRouter
+impl rust_web_server::application::Application for rust_web_server::k8s::webhook::Webhooks
 impl rust_web_server::application::Application for rust_web_server::llm::LlmProxy
 impl rust_web_server::application::Application for rust_web_server::mcp::McpServer
 impl rust_web_server::application::Application for rust_web_server::proxy_config::ConfigDrivenApp
@@ -5356,6 +5567,7 @@ impl rust_web_server::gateway_api::types::ParentReference
 impl rust_web_server::generator::BaseType
 impl rust_web_server::generator::ChangeKind
 impl rust_web_server::generator::Db
+impl rust_web_server::generator::DeploySpec
 impl rust_web_server::generator::Field
 impl rust_web_server::generator::FieldType
 impl rust_web_server::generator::GenError
@@ -5384,6 +5596,9 @@ impl rust_web_server::handler::FromPath for u8
 impl rust_web_server::handler::FromPath for usize
 impl rust_web_server::header::Header
 impl rust_web_server::header::content_disposition::ContentDisposition
+impl rust_web_server::health::Probe
+impl rust_web_server::health::Registry
+impl rust_web_server::health::Report
 impl rust_web_server::http::HTTP
 impl rust_web_server::http_client::AsyncClient
 impl rust_web_server::http_client::Client
@@ -5406,6 +5621,21 @@ impl rust_web_server::json::array::string::JSONArrayOfStrings
 impl rust_web_server::json::object::JSON
 impl rust_web_server::json::property::JSONProperty
 impl rust_web_server::json::property::JSONValue
+impl rust_web_server::k8s::Scope for k8s_openapi::_resource::ClusterResourceScope
+impl rust_web_server::k8s::Scope for k8s_openapi::_resource::NamespaceResourceScope
+impl rust_web_server::k8s::config::ConfigWatch
+impl rust_web_server::k8s::config::SecretRef
+impl rust_web_server::k8s::controller::Context
+impl rust_web_server::k8s::controller::Operator
+impl rust_web_server::k8s::leader::LeaderElector
+impl rust_web_server::k8s::leader::LeaderHandle
+impl rust_web_server::k8s::manifests::Rbac
+impl rust_web_server::k8s::manifests::Rule
+impl rust_web_server::k8s::manifests::WebhookRule
+impl rust_web_server::k8s::testing::TestCluster
+impl rust_web_server::k8s::testing::TestNamespace
+impl rust_web_server::k8s::webhook::WebhookCertificate
+impl rust_web_server::k8s::webhook::Webhooks
 impl rust_web_server::language::Language
 impl rust_web_server::llm::Api
 impl rust_web_server::llm::LlmProxy
@@ -5428,6 +5658,7 @@ impl rust_web_server::mcp::gateway::McpGateway
 impl rust_web_server::mcp::gateway::OpenApiUpstream
 impl rust_web_server::mcp::gateway::Upstream
 impl rust_web_server::mcp::openapi_tools::OpenApiTool
+impl rust_web_server::metrics::InFlight
 impl rust_web_server::middleware::Middleware for rust_web_server::admin::access::McpAuditLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::auth::JwtLayer
 impl rust_web_server::middleware::Middleware for rust_web_server::auth::forward::ForwardAuthLayer
@@ -5969,6 +6200,15 @@ impl<F> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::auth::Basic
 impl<F> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::config_watch::Watcher<F> where F: core::panic::unwind_safe::RefUnwindSafe
 impl<F> core::panic::unwind_safe::UnwindSafe for rust_web_server::auth::BasicAuthLayer<F> where F: core::panic::unwind_safe::UnwindSafe
 impl<F> core::panic::unwind_safe::UnwindSafe for rust_web_server::config_watch::Watcher<F> where F: core::panic::unwind_safe::UnwindSafe
+impl<K> !core::marker::Sync for rust_web_server::k8s::controller::Controller<K>
+impl<K> !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::k8s::controller::Controller<K>
+impl<K> !core::panic::unwind_safe::UnwindSafe for rust_web_server::k8s::controller::Controller<K>
+impl<K> core::marker::Freeze for rust_web_server::k8s::controller::Controller<K> where kube_client::api::Api<K>: core::marker::Freeze, alloc::vec::Vec<alloc::boxed::Box<(dyn core::ops::function::FnOnce(kube_runtime::controller::Controller<K>, &kube_client::client::Client) -> kube_runtime::controller::Controller<K> + core::marker::Send)>>: core::marker::Freeze, core::option::Option<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<kube_runtime::controller::Action, rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>: core::marker::Freeze, core::option::Option<(alloc::string::String, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::Freeze
+impl<K> core::marker::Send for rust_web_server::k8s::controller::Controller<K> where kube_client::api::Api<K>: core::marker::Send, alloc::vec::Vec<alloc::boxed::Box<(dyn core::ops::function::FnOnce(kube_runtime::controller::Controller<K>, &kube_client::client::Client) -> kube_runtime::controller::Controller<K> + core::marker::Send)>>: core::marker::Send, core::option::Option<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<kube_runtime::controller::Action, rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>: core::marker::Send, core::option::Option<(alloc::string::String, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::Send
+impl<K> core::marker::Unpin for rust_web_server::k8s::controller::Controller<K> where kube_client::api::Api<K>: core::marker::Unpin, alloc::vec::Vec<alloc::boxed::Box<(dyn core::ops::function::FnOnce(kube_runtime::controller::Controller<K>, &kube_client::client::Client) -> kube_runtime::controller::Controller<K> + core::marker::Send)>>: core::marker::Unpin, core::option::Option<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<kube_runtime::controller::Action, rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>: core::marker::Unpin, core::option::Option<(alloc::string::String, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::Unpin
+impl<K> core::marker::UnsafeUnpin for rust_web_server::k8s::controller::Controller<K> where kube_client::api::Api<K>: core::marker::UnsafeUnpin, alloc::vec::Vec<alloc::boxed::Box<(dyn core::ops::function::FnOnce(kube_runtime::controller::Controller<K>, &kube_client::client::Client) -> kube_runtime::controller::Controller<K> + core::marker::Send)>>: core::marker::UnsafeUnpin, core::option::Option<alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<kube_runtime::controller::Action, rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>>: core::marker::UnsafeUnpin, core::option::Option<(alloc::string::String, alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), rust_web_server::k8s::Error>> + core::marker::Send)>> + core::marker::Send + core::marker::Sync)>)>: core::marker::UnsafeUnpin
+impl<K> rust_web_server::k8s::controller::Controller<K> where K: kube_core::resource::Resource<DynamicType = ()> + core::clone::Clone + serde_core::de::DeserializeOwned + serde_core::ser::Serialize + core::fmt::Debug + core::marker::Send + core::marker::Sync + 'static, <K as kube_core::resource::Resource>::Scope: rust_web_server::k8s::Scope
+impl<K> rust_web_server::k8s::controller::Runnable for rust_web_server::k8s::controller::Controller<K> where K: kube_core::resource::Resource<DynamicType = ()> + core::clone::Clone + serde_core::de::DeserializeOwned + serde_core::ser::Serialize + core::fmt::Debug + core::marker::Send + core::marker::Sync + 'static, <K as kube_core::resource::Resource>::Scope: rust_web_server::k8s::Scope
 impl<L, ResBody> rust_web_server::middleware::Middleware for rust_web_server::tower::TowerLayer<L> where L: for<'a> tower_layer::Layer<rust_web_server::tower::Next<'a>> + core::marker::Send + core::marker::Sync, for<'a> <L as tower_layer::Layer<rust_web_server::tower::Next<'a>>>::Service: tower_service::Service<http::request::Request<rust_web_server::tower::Body>, Response = http::response::Response<ResBody>>, for<'a> <<L as tower_layer::Layer<rust_web_server::tower::Next<'a>>>::Service as tower_service::Service<http::request::Request<rust_web_server::tower::Body>>>::Error: core::convert::Into<rust_web_server::tower::BoxError>, ResBody: http_body::Body<Data = bytes::bytes::Bytes> + core::marker::Send + 'static, <ResBody as http_body::Body>::Error: core::convert::Into<rust_web_server::tower::BoxError>
 impl<L> core::marker::Freeze for rust_web_server::tower::TowerLayer<L> where L: core::marker::Freeze
 impl<L> core::marker::Send for rust_web_server::tower::TowerLayer<L> where L: core::marker::Send
@@ -6290,6 +6530,27 @@ pub async fn rust_web_server::gateway_api::l4::serve_tls_terminate(tokio::net::t
 pub async fn rust_web_server::gateway_api::l4::serve_udp(alloc::rcs::arc::Arc<tokio::net::udp::UdpSocket>, rust_web_server::gateway_api::router::PortListeners)
 pub async fn rust_web_server::gateway_api::lease::run(kube_client::client::Client, rust_web_server::gateway_api::lease::LeaseSettings, alloc::rcs::arc::Arc<core::sync::atomic::AtomicBool>, alloc::rcs::arc::Arc<tokio::sync::notify::Notify>)
 pub async fn rust_web_server::http_client::AsyncRequestBuilder<'a>::send(self) -> core::result::Result<rust_web_server::http_client::Response, rust_web_server::http_client::HttpClientError>
+pub async fn rust_web_server::k8s::client::client() -> rust_web_server::k8s::Result<kube_client::client::Client>
+pub async fn rust_web_server::k8s::client::from_kubeconfig(&str) -> rust_web_server::k8s::Result<kube_client::client::Client>
+pub async fn rust_web_server::k8s::config::ConfigWatch::config_map(kube_client::client::Client, &str, &str) -> rust_web_server::k8s::Result<Self>
+pub async fn rust_web_server::k8s::config::ConfigWatch::secret(kube_client::client::Client, &str, &str) -> rust_web_server::k8s::Result<Self>
+pub async fn rust_web_server::k8s::config::resolve(&kube_client::client::Client, &str) -> rust_web_server::k8s::Result<alloc::string::String>
+pub async fn rust_web_server::k8s::controller::Context::apply_owned<O, C>(&self, &O, C) -> core::result::Result<C, rust_web_server::k8s::Error> where O: kube_core::resource::Resource<DynamicType = ()>, C: kube_core::resource::Resource<DynamicType = ()> + core::clone::Clone + serde_core::de::DeserializeOwned + serde_core::ser::Serialize + core::fmt::Debug, <C as kube_core::resource::Resource>::Scope: rust_web_server::k8s::Scope
+pub async fn rust_web_server::k8s::controller::Context::event<K: kube_core::resource::Resource<DynamicType = ()>>(&self, &K, bool, &str, &str) -> core::result::Result<(), rust_web_server::k8s::Error>
+pub async fn rust_web_server::k8s::controller::Context::patch_status<K>(&self, &K, serde_json::value::Value) -> core::result::Result<K, rust_web_server::k8s::Error> where K: kube_core::resource::Resource<DynamicType = ()> + core::clone::Clone + serde_core::de::DeserializeOwned + core::fmt::Debug, <K as kube_core::resource::Resource>::Scope: rust_web_server::k8s::Scope
+pub async fn rust_web_server::k8s::controller::Operator::run(self)
+pub async fn rust_web_server::k8s::discovery::service_endpoints(kube_client::client::Client, &str, &str, core::option::Option<&str>) -> rust_web_server::k8s::Result<rust_web_server::service_discovery::BackendPool>
+pub async fn rust_web_server::k8s::leader::LeaderElector::release(&self) -> rust_web_server::k8s::Result<()>
+pub async fn rust_web_server::k8s::leader::LeaderElector::run(self)
+pub async fn rust_web_server::k8s::leader::LeaderElector::step(&self) -> bool
+pub async fn rust_web_server::k8s::leader::LeaderHandle::changed(&mut self) -> bool
+pub async fn rust_web_server::k8s::leader::LeaderHandle::wait_until_leader(&mut self)
+pub async fn rust_web_server::k8s::testing::TestCluster::from_env() -> core::option::Option<rust_web_server::k8s::testing::TestCluster>
+pub async fn rust_web_server::k8s::testing::TestCluster::install_crd<K: kube_core::crd::v1::CustomResourceExt>(&self) -> rust_web_server::k8s::Result<()>
+pub async fn rust_web_server::k8s::testing::TestCluster::namespace(&self, &str) -> rust_web_server::k8s::Result<rust_web_server::k8s::testing::TestNamespace>
+pub async fn rust_web_server::k8s::testing::TestNamespace::delete(self)
+pub async fn rust_web_server::k8s::testing::eventually<T, F, Fut>(core::time::Duration, F) -> core::option::Option<T> where F: core::ops::function::FnMut() -> Fut, Fut: core::future::future::Future<Output = core::option::Option<T>>
+pub async fn rust_web_server::k8s::webhook::WebhookCertificate::patch_ca_bundle(&self, &kube_client::client::Client, core::option::Option<&str>, core::option::Option<&str>, core::option::Option<&str>) -> rust_web_server::k8s::Result<()>
 pub async fn rust_web_server::model::Repository::count(&self) -> core::result::Result<i64, rust_web_server::model::DbError>
 pub async fn rust_web_server::model::Repository::delete_all_by_id(&self, &[ID]) -> core::result::Result<(), rust_web_server::model::DbError>
 pub async fn rust_web_server::model::Repository::delete_by_id(&self, ID) -> core::result::Result<(), rust_web_server::model::DbError>
@@ -6399,6 +6660,7 @@ pub async fn rust_web_server::server::Server::run_plain(std::net::tcp::TcpListen
 pub async fn rust_web_server::server::Server::run_quic(impl rust_web_server::application::Application + core::marker::Send + 'static + core::clone::Clone)
 pub async fn rust_web_server::server::Server::run_redirect()
 pub async fn rust_web_server::server::Server::run_tls(std::net::tcp::TcpListener, rust_web_server::thread_pool::ThreadPool, impl rust_web_server::application::Application + core::marker::Send + 'static + core::clone::Clone)
+pub async fn rust_web_server::server::drain_requests() -> i64
 pub async fn rust_web_server::server::proxy_protocol::read_async<S: tokio::io::async_read::AsyncRead + core::marker::Unpin>(&mut S) -> core::io::error::Result<core::option::Option<core::net::socket_addr::SocketAddr>>
 pub async fn rust_web_server::session::DbSessionStore::create(&self) -> core::result::Result<rust_web_server::session::Session, rust_web_server::model::DbError>
 pub async fn rust_web_server::session::DbSessionStore::create_with_id(&self, alloc::string::String) -> core::result::Result<rust_web_server::session::Session, rust_web_server::model::DbError>
@@ -7367,8 +7629,11 @@ pub enum rust_web_server::generator::ChangeKind
 pub enum rust_web_server::generator::Db
 pub enum rust_web_server::generator::Generate
 pub enum rust_web_server::generator::RouteAction
+pub enum rust_web_server::health::Probe
 pub enum rust_web_server::ingress::PathType
 pub enum rust_web_server::ip_filter::TrustedProxies
+pub enum rust_web_server::k8s::Error
+pub enum rust_web_server::k8s::leader::Decision
 pub enum rust_web_server::llm::Api
 pub enum rust_web_server::log::syslog::Target
 pub enum rust_web_server::mcp::LogLevel
@@ -7428,6 +7693,8 @@ pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::json_
 pub fn alloc::string::String::from(rust_web_server::core::base64::DecodeError) -> alloc::string::String
 pub fn alloc::vec::Vec<u8>::eq(&self, &rust_web_server::request::Body) -> bool
 pub fn core::result::Result<T, E>::into_response(self) -> rust_web_server::response::Response
+pub fn k8s_openapi::_resource::ClusterResourceScope::api<K: kube_core::resource::Resource<Scope = Self, DynamicType = ()>>(kube_client::client::Client, core::option::Option<&str>) -> kube_client::api::Api<K>
+pub fn k8s_openapi::_resource::NamespaceResourceScope::api<K: kube_core::resource::Resource<Scope = Self, DynamicType = ()>>(kube_client::client::Client, core::option::Option<&str>) -> kube_client::api::Api<K>
 pub fn rust_web_server::a2a::A2aContext::complete(&self, alloc::vec::Vec<rust_web_server::a2a::Artifact>) -> rust_web_server::a2a::Task
 pub fn rust_web_server::a2a::A2aContext::context_id(&self) -> &str
 pub fn rust_web_server::a2a::A2aContext::fail(&self, &str) -> rust_web_server::a2a::Task
@@ -8855,6 +9122,10 @@ pub fn rust_web_server::generator::Db::eq(&self, &Self) -> bool
 pub fn rust_web_server::generator::Db::feature(self) -> &'static str
 pub fn rust_web_server::generator::Db::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::generator::Db::parse(&str) -> core::option::Option<rust_web_server::generator::Db>
+pub fn rust_web_server::generator::DeploySpec::clone(&self) -> Self
+pub fn rust_web_server::generator::DeploySpec::eq(&self, &Self) -> bool
+pub fn rust_web_server::generator::DeploySpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::generator::DeploySpec::new(&str) -> Self
 pub fn rust_web_server::generator::Field::clone(&self) -> Self
 pub fn rust_web_server::generator::Field::eq(&self, &Self) -> bool
 pub fn rust_web_server::generator::Field::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -8892,8 +9163,10 @@ pub fn rust_web_server::generator::RouteAction::fmt(&self, &mut core::fmt::Forma
 pub fn rust_web_server::generator::RouteAction::handler(self) -> &'static str
 pub fn rust_web_server::generator::RouteAction::parse(&str) -> core::option::Option<rust_web_server::generator::RouteAction>
 pub fn rust_web_server::generator::RouteAction::parse_list(&str) -> core::result::Result<alloc::vec::Vec<rust_web_server::generator::RouteAction>, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::k8s_name(&str) -> alloc::string::String
 pub fn rust_web_server::generator::parse_fields<S: core::convert::AsRef<str>>(&[S]) -> core::result::Result<alloc::vec::Vec<rust_web_server::generator::Field>, rust_web_server::generator::GenError>
 pub fn rust_web_server::generator::plan(impl core::convert::AsRef<std::path::Path>, &rust_web_server::generator::Generate) -> core::result::Result<rust_web_server::generator::Plan, rust_web_server::generator::GenError>
+pub fn rust_web_server::generator::plan_deploy(impl core::convert::AsRef<std::path::Path>, &rust_web_server::generator::DeploySpec) -> core::result::Result<rust_web_server::generator::Plan, rust_web_server::generator::GenError>
 pub fn rust_web_server::generator::plan_model_migration(impl core::convert::AsRef<std::path::Path>, &str, &rust_web_server::generator::ExistingColumns, core::option::Option<rust_web_server::generator::Db>) -> core::result::Result<rust_web_server::generator::Plan, rust_web_server::generator::GenError>
 pub fn rust_web_server::generator::requested(&[alloc::string::String]) -> core::option::Option<&[alloc::string::String]>
 pub fn rust_web_server::generator::run(&[alloc::string::String], &mut dyn core::io::write::Write, &mut dyn core::io::write::Write) -> i32
@@ -8977,6 +9250,38 @@ pub fn rust_web_server::header::Header::parse_header(&str) -> core::result::Resu
 pub fn rust_web_server::header::Header::single_line(&str) -> alloc::borrow::Cow<'_, str>
 pub fn rust_web_server::header::content_disposition::ContentDisposition::as_string(&self) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::header::content_disposition::ContentDisposition::parse(&str) -> core::result::Result<rust_web_server::header::content_disposition::ContentDisposition, alloc::string::String>
+pub fn rust_web_server::health::CheckResult::clone(&self) -> Self
+pub fn rust_web_server::health::CheckResult::eq(&self, &Self) -> bool
+pub fn rust_web_server::health::CheckResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::health::Probe::clone(&self) -> Self
+pub fn rust_web_server::health::Probe::eq(&self, &Self) -> bool
+pub fn rust_web_server::health::Probe::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::health::Probe::hash<__H: core::hash::Hasher>(&self, &mut __H)
+pub fn rust_web_server::health::Probe::path(self) -> &'static str
+pub fn rust_web_server::health::Registry::default() -> Self
+pub fn rust_web_server::health::Registry::has_checks(&self, rust_web_server::health::Probe) -> bool
+pub fn rust_web_server::health::Registry::new() -> Self
+pub fn rust_web_server::health::Registry::register(&self, rust_web_server::health::Probe, &str, impl core::ops::function::Fn() -> core::result::Result<(), alloc::string::String> + core::marker::Send + core::marker::Sync + 'static)
+pub fn rust_web_server::health::Registry::report(&self, rust_web_server::health::Probe) -> rust_web_server::health::Report
+pub fn rust_web_server::health::Registry::set_timeout(&self, core::time::Duration)
+pub fn rust_web_server::health::Registry::unregister(&self, rust_web_server::health::Probe, &str) -> bool
+pub fn rust_web_server::health::Report::body(&self, bool) -> alloc::string::String
+pub fn rust_web_server::health::Report::clone(&self) -> Self
+pub fn rust_web_server::health::Report::eq(&self, &Self) -> bool
+pub fn rust_web_server::health::Report::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::health::database(&str, rust_web_server::model::pool::DbPool)
+pub fn rust_web_server::health::global() -> &'static rust_web_server::health::Registry
+pub fn rust_web_server::health::has_checks(rust_web_server::health::Probe) -> bool
+pub fn rust_web_server::health::liveness(&str, impl core::ops::function::Fn() -> core::result::Result<(), alloc::string::String> + core::marker::Send + core::marker::Sync + 'static)
+pub fn rust_web_server::health::probe_for_path(&str) -> core::option::Option<rust_web_server::health::Probe>
+pub fn rust_web_server::health::readiness(&str, impl core::ops::function::Fn() -> core::result::Result<(), alloc::string::String> + core::marker::Send + core::marker::Sync + 'static)
+pub fn rust_web_server::health::register(rust_web_server::health::Probe, &str, impl core::ops::function::Fn() -> core::result::Result<(), alloc::string::String> + core::marker::Send + core::marker::Sync + 'static)
+pub fn rust_web_server::health::register_async<F, Fut>(rust_web_server::health::Probe, &str, F) where F: core::ops::function::Fn() -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = core::result::Result<(), alloc::string::String>> + core::marker::Send + 'static
+pub fn rust_web_server::health::report(rust_web_server::health::Probe) -> rust_web_server::health::Report
+pub fn rust_web_server::health::respond(rust_web_server::health::Probe, bool) -> rust_web_server::response::Response
+pub fn rust_web_server::health::set_timeout(core::time::Duration)
+pub fn rust_web_server::health::startup(&str, impl core::ops::function::Fn() -> core::result::Result<(), alloc::string::String> + core::marker::Send + core::marker::Sync + 'static)
+pub fn rust_web_server::health::unregister(rust_web_server::health::Probe, &str) -> bool
 pub fn rust_web_server::http::HTTP::is_supported_version(&str) -> bool
 pub fn rust_web_server::http::HTTP::version_list() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::http_client::AsyncClient::default() -> Self
@@ -9139,6 +9444,94 @@ pub fn rust_web_server::json::object::ToJSON::to_json_string(&self) -> alloc::st
 pub fn rust_web_server::json::property::JSONProperty::parse(&str) -> core::result::Result<(rust_web_server::json::property::JSONProperty, rust_web_server::json::property::JSONValue), alloc::string::String>
 pub fn rust_web_server::json::property::JSONValue::float_number_with_precision(&self, u8) -> alloc::string::String
 pub fn rust_web_server::json::property::JSONValue::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::k8s::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::k8s::Error::from(&str) -> Self
+pub fn rust_web_server::k8s::Error::from(alloc::string::String) -> Self
+pub fn rust_web_server::k8s::Error::from(kube_client::error::Error) -> Self
+pub fn rust_web_server::k8s::Scope::api<K: kube_core::resource::Resource<Scope = Self, DynamicType = ()>>(kube_client::client::Client, core::option::Option<&str>) -> kube_client::api::Api<K>
+pub fn rust_web_server::k8s::api_for<K>(&kube_client::client::Client, &K) -> kube_client::api::Api<K> where K: kube_core::resource::Resource<DynamicType = ()>, <K as kube_core::resource::Resource>::Scope: rust_web_server::k8s::Scope
+pub fn rust_web_server::k8s::client::current_namespace() -> alloc::string::String
+pub fn rust_web_server::k8s::client::identity() -> alloc::string::String
+pub fn rust_web_server::k8s::config::ConfigWatch::apply_to_env(&self, &str)
+pub fn rust_web_server::k8s::config::ConfigWatch::clone(&self) -> Self
+pub fn rust_web_server::k8s::config::ConfigWatch::exists(&self) -> bool
+pub fn rust_web_server::k8s::config::ConfigWatch::get(&self, &str) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::k8s::config::ConfigWatch::on_change(&self, impl core::ops::function::Fn(&alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) + core::marker::Send + core::marker::Sync + 'static)
+pub fn rust_web_server::k8s::config::ConfigWatch::snapshot(&self) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub fn rust_web_server::k8s::config::SecretRef::clone(&self) -> Self
+pub fn rust_web_server::k8s::config::SecretRef::eq(&self, &Self) -> bool
+pub fn rust_web_server::k8s::config::SecretRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::k8s::config::SecretRef::parse(&str) -> rust_web_server::k8s::Result<rust_web_server::k8s::config::SecretRef>
+pub fn rust_web_server::k8s::config::config_map_data(&k8s_openapi::v1_32::api::core::v1::config_map::ConfigMap) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub fn rust_web_server::k8s::config::secret_data(&k8s_openapi::v1_32::api::core::v1::secret::Secret) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub fn rust_web_server::k8s::controller::Controller<K>::finalizer<F, Fut>(self, &str, F) -> Self where F: core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = core::result::Result<(), rust_web_server::k8s::Error>> + core::marker::Send + 'static
+pub fn rust_web_server::k8s::controller::Controller<K>::new(kube_client::api::Api<K>) -> Self
+pub fn rust_web_server::k8s::controller::Controller<K>::on_error(self, core::time::Duration) -> Self
+pub fn rust_web_server::k8s::controller::Controller<K>::owns<C>(self, kube_client::api::Api<C>) -> Self where C: kube_core::resource::Resource<DynamicType = ()> + core::clone::Clone + serde_core::de::DeserializeOwned + core::fmt::Debug + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::k8s::controller::Controller<K>::reconcile<F, Fut>(self, F) -> Self where F: core::ops::function::Fn(alloc::rcs::arc::Arc<K>, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = core::result::Result<kube_runtime::controller::Action, rust_web_server::k8s::Error>> + core::marker::Send + 'static
+pub fn rust_web_server::k8s::controller::Controller<K>::rule(self, rust_web_server::k8s::manifests::Rule) -> Self
+pub fn rust_web_server::k8s::controller::Controller<K>::watching(self, kube_runtime::watcher::Config) -> Self
+pub fn rust_web_server::k8s::controller::Operator::controller(self, impl rust_web_server::k8s::controller::Runnable + 'static) -> Self
+pub fn rust_web_server::k8s::controller::Operator::kinds(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn rust_web_server::k8s::controller::Operator::leader_election(self, &str, &str) -> Self
+pub fn rust_web_server::k8s::controller::Operator::new(kube_client::client::Client, &str) -> Self
+pub fn rust_web_server::k8s::controller::Operator::rules(&self) -> alloc::vec::Vec<rust_web_server::k8s::manifests::Rule>
+pub fn rust_web_server::k8s::controller::Runnable::kind(&self) -> alloc::string::String
+pub fn rust_web_server::k8s::controller::Runnable::rules(&self) -> alloc::vec::Vec<rust_web_server::k8s::manifests::Rule>
+pub fn rust_web_server::k8s::controller::Runnable::start(alloc::boxed::Box<Self>, kube_client::client::Client, alloc::rcs::arc::Arc<rust_web_server::k8s::controller::Context>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = ()> + core::marker::Send)>>
+pub fn rust_web_server::k8s::controller::backoff(core::time::Duration, u32) -> core::time::Duration
+pub fn rust_web_server::k8s::controller::group_and_plural<K: kube_core::resource::Resource<DynamicType = ()>>() -> (alloc::string::String, alloc::string::String)
+pub fn rust_web_server::k8s::controller::metrics_text() -> alloc::string::String
+pub fn rust_web_server::k8s::discovery::ready_addresses<'a>(impl core::iter::traits::collect::IntoIterator<Item = &'a k8s_openapi::v1_32::api::discovery::v1::endpoint_slice::EndpointSlice>, core::option::Option<&str>) -> alloc::vec::Vec<alloc::string::String>
+pub fn rust_web_server::k8s::leader::Decision::eq(&self, &Self) -> bool
+pub fn rust_web_server::k8s::leader::Decision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::k8s::leader::LeaderElector::handle(&self) -> rust_web_server::k8s::leader::LeaderHandle
+pub fn rust_web_server::k8s::leader::LeaderElector::identity(self, &str) -> Self
+pub fn rust_web_server::k8s::leader::LeaderElector::new(kube_client::client::Client, &str, &str) -> Self
+pub fn rust_web_server::k8s::leader::LeaderElector::timing(self, core::time::Duration, core::time::Duration) -> Self
+pub fn rust_web_server::k8s::leader::LeaderHandle::clone(&self) -> Self
+pub fn rust_web_server::k8s::leader::LeaderHandle::is_leader(&self) -> bool
+pub fn rust_web_server::k8s::leader::decide(core::option::Option<&k8s_openapi::v1_32::api::coordination::v1::lease::Lease>, &str, jiff::timestamp::Timestamp, core::time::Duration) -> rust_web_server::k8s::leader::Decision
+pub fn rust_web_server::k8s::leader::held(&str, &str, &str, core::time::Duration, core::option::Option<&k8s_openapi::v1_32::api::coordination::v1::lease::Lease>, jiff::timestamp::Timestamp) -> k8s_openapi::v1_32::api::coordination::v1::lease::Lease
+pub fn rust_web_server::k8s::manifests::Rbac::documents(&self) -> alloc::vec::Vec<serde_json::value::Value>
+pub fn rust_web_server::k8s::manifests::Rbac::leader_election(self) -> Self
+pub fn rust_web_server::k8s::manifests::Rbac::new(&str, &str) -> Self
+pub fn rust_web_server::k8s::manifests::Rbac::rule(self, rust_web_server::k8s::manifests::Rule) -> Self
+pub fn rust_web_server::k8s::manifests::Rbac::rules(self, alloc::vec::Vec<rust_web_server::k8s::manifests::Rule>) -> Self
+pub fn rust_web_server::k8s::manifests::Rule::clone(&self) -> Self
+pub fn rust_web_server::k8s::manifests::Rule::cmp(&self, &Self) -> core::cmp::Ordering
+pub fn rust_web_server::k8s::manifests::Rule::eq(&self, &Self) -> bool
+pub fn rust_web_server::k8s::manifests::Rule::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::k8s::manifests::Rule::new(&str, &[&str], &[&str]) -> Self
+pub fn rust_web_server::k8s::manifests::Rule::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+pub fn rust_web_server::k8s::manifests::Rule::to_json(&self) -> serde_json::value::Value
+pub fn rust_web_server::k8s::manifests::WebhookRule::clone(&self) -> Self
+pub fn rust_web_server::k8s::manifests::WebhookRule::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::k8s::manifests::WebhookRule::new(&str, &str, &str, &[&str]) -> Self
+pub fn rust_web_server::k8s::manifests::WebhookTarget::clone(&self) -> Self
+pub fn rust_web_server::k8s::manifests::WebhookTarget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::k8s::manifests::crd<K: kube_core::crd::v1::CustomResourceExt>() -> serde_json::value::Value
+pub fn rust_web_server::k8s::manifests::merge_rules(alloc::vec::Vec<rust_web_server::k8s::manifests::Rule>) -> alloc::vec::Vec<rust_web_server::k8s::manifests::Rule>
+pub fn rust_web_server::k8s::manifests::print_on_request(impl core::ops::function::FnOnce() -> alloc::vec::Vec<serde_json::value::Value>)
+pub fn rust_web_server::k8s::manifests::to_yaml(&[serde_json::value::Value]) -> alloc::string::String
+pub fn rust_web_server::k8s::manifests::webhook_configuration(&str, bool, &rust_web_server::k8s::manifests::WebhookTarget, &[rust_web_server::k8s::manifests::WebhookRule], bool) -> serde_json::value::Value
+pub fn rust_web_server::k8s::manifests::with_conversion_webhook(serde_json::value::Value, &rust_web_server::k8s::manifests::WebhookTarget) -> serde_json::value::Value
+pub fn rust_web_server::k8s::testing::TestCluster::clone(&self) -> Self
+pub fn rust_web_server::k8s::testing::TestNamespace::api<K>(&self) -> kube_client::api::Api<K> where K: kube_core::resource::Resource<Scope = k8s_openapi::_resource::NamespaceResourceScope, DynamicType = ()>
+pub fn rust_web_server::k8s::testing::TestNamespace::name(&self) -> &str
+pub fn rust_web_server::k8s::webhook::WebhookCertificate::clone(&self) -> Self
+pub fn rust_web_server::k8s::webhook::WebhookCertificate::generate(&str, &str) -> core::result::Result<Self, alloc::string::String>
+pub fn rust_web_server::k8s::webhook::WebhookCertificate::generate_for(&str, alloc::vec::Vec<alloc::string::String>) -> core::result::Result<Self, alloc::string::String>
+pub fn rust_web_server::k8s::webhook::WebhookCertificate::install(&self, &str) -> core::result::Result<(), alloc::string::String>
+pub fn rust_web_server::k8s::webhook::Webhooks::clone(&self) -> Self
+pub fn rust_web_server::k8s::webhook::Webhooks::convert<F>(self, &str, F) -> Self where F: core::ops::function::Fn(serde_json::value::Value, &str) -> core::result::Result<serde_json::value::Value, alloc::string::String> + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::k8s::webhook::Webhooks::default() -> Self
+pub fn rust_web_server::k8s::webhook::Webhooks::mutate<K, F>(self, &str, F) -> Self where K: kube_core::resource::Resource + serde_core::de::DeserializeOwned + serde_core::ser::Serialize + core::clone::Clone + 'static, F: core::ops::function::Fn(K) -> core::result::Result<K, alloc::string::String> + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::k8s::webhook::Webhooks::new() -> Self
+pub fn rust_web_server::k8s::webhook::Webhooks::validate<K, F>(self, &str, F) -> Self where K: kube_core::resource::Resource + serde_core::de::DeserializeOwned + serde_core::ser::Serialize + core::clone::Clone + 'static, F: core::ops::function::Fn(&kube_core::admission::AdmissionRequest<K>) -> core::result::Result<(), alloc::string::String> + core::marker::Send + core::marker::Sync + 'static
+pub fn rust_web_server::k8s::webhook::Webhooks::wrap(self, impl rust_web_server::application::Application + core::marker::Send + core::marker::Sync + 'static) -> Self
+pub fn rust_web_server::k8s::webhook::admission<K, F>(&[u8], F) -> core::result::Result<alloc::vec::Vec<u8>, alloc::string::String> where K: kube_core::resource::Resource + serde_core::de::DeserializeOwned + serde_core::ser::Serialize + core::clone::Clone, F: core::ops::function::Fn(&kube_core::admission::AdmissionRequest<K>) -> core::result::Result<core::option::Option<json_patch::Patch>, alloc::string::String>
+pub fn rust_web_server::k8s::webhook::conversion<F>(&[u8], F) -> core::result::Result<alloc::vec::Vec<u8>, alloc::string::String> where F: core::ops::function::Fn(serde_json::value::Value, &str) -> core::result::Result<serde_json::value::Value, alloc::string::String>
 pub fn rust_web_server::language::Language::as_list() -> alloc::vec::Vec<rust_web_server::language::Lang>
 pub fn rust_web_server::llm::Api::clone(&self) -> Self
 pub fn rust_web_server::llm::Api::eq(&self, &Self) -> bool
@@ -9359,6 +9752,8 @@ pub fn rust_web_server::mcp::openapi_tools::ToolRequest::clone(&self) -> Self
 pub fn rust_web_server::mcp::openapi_tools::ToolRequest::eq(&self, &Self) -> bool
 pub fn rust_web_server::mcp::openapi_tools::ToolRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::mcp::openapi_tools::tools(&str, &rust_web_server::mcp::openapi_tools::ToolOptions) -> core::result::Result<alloc::vec::Vec<rust_web_server::mcp::openapi_tools::OpenApiTool>, alloc::string::String>
+pub fn rust_web_server::metrics::InFlight::drop(&mut self)
+pub fn rust_web_server::metrics::InFlight::start() -> Self
 pub fn rust_web_server::metrics::connection_close()
 pub fn rust_web_server::metrics::connection_open()
 pub fn rust_web_server::metrics::exposition::accepts_protobuf(&str) -> bool
@@ -10786,6 +11181,7 @@ pub mod rust_web_server::group
 pub mod rust_web_server::handler
 pub mod rust_web_server::header
 pub mod rust_web_server::header::content_disposition
+pub mod rust_web_server::health
 pub mod rust_web_server::http
 pub mod rust_web_server::http_client
 pub mod rust_web_server::i18n
@@ -10801,6 +11197,15 @@ pub mod rust_web_server::json::array::object
 pub mod rust_web_server::json::array::string
 pub mod rust_web_server::json::object
 pub mod rust_web_server::json::property
+pub mod rust_web_server::k8s
+pub mod rust_web_server::k8s::client
+pub mod rust_web_server::k8s::config
+pub mod rust_web_server::k8s::controller
+pub mod rust_web_server::k8s::discovery
+pub mod rust_web_server::k8s::leader
+pub mod rust_web_server::k8s::manifests
+pub mod rust_web_server::k8s::testing
+pub mod rust_web_server::k8s::webhook
 pub mod rust_web_server::language
 pub mod rust_web_server::llm
 pub mod rust_web_server::llm::usage
@@ -11589,6 +11994,11 @@ pub rust_web_server::generator::ChangeKind::Unchanged
 pub rust_web_server::generator::Db::Mysql
 pub rust_web_server::generator::Db::Postgres
 pub rust_web_server::generator::Db::Sqlite
+pub rust_web_server::generator::DeploySpec::dir: alloc::string::String
+pub rust_web_server::generator::DeploySpec::image: alloc::string::String
+pub rust_web_server::generator::DeploySpec::max_replicas: u32
+pub rust_web_server::generator::DeploySpec::port: u16
+pub rust_web_server::generator::DeploySpec::replicas: u32
 pub rust_web_server::generator::Field::name: alloc::string::String
 pub rust_web_server::generator::Field::ty: rust_web_server::generator::FieldType
 pub rust_web_server::generator::FieldType::base: rust_web_server::generator::BaseType
@@ -11637,6 +12047,15 @@ pub rust_web_server::header::content_disposition::ContentDisposition::file_name:
 pub rust_web_server::header::content_disposition::DispositionType::attachment: &'static str
 pub rust_web_server::header::content_disposition::DispositionType::form_data: &'static str
 pub rust_web_server::header::content_disposition::DispositionType::inline: &'static str
+pub rust_web_server::health::CheckResult::error: core::option::Option<alloc::string::String>
+pub rust_web_server::health::CheckResult::name: alloc::string::String
+pub rust_web_server::health::Probe::Liveness
+pub rust_web_server::health::Probe::Readiness
+pub rust_web_server::health::Probe::Startup
+pub rust_web_server::health::Report::checks: alloc::vec::Vec<rust_web_server::health::CheckResult>
+pub rust_web_server::health::Report::note: core::option::Option<alloc::string::String>
+pub rust_web_server::health::Report::ok: bool
+pub rust_web_server::health::Report::probe: rust_web_server::health::Probe
 pub rust_web_server::http::Version::http_0_9: &'static str
 pub rust_web_server::http::Version::http_1_0: &'static str
 pub rust_web_server::http::Version::http_1_1: &'static str
@@ -11669,6 +12088,32 @@ pub rust_web_server::json::property::JSONValue::i128: core::option::Option<i128>
 pub rust_web_server::json::property::JSONValue::null: core::option::Option<rust_web_server::null::Null>
 pub rust_web_server::json::property::JSONValue::object: core::option::Option<alloc::string::String>
 pub rust_web_server::json::property::JSONValue::string: core::option::Option<alloc::string::String>
+pub rust_web_server::k8s::Error::Kube(kube_client::error::Error)
+pub rust_web_server::k8s::Error::Other(alloc::string::String)
+pub rust_web_server::k8s::config::SecretRef::key: alloc::string::String
+pub rust_web_server::k8s::config::SecretRef::name: alloc::string::String
+pub rust_web_server::k8s::config::SecretRef::namespace: alloc::string::String
+pub rust_web_server::k8s::controller::Context::client: kube_client::client::Client
+pub rust_web_server::k8s::controller::Context::operator: alloc::string::String
+pub rust_web_server::k8s::leader::Decision::Create
+pub rust_web_server::k8s::leader::Decision::Follow
+pub rust_web_server::k8s::leader::Decision::Take
+pub rust_web_server::k8s::manifests::Rule::api_group: alloc::string::String
+pub rust_web_server::k8s::manifests::Rule::resources: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::k8s::manifests::Rule::verbs: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::k8s::manifests::WebhookRule::api_group: alloc::string::String
+pub rust_web_server::k8s::manifests::WebhookRule::api_version: alloc::string::String
+pub rust_web_server::k8s::manifests::WebhookRule::operations: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::k8s::manifests::WebhookRule::resource: alloc::string::String
+pub rust_web_server::k8s::manifests::WebhookTarget::ca_pem: alloc::string::String
+pub rust_web_server::k8s::manifests::WebhookTarget::namespace: alloc::string::String
+pub rust_web_server::k8s::manifests::WebhookTarget::path: alloc::string::String
+pub rust_web_server::k8s::manifests::WebhookTarget::port: u16
+pub rust_web_server::k8s::manifests::WebhookTarget::service: alloc::string::String
+pub rust_web_server::k8s::testing::TestCluster::client: kube_client::client::Client
+pub rust_web_server::k8s::webhook::WebhookCertificate::ca_pem: alloc::string::String
+pub rust_web_server::k8s::webhook::WebhookCertificate::cert_pem: alloc::string::String
+pub rust_web_server::k8s::webhook::WebhookCertificate::key_pem: alloc::string::String
 pub rust_web_server::language::Lang::code: &'static str
 pub rust_web_server::language::Lang::name: &'static str
 pub rust_web_server::llm::Api::Anthropic
@@ -12281,6 +12726,7 @@ pub rust_web_server::server_config::ServerConfig::proxy_status_next_hop: bool
 pub rust_web_server::server_config::ServerConfig::request_allocation_size: i64
 pub rust_web_server::server_config::ServerConfig::security_headers: bool
 pub rust_web_server::server_config::ServerConfig::shutdown_delay_secs: u64
+pub rust_web_server::server_config::ServerConfig::shutdown_timeout_secs: u64
 pub rust_web_server::server_config::ServerConfig::static_cache_control: alloc::string::String
 pub rust_web_server::server_config::ServerConfig::trusted_proxies: rust_web_server::ip_filter::TrustedProxies
 pub rust_web_server::server_config::log_privacy::AnonymizeIp::Hash
@@ -12569,6 +13015,7 @@ pub static rust_web_server::config_reload::RELOAD_REQUESTED: core::sync::atomic:
 pub static rust_web_server::maintenance::MAINTENANCE_MODE: core::sync::atomic::AtomicBool
 pub static rust_web_server::metrics::ACTIVE_CONNECTIONS: core::sync::atomic::AtomicI64
 pub static rust_web_server::metrics::ERRORS_TOTAL: core::sync::atomic::AtomicU64
+pub static rust_web_server::metrics::REQUESTS_IN_FLIGHT: core::sync::atomic::AtomicI64
 pub static rust_web_server::metrics::REQUESTS_TOTAL: core::sync::atomic::AtomicU64
 pub static rust_web_server::metrics::SERVER_READY: core::sync::atomic::AtomicBool
 pub static rust_web_server::metrics::THREAD_POOL_QUEUED: core::sync::atomic::AtomicI64
@@ -12785,6 +13232,7 @@ pub struct rust_web_server::gateway_api::types::SupportedFeature
 pub struct rust_web_server::gateway_api::types::TlsConfig
 pub struct rust_web_server::gateway_api::types::TlsPortConfig
 pub struct rust_web_server::gateway_api::types::TypedLocalReference
+pub struct rust_web_server::generator::DeploySpec
 pub struct rust_web_server::generator::Field
 pub struct rust_web_server::generator::FieldType
 pub struct rust_web_server::generator::FileChange
@@ -12802,6 +13250,9 @@ pub struct rust_web_server::handler::State<S>(pub alloc::rcs::arc::Arc<S>)
 pub struct rust_web_server::header::Header
 pub struct rust_web_server::header::content_disposition::ContentDisposition
 pub struct rust_web_server::header::content_disposition::DispositionType
+pub struct rust_web_server::health::CheckResult
+pub struct rust_web_server::health::Registry
+pub struct rust_web_server::health::Report
 pub struct rust_web_server::http::HTTP
 pub struct rust_web_server::http::Version
 pub struct rust_web_server::http_client::AsyncClient
@@ -12831,6 +13282,21 @@ pub struct rust_web_server::json::array::string::JSONArrayOfStrings
 pub struct rust_web_server::json::object::JSON
 pub struct rust_web_server::json::property::JSONProperty
 pub struct rust_web_server::json::property::JSONValue
+pub struct rust_web_server::k8s::config::ConfigWatch
+pub struct rust_web_server::k8s::config::SecretRef
+pub struct rust_web_server::k8s::controller::Context
+pub struct rust_web_server::k8s::controller::Controller<K: kube_core::resource::Resource<DynamicType = ()> + core::clone::Clone + core::fmt::Debug + 'static>
+pub struct rust_web_server::k8s::controller::Operator
+pub struct rust_web_server::k8s::leader::LeaderElector
+pub struct rust_web_server::k8s::leader::LeaderHandle
+pub struct rust_web_server::k8s::manifests::Rbac
+pub struct rust_web_server::k8s::manifests::Rule
+pub struct rust_web_server::k8s::manifests::WebhookRule
+pub struct rust_web_server::k8s::manifests::WebhookTarget
+pub struct rust_web_server::k8s::testing::TestCluster
+pub struct rust_web_server::k8s::testing::TestNamespace
+pub struct rust_web_server::k8s::webhook::WebhookCertificate
+pub struct rust_web_server::k8s::webhook::Webhooks
 pub struct rust_web_server::language::Lang
 pub struct rust_web_server::language::Language
 pub struct rust_web_server::llm::LlmProxy
@@ -12861,6 +13327,7 @@ pub struct rust_web_server::mcp::gateway::Upstream
 pub struct rust_web_server::mcp::openapi_tools::OpenApiTool
 pub struct rust_web_server::mcp::openapi_tools::ToolOptions
 pub struct rust_web_server::mcp::openapi_tools::ToolRequest
+pub struct rust_web_server::metrics::InFlight(_)
 pub struct rust_web_server::metrics::MetricsLayer
 pub struct rust_web_server::middleware::RateLimitLayer
 pub struct rust_web_server::middleware::WithMiddleware<A>
@@ -13127,6 +13594,8 @@ pub trait rust_web_server::handler::Handler<S>: rust_web_server::handler::RouteS
 pub trait rust_web_server::handler::RouteSpec
 pub trait rust_web_server::json::object::FromJSON
 pub trait rust_web_server::json::object::ToJSON
+pub trait rust_web_server::k8s::Scope
+pub trait rust_web_server::k8s::controller::Runnable: core::marker::Send
 pub trait rust_web_server::middleware::Middleware: core::marker::Send + core::marker::Sync
 pub trait rust_web_server::model::FromColumn: core::marker::Sized
 pub trait rust_web_server::model::Model: core::marker::Sized + core::marker::Send + core::marker::Sync
@@ -13168,6 +13637,7 @@ pub type rust_web_server::handler::Path<T>::Target = T
 pub type rust_web_server::handler::Query<T>::Target = T
 pub type rust_web_server::handler::State<S>::Target = S
 pub type rust_web_server::json::Json<T>::Target = T
+pub type rust_web_server::k8s::Result<T, E> = core::result::Result<T, E>
 pub type rust_web_server::model::eager::Loaded<T>::Target = T
 pub type rust_web_server::model::seed::SeedFuture<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), rust_web_server::model::DbError>> + core::marker::Send + 'a)>>
 pub type rust_web_server::model::timestamp::Timestamp::Err = rust_web_server::model::DbError
@@ -13205,6 +13675,11 @@ pub use rust_web_server::handler::IntoResponse
 pub use rust_web_server::handler::Json
 pub use rust_web_server::handler::RequestHeaders
 pub use rust_web_server::handler::RequestId
+pub use rust_web_server::k8s::controller::Action
+pub use rust_web_server::k8s::k8s_openapi
+pub use rust_web_server::k8s::kube
+pub use rust_web_server::k8s::schemars
+pub use rust_web_server::k8s::webhook::AdmissionOperation
 pub use rust_web_server::model::CursorPage
 pub use rust_web_server::model::Page
 pub use rust_web_server::patch

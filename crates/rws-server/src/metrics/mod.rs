@@ -299,6 +299,8 @@ pub mod section {
     pub const LLM: u16 = 80;
     pub const TLS: u16 = 90;
     pub const CIRCUIT_BREAKER: u16 = 100;
+ /// Kubernetes controllers (`k8s::controller`, 18.36.0).
+ pub const CONTROLLERS: u16 = 110;
 }
 
 static SECTIONS: std::sync::Mutex<Vec<(u16, fn() -> String)>> = std::sync::Mutex::new(Vec::new());

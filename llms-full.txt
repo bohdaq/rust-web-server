@@ -582,6 +582,7 @@ KMS; see [PKCS#11](/features/https-tls/#keys-in-an-hsm-or-cloud-kms-pkcs11).
 | `zstd` *(default)* | `zstd` content coding | `zstd` (C libzstd, built with the crate) |
 | `tower` | Tower layers as middleware, Tower services as apps, an app as a Tower service | `http2`, `tower-service`, `tower-layer`, `http-body` |
 | `gateway-api` | Kubernetes Gateway API controller | `http2`, `serde`, `kube`, `k8s-openapi` |
+| `k8s` | The Kubernetes API from an app (ConfigMaps, Secrets, discovery, leader election) and operators (controllers, webhooks, CRD/RBAC manifests, test clusters) | `http2`, `serde`, `kube`, `k8s-openapi`, `schemars` |
 | `wasm-plugins` | `WasmLayer`: middleware as WebAssembly modules | `wasmtime` |
 | `fips` | TLS on aws-lc's FIPS 140-3 module (needs CMake and Go) | `http2` |
 | `pkcs11` | TLS private keys on an HSM or cloud KMS | `http2`, `cryptoki` |
@@ -22981,6 +22982,17 @@ When Kubernetes sends `SIGTERM`, the server:
 
 Ctrl+C (SIGINT) skips the delay and the wait. Set `terminationGracePeriodSeconds` to at least the delay plus the timeout (`30` with the defaults) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
+## Generate the manifests
+
+`rws gen deploy --image <image>` writes `deploy/k8s/` for the app in the current project (18.36.0): a Deployment with the startup, readiness and liveness probes above, `POD_NAME`/`POD_NAMESPACE` from the downward API, a 35 s grace period for the shutdown, a non-root read-only container; a Service; a PodDisruptionBudget; a HorizontalPodAutoscaler; a ServiceAccount; and a `kustomization.yaml`:
+
+```sh
+rws gen deploy --image ghcr.io/acme/notes:1.4.0 [--port 7878] [--replicas 2] [--max-replicas 10] [--out deploy/k8s]
+kubectl apply -k deploy/k8s
+```
+
+The name comes from `rws.app.toml` (or `Cargo.toml`). The files are yours to change; like every generator it never overwrites one (`--dry-run` shows them first). For an app that uses the Kubernetes API see [Using the Kubernetes API](/deployment/kubernetes-api/); an operator prints its own RBAC ([Operators](/deployment/kubernetes-operators/#manifests)).
+
 :::tip[Helm chart]
 The manifests below are also a Helm chart, published with every release (since 18.2.0):
 
@@ -23488,6 +23500,281 @@ Every gateway answered every request with 200 except as noted. Memory (working s
 ¹ NGINX Gateway Fabric answered 404 through the rewriting route in this setup, so the row isn't comparable; it also had 160 cancelled requests over HTTP/2.
 
 What this doesn't measure: many routes or Gateways, configuration churn, connection setup (every scenario reuses connections), and real backends.
+
+---
+
+# Using the Kubernetes API
+
+<https://rws8.tech/docs/deployment/kubernetes-api/>
+
+The `k8s` feature (18.36.0) gives an app running in Kubernetes the API itself: configuration that changes without a restart, secrets read where they live, the pods behind a Service, and one replica at a time for singleton work. It builds on [kube-rs](https://kube.rs), which `rust_web_server::k8s` re-exports (`kube`, `k8s_openapi`, `schemars`).
+
+```toml
+rust-web-server = { version = "18.36", features = ["k8s"] }
+```
+
+## A client
+
+```rust
+use rust_web_server::k8s::client;
+
+let kube = client::client().await?;          // in a pod: its service account; elsewhere: ~/.kube/config
+let ns = client::current_namespace();        // POD_NAMESPACE, the service account's, the kubeconfig's, else "default"
+```
+
+`client::from_kubeconfig(path)` reads a given file; `client::identity()` is this replica's name (`POD_NAME`, else `HOSTNAME`). [`rws gen deploy`](/deployment/kubernetes/#generate-the-manifests) sets `POD_NAME` and `POD_NAMESPACE` from the downward API.
+
+## ConfigMaps and Secrets
+
+`config::ConfigWatch` keeps one ConfigMap's or Secret's data current through a watch — no volume mount, no restart, and a change arrives in a second or two:
+
+```rust
+use rust_web_server::k8s::config::ConfigWatch;
+
+let settings = ConfigWatch::config_map(kube.clone(), &ns, "app-settings").await?;   // fails if it can't be read now
+let page_size: usize = settings.get("page_size").and_then(|v| v.parse().ok()).unwrap_or(20);
+settings.on_change(|data| println!("now: {data:?}"));
+
+// RWS_CONFIG_* keys become rws's own settings, re-read after each change:
+settings.apply_to_env("RWS_CONFIG_");
+
+let credentials = ConfigWatch::secret(kube.clone(), &ns, "db-credentials").await?;
+```
+
+| Method | What |
+|---|---|
+| `get(key)`, `snapshot()` | The value now, every key now |
+| `on_change(f)` | Called with the new data after each change |
+| `apply_to_env(prefix)` | Keys with `prefix` as environment variables, now and on change, then `server_config::invalidate()` |
+| `exists()` | `false` once the object was deleted (the last data is kept) |
+
+Binary data is included when it's UTF-8. A clone shares the watch; it stops when the last clone is dropped.
+
+### `k8s://` secret references
+
+```rust
+let password = rust_web_server::k8s::config::resolve(&kube, "k8s://prod/db-credentials#password").await?;
+```
+
+`k8s://<namespace>/<secret>#<key>` (or `k8s://<secret>#<key>` for the current namespace) reads one key of a Secret, as `vault://`, `aws-sm://` and `azkv://` read [other stores](/features/secrets/).
+
+## Service discovery
+
+The ready endpoints of a Service, from its EndpointSlices, kept current in a [`BackendPool`](/proxy/service-discovery/) — for a `ReverseProxy`, or to reach each pod of a headless Service:
+
+```rust
+use rust_web_server::k8s::discovery;
+
+let pool = discovery::service_endpoints(kube.clone(), &ns, "orders", Some("http")).await?;
+pool.backends();    // ["10.42.0.17:8080", "10.42.1.9:8080"]
+```
+
+Endpoints whose `ready` condition is `false` are left out; `Some("http")` picks the Service port of that name (`None`: the first). IPv6 addresses come as `[addr]:port`.
+
+## Leader election
+
+`leader::LeaderElector` holds a `coordination.k8s.io/v1` Lease so one replica at a time does singleton work — a scheduler, a cleanup loop:
+
+```rust
+use rust_web_server::k8s::leader::LeaderElector;
+
+let elector = LeaderElector::new(kube.clone(), &ns, "report-scheduler");
+let mut leader = elector.handle();
+tokio::spawn(elector.run());
+
+loop {
+    leader.wait_until_leader().await;
+    // … work while leader.is_leader() …
+}
+```
+
+The holder renews every 5 s; another replica takes over when a renewal is 15 s old (`.timing(duration, renew)`). Writes carry the Lease's `resourceVersion`, so two replicas can't both win. `release()` hands it over at once (on shutdown). Controllers get this built in: [`Operator::leader_election`](/deployment/kubernetes-operators/#leader-election).
+
+## Permissions
+
+The pod's service account needs:
+
+| For | Rules |
+|---|---|
+| `ConfigWatch::config_map` / `secret`, `k8s://` | `get`, `list`, `watch` on `configmaps` / `secrets` in the namespace |
+| `discovery::service_endpoints` | `list`, `watch` on `endpointslices` (`discovery.k8s.io`) |
+| `LeaderElector` | `get`, `create`, `update` on `leases` (`coordination.k8s.io`) |
+
+`manifests::Rbac` writes them: see [Manifests](/deployment/kubernetes-operators/#manifests).
+
+---
+
+# Operators
+
+<https://rws8.tech/docs/deployment/kubernetes-operators/>
+
+An operator watches custom resources and makes the cluster match them. The `k8s` feature (18.36.0) has the parts on top of [kube-rs](https://kube.rs)'s controller runtime: controllers with finalizers and status, an operator that runs them under leader election with metrics and a readiness check, admission and conversion webhooks with their certificate, CRD and RBAC manifests generated from the code, and tests against a real API server.
+
+## A custom resource
+
+A resource's types are Rust structs; `#[derive(CustomResource)]` (kube) makes the kind and its CRD:
+
+```rust
+use rust_web_server::k8s::{kube::CustomResource, schemars::JsonSchema};
+use serde::{Deserialize, Serialize};
+
+#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[kube(group = "example.com", version = "v1", kind = "Backup", namespaced, status = "BackupStatus")]
+pub struct BackupSpec {
+    pub schedule: String,
+    pub database: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+pub struct BackupStatus {
+    pub last_run: Option,
+}
+```
+
+## Controllers
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+use rust_web_server::k8s::controller::{Action, Context, Controller, Operator};
+use rust_web_server::k8s::kube::api::Api;
+use rust_web_server::k8s::Error;
+use k8s_openapi::api::batch::v1::CronJob;
+
+async fn reconcile(backup: Arc, ctx: Arc) -> Result {
+    ctx.apply_owned(&*backup, cron_job_for(&backup)).await?;                 // owned: deleted with it
+    ctx.patch_status(&*backup, serde_json::json!({ "last_run": null })).await?;
+    ctx.event(&*backup, false, "Scheduled", "the CronJob is up to date").await?;
+    Ok(Action::requeue(Duration::from_secs(300)))
+}
+
+let kube = rust_web_server::k8s::client::client().await?;
+Operator::new(kube.clone(), "backup-operator")
+    .leader_election(&rust_web_server::k8s::client::current_namespace(), "backup-operator")
+    .controller(
+        Controller::new(Api::::all(kube.clone()))
+            .owns(Api::::all(kube.clone()))          // a change to its CronJob reconciles the Backup
+            .reconcile(reconcile)
+            .finalizer("example.com/cleanup", |backup, ctx| async move { delete_backups_of(&backup).await }),
+    )
+    .run()
+    .await;
+```
+
+| `Controller` | What |
+|---|---|
+| `new(api)` | Watch `api`'s objects (`Api::all` or `Api::namespaced`) |
+| `watching(config)` | Only those a label or field selector picks |
+| `owns(api)` | Also reconcile when an object it owns (owner reference) changes |
+| `reconcile(f)` | `async fn(Arc, Arc) -> Result`: make the world match, answer when to look again (`Action::requeue(d)`, `Action::await_change()`) |
+| `finalizer(name, cleanup)` | Add the finalizer to each object; on deletion run `cleanup`, then remove it |
+| `on_error(delay)` | First retry delay after a failed reconcile (5 s), doubling per failure of the same object up to 5 min |
+| `rule(rule)` | An extra RBAC rule the reconcile needs |
+
+`Context` has the `client` and helpers: `patch_status(obj, json)` (merge into the status subresource), `apply_owned(owner, child)` (server-side apply with an owner reference, field manager = the operator's name) and `event(obj, warning, reason, note)` (a Kubernetes Event, shown by `kubectl describe`).
+
+### The operator
+
+`Operator::run` runs every controller and registers a readiness check (`/readyz`, see [health checks](/deployment/kubernetes/#health-checks)). Serve it beside the probes:
+
+```rust
+let operator = tokio::spawn(operator.run());
+let (listener, pool) = Server::setup()?;
+Server::run_tls(listener, pool, App::new()).await;     // /livez, /readyz, /metrics
+```
+
+`/metrics` gets `rws_controller_reconciles_total` and `rws_controller_reconcile_errors_total` per controller.
+
+### Leader election
+
+With `.leader_election(namespace, lease)` the controllers run only on the replica holding the Lease; the others wait. A replica that loses the Lease exits, and Kubernetes restarts it as a follower — kube's controllers can't be stopped and restarted in place, and an exit is the safe way to never reconcile on two replicas.
+
+## Webhooks
+
+`webhook::Webhooks` is an rws application answering the API server's AdmissionReview and ConversionReview requests:
+
+```rust
+use rust_web_server::k8s::webhook::{Webhooks, WebhookCertificate};
+
+let webhooks = Webhooks::new()
+    .validate::("/validate-backups", |request| match &request.object {
+        Some(b) if b.spec.schedule.is_empty() => Err("spec.schedule is required".into()),
+        _ => Ok(()),
+    })
+    .mutate::("/mutate-backups", |mut backup| {
+        backup.labels_mut().insert("example.com/managed".into(), "true".into());
+        Ok(backup)
+    })
+    .convert("/convert-backups", |object, desired_version| v1_to_v2(object, desired_version))
+    .wrap(App::new());                                       // probes and metrics on the same server
+
+// The API server only calls webhooks over TLS it trusts.
+let cert = WebhookCertificate::generate("backup-operator", &namespace)?;
+cert.install("/tmp/tls")?;                                    // RWS_CONFIG_TLS_CERT_FILE / KEY_FILE
+cert.patch_ca_bundle(&kube, Some("backup-operator"), None, None).await?;
+Server::run_tls(listener, pool, webhooks).await;
+```
+
+| Builder | The handler gets | Answers |
+|---|---|---|
+| `validate::(path, f)` | The request: `operation`, `object`, `old_object`, `user_info`, `name`, `namespace` | `Ok(())` allows, `Err(message)` denies (kubectl shows the message) |
+| `mutate::(path, f)` | The object (on create and update) | The object changed; the JSON patch from old to new is computed for you |
+| `convert(path, f)` | Each object and the desired `apiVersion` | The object in that version (`apiVersion` set for you) |
+
+`WebhookCertificate::generate(service, namespace)` makes a CA and a serving certificate for `<service>.<namespace>.svc` (`generate_for(name, dns_names)` for others); `install(dir)` writes `tls.crt`, `tls.key`, `ca.crt` and points rws's TLS settings at them; `patch_ca_bundle` puts the CA into the webhook configurations (and a CRD's conversion webhook) at startup, so no cert-manager is needed. With cert-manager, mount its Secret and set the TLS settings instead.
+
+## Manifests
+
+The CRDs, RBAC and webhook configurations come from the code, so they never drift from it:
+
+```rust
+use rust_web_server::k8s::manifests::{self, Rbac, WebhookRule, WebhookTarget};
+
+manifests::print_on_request(|| {                // `backup-operator --manifests | kubectl apply -f -`
+    let rbac = Rbac::new("backup-operator", "backups").rules(operator.rules());
+    let target = WebhookTarget { service: "backup-operator".into(), namespace: "backups".into(), port: 443, path: "/validate-backups".into(), ca_pem: ca.clone() };
+    let mut docs = vec![manifests::crd::()];
+    docs.extend(rbac.documents());
+    docs.push(manifests::webhook_configuration("backups", false, &target, &[WebhookRule::new("example.com", "v1", "backups", &["CREATE", "UPDATE"])], true));
+    docs
+});
+```
+
+| Function | Writes |
+|---|---|
+| `crd::()` | The CustomResourceDefinition from the type's schema |
+| `with_conversion_webhook(crd, target)` | The CRD with `conversion.strategy: Webhook` |
+| `Rbac::new(name, ns).rules(…).documents()` | ServiceAccount, ClusterRole (rules merged per resource), ClusterRoleBinding; `.leader_election()` adds the Lease rule |
+| `Operator::rules()` | What its controllers need: their kinds and status, what they own, events, the Lease |
+| `webhook_configuration(name, mutating, target, rules, fail_closed)` | A Validating/MutatingWebhookConfiguration |
+| `to_yaml(&docs)` | A YAML stream (each document as JSON, which YAML accepts) |
+
+## Testing against a real API server
+
+A fake API server doesn't run admission, garbage collection, finalizers or status subresources — the things operators get wrong. `testing::TestCluster` uses a real one (kind, k3d, or envtest's `kube-apiserver`) from `RWS_TEST_KUBECONFIG`, with a namespace of its own per test:
+
+```rust
+use rust_web_server::k8s::testing::{eventually, TestCluster};
+
+#[tokio::test]
+async fn backups_get_a_cron_job() {
+    let Some(cluster) = TestCluster::from_env().await else { return };   // skipped without a cluster
+    cluster.install_crd::().await.unwrap();                       // applied, then waited for
+    let ns = cluster.namespace("backup").await.unwrap();                  // backup-<random>, labelled rws-test=true
+    tokio::spawn(operator(cluster.client.clone()).run());
+    ns.api::().create(&Default::default(), &Backup::new("nightly", spec())).await.unwrap();
+    let job = eventually(Duration::from_secs(30), || async { ns.api::().get_opt("nightly").await.ok().flatten() }).await;
+    assert!(job.is_some());
+    ns.delete().await;
+}
+```
+
+```sh
+kind create cluster --name test --kubeconfig /tmp/kubeconfig
+RWS_TEST_KUBECONFIG=/tmp/kubeconfig cargo test
+```
+
+With `RWS_TEST_REQUIRE_KUBERNETES` set, a missing cluster fails the test instead of skipping it — for CI. rws's own CI runs its Kubernetes tests this way on kind. Never point it at a cluster that matters: the tests create and delete namespaces and cluster-wide CRDs.
 
 ---
 
@@ -24915,6 +25202,13 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `AsyncAppWithState` | `async_state` (`http2`) | Same with `async fn` handlers. Entry point `App::with_async_state(S)` |
 | `Middleware` | `middleware` | Layer trait: `handle(request, connection, next)`. `runs_inline` / `is_passthrough` (default `false`) declare a layer non-blocking or a no-op for a request. `layer_name()` (default: the type's name, 18.28.0) is how tools list it. See [Middleware](/building-apps/middleware/) |
 | `WithMiddleware` | `middleware` | Wraps any `Application` with a layer stack; `app.wrap(layer)`, first-pushed is outermost |
+| `k8s::client` / `k8s::config::ConfigWatch` / `k8s::config::resolve` | `k8s` (`k8s`) | A Kubernetes client (in-cluster or kubeconfig); a ConfigMap's or Secret's data kept current by a watch (`get`, `on_change`, `apply_to_env`); `k8s://ns/name#key` secrets (18.36.0). See [Using the Kubernetes API](/deployment/kubernetes-api/) |
+| `k8s::discovery::service_endpoints` / `k8s::leader::LeaderElector` | `k8s` (`k8s`) | A Service's ready endpoints as a `BackendPool`; leader election over a Lease (`handle`, `wait_until_leader`, `release`) (18.36.0) |
+| `k8s::controller::{Controller, Operator, Context}` | `k8s` (`k8s`) | Controllers (`reconcile`, `owns`, `finalizer`, `on_error`) run by an `Operator` (leader election, metrics, readiness); `Context::patch_status`, `apply_owned`, `event` (18.36.0). See [Operators](/deployment/kubernetes-operators/) |
+| `k8s::webhook::{Webhooks, WebhookCertificate}` | `k8s` (`k8s`) | Validating, mutating and conversion webhooks as an rws app; a CA + serving certificate, `install`, `patch_ca_bundle` (18.36.0) |
+| `k8s::manifests` (`Rbac`, `Rule`, `crd`, `webhook_configuration`, `to_yaml`, `print_on_request`) | `k8s` (`k8s`) | CRDs, RBAC and webhook configurations from the code (18.36.0) |
+| `k8s::testing::{TestCluster, TestNamespace, eventually}` | `k8s` (`k8s`) | Tests against a real API server from `RWS_TEST_KUBECONFIG`, a namespace per test (18.36.0) |
+| `generator::plan_deploy` / `DeploySpec` | `generator` | `rws gen deploy`: Kubernetes manifests for the app (18.36.0). See [Generate the manifests](/deployment/kubernetes/#generate-the-manifests) |
 | `health` (`Probe`, `Registry`, `Report`) | `health` | Liveness, readiness and startup checks for `/livez`, `/readyz`, `/startupz`: `readiness(name, f)`, `liveness`, `startup`, `register_async`, `database(name, pool)`, `report`, `set_timeout` (18.36.0). See [Health checks](/deployment/kubernetes/#health-checks) |
 | `Container` | `di` | `TypeId`-keyed dependency injection container: `register::`, `provide::<dyn Trait>`, `*_named`, `get`. Pass it directly to `App::with_state(container)` — not `into_arc()`, which double-wraps. See [Dependency injection](/building-apps/dependency-injection/) |
 | `Lifecycle` | `di` | `start`/`stop` for services registered with `Container::register_managed`; `Container::on_start`/`on_stop`/`start`/`stop`/`is_started` (18.35.0). See [Lifecycle hooks](/building-apps/dependency-injection/#lifecycle-hooks) |

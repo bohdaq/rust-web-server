@@ -27,6 +27,9 @@ Generators:
         [--from-models [--database-url <url>] [--db …]]  written from the models: CREATE TABLE /
                                   ADD COLUMN for what the database (DATABASE_URL / RWS_DB_*) lacks
   test <resource> [--app-expr 'app(...)']  tests/<resource>.rs: TestClient against app()
+  deploy --image <image> [--port 7878] [--replicas 2] [--max-replicas 10] [--out deploy/k8s]
+                                  Kubernetes manifests: Deployment (probes, graceful shutdown),
+                                  Service, PodDisruptionBudget, HPA, ServiceAccount, kustomization
 
 Field types: i64, i32, f64, bool, String, Option<T> (T one of those).
 Paths come from rws.app.toml (the conventional layout without one). --db
@@ -51,13 +54,16 @@ pub fn run(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
         Ok(Parsed::Run(cli)) => cli,
         Err(e) => return fail(&e, args.iter().any(|a| a == "--json"), out, err),
     };
-    let planned = match &parsed.from_models {
-        Some((url, db)) => match (&parsed.request, existing_columns(url.clone())) {
+    let planned = match (&parsed.request, &parsed.from_models) {
+        (Request::Deploy(spec), _) => super::plan_deploy(&parsed.dir, spec),
+        (Request::Generate(request), from_models) => match from_models {
+        Some((url, db)) => match (request, existing_columns(url.clone())) {
             (Generate::Migration { name }, Ok(existing)) => super::plan_model_migration(&parsed.dir, name, &existing, *db),
             (_, Err(e)) => Err(GenError::refused(e)),
             _ => Err(GenError::usage("--from-models applies to rws gen migration only")),
         },
-        None => plan(&parsed.dir, &parsed.request),
+        None => plan(&parsed.dir, request),
+        },
     };
     let plan = match planned {
         Ok(plan) => plan,
@@ -112,8 +118,15 @@ fn fail(e: &GenError, json: bool, out: &mut dyn Write, err: &mut dyn Write) -> i
     }
 }
 
+enum Request {
+    Generate(Generate),
+    /// `rws gen deploy`: not a [`Generate`] variant (adding one would break
+    /// exhaustive matches on it).
+    Deploy(super::DeploySpec),
+}
+
 struct Cli {
-    request: Generate,
+    request: Request,
     dir: PathBuf,
     dry_run: bool,
     json: bool,
@@ -155,6 +168,7 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
     let (mut db, mut methods, mut prefix, mut app_expr) = (None, None, None, None);
     let (mut timestamps, mut soft_delete) = (false, false);
     let (mut from_models, mut database_url) = (false, None);
+    let (mut image, mut port, mut replicas, mut max_replicas, mut out_dir) = (None, None, None, None, None);
     let mut i = 0;
     while i < args.len() {
         let arg = args[i].as_str();
@@ -192,13 +206,43 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
             "--prefix" => prefix = Some(value("--prefix")?),
             "--app-expr" => app_expr = Some(value("--app-expr")?),
             "--from-models" => from_models = true,
+            "--image" => image = Some(value("--image")?),
+            "--port" => port = Some(value("--port")?),
+            "--replicas" => replicas = Some(value("--replicas")?),
+            "--max-replicas" => max_replicas = Some(value("--max-replicas")?),
+            "--out" => out_dir = Some(value("--out")?),
             "--database-url" => database_url = Some(value("--database-url")?),
             other => return Err(GenError::usage(format!("unknown option {other}"))),
         }
     }
     let Some(kind) = positional.first().cloned() else {
-        return Err(GenError::usage("name a generator: model, route, migration or test"));
+        return Err(GenError::usage("name a generator: model, route, migration, test or deploy"));
     };
+    let deploy_flags = image.is_some() || port.is_some() || replicas.is_some() || max_replicas.is_some() || out_dir.is_some();
+    if kind == "deploy" {
+        if let Some(extra) = positional.get(1) {
+            return Err(GenError::usage(format!("rws gen deploy takes no name; `{extra}` is extra")));
+        }
+        let image = image.ok_or_else(|| GenError::usage("rws gen deploy: give the container image with --image"))?;
+        let mut spec = super::DeploySpec::new(&image);
+        let number = |flag: &str, v: &str| v.parse::<u32>().map_err(|_| GenError::usage(format!("{flag} {v}: a number")));
+        if let Some(p) = &port {
+            spec.port = u16::try_from(number("--port", p)?).map_err(|_| GenError::usage(format!("--port {p}: 1 to 65535")))?;
+        }
+        if let Some(r) = &replicas {
+            spec.replicas = number("--replicas", r)?;
+        }
+        if let Some(m) = &max_replicas {
+            spec.max_replicas = number("--max-replicas", m)?;
+        }
+        if let Some(o) = out_dir {
+            spec.dir = o;
+        }
+        return Ok(Parsed::Run(Cli { request: Request::Deploy(spec), dir, dry_run, json, from_models: None }));
+    }
+    if deploy_flags {
+        return Err(GenError::usage("--image, --port, --replicas, --max-replicas and --out apply to rws gen deploy only"));
+    }
     let name = positional.get(1).cloned();
     let rest = positional.get(2..).unwrap_or(&[]);
     let only = |flag: &str, set: bool, kinds: &str| -> Result<(), GenError> {
@@ -243,12 +287,12 @@ fn parse(args: &[String]) -> Result<Parsed, GenError> {
                 Generate::Test { resource: need_name("resource (e.g. posts)")?, app_expr }
             }
         }
-        other => return Err(GenError::usage(format!("unknown generator `{other}`: use model, route, migration or test"))),
+        other => return Err(GenError::usage(format!("unknown generator `{other}`: use model, route, migration, test or deploy"))),
     };
     only("--from-models", from_models && kind != "migration", "migration")?;
     only("--database-url", database_url.is_some() && !from_models, "migration --from-models")?;
     let from_models = from_models.then_some((database_url, db));
-    Ok(Parsed::Run(Cli { request, dir, dry_run, json, from_models }))
+    Ok(Parsed::Run(Cli { request: Request::Generate(request), dir, dry_run, json, from_models }))
 }
 
 /// `rws gen …` asked for: the arguments after `gen`.

@@ -1,0 +1,38 @@
+[package]
+name = "rws-k8s"
+description = "Kubernetes integration and operator framework of rust-web-server (kube). (internal: use the rust-web-server crate)."
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(fuzzing)', 'cfg(docsrs)'] }
+
+[package.metadata.docs.rs]
+features = ["k8s"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["k8s"]
+k8s = ["dep:kube", "dep:k8s-openapi", "dep:futures-util", "dep:tokio", "dep:serde", "dep:serde_json", "dep:schemars", "dep:rcgen", "dep:json-patch", "rws-server/http2", "rws-server/serde"]
+
+[dependencies]
+rws-server.workspace = true
+kube = { version = "4.2", default-features = false, features = ["client", "runtime", "derive", "admission", "jsonpatch", "rustls-tls", "aws-lc-rs"], optional = true }
+k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32", "std", "schemars"], optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+schemars = { version = "1", optional = true }
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"], optional = true }
+json-patch = { version = "4", optional = true }
+
+[dev-dependencies]
+rws-server = { workspace = true, features = ["test-support"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std"] }
+rustls-pki-types = "1"

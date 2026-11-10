@@ -52,6 +52,7 @@ use crate::app_manifest::AppManifest;
 use crate::core::json::escape as json_escape;
 
 mod cli;
+mod deploy;
 mod diff;
 mod from_models;
 mod names;
@@ -61,6 +62,7 @@ mod templates;
 mod tests;
 
 pub use cli::{requested, run, EXIT_CONFLICT, EXIT_OK, EXIT_USAGE};
+pub use deploy::{k8s_name, plan_deploy, DeploySpec};
 pub use from_models::{plan_model_migration, ExistingColumns};
 pub use names::{parse_fields, BaseType, Field, FieldType, FIELD_TYPES, MAX_NAME_LEN};
 

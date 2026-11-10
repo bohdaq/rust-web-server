@@ -336,6 +336,17 @@ What a Rails/Django-class framework has beyond 18.31's building blocks (asked fo
 
 **Done when:** both have docs, tests on SQLite/PostgreSQL/MySQL, and a starter uses them.
 
+## 18.36.0 — Kubernetes framework
+
+Plan, decisions and status: [K8S_FRAMEWORK.md](K8S_FRAMEWORK.md) (2026-11-10).
+
+- **#110** ✅ *branch `k8s-framework`* **Health checks and graceful drain** — `health` checks behind `/livez`, `/readyz`, `/startupz`; handlers in flight finish on shutdown.
+- **#111** ✅ *branch `k8s-framework`* **The Kubernetes API from apps** — `ConfigWatch`, `k8s://` secrets, EndpointSlice discovery, `LeaderElector`.
+- **#112** ✅ *branch `k8s-framework`* **Operators** — controllers, webhooks, CRD/RBAC manifests, tests against a real API server (CI on kind).
+- **#113** ✅ *branch `k8s-framework`* **`rws gen deploy`**.
+
+**Done when:** the `kubernetes` CI job passes on kind.
+
 ## 19.0.0 — Breaking changes
 
 - **#63** **Proxy response pass-through.** On the 18.0.0 benchmarks rws leads nginx in most scenarios, but on proxy-1k it is level or slightly behind (EPYC 7763: 48.7 vs 45.3 µs CPU per request; the one Intel run: −2% requests per second, +9% CPU per request). The remaining cost is rws parsing every upstream response into a `Response` and writing it out again, about 7% of a proxied request's CPU in the per-core profile. Carry a simple upstream head through unparsed instead, keeping what the parse does for safety: dropping hop-by-hop and duplicate `Content-Length` headers and rejecting CR/LF. That needs a new field on `Response`, whose fields are all public and built by struct literal, so it breaks apps; mark `Response` `#[non_exhaustive]` (with constructors) in the same release so later fields don't. Judge it by same-run A/B against 18.x on proxy-1k. *Planned 2026-10-26.* **Shelved 2026-10-30**: re-measured (proxy-1k level with nginx on throughput, +4.6% CPU/request); a same-run A/B of the cheap non-breaking half was noise, so a major version for the rest isn't worth it ([RELEASE_19_0.md](RELEASE_19_0.md)).

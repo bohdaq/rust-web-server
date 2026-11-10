@@ -553,6 +553,14 @@
         "link": "/deployment/kubernetes-gateway-api/"
       },
       {
+        "label": "Using the Kubernetes API",
+        "link": "/deployment/kubernetes-api/"
+      },
+      {
+        "label": "Operators",
+        "link": "/deployment/kubernetes-operators/"
+      },
+      {
         "label": "Observability",
         "link": "/deployment/observability/"
       },

@@ -159,6 +159,8 @@ async fn main() {
 | Jobs, mail, events | `PersistentJobQueue::enqueue_with(type, payload, EnqueueOptions::new().run_in(d).queue("mail").unique(k))`, `.schedule(name, cron, type, payload)` (once across replicas), `failed_jobs`/`retry`; `Mail::new(email).attach(..)`, `deliver_later(&queue, transport)`; `events::EventBus` (18.35) |
 | Errors, cache, lifecycle | `.wrap(ErrorPages::from_env())` (backtraces in dev); `cache::ValueCache::fetch_or(key, ttl, \|\| …)`; `di::Lifecycle` + `Container::start/stop` (18.35) |
 | Schema changes, admin | after editing a model: `rws gen migration <name> --from-models` (additive); `ModelAdmin::new(pool).model::<Post>().allow(\|r\| …)` for CRUD pages (18.35) |
+| Kubernetes probes and shutdown | `health::readiness("db", \|\| …)` / `health::database("db", pool)`, `liveness`, `startup` → `/readyz`, `/livez`, `/startupz` (`?verbose`); SIGTERM drains handlers (`shutdown_timeout_secs`); `rws gen deploy --image <img>` writes `deploy/k8s/` (18.36) |
+| Kubernetes API, operators (`k8s` feature) | `k8s::config::ConfigWatch::config_map(client, ns, name)` (live), `k8s::config::resolve(&client, "k8s://ns/secret#key")`, `k8s::discovery::service_endpoints`, `k8s::leader::LeaderElector`; operators: `Operator::new(client, name).leader_election(ns, lease).controller(Controller::new(api).owns(..).reconcile(f).finalizer(name, cleanup))`, `k8s::webhook::Webhooks` (validate/mutate/convert), `k8s::manifests` (CRD, RBAC, `--manifests`); test with `k8s::testing::TestCluster` + `RWS_TEST_KUBECONFIG` (18.36) |
 | gRPC service | `tower::mount("/pkg.Service/", tonic_service, app)` (`tower` feature) |
 | Proxy without code | `rws.config.toml` with `[[upstream]]` + `[[route]]`; check it with `rws --check` |
 

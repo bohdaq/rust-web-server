@@ -49,6 +49,17 @@ When Kubernetes sends `SIGTERM`, the server:
 
 Ctrl+C (SIGINT) skips the delay and the wait. Set `terminationGracePeriodSeconds` to at least the delay plus the timeout (`30` with the defaults) to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
+## Generate the manifests
+
+`rws gen deploy --image <image>` writes `deploy/k8s/` for the app in the current project (18.36.0): a Deployment with the startup, readiness and liveness probes above, `POD_NAME`/`POD_NAMESPACE` from the downward API, a 35 s grace period for the shutdown, a non-root read-only container; a Service; a PodDisruptionBudget; a HorizontalPodAutoscaler; a ServiceAccount; and a `kustomization.yaml`:
+
+```sh
+rws gen deploy --image ghcr.io/acme/notes:1.4.0 [--port 7878] [--replicas 2] [--max-replicas 10] [--out deploy/k8s]
+kubectl apply -k deploy/k8s
+```
+
+The name comes from `rws.app.toml` (or `Cargo.toml`). The files are yours to change; like every generator it never overwrites one (`--dry-run` shows them first). For an app that uses the Kubernetes API see [Using the Kubernetes API](/deployment/kubernetes-api/); an operator prints its own RBAC ([Operators](/deployment/kubernetes-operators/#manifests)).
+
 :::tip[Helm chart]
 The manifests below are also a Helm chart, published with every release (since 18.2.0):
 

@@ -26,6 +26,7 @@ license = "MIT"
 # pins together with `version` above.
 [workspace.dependencies]
 rws-gateway-api = { path = "crates/rws-gateway-api", version = "=18.34.1" }
+rws-k8s = { path = "crates/rws-k8s", version = "=18.34.1" }
 rws-proxy = { path = "crates/rws-proxy", version = "=18.34.1" }
 rws-storage = { path = "crates/rws-storage", version = "=18.34.1" }
 rws-wasm-plugin = { path = "crates/rws-wasm-plugin", version = "=18.34.1" }
@@ -41,7 +42,7 @@ rws-server = { path = "crates/rws-server", version = "=18.34.1" }
 # rws-wasm-shim depends ON rust-web-server rather than the other way around,
 # so it can't be pulled in as a path *dependency* the way rws-macros is —
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
-members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http", "crates/rws-server", "crates/rws-tower", "crates/rws-acme", "crates/rws-wasm-plugin", "crates/rws-storage", "crates/rws-proxy", "crates/rws-gateway-api"]
+members = ["rws-macros", "rws-wasm-shim", "crates/rws-base", "crates/rws-http", "crates/rws-server", "crates/rws-tower", "crates/rws-acme", "crates/rws-wasm-plugin", "crates/rws-storage", "crates/rws-proxy", "crates/rws-gateway-api", "crates/rws-k8s"]
 # fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
 exclude = ["fuzz", "ci/e2e/grpc", "starters", "site/mcp", "examples/wasm_plugin"]
 
@@ -195,6 +196,10 @@ tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:
 # k8s-openapi pinned to the oldest Kubernetes it supports, for the widest
 # range of clusters.
 gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util", "rws-server/gateway-api", "rws-proxy/gateway-api", "dep:rws-gateway-api", "rws-gateway-api?/gateway-api"]
+# Kubernetes integration and operator framework (18.36.0, spec/K8S_FRAMEWORK.md):
+# config/secrets/discovery from the API, leader election, controllers,
+# admission and conversion webhooks, CRD/RBAC manifests, test clusters.
+k8s = ["http2", "serde", "dep:rws-k8s", "rws-k8s?/k8s"]
 # WasmLayer / [route.middleware.wasm]: middleware as WebAssembly core modules
 # (wasmtime + cranelift, no WASI). Off by default (several MB, long compile);
 # the release binaries enable it.
@@ -226,7 +231,7 @@ proxy = ["http3", "brotli", "zstd", "acme", "auth", "auth-asymmetric", "sso", "r
 # library).
 full = ["http3", "brotli", "zstd", "http-client", "serde", "auth", "auth-asymmetric", "macros", "acme", "tera",
         "model-sqlite", "model-postgres", "model-mysql", "crypto", "csrf", "mailer", "sso", "sso-server", "sso-saml",
-        "jobs", "storage-local", "storage-s3", "storage-azure", "storage-gcs", "tower", "gateway-api", "wasm-plugins",
+        "jobs", "storage-local", "storage-s3", "storage-azure", "storage-gcs", "tower", "gateway-api", "k8s", "wasm-plugins",
         "openapi", "webhook", "rewrite-regex", "secrets", "geo"]
 
 [dependencies]
@@ -235,6 +240,7 @@ rws-base.workspace = true
 rws-http.workspace = true
 rws-server.workspace = true
 rws-gateway-api = { workspace = true, optional = true }
+rws-k8s = { workspace = true, optional = true }
 rws-proxy.workspace = true
 rws-storage = { workspace = true, optional = true }
 rws-wasm-plugin = { workspace = true, optional = true }
