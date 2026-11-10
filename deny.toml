@@ -12,6 +12,11 @@ ignore = [
     # (`model-mysql`), which uses the MySQL server's *public* key — no
     # private-key operation. rws's own RSA verification is in crates/rws-server/src/rsa_key.
     { id = "RUSTSEC-2023-0071", reason = "public-key use only, via sqlx-mysql" },
+    # SQLite < 3.54 WAL page-size mismatch (CVE-2026-119375): local, needs a
+    # crafted database + -wal pair. libsqlite3-sys comes only through
+    # sqlx-sqlite (`model-sqlite`), and neither sqlx 0.8.6 nor 0.9.0 accepts
+    # the fixed libsqlite3-sys 0.39. Drop when sqlx allows it.
+    { id = "RUSTSEC-2026-0459", reason = "local-only, crafted db+wal files; no sqlx release takes libsqlite3-sys 0.39" },
 ]
 
 [licenses]

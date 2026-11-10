@@ -105,7 +105,12 @@ TOML
 }
 start() { # <name> <probe url>
   (exec env RWS_CONFIG_FILE=rws.config.toml "$RWS" >"rws-$1.log" 2>&1) & PIDS+=($!)
-  for _ in $(seq 1 100); do curl -s -o /dev/null --cacert pki/ca.pem "$2" && return 0; sleep 0.1; done
+  # --cacert only once the internal CA exists: newer curl (Ubuntu 26.04
+  # runners) refuses a CA file that isn't there, even for an http:// URL.
+  for _ in $(seq 1 100); do
+    local ca=(); [ -f pki/ca.pem ] && ca=(--cacert pki/ca.pem)
+    curl -s -o /dev/null "${ca[@]}" "$2" && return 0; sleep 0.1
+  done
   fail "rws didn't start ($1)"
 }
 

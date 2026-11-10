@@ -11,4 +11,11 @@ ignore = [
     # non-TLS connection) — no private-key operation, so not exploitable.
     # Drop this when sqlx-mysql moves off rsa 0.9.
     "RUSTSEC-2023-0071",
+    # RUSTSEC-2026-0459 (libsqlite3-sys, CVE-2026-119375): SQLite < 3.54 can
+    # return stale page-cache bytes when it opens a database with a crafted
+    # -wal file of another page size — a local attack needing files the
+    # victim opens. libsqlite3-sys comes only through sqlx-sqlite (the
+    # optional `model-sqlite` feature); neither sqlx 0.8.6 nor 0.9.0 accepts
+    # the fixed libsqlite3-sys 0.39. Drop this when sqlx does.
+    "RUSTSEC-2026-0459",
 ]
