@@ -1145,3 +1145,48 @@ fn loading_the_script_shows_a_browser_but_its_endpoints_are_not_requests() {
     let json = summary(24, None, T0 + 10);
     assert_eq!(totals(&json, "people"), (2, 1, 1), "the page and the script, nothing else: {json}");
 }
+
+#[test]
+fn www_folds_into_its_site_and_unknown_hosts_share_other() {
+    let _g = fresh();
+    super::record::set_configured_hosts(["example.com", "www.example.com", "mail.example.com", "shop.example"].map(String::from));
+    // `www.` is the site; hidden and unrouted names, addresses and no Host are `other`.
+    assert_eq!(super::record::configured_hosts(), vec!["example.com", "mail.example.com", "shop.example"]);
+    for (host, ua_ip) in [("www.example.com", "203.0.113.1"), ("example.com", "203.0.113.2"), ("168.119.17.57", "203.0.113.3"), ("", "203.0.113.4"), ("example.sslip.io", "203.0.113.5")] {
+        let mut h = hit(ua_ip, CHROME, "/", T0);
+        h.host = host;
+        record(&h);
+        let mut a = hit(ua_ip, CHROME, "/a.css", T0 + 1);
+        a.host = host;
+        record(&a);
+    }
+    let json = summary(24, None, T0 + 10);
+    assert!(json.contains(r#""hosts":["example.com","mail.example.com","shop.example","other"]"#), "{json}");
+    let site = summary(24, Some("example.com"), T0 + 10);
+    assert_eq!(totals(&site, "people").2, 2, "www and the apex: {site}");
+    assert!(site.contains(r#""people_pages":[["example.com/",2]]"#), "{site}");
+    assert_eq!(totals(&summary(24, Some("other"), T0 + 10), "people").2, 3);
+    // A link from www. to the apex is the same site, not a referral.
+    let mut nav = hit("203.0.113.2", CHROME, "/docs/", T0 + 20);
+    nav.referer = Some("https://www.example.com/");
+    record(&nav);
+    assert!(!summary(24, None, T0 + 30).contains(r#"["www.example.com",1]"#));
+}
+
+#[test]
+fn saved_counts_of_renamed_hosts_move_with_them() {
+    let _g = fresh();
+    super::record::set_configured_hosts(["example.com"].map(String::from));
+    let old = r#"{"version":1,"hosts":["example.com","www.example.com","127.0.0.1"],"hours":[[498048,0,5,2,0,0,0,0],[498048,1,3,1,0,0,0,0],[498048,2,4,0,0,0,1,0]],"days":[{"day":20752,"visitors":[3,0,1],"sessions":[["www.example.com",1,1,0,1]],"people_pages":[["example.com/",2],["www.example.com/",1]],"site_visitors":[["www.example.com\t0",1],["example.com\t0",2],["127.0.0.1\t2",1]],"countries":[["www.example.com\tDE",1]],"bots":[["tool\tcurl",1]]}]}"#;
+    let (hosts, hours, days) = super::persist::from_json(old).unwrap();
+    super::record::restore(hosts, hours, days);
+    let now = 20752 * 86_400 + 3600;
+    let site = summary(48, Some("example.com"), now);
+    assert_eq!(totals(&site, "people"), (8, 3, 3), "{site}");
+    assert!(site.contains(r#""people_pages":[["example.com/",3]]"#), "{site}");
+    assert!(site.contains(r#""countries":[["DE",1]]"#), "{site}");
+    assert!(site.contains(r#""sessions":{"sessions":1,"#), "{site}");
+    let other = summary(48, Some("other"), now);
+    assert_eq!(totals(&other, "bots").2, 1, "{other}");
+    assert!(summary(48, None, now).contains(r#""kind":"tool","name":"curl""#), "legacy lists keep their keys");
+}

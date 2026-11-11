@@ -5,6 +5,16 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- **Traffic: the site list shows sites.** With sites configured,
+  `www.<site>` counts as `<site>` and every other `Host` (addresses,
+  `localhost`, none, names no route serves, `[traffic] hide_hosts`) as one
+  *Unknown hosts* entry; saved counts of such names move there at start.
+  A link from `www.<site>` to `<site>` is no longer a referral.
+
 ## 18.35.1 — 2026-11-11
 
 ### Fixed

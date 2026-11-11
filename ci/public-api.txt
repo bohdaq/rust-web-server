@@ -7570,6 +7570,7 @@ pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_ENABLED: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_EXCLUDE: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_GEO_DB: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_GOALS: &str
+pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_HIDE_HOSTS: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_HOSTING_NETWORKS: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_OWNER_NETWORKS: &str
 pub const rust_web_server::traffic::config::RWS_CONFIG_TRAFFIC_PERSIST: &str
@@ -10958,6 +10959,7 @@ pub fn rust_web_server::traffic::config::enabled_setting() -> core::option::Opti
 pub fn rust_web_server::traffic::config::exclude() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::geo_db() -> core::option::Option<std::path::PathBuf>
 pub fn rust_web_server::traffic::config::goals() -> alloc::vec::Vec<alloc::string::String>
+pub fn rust_web_server::traffic::config::hide_hosts() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::hosting_networks() -> bool
 pub fn rust_web_server::traffic::config::owner_networks() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::traffic::config::persist_path() -> core::option::Option<std::path::PathBuf>

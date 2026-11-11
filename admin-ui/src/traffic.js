@@ -435,10 +435,11 @@ export class RwsTraffic extends LitElement {
 
   /** The site options: the configured sites, then other Host headers seen. */
   hostOptions(hosts, configured) {
-    const option = (h) => html`<option value=${h} ?selected=${this.host === h}>${h === "other" ? "Other hosts (combined)" : h}</option>`;
+    const option = (h) => html`<option value=${h} ?selected=${this.host === h}>${h === "other" ? "Unknown hosts" : h}</option>`;
     const sites = hosts.filter((h) => configured.includes(h));
     const rest = hosts.filter((h) => !configured.includes(h));
-    if (!sites.length || !rest.length) return hosts.map(option);
+    // With sites configured, the rest is only `other` (addresses, names no route serves).
+    if (!sites.length || !rest.length || (rest.length === 1 && rest[0] === "other")) return hosts.map(option);
     return html`<optgroup label="Sites">${sites.map(option)}</optgroup><optgroup label="Other hosts">${rest.map(option)}</optgroup>`;
   }
 
@@ -481,7 +482,7 @@ export class RwsTraffic extends LitElement {
       : nothing}
     ${this.filtered || this.host
       ? html`<div class="t-chips" aria-label="Filters">
-          ${this.host ? html`<button class="t-chip" @click=${() => this.setHost("")}>Site: ${this.host} <span aria-hidden="true">✕</span></button>` : nothing}
+          ${this.host ? html`<button class="t-chip" @click=${() => this.setHost("")}>Site: ${this.host === "other" ? "Unknown hosts" : this.host} <span aria-hidden="true">✕</span></button>` : nothing}
           ${Object.entries(this.filters).map(([k, v]) => html`<button class="t-chip" @click=${() => this.unpick(k)}>${DIMS[k]}: ${this.label(k, v)} <span aria-hidden="true">✕</span></button>`)}
           ${this.filtered ? html`<button class="t-chip t-clear" @click=${() => { this.filters = {}; this.query = null; }}>Clear filters</button>` : nothing}
         </div>`

@@ -341,6 +341,30 @@ and the `User-Agent`. The secret and the hashes are never saved: no addresses
 or `User-Agent`s are kept, in memory or in the file. A restart within a day
 can count a returning visitor once more.
 
+**Sites and unknown hosts** (since 18.35.2): when your `[[route]]`s match
+sites by `host`, those are the sites. `www.<site>` counts as `<site>`, and
+every other `Host` — addresses, `localhost`, no `Host`, names no route
+serves, and the names in `hide_hosts` — counts as one **Unknown hosts**
+entry, so scanners' junk headers don't fill the site list. Counts saved
+under such names move there when rws starts.
+
+```toml
+[traffic]
+hide_hosts = ["mail.example.com", "mta-sts.example.com"]
+```
+
+**Sites and unknown hosts** (since 18.35.2): when your `[[route]]`s match
+sites by `host`, those are the sites. `www.<site>` counts as `<site>`, and
+every other `Host` — addresses, `localhost`, no `Host`, names no route
+serves, and the names in `hide_hosts` — counts as one **Unknown hosts**
+entry, so scanners' junk headers don't fill the site list. Counts saved
+under such names move there when rws starts.
+
+```toml
+[traffic]
+hide_hosts = ["mail.example.com", "mta-sts.example.com"]
+```
+
 Counting costs about 170 ns per request; the country, device and hosting
 network are worked out once per visitor per day. Memory and the file are
 bounded: every site a `[[route]]` matches by `host` (up to 238) plus 16 other

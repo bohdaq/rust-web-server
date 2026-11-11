@@ -567,6 +567,7 @@ fn host_index_slow(host: &str) -> u8 {
 /// [`MAX_HOSTS`] such are counted (with no configured sites, the first
 /// [`MAX_HOSTS`] hosts seen); the rest share `other`.
 fn host_slot(hosts: &mut Vec<String>, configured: &[String], host: String) -> u8 {
+    let host = canonical(host, configured);
     if let Some(i) = hosts.iter().position(|h| *h == host) {
         return i as u8;
     }
@@ -595,9 +596,14 @@ const MAX_CONFIGURED: usize = MAX_SLOTS - MAX_HOSTS - 1;
 /// its own counts, ahead of whatever else arrives in a Host header, and is
 /// listed first on the Traffic page. Set at start and on every reload.
 pub fn set_configured_hosts<I: IntoIterator<Item = String>>(hosts: I) {
-    let mut list: Vec<String> = hosts.into_iter().map(|h| normalize_host(&h)).filter(|h| h != "(none)" && h != "other" && !h.contains('*')).collect();
+    let hidden: Vec<String> = super::config::hide_hosts().iter().map(|h| normalize_host(h)).collect();
+    let mut list: Vec<String> =
+        hosts.into_iter().map(|h| normalize_host(&h)).filter(|h| h != "(none)" && h != "other" && !h.contains('*') && !hidden.contains(h)).collect();
     list.sort();
     list.dedup();
+    // `www.<site>` counts as `<site>`.
+    let apexes = list.clone();
+    list.retain(|h| h.strip_prefix("www.").is_none_or(|apex| apexes.binary_search_by(|c| c.as_str().cmp(apex)).is_err()));
     list.truncate(MAX_CONFIGURED);
     let mut configured = recorder().configured.write().unwrap_or_else(|e| e.into_inner());
     if *configured != list {
@@ -652,13 +658,33 @@ fn is_asset(path: &str) -> bool {
 }
 
 fn page_key(host: &str, path: &str) -> String {
-    format!("{}{}", normalize_host(host), path.split('?').next().unwrap_or(path))
+    format!("{}{}", site_of(host), path.split('?').next().unwrap_or(path))
+}
+
+/// The site a Host header is counted under (18.35.2): with configured sites,
+/// a configured one as is, `www.<site>` as `<site>`, anything else (addresses,
+/// `(none)`, names no route serves, `[traffic] hide_hosts`) as `other`;
+/// without, the host itself.
+fn canonical(host: String, configured: &[String]) -> String {
+    if configured.is_empty() || configured.binary_search(&host).is_ok() || host == "other" {
+        return host;
+    }
+    match host.strip_prefix("www.") {
+        Some(apex) if configured.binary_search_by(|c| c.as_str().cmp(apex)).is_ok() => apex.to_string(),
+        _ => "other".to_string(),
+    }
+}
+
+/// [`canonical`] of a raw Host header.
+fn site_of(raw: &str) -> String {
+    canonical(normalize_host(raw), &recorder().configured.read().unwrap_or_else(|e| e.into_inner()))
 }
 
 fn referrer_host(referer: Option<&str>, host: &str) -> Option<String> {
     let rest = referer?.split_once("://")?.1;
     let other = rest.split(['/', '?', '#']).next()?.split(':').next()?.to_ascii_lowercase();
-    (!other.is_empty() && other != normalize_host(host)).then_some(other)
+    // `www.example.com` linking to `example.com` is the same site.
+    (!other.is_empty() && other != normalize_host(host) && site_of(&other) != site_of(host)).then_some(other)
 }
 
 /// The channel a referring site belongs to.
@@ -931,7 +957,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
                     shard.seen.insert(visitor, Group::Person);
                     shard.new_visitor(day, host, PEOPLE);
                     if let Some(audience) = &cached.audience {
-                        shard.count_audience(day, &normalize_host(hit.host), audience);
+                        shard.count_audience(day, &site_of(hit.host), audience);
                     }
                     if let Some(pending) = shard.pending.remove(&visitor) {
                         for d in pending.requests {
@@ -1532,7 +1558,7 @@ pub fn beacon(ip: IpAddr, raw_host: &str, user_agent: Option<&str>, body: &str, 
     let host = host_index(raw_host);
     let day = now / 86_400;
     let visitor = visitor(day, host, ip, user_agent);
-    let host_name = normalize_host(raw_host);
+    let host_name = site_of(raw_host);
 
     if kind == "view" {
         // A single-page app's route change: a page view like any other,
@@ -1737,6 +1763,13 @@ pub fn restore(hosts: Vec<String>, hours: BTreeMap<(u64, u8), [Counts; GROUPS]>,
     for i in order {
         map[i] = host_slot(&mut known, &configured, hosts[i].clone());
     }
+    // Saved names that now count as another site (`www.`, unknown hosts):
+    // their list keys move there too.
+    let rename: HashMap<String, String> = hosts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, h)| known.get(map[i] as usize).filter(|n| *n != h).map(|n| (h.clone(), n.clone())))
+        .collect();
     drop(known);
     drop(configured);
     HOSTS_GENERATION.fetch_add(1, Ordering::Relaxed);
@@ -1749,8 +1782,56 @@ pub fn restore(hosts: Vec<String>, hours: BTreeMap<(u64, u8), [Counts; GROUPS]>,
             entry[g].pages += counts[g].pages;
         }
     }
-    for (day, lists) in days {
+    for (day, mut lists) in days {
+        if !rename.is_empty() {
+            rename_hosts(&mut lists, &rename);
+        }
         shard.days.entry(day).or_default().merge(&lists);
+    }
+}
+
+/// Move a day's list keys (`host/…`, `host\t…`), sessions and visits from
+/// the old host names in `rename` to the new ones, adding up what meets.
+fn rename_hosts(day: &mut Day, rename: &HashMap<String, String>) {
+    let rekey = |top: &mut Top| {
+        if !top.0.keys().any(|k| rename.contains_key(&k[..k.find(['/', '\t']).unwrap_or(k.len())])) {
+            return;
+        }
+        let old = std::mem::take(&mut top.0);
+        for (key, n) in old {
+            let at = key.find(['/', '\t']).unwrap_or(key.len());
+            let key = match rename.get(&key[..at]) {
+                Some(new) => format!("{new}{}", &key[at..]),
+                None => key,
+            };
+            *top.0.entry(key).or_default() += n;
+        }
+    };
+    for top in [
+        &mut day.people_pages,
+        &mut day.ai_pages,
+        &mut day.site_visitors,
+        &mut day.site_ai_agents,
+        &mut day.site_bots,
+        &mut day.site_referrers,
+        &mut day.not_found,
+        &mut day.entry_pages,
+        &mut day.exit_pages,
+    ] {
+        rekey(top);
+    }
+    day.dims.iter_mut().for_each(rekey);
+    day.behaviour.iter_mut().for_each(rekey);
+    day.extra.iter_mut().for_each(rekey);
+    for (old, new) in rename {
+        if let Some(s) = day.sessions.remove(old) {
+            day.sessions.entry(new.clone()).or_default().add(&s);
+        }
+    }
+    for v in &mut day.visits {
+        if let Some(new) = rename.get(&v.host) {
+            v.host = new.clone();
+        }
     }
 }
 
