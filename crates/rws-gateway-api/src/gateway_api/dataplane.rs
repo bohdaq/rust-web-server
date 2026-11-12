@@ -94,7 +94,8 @@ impl DataPlane {
         for listener in &config.listeners {
             let Some(kind) = Kind::of(listener) else { continue };
             let entry = wanted.entry((listener.container_port, kind == Kind::Udp)).or_insert((kind, Vec::new()));
-            // One port, one way of serving: a terminating TLS listener wins.
+            // One port, one way of serving: a terminating TLS listener wins (and
+            // serves the port's passthrough listeners too, by SNI).
             entry.0 = entry.0.min(kind);
             entry.1.push(listener.clone());
         }
@@ -191,7 +192,7 @@ fn serve(bind_ip: &str, port: u16, kind: Kind, listeners: Vec<ListenerConfig>) -
                 match (kind, acceptor) {
                     (Kind::Http, Some(acceptor)) => crate::server::serve_tls_connection(stream, peer, acceptor, router).await,
                     (Kind::Http, None) => crate::server::serve_plain_connection(stream, peer, router).await,
-                    (Kind::TlsTerminate, Some(acceptor)) => super::l4::serve_tls_terminate(stream, acceptor, listeners, counter).await,
+                    (Kind::TlsTerminate, acceptor) => super::l4::serve_tls_mixed(stream, acceptor, listeners, counter).await,
                     (Kind::TlsPassthrough, _) => super::l4::serve_tls_passthrough(stream, listeners, counter).await,
                     (Kind::Tcp, _) => super::l4::serve_tcp(stream, listeners, counter).await,
                     _ => {}

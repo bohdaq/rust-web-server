@@ -629,15 +629,17 @@ fn every_label_rws_writes_is_one_the_api_server_accepts() {
 }
 
 #[test]
-fn mixed_tls_modes_on_a_port_and_parameters_refs_are_rejected() {
+fn mixed_tls_modes_share_a_port_and_parameters_refs_are_rejected() {
+    // TLSRouteModeMixed (Gateway API v1.7): a Terminate and a Passthrough
+    // listener with different hostnames on one port are both accepted.
     let mut s = snapshot(&["tlsroute-listener-mixed-termination-not-supported", "gateway-invalid-parameters-ref"]);
     s.secrets.push(tls_secret("tls-terminate-checks-certificate"));
     let (_, desired) = run(&s);
     for name in ["tls-terminate", "tls-passthrough"] {
         let l = listener(&desired, "gateway-tlsroute-mixed-termination-not-supported", name);
         let c = find(&l.conditions, "Accepted");
-        assert_eq!(("False", "ProtocolConflict"), (c.status.as_str(), c.reason.as_str()), "{name}");
-        assert!(l.supported_kinds.is_empty(), "{name}");
+        assert_eq!(("True", "Accepted"), (c.status.as_str(), c.reason.as_str()), "{name}");
+        assert_eq!(vec!["TLSRoute"], l.supported_kinds.iter().map(|k| k.kind.as_str()).collect::<Vec<_>>(), "{name}");
     }
     let g = &desired.gateways[&(INFRA.to_string(), "gateway-invalid-parameters-ref".to_string())];
     let c = find(&g.conditions, "Accepted");

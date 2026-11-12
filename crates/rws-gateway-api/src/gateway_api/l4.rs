@@ -143,6 +143,60 @@ pub async fn serve_tls_terminate(client: TcpStream, acceptor: tokio_rustls::TlsA
     let _ = tokio::io::copy_bidirectional(&mut tls, &mut backend).await;
 }
 
+/// The SNI of a connection's ClientHello, read with `peek` so the bytes
+/// stay in the socket: `Err` when the start of the stream isn't TLS or the
+/// hello doesn't come within 10 s.
+async fn peek_sni(client: &TcpStream) -> Result<Option<String>, ()> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut buffer = vec![0u8; MAX_CLIENT_HELLO];
+    let mut last = 0;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let n = match tokio::time::timeout(left, client.peek(&mut buffer)).await {
+            Ok(Ok(n)) if n > 0 => n,
+            _ => return Err(()),
+        };
+        match client_hello(&buffer[..n]) {
+            Hello::Sni(sni) => return Ok(sni),
+            Hello::NeedMore if n < MAX_CLIENT_HELLO => {
+                // `peek` returns at once while the bytes it saw are unread:
+                // wait for more to arrive before looking again.
+                if n == last {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                last = n;
+            }
+            _ => return Err(()),
+        }
+    }
+}
+
+/// A TLS port with listeners of both modes (`TLSRouteModeMixed`): the
+/// ClientHello's SNI picks the listener; a `Terminate` one gets the
+/// handshake with its certificates, a `Passthrough` one the untouched stream.
+pub async fn serve_tls_mixed(client: TcpStream, acceptor: Option<tokio_rustls::TlsAcceptor>, listeners: PortListeners, counter: Arc<AtomicUsize>) {
+    let current: Arc<Vec<ListenerConfig>> = listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
+    let all_terminate = current.iter().all(|l| l.tls.is_some());
+    if all_terminate {
+        if let Some(acceptor) = acceptor {
+            serve_tls_terminate(client, acceptor, listeners, counter).await;
+        }
+        return;
+    }
+    let Ok(sni) = peek_sni(&client).await else { return };
+    let terminate = pick_listener(&current, &sni.as_deref().unwrap_or("").to_ascii_lowercase()).is_some_and(|l| l.tls.is_some());
+    match acceptor {
+        Some(acceptor) if terminate => serve_tls_terminate(client, acceptor, listeners, counter).await,
+        _ if terminate => {}
+        _ => {
+            let mut client = client;
+            let Some(endpoint) = target(&listeners, sni.as_deref(), &counter) else { return };
+            let Some(mut backend) = connect(&endpoint).await else { return };
+            let _ = tokio::io::copy_bidirectional(&mut client, &mut backend).await;
+        }
+    }
+}
+
 /// A UDP client's session: its socket to the backend and when it was last used.
 struct Session {
     backend: Arc<UdpSocket>,

@@ -210,3 +210,37 @@ pub fn duration(value: &str) -> Option<std::time::Duration> {
 
 #[cfg(test)]
 mod tests;
+
+/// The request as a backend's own filters leave it (`backendRefs[].filters`):
+/// header modifiers and, since Gateway API v1.7 (`HTTPRouteBackendURLRewrite`),
+/// `URLRewrite` — a prefix replacement needs the rule's `matched` path.
+pub fn backend_request<'a>(request: &'a Request, filters: &[HttpRouteFilter], matched: Option<&HttpRouteMatch>) -> std::borrow::Cow<'a, Request> {
+    if filters.is_empty() {
+        return std::borrow::Cow::Borrowed(request);
+    }
+    let mut copy = request.clone();
+    for filter in filters {
+        match filter.filter_type.as_str() {
+            "RequestHeaderModifier" => {
+                if let Some(f) = &filter.request_header_modifier {
+                    modify_headers(&mut copy.headers, f);
+                }
+            }
+            "URLRewrite" => {
+                if let Some(f) = &filter.url_rewrite {
+                    if let Some(hostname) = &f.hostname {
+                        copy.headers.retain(|h| !h.name.eq_ignore_ascii_case("host"));
+                        copy.headers.push(crate::header::Header::new("Host", hostname.clone()));
+                    }
+                    if let Some(modifier) = &f.path {
+                        let default = HttpRouteMatch::default();
+                        let (path, query) = split_target(&copy.request_uri);
+                        copy.request_uri = format!("{}{query}", modified_path(path, matched.unwrap_or(&default), modifier));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    std::borrow::Cow::Owned(copy)
+}

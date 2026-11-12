@@ -216,6 +216,58 @@ async fn a_tls_passthrough_listener_forwards_the_encrypted_stream() {
     assert_eq!(b"ping".to_vec(), echoed, "the backend's certificate, end to end");
 }
 
+/// A backend that terminates TLS with its own certificate for `name` and
+/// echoes four bytes back.
+fn tls_echo_backend(cert: &rcgen::CertifiedKey<rcgen::KeyPair>) -> u16 {
+    let server_config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![rustls::pki_types::CertificateDer::from(cert.cert.der().to_vec())], rustls::pki_types::PrivateKeyDer::try_from(cert.signing_key.serialize_der()).unwrap())
+        .unwrap();
+    let server_config = Arc::new(server_config);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for tcp in listener.incoming().flatten() {
+            let server_config = Arc::clone(&server_config);
+            std::thread::spawn(move || {
+                let connection = rustls::ServerConnection::new(server_config).unwrap();
+                let mut tls = rustls::StreamOwned::new(connection, tcp);
+                let mut buffer = [0u8; 4];
+                if tls.read_exact(&mut buffer).is_ok() {
+                    let _ = tls.write_all(&buffer);
+                    let _ = tls.flush();
+                }
+            });
+        }
+    });
+    port
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn terminate_and_passthrough_listeners_share_a_port_by_sni() {
+    // TLSRouteModeMixed: the gateway's certificate for one name, the
+    // backend's own for the other, on one port.
+    let gateway_cert = rcgen::generate_simple_self_signed(vec!["term.example.com".to_string()]).unwrap();
+    let backend_cert = rcgen::generate_simple_self_signed(vec!["pass.example.com".to_string()]).unwrap();
+    let plain_backend = tcp_echo_backend();
+    let tls_backend = tls_echo_backend(&backend_cert);
+    let pem = (gateway_cert.cert.pem().into_bytes(), gateway_cert.signing_key.serialize_pem().into_bytes());
+    let plane = DataPlane::new("127.0.0.1");
+    let port = serve_on_free_port(&plane, |port| {
+        let mut config = l4_config(port, plain_backend, "TLS", Some(pem.clone()));
+        config.listeners[0].hostname = Some("term.example.com".to_string());
+        let mut passthrough = l4_config(port, tls_backend, "TLS", None).listeners.remove(0);
+        passthrough.name = "pass".to_string();
+        passthrough.hostname = Some("pass.example.com".to_string());
+        config.listeners.push(passthrough);
+        config
+    });
+    let terminated = tokio::task::spawn_blocking(move || tls_ping(port, "term.example.com", &gateway_cert)).await.unwrap();
+    assert_eq!(b"ping".to_vec(), terminated, "terminated with the gateway's certificate");
+    let passed = tokio::task::spawn_blocking(move || tls_ping(port, "pass.example.com", &backend_cert)).await.unwrap();
+    assert_eq!(b"ping".to_vec(), passed, "passed through to the backend's certificate");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_udp_listener_relays_datagrams_both_ways() {
     let backend = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();

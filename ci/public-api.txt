@@ -6537,6 +6537,7 @@ pub async fn rust_web_server::cache::ValueCache<V>::try_fetch_or_async<E, F, Fut
 pub async fn rust_web_server::gateway_api::controller::reconcile(&kube_client::client::Client, &rust_web_server::gateway_api::controller::Stores, &rust_web_server::gateway_api::controller::Options) -> core::result::Result<(), alloc::string::String>
 pub async fn rust_web_server::gateway_api::controller::run(kube_client::client::Client, rust_web_server::gateway_api::controller::Options, alloc::rcs::arc::Arc<tokio::sync::notify::Notify>)
 pub async fn rust_web_server::gateway_api::l4::serve_tcp(tokio::net::tcp::stream::TcpStream, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
+pub async fn rust_web_server::gateway_api::l4::serve_tls_mixed(tokio::net::tcp::stream::TcpStream, core::option::Option<tokio_rustls::server::TlsAcceptor>, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
 pub async fn rust_web_server::gateway_api::l4::serve_tls_passthrough(tokio::net::tcp::stream::TcpStream, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
 pub async fn rust_web_server::gateway_api::l4::serve_tls_terminate(tokio::net::tcp::stream::TcpStream, tokio_rustls::server::TlsAcceptor, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
 pub async fn rust_web_server::gateway_api::l4::serve_udp(alloc::rcs::arc::Arc<tokio::net::udp::UdpSocket>, rust_web_server::gateway_api::router::PortListeners)
@@ -8632,6 +8633,7 @@ pub fn rust_web_server::gateway_api::dataplane::DataPlane::ports(&self) -> alloc
 pub fn rust_web_server::gateway_api::enabled() -> bool
 pub fn rust_web_server::gateway_api::filters::Cors::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::filters::Cors::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::filters::backend_request<'a>(&'a rust_web_server::request::Request, &[rust_web_server::gateway_api::types::HttpRouteFilter], core::option::Option<&rust_web_server::gateway_api::types::HttpRouteMatch>) -> alloc::borrow::Cow<'a, rust_web_server::request::Request>
 pub fn rust_web_server::gateway_api::filters::cors(&rust_web_server::request::Request, &rust_web_server::gateway_api::types::HttpCorsFilter) -> rust_web_server::gateway_api::filters::Cors
 pub fn rust_web_server::gateway_api::filters::duration(&str) -> core::option::Option<core::time::Duration>
 pub fn rust_web_server::gateway_api::filters::modified_path(&str, &rust_web_server::gateway_api::types::HttpRouteMatch, &rust_web_server::gateway_api::types::HttpPathModifier) -> alloc::string::String

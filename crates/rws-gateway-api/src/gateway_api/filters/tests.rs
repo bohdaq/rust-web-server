@@ -146,3 +146,25 @@ fn durations_follow_the_gateway_api_format() {
         assert_eq!(None, duration(bad), "{bad:?}");
     }
 }
+
+fn rewrite(path: HttpPathModifier) -> HttpRouteFilter {
+    HttpRouteFilter { filter_type: "URLRewrite".to_string(), url_rewrite: Some(HttpUrlRewriteFilter { hostname: None, path: Some(path) }), ..Default::default() }
+}
+
+#[test]
+fn backend_filters_rewrite_the_path_against_the_rules_match() {
+    let r = request("GET", "/prefix/original?q=1", &[("Host", "a.example.com")]);
+    let full = HttpPathModifier { modifier_type: "ReplaceFullPath".to_string(), replace_full_path: Some("/rewritten-full".to_string()), ..Default::default() };
+    assert_eq!("/rewritten-full?q=1", backend_request(&r, &[rewrite(full)], Some(&prefix("/prefix"))).request_uri);
+    let replaced = backend_request(&r, &[rewrite(replace_prefix("/rewritten-prefix"))], Some(&prefix("/prefix")));
+    assert_eq!("/rewritten-prefix/original?q=1", replaced.request_uri);
+    let host = HttpRouteFilter { filter_type: "URLRewrite".to_string(), url_rewrite: Some(HttpUrlRewriteFilter { hostname: Some("b.example.com".to_string()), path: None }), ..Default::default() };
+    let rewritten = backend_request(&r, &[host], None);
+    assert_eq!(vec![("Host".to_string(), "b.example.com".to_string())], names(&rewritten.headers));
+}
+
+#[test]
+fn a_backend_without_filters_gets_the_request_unchanged() {
+    let r = request("GET", "/x", &[]);
+    assert!(matches!(backend_request(&r, &[], None), std::borrow::Cow::Borrowed(_)));
+}

@@ -7,6 +7,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- **Gateway API v1.7.0.** The conformance suite and CRDs move to v1.7.0,
+  and rws claims the features that became standard there:
+  `HTTPRouteRetryCodes` and `HTTPRouteRetryConnectionError` (retries were
+  already honoured), `HTTPRouteBackendURLRewrite` (`URLRewrite` on a
+  `backendRef`), `GRPCRouteRequestHeaderModifier`,
+  `GatewayRouteHostnameIntersectionPrecedence` and `TLSRouteModeMixed` —
+  `Terminate` and `Passthrough` TLS listeners on one port, chosen by SNI
+  (they were refused with `ProtocolConflict` before).
+
 ### Changed
 
 - **Traffic: the site list shows sites.** With sites configured,

@@ -144,13 +144,14 @@ pub struct ClientCa {
 }
 
 /// The features rws reports on its GatewayClasses (names as in the suite's
-/// `pkg/features` at Gateway API v1.6.3; sorted). Grows with each phase;
+/// `pkg/features` at Gateway API v1.7.0; sorted). Grows with each phase;
 /// `FEATURES` in `.github/workflows/gateway-api.yml` must match.
 pub const SUPPORTED_FEATURES: &[&str] = &[
     "BackendTLSPolicy",
     "BackendTLSPolicySANValidation",
     "GRPCRoute",
     "GRPCRouteNamedRouteRule",
+    "GRPCRouteRequestHeaderModifier",
     "Gateway",
     "GatewayAddressEmpty",
     "GatewayBackendClientCertificate",
@@ -160,6 +161,7 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "GatewayHTTPSListenerDetectMisdirectedRequests",
     "GatewayInfrastructure",
     "GatewayPort8080",
+    "GatewayRouteHostnameIntersectionPrecedence",
     "GatewayStaticAddresses",
     "HTTPRoute",
     "HTTPRoute303RedirectStatusCode",
@@ -169,6 +171,7 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "HTTPRouteBackendProtocolWebSocket",
     "HTTPRouteBackendRequestHeaderModification",
     "HTTPRouteBackendTimeout",
+    "HTTPRouteBackendURLRewrite",
     "HTTPRouteCORS",
     "HTTPRouteHostRewrite",
     "HTTPRouteMethodMatching",
@@ -183,11 +186,14 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "HTTPRouteRequestPercentageMirror",
     "HTTPRouteRequestTimeout",
     "HTTPRouteResponseHeaderModification",
+    "HTTPRouteRetryCodes",
+    "HTTPRouteRetryConnectionError",
     "HTTPRouteSchemeRedirect",
     "ListenerSet",
     "ReferenceGrant",
     "TCPRoute",
     "TLSRoute",
+    "TLSRouteModeMixed",
     "TLSRouteModeTerminate",
     "UDPRoute",
 ];
@@ -512,8 +518,6 @@ struct ListenerView {
     message: String,
     tls: Option<(Vec<u8>, Vec<u8>)>,
     client_ca: Option<ClientCa>,
-    /// A TLS listener in `Passthrough` mode.
-    passthrough: bool,
     http_routes: Vec<CompiledHttpRoute>,
 }
 
@@ -604,7 +608,6 @@ fn listener_views(gateway: &Gateway, listeners: &[Listener], namespace: &str, ow
                 message,
                 tls,
                 client_ca,
-                passthrough: l.protocol == "TLS" && !terminates_tls(l),
                 http_routes: Vec::new(),
             }
         })
@@ -633,9 +636,9 @@ fn mark_conflicts(views: &mut [ListenerView]) {
             if views[j].owner.is_none() && views[i].owner.is_some() {
                 continue;
             }
-            // Terminate and Passthrough on one port would need TLSRouteModeMixed.
-            let mixed_tls = views[i].protocol == "TLS" && views[j].protocol == "TLS" && views[i].passthrough != views[j].passthrough;
-            let reason = if views[i].protocol != views[j].protocol || mixed_tls {
+            // Terminate and Passthrough listeners share a port
+            // (TLSRouteModeMixed): the SNI picks the listener.
+            let reason = if views[i].protocol != views[j].protocol {
                 "ProtocolConflict"
             } else if views[i].hostname == views[j].hostname {
                 "HostnameConflict"
@@ -644,14 +647,9 @@ fn mark_conflicts(views: &mut [ListenerView]) {
             };
             views[j].conflicted = Some(reason);
             views[j].programmed = false;
-            if views[j].owner.is_some() || mixed_tls {
+            if views[j].owner.is_some() {
                 views[j].accepted = false;
                 views[j].accepted_reason = reason;
-            }
-            // A listener that can't be served carries no route kinds (the suite
-            // expects none for the mixed TLS modes).
-            if mixed_tls {
-                views[j].supported_kinds.clear();
             }
         }
     }

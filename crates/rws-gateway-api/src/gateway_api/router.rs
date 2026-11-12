@@ -300,19 +300,19 @@ fn connect_timeout(timeout: Duration) -> Duration {
 impl PortRouter {
     #[cfg(test)]
     fn forward(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo) -> Response {
-        self.forward_with(rule, request, connection, None)
+        self.forward_with(rule, None, request, connection, None)
     }
 
     /// Forward within the rule's [`Policy`], presenting `client_cert` (the
     /// Gateway's) to TLS backends; blocks for the whole exchange.
-    fn forward_with(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Response {
+    fn forward_with(&self, rule: &CompiledRule, matched: Option<&HttpRouteMatch>, request: &Request, connection: &ConnectionInfo, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Response {
         let mut policy = Policy::new(rule);
         loop {
             let timeout = match policy.timeout() {
                 Ok(timeout) => timeout,
                 Err(response) => return response,
             };
-            match policy.settle(self.attempt(rule, request, connection, timeout, client_cert)) {
+            match policy.settle(self.attempt(rule, matched, request, connection, timeout, client_cert)) {
                 Ok(response) => return response,
                 Err(pause) => std::thread::sleep(pause),
             }
@@ -322,14 +322,14 @@ impl PortRouter {
     /// [`PortRouter::forward_with`] without blocking a thread: plain and
     /// BackendTLSPolicy backends through the async forwarder, h2c ones on
     /// the blocking pool.
-    async fn forward_async(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Response {
+    async fn forward_async(&self, rule: &CompiledRule, matched: Option<&HttpRouteMatch>, request: &Request, connection: &ConnectionInfo, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Response {
         let mut policy = Policy::new(rule);
         loop {
             let timeout = match policy.timeout() {
                 Ok(timeout) => timeout,
                 Err(response) => return response,
             };
-            match policy.settle(self.attempt_async(rule, request, connection, timeout, client_cert).await) {
+            match policy.settle(self.attempt_async(rule, matched, request, connection, timeout, client_cert).await) {
                 Ok(response) => return response,
                 Err(pause) => tokio::time::sleep(pause).await,
             }
@@ -338,7 +338,7 @@ impl PortRouter {
 
     /// Pick a backend by weight and an endpoint; `Err` is the response
     /// when there is nothing to send to.
-    fn target<'a>(&self, rule: &'a CompiledRule, request: &'a Request) -> Result<Target<'a>, Response> {
+    fn target<'a>(&self, rule: &'a CompiledRule, matched: Option<&HttpRouteMatch>, request: &'a Request) -> Result<Target<'a>, Response> {
         let total: u32 = rule.backends.iter().map(|b| b.weight).sum();
         if total == 0 {
             // No backends, or all weighted 0: the spec's 500.
@@ -358,17 +358,7 @@ impl PortRouter {
                 }
             })
             .expect("weights sum to total");
-        let request = if backend.filters.is_empty() {
-            std::borrow::Cow::Borrowed(request)
-        } else {
-            let mut copy = request.clone();
-            for filter in &backend.filters {
-                if let Some(f) = filter.request_header_modifier.as_ref().filter(|_| filter.filter_type == "RequestHeaderModifier") {
-                    filters::modify_headers(&mut copy.headers, f);
-                }
-            }
-            std::borrow::Cow::Owned(copy)
-        };
+        let request = filters::backend_request(request, &backend.filters, matched);
         let endpoints = match &backend.endpoints {
             Err(_) => return Err(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
             Ok(e) if e.is_empty() => return Err(status(STATUS_CODE_REASON_PHRASE.n503_service_unavailable)),
@@ -398,8 +388,8 @@ impl PortRouter {
     }
 
     /// Forward once, blocking.
-    fn attempt(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
-        let target = match self.target(rule, request) {
+    fn attempt(&self, rule: &CompiledRule, matched: Option<&HttpRouteMatch>, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
+        let target = match self.target(rule, matched, request) {
             Ok(target) => target,
             Err(response) => return Attempt::Response(response),
         };
@@ -430,8 +420,8 @@ impl PortRouter {
 
     /// Forward once without blocking (upgrades never get here: they take
     /// the blocking path, [`Application::execute`]).
-    async fn attempt_async(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
-        let target = match self.target(rule, request) {
+    async fn attempt_async(&self, rule: &CompiledRule, matched: Option<&HttpRouteMatch>, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
+        let target = match self.target(rule, matched, request) {
             Ok(target) => target,
             Err(response) => return Attempt::Response(response),
         };
@@ -553,7 +543,7 @@ impl PortRouter {
         match self.prepare(listener, rule, matched, request, host, connection) {
             Err(response) => response,
             Ok(prepared) => {
-                let response = self.forward_with(rule, prepared.request.as_ref().unwrap_or(request), connection, listener.backend_client_cert.as_ref());
+                let response = self.forward_with(rule, Some(matched), prepared.request.as_ref().unwrap_or(request), connection, listener.backend_client_cert.as_ref());
                 Self::finish(prepared, response)
             }
         }
@@ -613,7 +603,7 @@ impl Application for PortRouter {
                 Ok(prepared) => prepared,
                 Err(response) => return Ok(response),
             };
-            let response = self.forward_async(rule, prepared.request.as_ref().unwrap_or(request), connection, listener.backend_client_cert.as_ref()).await;
+            let response = self.forward_async(rule, Some(matched), prepared.request.as_ref().unwrap_or(request), connection, listener.backend_client_cert.as_ref()).await;
             Ok(Self::finish(prepared, response))
         }))
     }
