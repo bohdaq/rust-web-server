@@ -45,16 +45,19 @@ impl Publisher {
         Publisher::default()
     }
 
-    /// Serve `mesh` from now on; a snapshot equal to the current one keeps
-    /// its version (no wake-up for the sidecars).
+    /// Serve `mesh` from now on. The version is a hash of the content, so
+    /// every controller replica gives the same content the same version
+    /// (sidecars reach them through one Service); an unchanged snapshot
+    /// wakes no sidecar.
     pub fn publish(&self, mesh: &MeshSnapshot) {
         let Ok(body) = serde_json::to_string(mesh) else { return };
+        let version = content_version(&body);
         let mut current = self.current.lock().unwrap_or_else(|e| e.into_inner());
-        if *current.1 == body {
+        if current.0 == version {
             return;
         }
-        *current = (current.0 + 1, Arc::new(body));
-        self.changed.send_replace(current.0);
+        *current = (version, Arc::new(body));
+        self.changed.send_replace(version);
     }
 
     /// The version and JSON being served (version 0: nothing yet).
@@ -83,6 +86,13 @@ impl Publisher {
         }
         let _ = tokio::time::timeout(LONG_POLL, changed.changed()).await;
     }
+}
+
+/// A snapshot's version: the first 8 bytes of its SHA-256, never 0 (0
+/// means "nothing yet").
+pub fn content_version(body: &str) -> u64 {
+    let digest = crate::core::sha256::sha256(body.as_bytes());
+    u64::from_be_bytes(digest[..8].try_into().unwrap_or_default()).max(1)
 }
 
 /// `version=<n>` of a request target.

@@ -103,6 +103,32 @@ helm install rws "$ROOT/helm/rws" --namespace rws-system --create-namespace \
   --set replicaCount=2 --set podDisruptionBudget.enabled=false --wait --timeout 5m
 kubectl wait --for=condition=Accepted gatewayclass/rws --timeout=60s
 
+# The experimental features the suite has no tests for yet (v1.7): checked
+# here before they're claimed.
+if [ "$CHANNEL" = experimental ]; then
+  # ClusterTrustBundle is advertised only where the API is served.
+  for _ in $(seq 1 30); do
+    kubectl get gatewayclass rws -o jsonpath='{.status.supportedFeatures[*].name}' | tr ' ' '\n' | grep -qx ClusterTrustBundle && break
+    sleep 2
+  done
+  kubectl get gatewayclass rws -o jsonpath='{.status.supportedFeatures[*].name}' | tr ' ' '\n' | grep -qx ClusterTrustBundle \
+    || { echo "ClusterTrustBundle isn't advertised: is the API served?" >&2; exit 1; }
+  # A Cluster-scoped address is the Gateway Service's ClusterIP.
+  kubectl apply -f - <<'YAML'
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: routability-check, namespace: default}
+spec:
+  gatewayClassName: rws
+  addresses: [{routability: Cluster}]
+  listeners: [{name: http, port: 80, protocol: HTTP}]
+YAML
+  kubectl wait --for=condition=AddressesAssigned gateway/routability-check -n default --timeout=120s
+  [ "$(kubectl get gateway routability-check -n default -o jsonpath='{.status.addresses[0].routability}')" = Cluster ] \
+    || { echo "the Cluster address wasn't reported" >&2; exit 1; }
+  kubectl delete gateway routability-check -n default --wait=false
+fi
+
 cd "$GWAPI/conformance"
 version=$(git -C "$ROOT" describe --tags --always)
 go test -v -timeout 150m -run TestConformance . -args \

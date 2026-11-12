@@ -41,11 +41,19 @@ env:
 
 jobs:
   conformance:
-    name: conformance (${{ matrix.mode }})
+    name: conformance (${{ matrix.mode }}, ${{ matrix.channel }})
     strategy:
       fail-fast: false
       matrix:
-        mode: [shared, provisioned, mesh]
+        # Standard CRDs are what most clusters install: shared mode stays
+        # covered there. The reports submitted upstream are the experimental
+        # ones (every feature, as the v1.7 implementations page lists them)
+        # and the mesh one.
+        include:
+          - {mode: shared, channel: standard}
+          - {mode: shared, channel: experimental}
+          - {mode: provisioned, channel: experimental}
+          - {mode: mesh, channel: standard}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -74,13 +82,10 @@ jobs:
           gh release download "$GATEWAY_API_VERSION" --repo kubernetes-sigs/gateway-api --pattern standard-install.yaml --pattern experimental-install.yaml --dir "$RUNNER_TEMP/gateway-api"
       - name: Conformance suite
         run: |
-          # The Gateway runs on the experimental channel (every standard and
-          # experimental feature, as the v1.7 implementations page lists them);
-          # the mesh run on the standard one.
+          export GATEWAY_API_CHANNEL="${{ matrix.channel }}"
           if [ "${{ matrix.mode }}" = mesh ]; then
             PROFILES="$MESH_PROFILES" FEATURES="$MESH_FEATURES"
-          else
-            export GATEWAY_API_CHANNEL=experimental
+          elif [ "${{ matrix.channel }}" = experimental ]; then
             FEATURES="$FEATURES,$EXPERIMENTAL_FEATURES"
           fi
           ci/e2e/gateway_api.sh target/x86_64-unknown-linux-musl/debug/rws "$RUNNER_TEMP/gateway-api" "$RUNNER_TEMP/report.yaml" "$PROFILES" "$FEATURES" "${{ matrix.mode }}"
@@ -92,13 +97,11 @@ jobs:
             # Named as conformance/reports/<version>/<impl>/ in gateway-api wants it:
             # <channel>-<version>-<mode>-report.yaml.
             version=$(git describe --tags --always)
-            channel=experimental
-            [ "${{ matrix.mode }}" = mesh ] && channel=standard
-            cp "$RUNNER_TEMP/report.yaml" "$RUNNER_TEMP/$channel-$version-${{ matrix.mode }}-report.yaml"
+            cp "$RUNNER_TEMP/report.yaml" "$RUNNER_TEMP/${{ matrix.channel }}-$version-${{ matrix.mode }}-report.yaml"
           fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gateway-api-conformance-report-${{ matrix.mode }}
+          name: gateway-api-conformance-report-${{ matrix.mode }}-${{ matrix.channel }}
           path: ${{ runner.temp }}/*-report.yaml
           if-no-files-found: ignore

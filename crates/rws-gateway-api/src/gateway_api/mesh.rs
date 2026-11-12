@@ -98,7 +98,40 @@ pub fn snapshot(from: &Snapshot) -> MeshSnapshot {
         .filter(|e| e.labels().get("kubernetes.io/service-name").is_some_and(|service| named(e.namespace(), service.clone())))
         .cloned()
         .collect();
-    MeshSnapshot { http_routes, grpc_routes, services, endpoint_slices, reference_grants: from.reference_grants.clone() }
+    let mut mesh = MeshSnapshot { http_routes, grpc_routes, services, endpoint_slices, reference_grants: from.reference_grants.clone() };
+    trim(&mut mesh);
+    mesh
+}
+
+/// Leave out what changes without changing routing — status (rws writes
+/// the routes' own), managed fields, resource versions — so the snapshot,
+/// and its version, change only when routing does.
+fn trim(mesh: &mut MeshSnapshot) {
+    fn meta(m: &mut kube::core::ObjectMeta) {
+        m.managed_fields = None;
+        m.resource_version = None;
+        m.generation = None;
+        m.uid = None;
+        m.annotations = None;
+    }
+    for r in &mut mesh.http_routes {
+        meta(&mut r.metadata);
+        r.status = None;
+    }
+    for r in &mut mesh.grpc_routes {
+        meta(&mut r.metadata);
+        r.status = None;
+    }
+    for s in &mut mesh.services {
+        meta(&mut s.metadata);
+        s.status = None;
+    }
+    for e in &mut mesh.endpoint_slices {
+        meta(&mut e.metadata);
+    }
+    for g in &mut mesh.reference_grants {
+        meta(&mut g.metadata);
+    }
 }
 
 /// A Service port's routes, as the sidecar serves them: one listener (the

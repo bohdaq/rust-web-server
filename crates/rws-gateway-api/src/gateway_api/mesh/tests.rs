@@ -191,9 +191,13 @@ async fn the_endpoint_serves_versions_and_waits_for_the_next() {
     let first = publisher.execute(&get(config::PATH), &c).unwrap();
     assert_eq!(503, first.status_code, "nothing published yet");
     publisher.publish(&suite_snapshot());
+    let first = publisher.current().0;
     publisher.publish(&suite_snapshot());
-    assert_eq!(1, publisher.current().0, "the same snapshot keeps its version");
-    let request = get(&format!("{}?version=1", config::PATH));
+    assert_eq!(first, publisher.current().0, "the same snapshot keeps its version");
+    let other = config::Publisher::new();
+    other.publish(&suite_snapshot());
+    assert_eq!(first, other.current().0, "and another replica gives it the same one");
+    let request = get(&format!("{}?version={first}", config::PATH));
     let waiting = {
         let publisher = publisher.clone();
         tokio::spawn(async move {
@@ -203,11 +207,13 @@ async fn the_endpoint_serves_versions_and_waits_for_the_next() {
         })
     };
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    assert!(!waiting.is_finished(), "waits while version 1 is current");
+    assert!(!waiting.is_finished(), "waits while that version is current");
     let mut next = suite_snapshot();
     next.http_routes.push(route(MESH, "r", (MESH, "echo-v2", None), "set", (MESH, "echo-v2")));
     publisher.publish(&next);
-    assert_eq!(Some("2".to_string()), waiting.await.unwrap());
+    let announced = waiting.await.unwrap().unwrap();
+    assert_ne!(first.to_string(), announced);
+    assert_eq!(publisher.current().0.to_string(), announced);
     let other = publisher.execute(&get("/other"), &c).unwrap();
     assert_eq!(404, other.status_code);
 }
@@ -355,4 +361,18 @@ fn the_webhook_answers_admission_reviews() {
     assert_eq!(true, update["response"]["allowed"]);
     assert!(update["response"].get("patch").is_none());
     assert!(inject::review(b"not json", &settings).is_err());
+}
+
+#[test]
+fn status_and_bookkeeping_dont_change_the_snapshot() {
+    let mut from = Snapshot::default();
+    let mesh = suite_snapshot();
+    from.services = mesh.services.clone();
+    from.endpoint_slices = mesh.endpoint_slices.clone();
+    from.http_routes.push(route(MESH, "r", (MESH, "echo-v2", None), "set", (MESH, "echo-v1")));
+    let before = serde_json::to_string(&snapshot(&from)).unwrap();
+    from.http_routes[0].metadata.resource_version = Some("42".to_string());
+    from.http_routes[0].status = Some(RouteStatus { parents: vec![RouteParentStatus { parent_ref: ParentReference { name: "x".to_string(), ..Default::default() }, controller_name: "rws".to_string(), conditions: vec![] }] });
+    let after = serde_json::to_string(&snapshot(&from)).unwrap();
+    assert_eq!(before, after, "the leader's status writes don't wake every sidecar");
 }
