@@ -8890,6 +8890,7 @@ pub fn rust_web_server::gateway_api::mesh::config::Publisher::current(&self) -> 
 pub fn rust_web_server::gateway_api::mesh::config::Publisher::default() -> Self
 pub fn rust_web_server::gateway_api::mesh::config::Publisher::new() -> rust_web_server::gateway_api::mesh::config::Publisher
 pub fn rust_web_server::gateway_api::mesh::config::Publisher::publish(&self, &rust_web_server::gateway_api::mesh::MeshSnapshot)
+pub fn rust_web_server::gateway_api::mesh::config::content_version(&str) -> u64
 pub fn rust_web_server::gateway_api::mesh::config::requested_version(&str) -> core::option::Option<u64>
 pub fn rust_web_server::gateway_api::mesh::describe(&rust_web_server::gateway_api::mesh::MeshTable) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>
 pub fn rust_web_server::gateway_api::mesh::inject::InjectSettings::clone(&self) -> Self
