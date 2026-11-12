@@ -169,3 +169,48 @@ fn other_controllers_route_parents_are_kept() {
     assert_eq!(vec![("example.com/other", "theirs"), ("rws", "fresh")], names);
     let _ = RouteStatus { parents: merged };
 }
+
+/// An API server for ClusterTrustBundles only: v1 isn't served (404),
+/// v1beta1 refuses the first request (403, RBAC not in effect yet), then lists.
+fn trust_bundle_api(v1beta1_refusals: usize) -> (Client, Arc<Mutex<usize>>) {
+    let calls = Arc::new(Mutex::new(0usize));
+    let seen = Arc::clone(&calls);
+    let service = tower::service_fn(move |request: http::Request<kube::client::Body>| {
+        let calls = Arc::clone(&calls);
+        async move {
+            let path = request.uri().path().to_string();
+            let status = |code: u16| {
+                let body = serde_json::json!({"kind": "Status", "apiVersion": "v1", "status": "Failure", "code": code, "reason": "x", "message": "x"});
+                http::Response::builder().status(code).body(Full::new(Bytes::from(body.to_string()))).unwrap()
+            };
+            let response = if path == "/apis/certificates.k8s.io/v1/clustertrustbundles" {
+                status(404)
+            } else if path == "/apis/certificates.k8s.io/v1beta1/clustertrustbundles" {
+                let mut n = calls.lock().unwrap();
+                *n += 1;
+                if *n <= v1beta1_refusals {
+                    status(403)
+                } else {
+                    http::Response::new(Full::new(Bytes::from(serde_json::json!({"apiVersion": "v1", "kind": "List", "metadata": {"resourceVersion": "1"}, "items": []}).to_string())))
+                }
+            } else {
+                status(404)
+            };
+            Ok::<_, std::convert::Infallible>(response)
+        }
+    });
+    (Client::new(service, "default"), seen)
+}
+
+#[tokio::test]
+async fn trust_bundle_detection_skips_unserved_versions_and_retries_refusals() {
+    let (client, calls) = trust_bundle_api(1);
+    let found = served_cluster_trust_bundles(&client).await.expect("v1beta1 is served");
+    assert_eq!("v1beta1", found.version);
+    assert_eq!(2, *calls.lock().unwrap(), "the refusal was retried, not taken as 'not served'");
+    let none = tower::service_fn(|_request: http::Request<kube::client::Body>| async {
+        let body = serde_json::json!({"kind": "Status", "apiVersion": "v1", "status": "Failure", "code": 404, "reason": "NotFound", "message": "x"});
+        Ok::<_, std::convert::Infallible>(http::Response::builder().status(404).body(Full::new(Bytes::from(body.to_string()))).unwrap())
+    });
+    assert!(served_cluster_trust_bundles(&Client::new(none, "default")).await.is_none());
+}

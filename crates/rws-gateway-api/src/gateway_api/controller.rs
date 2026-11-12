@@ -174,16 +174,34 @@ pub fn start_watches(client: &Client, services: &super::services::ServiceSetting
 /// Where the cluster serves ClusterTrustBundles (`certificates.k8s.io` v1,
 /// else v1beta1), if it does: they're watched, and the feature advertised,
 /// only then (GEP-5075).
+/// Only a `404` means a version isn't served; any other error (RBAC not in
+/// effect yet right after an install, the API server busy) is retried for
+/// a minute, so a transient refusal doesn't hide the API for good.
 pub async fn served_cluster_trust_bundles(client: &Client) -> Option<kube::core::ApiResource> {
-    for version in ["v1", "v1beta1"] {
+    'versions: for version in ["v1", "v1beta1"] {
         let gvk = kube::core::GroupVersionKind::gvk(super::translate::CLUSTER_TRUST_BUNDLE_GROUP, version, "ClusterTrustBundle");
         let resource = kube::core::ApiResource::from_gvk_with_plural(&gvk, "clustertrustbundles");
         let api: Api<kube::core::DynamicObject> = Api::all_with(client.clone(), &resource);
-        if api.list(&kube::api::ListParams::default().limit(1)).await.is_ok() {
-            return Some(resource);
+        for _ in 0..30 {
+            match api.list(&kube::api::ListParams::default().limit(1)).await {
+                Ok(_) => return Some(resource),
+                Err(e) if not_served(&e) => continue 'versions,
+                Err(e) => {
+                    eprintln!("[gateway-api] ClusterTrustBundles {version}: {e}; retrying");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+            }
         }
     }
     None
+}
+
+/// Whether an API error says the resource isn't served at all.
+fn not_served(error: &kube::Error) -> bool {
+    match error {
+        kube::Error::Api(status) => status.code == 404,
+        _ => false,
+    }
 }
 
 /// Reconcile on every change, when this replica becomes the leader, and
