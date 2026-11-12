@@ -108,11 +108,17 @@ kubectl wait --for=condition=Accepted gatewayclass/rws --timeout=60s
 if [ "$CHANNEL" = experimental ]; then
   # ClusterTrustBundle is advertised only where the API is served.
   for _ in $(seq 1 30); do
-    kubectl get gatewayclass rws -o jsonpath='{.status.supportedFeatures[*].name}' | tr ' ' '\n' | grep -qx ClusterTrustBundle && break
+    kubectl get gatewayclass rws -o jsonpath='{.status.supportedFeatures[*].name}' | tr ' ' '\n' | grep -x ClusterTrustBundle >/dev/null && break
     sleep 2
   done
-  kubectl get gatewayclass rws -o jsonpath='{.status.supportedFeatures[*].name}' | tr ' ' '\n' | grep -qx ClusterTrustBundle \
-    || { echo "ClusterTrustBundle isn't advertised: is the API served?" >&2; exit 1; }
+  if ! kubectl get gatewayclass rws -o jsonpath='{.status.supportedFeatures[*].name}' | tr ' ' '\n' | grep -x ClusterTrustBundle >/dev/null; then
+    echo "ClusterTrustBundle isn't advertised: is the API served?" >&2
+    kubectl api-resources --api-group=certificates.k8s.io || true
+    kubectl version || true
+    kubectl get gatewayclass rws -o jsonpath='{.status.supportedFeatures[*].name}{"\n"}' || true
+    kubectl logs -n rws-system -l app.kubernetes.io/name=rws --tail=50 --prefix | grep -v '"method"' || true
+    exit 1
+  fi
   # A Cluster-scoped address is the Gateway Service's ClusterIP.
   kubectl apply -f - <<'YAML'
 apiVersion: gateway.networking.k8s.io/v1
