@@ -16,6 +16,7 @@ on:
       - "crates/rws-server/src/tls/**"
       - "helm/**"
       - "ci/e2e/gateway_api*"
+      - "packaging/mesh-init/**"
       - ".github/workflows/gateway-api.yml"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -29,6 +30,9 @@ env:
   GATEWAY_API_VERSION: v1.7.0
   KIND_VERSION: v0.33.0
   PROFILES: GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS,GATEWAY-TCP,GATEWAY-UDP
+  # The mesh profile (spec/GATEWAY_MESH.md): its own run and report.
+  MESH_PROFILES: MESH-HTTP,MESH-GRPC
+  MESH_FEATURES: Mesh,HTTPRoute,GRPCRoute,MeshClusterIPMatching,MeshConsumerRoute,MeshHTTPRouteBackendRequestHeaderModification,MeshHTTPRouteNamedRouteRule,MeshHTTPRouteQueryParamMatching,MeshHTTPRouteRedirectPath,MeshHTTPRouteRedirectPort,MeshHTTPRouteRewritePath,MeshHTTPRouteSchemeRedirect,HTTPRoute303RedirectStatusCode,HTTPRoute307RedirectStatusCode,HTTPRoute308RedirectStatusCode,HTTPRouteParentRefPort,HTTPRouteResponseHeaderModification,GRPCRouteRequestHeaderModifier
   # Keep in step with gateway_api::translate::SUPPORTED_FEATURES.
   FEATURES: BackendTLSPolicy,BackendTLSPolicySANValidation,GRPCRoute,GRPCRouteNamedRouteRule,GRPCRouteRequestHeaderModifier,Gateway,GatewayAddressEmpty,GatewayBackendClientCertificate,GatewayFrontendClientCertificateValidation,GatewayFrontendClientCertificateValidationInsecureFallback,GatewayHTTPListenerIsolation,GatewayHTTPSListenerDetectMisdirectedRequests,GatewayInfrastructure,GatewayPort8080,GatewayRouteHostnameIntersectionPrecedence,GatewayStaticAddresses,HTTPRoute,HTTPRoute303RedirectStatusCode,HTTPRoute307RedirectStatusCode,HTTPRoute308RedirectStatusCode,HTTPRouteBackendProtocolH2C,HTTPRouteBackendProtocolWebSocket,HTTPRouteBackendRequestHeaderModification,HTTPRouteBackendTimeout,HTTPRouteBackendURLRewrite,HTTPRouteCORS,HTTPRouteHostRewrite,HTTPRouteMethodMatching,HTTPRouteNamedRouteRule,HTTPRouteParentRefPort,HTTPRoutePathRedirect,HTTPRoutePathRewrite,HTTPRoutePortRedirect,HTTPRouteQueryParamMatching,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteRequestTimeout,HTTPRouteResponseHeaderModification,HTTPRouteRetryCodes,HTTPRouteRetryConnectionError,HTTPRouteSchemeRedirect,ListenerSet,ReferenceGrant,TCPRoute,TLSRoute,TLSRouteModeMixed,TLSRouteModeTerminate,UDPRoute
 
@@ -38,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [shared, provisioned]
+        mode: [shared, provisioned, mesh]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -66,7 +70,9 @@ jobs:
           git clone --depth 1 --branch "$GATEWAY_API_VERSION" https://github.com/kubernetes-sigs/gateway-api "$RUNNER_TEMP/gateway-api"
           gh release download "$GATEWAY_API_VERSION" --repo kubernetes-sigs/gateway-api --pattern standard-install.yaml --dir "$RUNNER_TEMP/gateway-api"
       - name: Conformance suite
-        run: ci/e2e/gateway_api.sh target/x86_64-unknown-linux-musl/debug/rws "$RUNNER_TEMP/gateway-api" "$RUNNER_TEMP/report.yaml" "$PROFILES" "$FEATURES" "${{ matrix.mode }}"
+        run: |
+          if [ "${{ matrix.mode }}" = mesh ]; then PROFILES="$MESH_PROFILES" FEATURES="$MESH_FEATURES"; fi
+          ci/e2e/gateway_api.sh target/x86_64-unknown-linux-musl/debug/rws "$RUNNER_TEMP/gateway-api" "$RUNNER_TEMP/report.yaml" "$PROFILES" "$FEATURES" "${{ matrix.mode }}"
       - name: Report
         if: always()
         run: |

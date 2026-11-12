@@ -33,12 +33,17 @@ pub type PortListeners = Arc<RwLock<Arc<Vec<ListenerConfig>>>>;
 #[derive(Clone)]
 pub struct PortRouter {
     pub listeners: PortListeners,
+    /// Picks backends by weight.
     counter: Arc<AtomicUsize>,
+    /// Picks a backend's endpoint, round robin: its own counter, so a retry
+    /// goes to the next endpoint (sharing one, two draws per attempt kept a
+    /// two-endpoint backend on the same one).
+    endpoint_counter: Arc<AtomicUsize>,
 }
 
 impl PortRouter {
     pub fn new(listeners: PortListeners) -> PortRouter {
-        PortRouter { listeners, counter: Arc::new(AtomicUsize::new(0)) }
+        PortRouter { listeners, counter: Arc::new(AtomicUsize::new(0)), endpoint_counter: Arc::new(AtomicUsize::new(0)) }
     }
 }
 
@@ -364,7 +369,7 @@ impl PortRouter {
             Ok(e) if e.is_empty() => return Err(status(STATUS_CODE_REASON_PHRASE.n503_service_unavailable)),
             Ok(e) => e,
         };
-        let endpoint = &endpoints[self.counter.fetch_add(1, Ordering::Relaxed) % endpoints.len()];
+        let endpoint = &endpoints[self.endpoint_counter.fetch_add(1, Ordering::Relaxed) % endpoints.len()];
         let (ip, port) = endpoint
             .rsplit_once(':')
             .and_then(|(ip, port)| Some((ip.trim_start_matches('[').trim_end_matches(']').to_string(), port.parse::<u16>().ok()?)))

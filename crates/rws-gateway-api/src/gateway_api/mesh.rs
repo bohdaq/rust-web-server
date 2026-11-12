@@ -24,6 +24,7 @@
 //! A route's `parentRef.port` limits it to that Service port.
 
 pub mod config;
+pub mod inject;
 pub mod sidecar;
 
 use std::collections::{BTreeMap, HashMap};

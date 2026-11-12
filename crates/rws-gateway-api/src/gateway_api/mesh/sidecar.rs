@@ -60,14 +60,22 @@ pub async fn run(settings: SidecarSettings) {
             return;
         }
     };
-    println!("[gateway-api] mesh sidecar for namespace {} on 127.0.0.1:{}", settings.namespace, settings.outbound_port);
+    println!("[gateway-api] mesh sidecar for namespace {} on port {}", settings.namespace, settings.outbound_port);
+    // IPv6 redirects arrive on ::1; a pod without IPv6 has none.
+    if let Ok(v6) = tokio::net::TcpListener::bind(("::1", settings.outbound_port)).await {
+        tokio::spawn(accept(v6, Arc::clone(&routers), settings.outbound_port));
+    }
+    accept(listener, routers, settings.outbound_port).await;
+}
+
+async fn accept(listener: tokio::net::TcpListener, routers: Routers, outbound_port: u16) {
     loop {
         let Ok((stream, peer)) = listener.accept().await else {
             tokio::time::sleep(Duration::from_millis(50)).await;
             continue;
         };
         let routers = routers.read().unwrap_or_else(|e| e.into_inner()).clone();
-        tokio::spawn(handle(stream, peer, routers, settings.outbound_port));
+        tokio::spawn(handle(stream, peer, routers, outbound_port));
     }
 }
 

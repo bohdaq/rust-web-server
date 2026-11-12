@@ -25,14 +25,21 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `RWS_CONFIG_GATEWAY_API_MODE=mesh-sidecar`): HTTPRoutes and GRPCRoutes
   attached to Services route pod-to-pod traffic through an rws sidecar,
   by the destination's ClusterIP and port; consumer routes; status on
-  Service parents; the controller serves sidecars their configuration.
-  No mTLS. [Service mesh](https://rws8.tech/deployment/kubernetes-mesh/).
+  Service parents; the controller serves sidecars their configuration and
+  injects them (mutating webhook, Helm `gatewayAPI.mesh.*`; init image
+  `ghcr.io/bohdaq/rws-mesh-init`, built per release). Passes the v1.7.0
+  MESH-HTTP and MESH-GRPC profiles. No mTLS.
+  [Service mesh](https://rws8.tech/deployment/kubernetes-mesh/).
 
 ### Fixed
 
 - **Gateway API: other controllers' conditions survive rws's status writes**
   on Gateways and listeners (domain-qualified types), and Gateway and
   ListenerSet status is written with the `resourceVersion`.
+- **Gateway API retries reach another endpoint.** A retry after a refused
+  connection went to the same endpoint of a two-endpoint backend every
+  time (one counter drawn twice per attempt); endpoints now have their own
+  round robin (`HTTPRouteRetryConnectionError`).
 - **HTTP/2 upstream pool**: connections to one address made for different
   TLS server names are no longer shared.
 

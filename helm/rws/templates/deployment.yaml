@@ -105,6 +105,26 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- if .Values.gatewayAPI.mesh.enabled }}
+            - name: RWS_CONFIG_GATEWAY_API_MESH
+              value: "true"
+            - name: RWS_CONFIG_GATEWAY_API_MESH_PORT
+              value: {{ .Values.gatewayAPI.mesh.configPort | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL
+              value: {{ printf "http://%s-mesh.%s:%v" (include "rws.fullname" .) .Release.Namespace .Values.gatewayAPI.mesh.configPort | quote }}
+            {{- if .Values.gatewayAPI.mesh.injection.enabled }}
+            - name: RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_PORT
+              value: {{ .Values.gatewayAPI.mesh.injection.webhookPort | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_CERT_FILE
+              value: /etc/rws-mesh-webhook/tls.crt
+            - name: RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_KEY_FILE
+              value: /etc/rws-mesh-webhook/tls.key
+            - name: RWS_CONFIG_GATEWAY_API_MESH_SIDECAR_IMAGE
+              value: {{ .Values.gatewayAPI.mesh.injection.sidecarImage | default (printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion)) | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_MESH_INIT_IMAGE
+              value: {{ .Values.gatewayAPI.mesh.injection.initImage | default (printf "ghcr.io/bohdaq/rws-mesh-init:%s" .Chart.AppVersion) | quote }}
+            {{- end }}
+            {{- end }}
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
@@ -113,8 +133,14 @@ spec:
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.tls.enabled .Values.configFile .Values.extraVolumeMounts }}
+          {{- $meshWebhook := and .Values.gatewayAPI.enabled .Values.gatewayAPI.mesh.enabled .Values.gatewayAPI.mesh.injection.enabled }}
+          {{- if or .Values.tls.enabled .Values.configFile .Values.extraVolumeMounts $meshWebhook }}
           volumeMounts:
+            {{- if $meshWebhook }}
+            - name: mesh-webhook
+              mountPath: /etc/rws-mesh-webhook
+              readOnly: true
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: tls
               mountPath: {{ .Values.tls.mountPath }}
@@ -168,8 +194,14 @@ spec:
           {{- end }}
           resources:
             {{- toYaml $resources | nindent 12 }}
-      {{- if or .Values.tls.enabled .Values.configFile .Values.extraVolumes }}
+      {{- $meshWebhookVolume := and .Values.gatewayAPI.enabled .Values.gatewayAPI.mesh.enabled .Values.gatewayAPI.mesh.injection.enabled }}
+      {{- if or .Values.tls.enabled .Values.configFile .Values.extraVolumes $meshWebhookVolume }}
       volumes:
+        {{- if $meshWebhookVolume }}
+        - name: mesh-webhook
+          secret:
+            secretName: {{ include "rws.fullname" . }}-mesh-webhook
+        {{- end }}
         {{- if .Values.tls.enabled }}
         - name: tls
           secret:

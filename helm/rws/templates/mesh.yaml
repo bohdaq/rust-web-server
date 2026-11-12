@@ -1,0 +1,89 @@
+{{- if and .Values.gatewayAPI.enabled .Values.gatewayAPI.mesh.enabled }}
+{{- /*
+The Gateway API mesh profile (routing only): the Service sidecars reach the
+controller's configuration endpoint (and the API server its injection
+webhook) through, the webhook's certificate, and the webhook itself.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rws.fullname" . }}-mesh
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "rws.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: config
+      port: {{ .Values.gatewayAPI.mesh.configPort }}
+      targetPort: {{ .Values.gatewayAPI.mesh.configPort }}
+    {{- if .Values.gatewayAPI.mesh.injection.enabled }}
+    - name: webhook
+      port: 443
+      targetPort: {{ .Values.gatewayAPI.mesh.injection.webhookPort }}
+    {{- end }}
+{{- if .Values.gatewayAPI.mesh.injection.enabled }}
+{{- $service := printf "%s-mesh" (include "rws.fullname" .) }}
+{{- $name := printf "%s.%s.svc" $service .Release.Namespace }}
+{{- /* The certificate is made once and kept across upgrades (lookup): the
+running controller keeps serving the one it read at start. */}}
+{{- $secretName := printf "%s-mesh-webhook" (include "rws.fullname" .) }}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $secretName }}
+{{- $caPem := "" }}
+{{- $certPem := "" }}
+{{- $keyPem := "" }}
+{{- if and $existing (index $existing.data "ca.crt") }}
+{{- $caPem = index $existing.data "ca.crt" | b64dec }}
+{{- $certPem = index $existing.data "tls.crt" | b64dec }}
+{{- $keyPem = index $existing.data "tls.key" | b64dec }}
+{{- else }}
+{{- $ca := genCA (printf "%s-mesh-ca" (include "rws.fullname" .)) 3650 }}
+{{- $cert := genSignedCert $name nil (list $name (printf "%s.%s" $service .Release.Namespace) $service) 3650 $ca }}
+{{- $caPem = $ca.Cert }}
+{{- $certPem = $cert.Cert }}
+{{- $keyPem = $cert.Key }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ $caPem | b64enc }}
+  tls.crt: {{ $certPem | b64enc }}
+  tls.key: {{ $keyPem | b64enc }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "rws.fullname" . }}-mesh-{{ .Release.Namespace }}
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+webhooks:
+  - name: inject.mesh.rws8.tech
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    timeoutSeconds: 10
+    failurePolicy: {{ .Values.gatewayAPI.mesh.injection.failurePolicy }}
+    reinvocationPolicy: Never
+    clientConfig:
+      service:
+        name: {{ $service }}
+        namespace: {{ .Release.Namespace }}
+        path: /mesh/v1/inject
+        port: 443
+      caBundle: {{ $caPem | b64enc }}
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+        operations: ["CREATE"]
+        scope: Namespaced
+    namespaceSelector:
+      {{- toYaml .Values.gatewayAPI.mesh.injection.namespaceSelector | nindent 6 }}
+{{- end }}
+{{- end }}

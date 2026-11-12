@@ -4,6 +4,10 @@ description: rws as a routing-only service mesh — HTTPRoutes and GRPCRoutes at
 ---
 
 :::note[Stage 1: routing only]
+rws passes the Gateway API v1.7.0 conformance suite's MESH-HTTP and MESH-GRPC profiles (core and every mesh extended feature).
+:::
+
+:::caution[No security layer]
 This is the Gateway API **mesh profile** without the security half of a service mesh: there is no mutual TLS between pods, no workload identity and no authorization policy. Traffic between pods is as encrypted as your applications make it. Design and progress: [`spec/GATEWAY_MESH.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/GATEWAY_MESH.md).
 :::
 
@@ -21,6 +25,36 @@ spec:
     backendRefs: [{name: echo-v2, port: 80}]
   - backendRefs: [{name: echo-v1, port: 80}]
 ```
+
+## Install
+
+With the [Helm chart](/deployment/kubernetes/), on top of the Gateway API controller (the Gateway API CRDs must be installed first):
+
+```sh
+helm install rws oci://ghcr.io/bohdaq/charts/rws --namespace rws-system --create-namespace \
+  --set gatewayAPI.enabled=true --set gatewayAPI.mesh.enabled=true
+kubectl label namespace shop mesh.rws8.tech/injection=enabled
+```
+
+New pods in labelled namespaces get the sidecar; restart existing ones (`kubectl rollout restart deployment -n shop`). To select namespaces differently, replace the selector rather than add to it (Helm merges maps):
+
+```sh
+--set gatewayAPI.mesh.injection.namespaceSelector.matchLabels=null \
+--set-json 'gatewayAPI.mesh.injection.namespaceSelector.matchExpressions=[{"key":"team","operator":"In","values":["shop"]}]'
+```
+
+The chart adds:
+
+- a Service `<release>-mesh` for the configuration endpoint (port 15010) and the injection webhook (443 → 15017);
+- a MutatingWebhookConfiguration for pod creation in the selected namespaces, `failurePolicy: Fail` by default (a pod that can't get its sidecar isn't created rather than bypassing the routes);
+- the webhook's certificate, generated once and kept across upgrades.
+
+Each injected pod gets two init containers, ahead of its own:
+
+- `rws-mesh-init` (`ghcr.io/bohdaq/rws-mesh-init`): sets the iptables rules and exits. It runs as root with `NET_ADMIN` and `NET_RAW`, so a namespace enforcing the `restricted` Pod Security Standard rejects meshed pods.
+- `rws-mesh`: the sidecar, rws as a native sidecar (`restartPolicy: Always`, Kubernetes 1.29 or later), as UID 1337 with a read-only root filesystem. It listens on 127.0.0.1:15001 for redirected connections and on port 15000 for its startup probe.
+
+A pod opts out with the annotation `mesh.rws8.tech/inject: "false"`; `hostNetwork` pods are never injected.
 
 ## How a request is routed
 

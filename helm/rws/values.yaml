@@ -133,6 +133,27 @@ gatewayAPI:
   # Gateway gets its own Deployment of rws pods (in this namespace, this
   # image and ServiceAccount); this release's pods only run the controller.
   mode: shared
+  # The Gateway API mesh profile, routing only (no mTLS): HTTPRoutes and
+  # GRPCRoutes attached to Services route pod-to-pod traffic through an rws
+  # sidecar injected into pods of the selected namespaces.
+  mesh:
+    enabled: false
+    # The controller's configuration endpoint for sidecars.
+    configPort: 15010
+    injection:
+      enabled: true
+      webhookPort: 15017
+      # Namespaces whose new pods get the sidecar.
+      namespaceSelector:
+        matchLabels:
+          mesh.rws8.tech/injection: enabled
+      # Fail: a pod that can't get its sidecar isn't created (it would bypass
+      # the routes). Ignore: it's created without one.
+      failurePolicy: Fail
+      # Empty: this chart's image.
+      sidecarImage: ""
+      # Empty: ghcr.io/bohdaq/rws-mesh-init at the chart's appVersion.
+      initImage: ""
 
 service:
   type: ClusterIP

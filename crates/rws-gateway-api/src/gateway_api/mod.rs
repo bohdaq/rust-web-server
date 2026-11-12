@@ -71,9 +71,20 @@ pub const RWS_CONFIG_GATEWAY_API_GATEWAY: &str = "RWS_CONFIG_GATEWAY_API_GATEWAY
 pub const RWS_CONFIG_GATEWAY_API_MESH: &str = "RWS_CONFIG_GATEWAY_API_MESH";
 /// The port of the mesh configuration endpoint (default 15010).
 pub const RWS_CONFIG_GATEWAY_API_MESH_PORT: &str = "RWS_CONFIG_GATEWAY_API_MESH_PORT";
-/// A sidecar's controller endpoint (`mesh-sidecar` mode), e.g.
-/// `http://rws-mesh.rws-system:15010`.
+/// The controller's configuration endpoint as sidecars reach it, e.g.
+/// `http://rws-mesh.rws-system:15010`: a sidecar's source, and what the
+/// injection webhook gives injected sidecars.
 pub const RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL: &str = "RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL";
+/// The injection webhook's certificate and key (PEM files): with both set,
+/// the controller serves it ([`mesh::inject`]).
+pub const RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_CERT_FILE: &str = "RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_CERT_FILE";
+pub const RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_KEY_FILE: &str = "RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_KEY_FILE";
+/// The injection webhook's port (default 15017).
+pub const RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_PORT: &str = "RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_PORT";
+/// The image injected sidecars run (default: this release's rws image).
+pub const RWS_CONFIG_GATEWAY_API_MESH_SIDECAR_IMAGE: &str = "RWS_CONFIG_GATEWAY_API_MESH_SIDECAR_IMAGE";
+/// The image of the injected `rws-mesh-init` container.
+pub const RWS_CONFIG_GATEWAY_API_MESH_INIT_IMAGE: &str = "RWS_CONFIG_GATEWAY_API_MESH_INIT_IMAGE";
 
 fn setting(key: &str) -> Option<String> {
     std::env::var(key).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
@@ -207,6 +218,18 @@ pub fn start_from_env() {
             let publisher = mesh::config::Publisher::new();
             let port = setting(RWS_CONFIG_GATEWAY_API_MESH_PORT).and_then(|p| p.parse().ok()).unwrap_or(mesh::config::DEFAULT_PORT);
             tokio::spawn(mesh::config::serve(publisher.clone(), port));
+            if let (Some(cert), Some(key)) = (setting(RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_CERT_FILE), setting(RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_KEY_FILE)) {
+                let version = env!("CARGO_PKG_VERSION");
+                let injector = mesh::inject::Injector {
+                    settings: mesh::inject::InjectSettings {
+                        sidecar_image: setting(RWS_CONFIG_GATEWAY_API_MESH_SIDECAR_IMAGE).unwrap_or_else(|| format!("ghcr.io/bohdaq/rws:{version}")),
+                        init_image: setting(RWS_CONFIG_GATEWAY_API_MESH_INIT_IMAGE).unwrap_or_else(|| format!("ghcr.io/bohdaq/rws-mesh-init:{version}")),
+                        config_url: setting(RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL).unwrap_or_else(|| format!("http://rws-mesh.{}:{port}", pod_namespace())),
+                    },
+                };
+                let webhook_port = setting(RWS_CONFIG_GATEWAY_API_MESH_WEBHOOK_PORT).and_then(|p| p.parse().ok()).unwrap_or(mesh::inject::DEFAULT_PORT);
+                tokio::spawn(mesh::inject::serve(injector, webhook_port, cert, key));
+            }
             publisher
         });
         let options = controller::Options { settings, leader, on_config: Arc::new(on_config), mesh };

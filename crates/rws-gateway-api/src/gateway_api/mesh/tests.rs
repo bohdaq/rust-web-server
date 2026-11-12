@@ -276,3 +276,83 @@ async fn a_sidecar_router_matches_filters_and_forwards() {
     assert!(matched.headers.iter().any(|h| h.name == "X-Header-Set" && h.value == "split"));
     assert_eq!(404, unmatched.status_code, "a Service with routes answers 404 when no rule matches");
 }
+
+fn inject_settings() -> inject::InjectSettings {
+    inject::InjectSettings { sidecar_image: "rws:test".to_string(), init_image: "rws-mesh-init:test".to_string(), config_url: "http://rws-mesh.rws-system:15010".to_string() }
+}
+
+/// `pod` with the JSON patch applied (only the `add`s injection makes).
+fn applied(mut pod: serde_json::Value, ops: &[serde_json::Value]) -> serde_json::Value {
+    for op in ops {
+        assert_eq!("add", op["op"]);
+        let path = op["path"].as_str().unwrap();
+        let (parent, last) = path.rsplit_once('/').unwrap();
+        let last = last.replace("~1", "/").replace("~0", "~");
+        let target = pod.pointer_mut(parent).unwrap();
+        match target {
+            serde_json::Value::Array(items) => items.insert(last.parse().unwrap(), op["value"].clone()),
+            serde_json::Value::Object(map) => {
+                map.insert(last, op["value"].clone());
+            }
+            _ => panic!("can't add at {path}"),
+        }
+    }
+    pod
+}
+
+#[test]
+fn injection_puts_the_init_container_then_the_sidecar_first() {
+    let settings = inject_settings();
+    let bare = json!({"metadata": {"name": "p"}, "spec": {"containers": [{"name": "app"}]}});
+    let pod = applied(bare.clone(), &inject::patch(&bare, &settings).unwrap());
+    let init = pod["spec"]["initContainers"].as_array().unwrap();
+    assert_eq!(vec!["rws-mesh-init", "rws-mesh"], init.iter().map(|c| c["name"].as_str().unwrap()).collect::<Vec<_>>());
+    assert_eq!("Always", init[1]["restartPolicy"], "a native sidecar");
+    assert_eq!(1337, init[1]["securityContext"]["runAsUser"]);
+    assert_eq!("rws:test", init[1]["image"]);
+    assert_eq!("true", pod["metadata"]["annotations"]["mesh.rws8.tech/injected"]);
+    let env = init[1]["env"].as_array().unwrap();
+    assert!(env.iter().any(|e| e["name"] == "RWS_CONFIG_GATEWAY_API_MODE" && e["value"] == "mesh-sidecar"));
+    assert!(init[0]["securityContext"]["capabilities"]["add"].as_array().unwrap().contains(&json!("NET_ADMIN")));
+
+    // Existing init containers and annotations are kept, after ours.
+    let busy = json!({"metadata": {"annotations": {"a": "b"}}, "spec": {"initContainers": [{"name": "migrate"}], "containers": [{"name": "app"}]}});
+    let pod = applied(busy.clone(), &inject::patch(&busy, &settings).unwrap());
+    let names: Vec<&str> = pod["spec"]["initContainers"].as_array().unwrap().iter().map(|c| c["name"].as_str().unwrap()).collect();
+    assert_eq!(vec!["rws-mesh-init", "rws-mesh", "migrate"], names);
+    assert_eq!("b", pod["metadata"]["annotations"]["a"]);
+    assert_eq!("true", pod["metadata"]["annotations"]["mesh.rws8.tech/injected"]);
+}
+
+#[test]
+fn pods_that_opt_out_use_the_host_network_or_have_the_sidecar_are_left_alone() {
+    let settings = inject_settings();
+    assert!(inject::patch(&json!({"metadata": {"annotations": {"mesh.rws8.tech/inject": "false"}}, "spec": {}}), &settings).is_none());
+    assert!(inject::patch(&json!({"metadata": {}, "spec": {"hostNetwork": true}}), &settings).is_none());
+    assert!(inject::patch(&json!({"metadata": {}, "spec": {"initContainers": [{"name": "rws-mesh"}]}}), &settings).is_none());
+}
+
+#[test]
+fn the_webhook_answers_admission_reviews() {
+    let settings = inject_settings();
+    let body = |kind: &str, operation: &str| {
+        serde_json::to_vec(&json!({
+            "apiVersion": "admission.k8s.io/v1", "kind": "AdmissionReview",
+            "request": {"uid": "u-1", "kind": {"group": "", "version": "v1", "kind": kind}, "operation": operation,
+                        "object": {"metadata": {"name": "p"}, "spec": {"containers": [{"name": "app"}]}}}
+        }))
+        .unwrap()
+    };
+    let answer: serde_json::Value = serde_json::from_slice(&inject::review(&body("Pod", "CREATE"), &settings).unwrap()).unwrap();
+    assert_eq!("u-1", answer["response"]["uid"]);
+    assert_eq!(true, answer["response"]["allowed"]);
+    assert_eq!("JSONPatch", answer["response"]["patchType"]);
+    let patch = crate::core::base64::Base64::decode(answer["response"]["patch"].as_str().unwrap().to_string()).unwrap();
+    let ops: Vec<serde_json::Value> = serde_json::from_slice(&patch).unwrap();
+    assert!(!ops.is_empty());
+    // Anything else is allowed unchanged.
+    let update: serde_json::Value = serde_json::from_slice(&inject::review(&body("Pod", "UPDATE"), &settings).unwrap()).unwrap();
+    assert_eq!(true, update["response"]["allowed"]);
+    assert!(update["response"].get("patch").is_none());
+    assert!(inject::review(b"not json", &settings).is_err());
+}

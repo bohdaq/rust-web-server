@@ -4,7 +4,11 @@
 # LoadBalancer Service gets an address the runner can reach, rws installed with
 # the Helm chart (gatewayAPI.enabled), then the suite's own `go test`.
 #
-#   ci/e2e/gateway_api.sh <rws-binary> <gateway-api-source> <report.yaml> <profiles> <supported-features> [shared|provisioned]
+#   ci/e2e/gateway_api.sh <rws-binary> <gateway-api-source> <report.yaml> <profiles> <supported-features> [shared|provisioned|mesh]
+#
+# `mesh` runs the mesh profile (spec/GATEWAY_MESH.md): rws with the mesh on,
+# its injection webhook selecting the suite's two mesh namespaces, and the
+# rws-mesh-init image built from packaging/mesh-init.
 #
 # <gateway-api-source> is a checkout of kubernetes-sigs/gateway-api at the
 # pinned tag; kind, kubectl, helm, docker and go must be on PATH.
@@ -22,6 +26,10 @@ METALLB_VERSION=v0.16.0
 
 dump() {
   echo "── pods"; kubectl get pods -A -o wide || true
+  if [ "$MODE" = mesh ]; then
+    echo "── mesh sidecars"; kubectl logs -n gateway-conformance-mesh -l app=echo -c rws-mesh --tail=100 --prefix || true
+    echo "── mesh init"; kubectl logs -n gateway-conformance-mesh -l app=echo -c rws-mesh-init --tail=20 --prefix || true
+  fi
   echo "── rws logs"; kubectl logs -n rws-system -l app.kubernetes.io/name=rws --tail=300 --prefix || true
   echo "── gateway Services"; kubectl get services -A -l app.kubernetes.io/managed-by=rws-gateway -o wide || true
   echo "── gateways"; kubectl get gateways -A -o yaml | head -300 || true
@@ -59,10 +67,22 @@ build=$(mktemp -d)
 cp "$RWS" "$build/rws"
 docker build -q -t rws:e2e -f "$ROOT/ci/e2e/gateway_api/Dockerfile" "$build"
 kind load docker-image rws:e2e --name "$CLUSTER"
+mesh_values=()
+gateway_mode="$MODE"
+if [ "$MODE" = mesh ]; then
+  gateway_mode=shared
+  docker build -q -t rws-mesh-init:e2e "$ROOT/packaging/mesh-init"
+  kind load docker-image rws-mesh-init:e2e --name "$CLUSTER"
+  mesh_values=(--set gatewayAPI.mesh.enabled=true
+    --set gatewayAPI.mesh.injection.sidecarImage=rws:e2e
+    --set gatewayAPI.mesh.injection.initImage=rws-mesh-init:e2e
+    --set gatewayAPI.mesh.injection.namespaceSelector.matchLabels=null
+    --set-json 'gatewayAPI.mesh.injection.namespaceSelector.matchExpressions=[{"key":"gateway-conformance","operator":"In","values":["mesh","mesh-consumer"]}]')
+fi
 helm install rws "$ROOT/helm/rws" --namespace rws-system --create-namespace \
   --set image.repository=rws --set image.tag=e2e --set image.pullPolicy=Never \
   --set gatewayAPI.enabled=true --set tls.enabled=false --set quic.enabled=false \
-  --set gatewayAPI.mode="$MODE" \
+  --set gatewayAPI.mode="$gateway_mode" "${mesh_values[@]}" \
   --set replicaCount=2 --set podDisruptionBudget.enabled=false --wait --timeout 5m
 kubectl wait --for=condition=Accepted gatewayclass/rws --timeout=60s
 

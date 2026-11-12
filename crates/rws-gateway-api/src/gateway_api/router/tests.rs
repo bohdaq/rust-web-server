@@ -398,3 +398,24 @@ async fn the_async_path_retries_times_out_and_leaves_upgrades_alone() {
     let upgrade = request("GET", "/", &[("host", "example.org"), ("connection", "Upgrade"), ("upgrade", "websocket")]);
     assert!(missing.execute_async(&upgrade, &connection).is_none(), "upgrades take the blocking path");
 }
+
+#[test]
+fn a_retry_after_a_refused_connection_goes_to_the_next_endpoint() {
+    // One backend, two endpoints: one refuses connections, one answers.
+    let refusing = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        drop(listener);
+        address
+    };
+    let (healthy, _) = flaky_backend(0, 500, std::time::Duration::ZERO);
+    let router = PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![]))));
+    let r = request("GET", "/", &[("host", "example.org")]);
+    let mut policy = with_policy(&healthy, None, Some((3, vec![])));
+    // The refusing one second: two draws per attempt from one shared counter
+    // landed every attempt on it.
+    policy.backends = vec![backend(1, Ok(vec![healthy, refusing]))];
+    for i in 0..10 {
+        assert_eq!(200, router.forward(&policy, &r, &connection()).status_code, "request {i}");
+    }
+}
