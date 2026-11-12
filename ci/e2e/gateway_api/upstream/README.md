@@ -44,8 +44,8 @@ steps below are what it does.
 2. Fetch the Gateway API suite and its standard-channel CRDs:
 
    ```sh
-   git clone --depth 1 --branch v1.6.3 https://github.com/kubernetes-sigs/gateway-api /tmp/gateway-api
-   gh release download v1.6.3 --repo kubernetes-sigs/gateway-api --pattern standard-install.yaml --dir /tmp/gateway-api
+   git clone --depth 1 --branch v1.7.0 https://github.com/kubernetes-sigs/gateway-api /tmp/gateway-api
+   gh release download v1.7.0 --repo kubernetes-sigs/gateway-api --pattern standard-install.yaml --dir /tmp/gateway-api
    ```
 
 3. Run the suite (needs docker, [kind](https://kind.sigs.k8s.io) v0.33, kubectl,

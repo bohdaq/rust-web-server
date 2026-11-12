@@ -217,6 +217,38 @@ controller pod writes status.
 | 8 | Provisioned mode: per-Gateway Deployment/Service, infrastructure propagation, static addresses, empty address | **done** — **8a done**: static addresses — `services::requested_addresses` (IPAddress with a value; empty value = any) → Service `loadBalancerIP` (first), compared by `same`; other types → Gateway Accepted False `UnsupportedAddress`; Programmed False `AddressNotUsable` until every requested address is in the Service's ingress. CI passes `--usable-address` (MetalLB pool) / `--unusable-address`. Claimed GatewayStaticAddresses, GatewayAddressEmpty. Found while designing it: a Service only selects pods in its own namespace, so every Gateway Service (in the Gateway's namespace) had no endpoints — now selectorless, with an EndpointSlice per address family written by the controller from its watched serving pods (`services::endpoint_slices`, `same_slice`; pods watched in `POD_NAMESPACE` by the selector; RBAC pods + endpointslices write). **8b done**: provisioned mode — `provision` (Deployment `rws-gw-<ns>-<name>` per Gateway in the pod namespace, controller's image + ServiceAccount, pod labels name=rws-gateway + gateway name/namespace, infrastructure labels/annotations on pods, `same`, `stale` pruning since no cross-namespace owner); `RWS_CONFIG_GATEWAY_API_MODE`/`_IMAGE`/`_SERVICE_ACCOUNT`/`_GATEWAY`; provisioned pods (`own_gateway`) take no Lease and serve only their Gateway, the controller's serve none; EndpointSlices per Gateway from its own pods; Deployments watched (managed-by) and applied by SSA; Helm `gatewayAPI.mode`, IMAGE, POD_SERVICE_ACCOUNT, deployments RBAC. CI: conformance matrix over both modes (`--mode`), a report each |
 | 9 | Helm chart + docs (deployment/kubernetes-gateway-api) + CHANGELOG; report README; implementation listing PR prepared for the user to open | **done** (release steps the user's): docs page states conformance, README section, CHANGELOG, Helm README; workflow runs on release tags and names reports `standard-<version>-<mode>-report.yaml`; upstream README drafted at `ci/e2e/gateway_api/upstream/README.md` (→ gateway-api `conformance/reports/v1.6/bohdaq-rust-web-server/`). Left: 18.8.0 tag (user pushes), tag-run reports, upstream PR (user opens) |
 
+## Gateway API v1.7 (2026-11-12)
+
+v1.7.0 was released 2026-10-29. The implementations page for v1.7 lists only
+reports for v1.7, so rws (reported at v1.6.3) is not on it. Goal: a v1.7
+report for both modes, then the mesh profile (`spec/GATEWAY_MESH.md`).
+
+Features new to rws at v1.7 (from `pkg/features` at `v1.7.0`):
+
+| Feature | Channel | Tests |
+|---|---|---|
+| `GatewayRouteHostnameIntersectionPrecedence` | standard | `*-multiple-routes-attachment-same-hostname-intersection` (HTTP, gRPC, TLS) |
+| `GRPCRouteRequestHeaderModifier` | standard | `grpcroute-request-header-modifier` |
+| `HTTPRouteBackendURLRewrite` | standard | `httproute-backend-url-rewrite` |
+| `HTTPRouteRetryCodes` (was `HTTPRouteRetry`) | standard | `httproute-retry`, `httproute-retry-with-timeouts` |
+| `HTTPRouteRetryConnectionError` | standard | `httproute-retry-connection-error` |
+| `TLSRouteModeMixed` | standard | `tlsroute-mixed-termination-same-namespace`, `tlsroute-listener-mixed-termination-not-supported` |
+| `HTTPRouteDestinationPortMatching` | experimental | `httproute-invalid-parentref-not-matching-listener-port` |
+| `GatewayListenerFilters` | experimental | none yet |
+| `ClusterTrustBundle` | experimental | none yet |
+| `GatewayAddressRoutability`, `GatewayAddressRoutabilityCluster` | experimental | none yet |
+
+Every implementation listed with all 43 HTTPRoute features (agentgateway)
+submits an **experimental-channel** report: experimental features need the
+experimental CRDs. A standard-channel report can reach 38 of 43.
+
+| Step | What | Status |
+|---|---|---|
+| A | Suite + CRDs to `v1.7.0`, types to v1.7, claimed set unchanged; fix what v1.7's tests break | |
+| B | The six new standard features | |
+| C | Experimental features + an experimental-channel report (separate decision) | |
+| D | Reports for both modes; upstream PR prepared (the user opens it) | |
+
 ## Open items
 
 - The `parametersRef` format for provisioned mode (ConfigMap now; a CRD of

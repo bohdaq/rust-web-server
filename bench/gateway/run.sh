@@ -41,7 +41,7 @@ mkdir -p "$OUT_DIR"
 : > "$RESULTS"
 
 # Versions: each the newest release at least two weeks old (2026-10-28).
-GATEWAY_API_VERSION=v1.6.3
+GATEWAY_API_VERSION=v1.7.0
 METALLB_VERSION=v0.16.0
 ENVOY_GATEWAY_VERSION=v1.9.2
 NGF_VERSION=2.7.2
