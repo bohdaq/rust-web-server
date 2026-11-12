@@ -533,3 +533,26 @@ async fn a_grpc_web_trailers_only_error_is_framed_over_http1_keep_alive() {
     let lower = head.to_ascii_lowercase();
     assert!(lower.contains("grpc-status: 13") && lower.contains("content-length: 0"), "{head}");
 }
+
+/// The Gateway API router's gRPC backends under a BackendTLSPolicy: HTTP/2
+/// on TLS to an address, with the policy's hostname as SNI and checked name.
+#[cfg(feature = "gateway-api")]
+#[tokio::test]
+async fn http2_on_tls_to_an_address_checks_the_given_server_name() {
+    let pki = pki("h2_tls_address");
+    let port = mtls_backend(std::sync::Arc::clone(&pki.server_config)).await;
+    let trust = crate::proxy::UpstreamTls::new(Some(pki.ca.as_str()), Some((pki.client_cert.as_str(), pki.client_key.as_str()))).unwrap();
+    let config = std::sync::Arc::clone(trust.h2_config());
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/test.Echo/Plain".to_string(), http_version: "HTTP/2".to_string(), headers: vec![], body: Default::default() };
+    let peer = || crate::proxy::Peer { ip: "127.0.0.1", tls: false };
+    let timeout = std::time::Duration::from_secs(5);
+    let (good, wrong_name) = tokio::task::spawn_blocking(move || {
+        let good = crate::proxy::forward_h2_tls_with_host(&config, &request, peer(), "127.0.0.1", port, "localhost", "abc.example.com", timeout, timeout);
+        let wrong = crate::proxy::forward_h2_tls_with_host(&config, &request, peer(), "127.0.0.1", port, "other.example.com", "abc.example.com", timeout, timeout);
+        (good, wrong)
+    })
+    .await
+    .unwrap();
+    assert_eq!(200, good.unwrap().status_code);
+    assert!(wrong_name.is_err(), "the certificate is for localhost, not other.example.com");
+}

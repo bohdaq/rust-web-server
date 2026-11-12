@@ -20,6 +20,7 @@ pub mod dataplane;
 pub mod filters;
 pub mod l4;
 pub mod lease;
+pub mod mesh;
 pub mod provision;
 pub mod resources;
 pub mod router;
@@ -64,13 +65,32 @@ pub const RWS_CONFIG_GATEWAY_API_SERVICE_ACCOUNT: &str = "RWS_CONFIG_GATEWAY_API
 /// they don't take the Lease or write anything.
 pub const RWS_CONFIG_GATEWAY_API_GATEWAY: &str = "RWS_CONFIG_GATEWAY_API_GATEWAY";
 
+/// `RWS_CONFIG_GATEWAY_API_MESH` (`[gateway_api] mesh`): the controller
+/// also handles routes attached to Services (the mesh profile, [`mesh`]) and
+/// serves sidecars their configuration.
+pub const RWS_CONFIG_GATEWAY_API_MESH: &str = "RWS_CONFIG_GATEWAY_API_MESH";
+/// The port of the mesh configuration endpoint (default 15010).
+pub const RWS_CONFIG_GATEWAY_API_MESH_PORT: &str = "RWS_CONFIG_GATEWAY_API_MESH_PORT";
+/// A sidecar's controller endpoint (`mesh-sidecar` mode), e.g.
+/// `http://rws-mesh.rws-system:15010`.
+pub const RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL: &str = "RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL";
+
 fn setting(key: &str) -> Option<String> {
     std::env::var(key).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
+fn on(key: &str) -> bool {
+    setting(key).is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on"))
+}
+
 /// Whether the controller is turned on.
 pub fn enabled() -> bool {
-    setting(RWS_CONFIG_GATEWAY_API_ENABLED).is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on"))
+    on(RWS_CONFIG_GATEWAY_API_ENABLED)
+}
+
+/// Whether this process is a mesh sidecar (`RWS_CONFIG_GATEWAY_API_MODE=mesh-sidecar`).
+pub fn is_mesh_sidecar() -> bool {
+    setting(RWS_CONFIG_GATEWAY_API_MODE).is_some_and(|m| m.eq_ignore_ascii_case("mesh-sidecar"))
 }
 
 /// `key=value,key=value`.
@@ -101,6 +121,7 @@ pub fn settings_from_env() -> translate::Settings {
         settings.services.service_type = kind;
     }
     settings.services.pod_namespace = pod_namespace();
+    settings.mesh = on(RWS_CONFIG_GATEWAY_API_MESH);
     if setting(RWS_CONFIG_GATEWAY_API_MODE).is_some_and(|m| m.eq_ignore_ascii_case("provisioned")) {
         settings.services.provisioned = true;
         settings.provision = Some(provision::ProvisionSettings {
@@ -137,6 +158,15 @@ fn lease_namespace() -> String {
 /// the current tokio runtime, against the cluster rws runs in (or the
 /// kubeconfig). Returns at once.
 pub fn start_from_env() {
+    if is_mesh_sidecar() {
+        let settings = mesh::sidecar::SidecarSettings {
+            config_url: setting(RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL).unwrap_or_else(|| format!("http://rws-mesh.rws-system:{}", mesh::config::DEFAULT_PORT)),
+            namespace: pod_namespace(),
+            outbound_port: mesh::sidecar::OUTBOUND_PORT,
+        };
+        tokio::spawn(mesh::sidecar::run(settings));
+        return;
+    }
     if !enabled() {
         return;
     }
@@ -173,7 +203,13 @@ pub fn start_from_env() {
             }
             plane.apply(&config)
         };
-        let options = controller::Options { settings, leader, on_config: Arc::new(on_config) };
+        let mesh = settings.mesh.then(|| {
+            let publisher = mesh::config::Publisher::new();
+            let port = setting(RWS_CONFIG_GATEWAY_API_MESH_PORT).and_then(|p| p.parse().ok()).unwrap_or(mesh::config::DEFAULT_PORT);
+            tokio::spawn(mesh::config::serve(publisher.clone(), port));
+            publisher
+        });
+        let options = controller::Options { settings, leader, on_config: Arc::new(on_config), mesh };
         controller::run(client, options, became_leader).await;
     });
 }

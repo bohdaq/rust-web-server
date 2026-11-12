@@ -42,6 +42,9 @@ pub struct Options {
     pub leader: Arc<AtomicBool>,
     /// Called with every new configuration.
     pub on_config: Arc<dyn Fn(GatewayConfig) + Send + Sync>,
+    /// The mesh configuration endpoint, when the mesh is on: every replica
+    /// publishes its snapshot's mesh part ([`super::mesh`]).
+    pub mesh: Option<super::mesh::config::Publisher>,
 }
 
 /// The watched stores.
@@ -182,6 +185,9 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
     let now = Time(k8s_openapi::jiff::Timestamp::now());
     let (config, desired) = translate(&snapshot, &options.settings, &now);
     (options.on_config)(config);
+    if let Some(publisher) = &options.mesh {
+        publisher.publish(&super::mesh::snapshot(&snapshot));
+    }
     if !options.leader.load(Ordering::SeqCst) {
         return Ok(());
     }
@@ -257,7 +263,9 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
             continue;
         }
         let api: Api<Gateway> = Api::namespaced_with(client.clone(), &namespace, &resources::gateways());
-        if let Err(e) = patch_status(&api, &gateway.name_any(), status, None).await {
+        // With the resourceVersion: a status written from a stale cache would
+        // drop conditions another controller added since (409, retried).
+        if let Err(e) = patch_status(&api, &gateway.name_any(), status, gateway.resource_version()).await {
             failures.push(e);
         }
     }
@@ -268,7 +276,7 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
             continue;
         }
         let api: Api<ListenerSet> = Api::namespaced_with(client.clone(), &namespace, &resources::listener_sets());
-        if let Err(e) = patch_status(&api, &set.name_any(), status, None).await {
+        if let Err(e) = patch_status(&api, &set.name_any(), status, set.resource_version()).await {
             failures.push(e);
         }
     }

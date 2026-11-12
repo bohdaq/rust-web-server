@@ -269,6 +269,26 @@ async fn terminate_and_passthrough_listeners_share_a_port_by_sni() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_terminated_tls_route_is_encrypted_again_under_a_backend_tls_policy() {
+    // The gateway's certificate for the client, the backend's own (trusted
+    // by the policy's CA, checked as `backend.example.com`) behind it.
+    let gateway_cert = rcgen::generate_simple_self_signed(vec!["term.example.com".to_string()]).unwrap();
+    let backend_cert = rcgen::generate_simple_self_signed(vec!["backend.example.com".to_string()]).unwrap();
+    let tls_backend = tls_echo_backend(&backend_cert);
+    let validation = crate::gateway_api::types::BackendTlsValidation { hostname: "backend.example.com".to_string(), ..Default::default() };
+    let policy = crate::gateway_api::backend_tls::build(Some(backend_cert.cert.pem().as_bytes()), &validation).unwrap();
+    let pem = (gateway_cert.cert.pem().into_bytes(), gateway_cert.signing_key.serialize_pem().into_bytes());
+    let plane = DataPlane::new("127.0.0.1");
+    let port = serve_on_free_port(&plane, |port| {
+        let mut config = l4_config(port, tls_backend, "TLS", Some(pem.clone()));
+        config.listeners[0].http_routes[0].rules[0].backends[0].tls = Some(Ok(policy.clone()));
+        config
+    });
+    let echoed = tokio::task::spawn_blocking(move || tls_ping(port, "term.example.com", &gateway_cert)).await.unwrap();
+    assert_eq!(b"ping".to_vec(), echoed, "decrypted at the gateway, encrypted again to the backend");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_udp_listener_relays_datagrams_both_ways() {
     let backend = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     let backend_port = backend.local_addr().unwrap().port();

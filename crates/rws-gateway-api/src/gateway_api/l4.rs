@@ -42,6 +42,15 @@ pub fn pick_route<'a>(routes: &'a [CompiledHttpRoute], sni: Option<&str>) -> Opt
 /// An endpoint of the route's first rule with backends, by weight; `None`
 /// when there is nothing to send to.
 pub fn pick_endpoint(route: &CompiledHttpRoute, counter: &AtomicUsize) -> Option<String> {
+    pick_backend(route, counter).map(|(endpoint, _)| endpoint)
+}
+
+/// The backend's TLS when a BackendTLSPolicy covers it (`Err`: covered but
+/// unusable — such a connection is dropped, never sent in the clear).
+type BackendTlsOf = Option<Result<super::backend_tls::BackendTls, String>>;
+
+/// [`pick_endpoint`], with the picked backend's TLS.
+fn pick_backend(route: &CompiledHttpRoute, counter: &AtomicUsize) -> Option<(String, BackendTlsOf)> {
     let rule = route.rules.iter().find(|r| !r.backends.is_empty())?;
     let total: u32 = rule.backends.iter().map(|b| b.weight).sum();
     if total == 0 {
@@ -58,7 +67,7 @@ pub fn pick_endpoint(route: &CompiledHttpRoute, counter: &AtomicUsize) -> Option
         }
     })?;
     let endpoints = backend.endpoints.as_ref().ok().filter(|e| !e.is_empty())?;
-    Some(endpoints[n % endpoints.len()].clone())
+    Some((endpoints[n % endpoints.len()].clone(), backend.tls.clone()))
 }
 
 /// The listener and endpoint for a connection with this SNI.
@@ -138,9 +147,24 @@ pub async fn serve_tls_passthrough(mut client: TcpStream, listeners: PortListene
 pub async fn serve_tls_terminate(client: TcpStream, acceptor: tokio_rustls::TlsAcceptor, listeners: PortListeners, counter: Arc<AtomicUsize>) {
     let Ok(Ok(mut tls)) = tokio::time::timeout(Duration::from_secs(10), acceptor.accept(client)).await else { return };
     let sni = tls.get_ref().1.server_name().map(str::to_string);
-    let Some(endpoint) = target(&listeners, sni.as_deref(), &counter) else { return };
-    let Some(mut backend) = connect(&endpoint).await else { return };
-    let _ = tokio::io::copy_bidirectional(&mut tls, &mut backend).await;
+    let current: Arc<Vec<ListenerConfig>> = listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some(listener) = pick_listener(&current, &sni.as_deref().unwrap_or("").to_ascii_lowercase()) else { return };
+    let Some((endpoint, backend_tls)) = pick_route(&listener.http_routes, sni.as_deref()).and_then(|route| pick_backend(route, &counter)) else { return };
+    let Some(backend) = connect(&endpoint).await else { return };
+    match backend_tls {
+        None => {
+            let mut backend = backend;
+            let _ = tokio::io::copy_bidirectional(&mut tls, &mut backend).await;
+        }
+        // BackendTLSPolicy: encrypted again, checked as the policy says.
+        Some(Ok(policy)) => {
+            let Ok(name) = rustls::pki_types::ServerName::try_from(policy.server_name.clone()) else { return };
+            let connector = tokio_rustls::TlsConnector::from(Arc::clone(&policy.config));
+            let Ok(Ok(mut backend)) = tokio::time::timeout(CONNECT_TIMEOUT, connector.connect(name, backend)).await else { return };
+            let _ = tokio::io::copy_bidirectional(&mut tls, &mut backend).await;
+        }
+        Some(Err(_)) => {}
+    }
 }
 
 /// The SNI of a connection's ClientHello, read with `peek` so the bytes

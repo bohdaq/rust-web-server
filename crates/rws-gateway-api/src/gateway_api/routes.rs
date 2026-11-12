@@ -202,7 +202,10 @@ pub fn compile_l4(route: &kube::core::Object<L4RouteSpec, RouteStatus>, kind: &s
                 .iter()
                 .map(|b| {
                     let resolved = resolve(&b.object, &namespace, kind, snapshot);
-                    Backend { weight: b.weight.unwrap_or(1).max(0) as u32, endpoints: resolved.endpoints, app_protocol: resolved.app_protocol, tls: None, filters: Vec::new() }
+                    // A BackendTLSPolicy matters to a TLSRoute a listener
+                    // terminates: the stream is encrypted again to the backend.
+                    let tls = if kind == "TLSRoute" { resolved.tls } else { None };
+                    Backend { weight: b.weight.unwrap_or(1).max(0) as u32, endpoints: resolved.endpoints, app_protocol: resolved.app_protocol, tls, filters: Vec::new() }
                 })
                 .collect(),
             timeouts: None,

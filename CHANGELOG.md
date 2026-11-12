@@ -17,6 +17,24 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `GatewayRouteHostnameIntersectionPrecedence` and `TLSRouteModeMixed` —
   `Terminate` and `Passthrough` TLS listeners on one port, chosen by SNI
   (they were refused with `ProtocolConflict` before).
+- **Gateway API: BackendTLSPolicy for GRPCRoute and terminated TLSRoute**
+  (v1.7 core tests): gRPC backends under a policy are reached over HTTP/2
+  on TLS (they were sent HTTP/1.1), and a TLSRoute a listener terminates
+  is encrypted again to a covered backend (it went in the clear).
+- **Gateway API mesh profile, routing only** (`RWS_CONFIG_GATEWAY_API_MESH`,
+  `RWS_CONFIG_GATEWAY_API_MODE=mesh-sidecar`): HTTPRoutes and GRPCRoutes
+  attached to Services route pod-to-pod traffic through an rws sidecar,
+  by the destination's ClusterIP and port; consumer routes; status on
+  Service parents; the controller serves sidecars their configuration.
+  No mTLS. [Service mesh](https://rws8.tech/deployment/kubernetes-mesh/).
+
+### Fixed
+
+- **Gateway API: other controllers' conditions survive rws's status writes**
+  on Gateways and listeners (domain-qualified types), and Gateway and
+  ListenerSet status is written with the `resourceVersion`.
+- **HTTP/2 upstream pool**: connections to one address made for different
+  TLS server names are no longer shared.
 
 ### Changed
 

@@ -400,7 +400,11 @@ impl PortRouter {
         let (request, ip, port, host_header) = (target.request.as_ref(), target.ip.as_str(), target.port, target.host_header.as_str());
         let started = std::time::Instant::now();
         let next_hop = format!("{}:{}", target.ip, target.port);
-        let forwarded = if let Some(tls) = &tls {
+        let h2 = target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c");
+        let forwarded = if let (Some(tls), true) = (&tls, h2) {
+            // gRPC and h2c backends a BackendTLSPolicy covers: HTTP/2 on TLS.
+            crate::proxy::forward_h2_tls_with_host(&tls.h2_config, request, crate::proxy::Peer::of(connection), ip, port, &tls.server_name, host_header, connect_timeout(timeout), timeout)
+        } else if let Some(tls) = &tls {
             crate::proxy::forward_tls_with_host(&tls.config, &tls.label, request, crate::proxy::Peer::of(connection), ip, port, &tls.server_name, host_header, connect_timeout(timeout), timeout)
         } else if super::upgrade::is_upgrade(request) {
             super::upgrade::forward(request, crate::proxy::Peer::of(connection), ip, port, host_header, timeout)
@@ -431,12 +435,18 @@ impl PortRouter {
         };
         let started = std::time::Instant::now();
         let next_hop = format!("{}:{}", target.ip, target.port);
-        let forwarded = if tls.is_none() && target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
+        let forwarded = if target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
             // HTTP/2 upstreams have their own runtime and a blocking API.
             let (request, client_ip, tls_client, ip, port, host) = (target.request.into_owned(), connection.client.ip.clone(), connection.tls, target.ip, target.port, target.host_header);
-            tokio::task::spawn_blocking(move || crate::proxy::forward_h2c_with_host(&request, crate::proxy::Peer { ip: &client_ip, tls: tls_client }, &ip, port, &host, connect_timeout(timeout), timeout))
-                .await
-                .unwrap_or_else(|e| Err(e.to_string()))
+            tokio::task::spawn_blocking(move || {
+                let peer = crate::proxy::Peer { ip: &client_ip, tls: tls_client };
+                match &tls {
+                    Some(tls) => crate::proxy::forward_h2_tls_with_host(&tls.h2_config, &request, peer, &ip, port, &tls.server_name, &host, connect_timeout(timeout), timeout),
+                    None => crate::proxy::forward_h2c_with_host(&request, peer, &ip, port, &host, connect_timeout(timeout), timeout),
+                }
+            })
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()))
         } else {
             let tls = tls.as_ref().map(|t| (t.server_name.as_str(), crate::proxy::async_upstream::AsyncTls { config: std::sync::Arc::clone(&t.config), pool: crate::proxy::async_upstream::gateway_tls_pool(&t.label) }));
             crate::proxy::async_upstream::forward_gateway(&target.request, crate::proxy::Peer::of(connection), &target.ip, target.port, &target.host_header, tls, connect_timeout(timeout), timeout).await

@@ -235,6 +235,9 @@ impl core::clone::Clone for rust_web_server::fleet::Source
 impl core::clone::Clone for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::clone::Clone for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::clone::Clone for rust_web_server::gateway_api::controller::Stores
+impl core::clone::Clone for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::clone::Clone for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::clone::Clone for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::clone::Clone for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::clone::Clone for rust_web_server::gateway_api::router::PortRouter
 impl core::clone::Clone for rust_web_server::gateway_api::routes::Backend
@@ -951,6 +954,8 @@ impl core::default::Default for rust_web_server::events::EventBus
 impl core::default::Default for rust_web_server::flash::Flash
 impl core::default::Default for rust_web_server::flash::FlashLayer
 impl core::default::Default for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::default::Default for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::default::Default for rust_web_server::gateway_api::mesh::config::Publisher
 impl core::default::Default for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::default::Default for rust_web_server::gateway_api::services::ServiceSettings
 impl core::default::Default for rust_web_server::gateway_api::translate::Desired
@@ -1188,6 +1193,8 @@ impl core::fmt::Debug for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::fmt::Debug for rust_web_server::gateway_api::filters::Cors
 impl core::fmt::Debug for rust_web_server::gateway_api::l4::Hello
 impl core::fmt::Debug for rust_web_server::gateway_api::lease::Decision
+impl core::fmt::Debug for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::fmt::Debug for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::fmt::Debug for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::fmt::Debug for rust_web_server::gateway_api::routes::Backend
 impl core::fmt::Debug for rust_web_server::gateway_api::routes::CompiledHttpRoute
@@ -1672,6 +1679,9 @@ impl core::marker::Freeze for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Freeze for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Freeze for rust_web_server::gateway_api::lease::Decision
 impl core::marker::Freeze for rust_web_server::gateway_api::lease::LeaseSettings
+impl core::marker::Freeze for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::marker::Freeze for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::marker::Freeze for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::marker::Freeze for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::marker::Freeze for rust_web_server::gateway_api::router::PortRouter
 impl core::marker::Freeze for rust_web_server::gateway_api::routes::Backend
@@ -2188,6 +2198,9 @@ impl core::marker::Send for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Send for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Send for rust_web_server::gateway_api::lease::Decision
 impl core::marker::Send for rust_web_server::gateway_api::lease::LeaseSettings
+impl core::marker::Send for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::marker::Send for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::marker::Send for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::marker::Send for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::marker::Send for rust_web_server::gateway_api::router::PortRouter
 impl core::marker::Send for rust_web_server::gateway_api::routes::Backend
@@ -2968,6 +2981,9 @@ impl core::marker::Sync for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Sync for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Sync for rust_web_server::gateway_api::lease::Decision
 impl core::marker::Sync for rust_web_server::gateway_api::lease::LeaseSettings
+impl core::marker::Sync for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::marker::Sync for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::marker::Sync for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::marker::Sync for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::marker::Sync for rust_web_server::gateway_api::router::PortRouter
 impl core::marker::Sync for rust_web_server::gateway_api::routes::Backend
@@ -3496,6 +3512,9 @@ impl core::marker::Unpin for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Unpin for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Unpin for rust_web_server::gateway_api::lease::Decision
 impl core::marker::Unpin for rust_web_server::gateway_api::lease::LeaseSettings
+impl core::marker::Unpin for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::marker::Unpin for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::marker::Unpin for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::marker::Unpin for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::marker::Unpin for rust_web_server::gateway_api::router::PortRouter
 impl core::marker::Unpin for rust_web_server::gateway_api::routes::Backend
@@ -4031,6 +4050,9 @@ impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::filters::Cors
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::l4::Hello
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::lease::Decision
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::lease::LeaseSettings
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::router::PortRouter
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::routes::Backend
@@ -4560,6 +4582,9 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::f
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::l4::Hello
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::lease::Decision
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::lease::LeaseSettings
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::router::PortRouter
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::routes::Mirror
@@ -5044,6 +5069,9 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::filt
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::l4::Hello
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::lease::Decision
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::lease::LeaseSettings
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::mesh::MeshSnapshot
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::mesh::config::Publisher
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::provision::ProvisionSettings
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::router::PortRouter
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::routes::Mirror
@@ -5443,6 +5471,7 @@ impl rust_web_server::application::Application for rust_web_server::a2a::A2aServ
 impl rust_web_server::application::Application for rust_web_server::admin::AdminApi
 impl rust_web_server::application::Application for rust_web_server::app::App
 impl rust_web_server::application::Application for rust_web_server::fastcgi::FastCgi
+impl rust_web_server::application::Application for rust_web_server::gateway_api::mesh::config::Publisher
 impl rust_web_server::application::Application for rust_web_server::gateway_api::router::PortRouter
 impl rust_web_server::application::Application for rust_web_server::ingress::IngressRouter
 impl rust_web_server::application::Application for rust_web_server::k8s::webhook::Webhooks
@@ -5572,6 +5601,7 @@ impl rust_web_server::fleet::Source
 impl rust_web_server::gateway_api::backend_tls::BackendTls
 impl rust_web_server::gateway_api::controller::Stores
 impl rust_web_server::gateway_api::dataplane::DataPlane
+impl rust_web_server::gateway_api::mesh::config::Publisher
 impl rust_web_server::gateway_api::router::PortRouter
 impl rust_web_server::gateway_api::services::ServiceSettings
 impl rust_web_server::gateway_api::types::BackendObjectReference
@@ -5893,6 +5923,7 @@ impl rust_web_server::websocket::WebSocket
 impl rust_web_server::websocket::WebSocketConnection
 impl rust_web_server::websocket::WebSocketSender
 impl rust_web_server::ws_proxy::WsProxy
+impl serde_core::ser::Serialize for rust_web_server::gateway_api::mesh::MeshSnapshot
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::AllowedRoutes
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::BackendObjectReference
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::BackendRef
@@ -6067,6 +6098,7 @@ impl<'a> core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::ToolCall
 impl<'a> core::panic::unwind_safe::UnwindSafe for rust_web_server::sso::jwks::VerifyOptions<'a>
 impl<'a> rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> rust_web_server::http_client::RequestBuilder<'a>
+impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::mesh::MeshSnapshot
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::AllowedRoutes
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::BackendObjectReference
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::BackendRef
@@ -6542,6 +6574,8 @@ pub async fn rust_web_server::gateway_api::l4::serve_tls_passthrough(tokio::net:
 pub async fn rust_web_server::gateway_api::l4::serve_tls_terminate(tokio::net::tcp::stream::TcpStream, tokio_rustls::server::TlsAcceptor, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
 pub async fn rust_web_server::gateway_api::l4::serve_udp(alloc::rcs::arc::Arc<tokio::net::udp::UdpSocket>, rust_web_server::gateway_api::router::PortListeners)
 pub async fn rust_web_server::gateway_api::lease::run(kube_client::client::Client, rust_web_server::gateway_api::lease::LeaseSettings, alloc::rcs::arc::Arc<core::sync::atomic::AtomicBool>, alloc::rcs::arc::Arc<tokio::sync::notify::Notify>)
+pub async fn rust_web_server::gateway_api::mesh::config::serve(rust_web_server::gateway_api::mesh::config::Publisher, u16)
+pub async fn rust_web_server::gateway_api::mesh::sidecar::run(rust_web_server::gateway_api::mesh::sidecar::SidecarSettings)
 pub async fn rust_web_server::http_client::AsyncRequestBuilder<'a>::send(self) -> core::result::Result<rust_web_server::http_client::Response, rust_web_server::http_client::HttpClientError>
 pub async fn rust_web_server::k8s::client::client() -> rust_web_server::k8s::Result<kube_client::client::Client>
 pub async fn rust_web_server::k8s::client::from_kubeconfig(&str) -> rust_web_server::k8s::Result<kube_client::client::Client>
@@ -6943,6 +6977,9 @@ pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_ENABLED: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_GATEWAY: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_IMAGE: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE: &str
+pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_MESH: &str
+pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL: &str
+pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_MESH_PORT: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_MODE: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_POD_SELECTOR: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_PORT_RANGE: &str
@@ -6953,6 +6990,12 @@ pub const rust_web_server::gateway_api::controller::RESYNC: core::time::Duration
 pub const rust_web_server::gateway_api::l4::UDP_IDLE: core::time::Duration
 pub const rust_web_server::gateway_api::lease::DURATION: core::time::Duration
 pub const rust_web_server::gateway_api::lease::RENEW: core::time::Duration
+pub const rust_web_server::gateway_api::mesh::config::DEFAULT_PORT: u16
+pub const rust_web_server::gateway_api::mesh::config::LONG_POLL: core::time::Duration
+pub const rust_web_server::gateway_api::mesh::config::PATH: &str
+pub const rust_web_server::gateway_api::mesh::config::VERSION_HEADER: &str
+pub const rust_web_server::gateway_api::mesh::sidecar::OUTBOUND_PORT: u16
+pub const rust_web_server::gateway_api::mesh::sidecar::SIDECAR_UID: u32
 pub const rust_web_server::gateway_api::provision::APP_NAME: &str
 pub const rust_web_server::gateway_api::provision::GATEWAY_NAMESPACE_LABEL: &str
 pub const rust_web_server::gateway_api::routes::GRPC_METHOD_MATCH: &str
@@ -8640,6 +8683,7 @@ pub fn rust_web_server::gateway_api::filters::modified_path(&str, &rust_web_serv
 pub fn rust_web_server::gateway_api::filters::modify_headers(&mut alloc::vec::Vec<rust_web_server::header::Header>, &rust_web_server::gateway_api::types::HttpHeaderFilter)
 pub fn rust_web_server::gateway_api::filters::redirect(&rust_web_server::request::Request, &str, bool, u16, &rust_web_server::gateway_api::types::HttpRouteMatch, &rust_web_server::gateway_api::types::HttpRequestRedirectFilter) -> rust_web_server::response::Response
 pub fn rust_web_server::gateway_api::filters::split_target(&str) -> (&str, &str)
+pub fn rust_web_server::gateway_api::is_mesh_sidecar() -> bool
 pub fn rust_web_server::gateway_api::l4::Hello::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::l4::Hello::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::l4::client_hello(&[u8]) -> rust_web_server::gateway_api::l4::Hello
@@ -8648,6 +8692,28 @@ pub fn rust_web_server::gateway_api::l4::pick_route<'a>(&'a [rust_web_server::ga
 pub fn rust_web_server::gateway_api::lease::Decision::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::lease::Decision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::lease::decide(core::option::Option<&k8s_openapi::v1_32::api::coordination::v1::lease::Lease>, &str, jiff::timestamp::Timestamp) -> rust_web_server::gateway_api::lease::Decision
+pub fn rust_web_server::gateway_api::mesh::MeshSnapshot::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::mesh::MeshSnapshot::default() -> Self
+pub fn rust_web_server::gateway_api::mesh::MeshSnapshot::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn rust_web_server::gateway_api::mesh::MeshSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::mesh::MeshSnapshot::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::gateway_api::mesh::config::Publisher::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::mesh::config::Publisher::current(&self) -> (u64, alloc::rcs::arc::Arc<alloc::string::String>)
+pub fn rust_web_server::gateway_api::mesh::config::Publisher::default() -> Self
+pub fn rust_web_server::gateway_api::mesh::config::Publisher::new() -> rust_web_server::gateway_api::mesh::config::Publisher
+pub fn rust_web_server::gateway_api::mesh::config::Publisher::publish(&self, &rust_web_server::gateway_api::mesh::MeshSnapshot)
+pub fn rust_web_server::gateway_api::mesh::config::requested_version(&str) -> core::option::Option<u64>
+pub fn rust_web_server::gateway_api::mesh::describe(&rust_web_server::gateway_api::mesh::MeshTable) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>
+pub fn rust_web_server::gateway_api::mesh::is_service_parent(&rust_web_server::gateway_api::types::ParentReference) -> bool
+pub fn rust_web_server::gateway_api::mesh::only_parent_references(&[&rust_web_server::gateway_api::types::BackendObjectReference], &[rust_web_server::gateway_api::types::ParentReference], &str) -> bool
+pub fn rust_web_server::gateway_api::mesh::parent_acceptance(&rust_web_server::gateway_api::types::ParentReference, &str, &[k8s_openapi::v1_32::api::core::v1::service::Service]) -> (bool, &'static str, alloc::string::String)
+pub fn rust_web_server::gateway_api::mesh::sidecar::SidecarSettings::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::mesh::sidecar::SidecarSettings::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::mesh::sidecar::build_routers(&rust_web_server::gateway_api::mesh::MeshSnapshot, &str) -> std::collections::hash::map::HashMap<(alloc::string::String, u16), rust_web_server::gateway_api::router::PortRouter>
+pub fn rust_web_server::gateway_api::mesh::sidecar::looks_like_http(&[u8]) -> core::option::Option<bool>
+pub fn rust_web_server::gateway_api::mesh::sidecar::original_destination(&tokio::net::tcp::stream::TcpStream) -> core::option::Option<core::net::socket_addr::SocketAddr>
+pub fn rust_web_server::gateway_api::mesh::snapshot(&rust_web_server::gateway_api::translate::Snapshot) -> rust_web_server::gateway_api::mesh::MeshSnapshot
+pub fn rust_web_server::gateway_api::mesh::table(&rust_web_server::gateway_api::mesh::MeshSnapshot, &str) -> rust_web_server::gateway_api::mesh::MeshTable
 pub fn rust_web_server::gateway_api::own_gateway() -> core::option::Option<(alloc::string::String, alloc::string::String)>
 pub fn rust_web_server::gateway_api::parse_labels(&str) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::gateway_api::parse_port_range(&str) -> core::option::Option<(u16, u16)>
@@ -11224,6 +11290,9 @@ pub mod rust_web_server::gateway_api::dataplane
 pub mod rust_web_server::gateway_api::filters
 pub mod rust_web_server::gateway_api::l4
 pub mod rust_web_server::gateway_api::lease
+pub mod rust_web_server::gateway_api::mesh
+pub mod rust_web_server::gateway_api::mesh::config
+pub mod rust_web_server::gateway_api::mesh::sidecar
 pub mod rust_web_server::gateway_api::provision
 pub mod rust_web_server::gateway_api::resources
 pub mod rust_web_server::gateway_api::router
@@ -11729,12 +11798,14 @@ pub rust_web_server::fleet::Source::S3
 pub rust_web_server::fleet::Source::S3::bucket: alloc::string::String
 pub rust_web_server::fleet::Source::S3::key: alloc::string::String
 pub rust_web_server::gateway_api::backend_tls::BackendTls::config: alloc::rcs::arc::Arc<rustls::client::client_conn::ClientConfig>
+pub rust_web_server::gateway_api::backend_tls::BackendTls::h2_config: alloc::rcs::arc::Arc<rustls::client::client_conn::ClientConfig>
 pub rust_web_server::gateway_api::backend_tls::BackendTls::label: alloc::string::String
 pub rust_web_server::gateway_api::backend_tls::BackendTls::server_name: alloc::string::String
 pub rust_web_server::gateway_api::backend_tls::Evaluated::accepted: core::result::Result<(), (&'static str, alloc::string::String)>
 pub rust_web_server::gateway_api::backend_tls::Evaluated::resolved: core::result::Result<(), (&'static str, alloc::string::String)>
 pub rust_web_server::gateway_api::backend_tls::Evaluated::tls: core::option::Option<rust_web_server::gateway_api::backend_tls::BackendTls>
 pub rust_web_server::gateway_api::controller::Options::leader: alloc::rcs::arc::Arc<core::sync::atomic::AtomicBool>
+pub rust_web_server::gateway_api::controller::Options::mesh: core::option::Option<rust_web_server::gateway_api::mesh::config::Publisher>
 pub rust_web_server::gateway_api::controller::Options::on_config: alloc::rcs::arc::Arc<(dyn core::ops::function::Fn(rust_web_server::gateway_api::translate::GatewayConfig) + core::marker::Send + core::marker::Sync)>
 pub rust_web_server::gateway_api::controller::Options::settings: rust_web_server::gateway_api::translate::Settings
 pub rust_web_server::gateway_api::controller::Stores::backend_tls_policies: kube_runtime::reflector::store::Store<rust_web_server::gateway_api::resources::BackendTlsPolicy>
@@ -11766,6 +11837,14 @@ pub rust_web_server::gateway_api::lease::Decision::Take
 pub rust_web_server::gateway_api::lease::LeaseSettings::identity: alloc::string::String
 pub rust_web_server::gateway_api::lease::LeaseSettings::name: alloc::string::String
 pub rust_web_server::gateway_api::lease::LeaseSettings::namespace: alloc::string::String
+pub rust_web_server::gateway_api::mesh::MeshSnapshot::endpoint_slices: alloc::vec::Vec<k8s_openapi::v1_32::api::discovery::v1::endpoint_slice::EndpointSlice>
+pub rust_web_server::gateway_api::mesh::MeshSnapshot::grpc_routes: alloc::vec::Vec<rust_web_server::gateway_api::resources::GrpcRoute>
+pub rust_web_server::gateway_api::mesh::MeshSnapshot::http_routes: alloc::vec::Vec<rust_web_server::gateway_api::resources::HttpRoute>
+pub rust_web_server::gateway_api::mesh::MeshSnapshot::reference_grants: alloc::vec::Vec<rust_web_server::gateway_api::resources::ReferenceGrant>
+pub rust_web_server::gateway_api::mesh::MeshSnapshot::services: alloc::vec::Vec<k8s_openapi::v1_32::api::core::v1::service::Service>
+pub rust_web_server::gateway_api::mesh::sidecar::SidecarSettings::config_url: alloc::string::String
+pub rust_web_server::gateway_api::mesh::sidecar::SidecarSettings::namespace: alloc::string::String
+pub rust_web_server::gateway_api::mesh::sidecar::SidecarSettings::outbound_port: u16
 pub rust_web_server::gateway_api::provision::ProvisionSettings::health_port: i32
 pub rust_web_server::gateway_api::provision::ProvisionSettings::image: alloc::string::String
 pub rust_web_server::gateway_api::provision::ProvisionSettings::replicas: i32
@@ -11823,6 +11902,7 @@ pub rust_web_server::gateway_api::translate::ListenerConfig::port: i32
 pub rust_web_server::gateway_api::translate::ListenerConfig::protocol: alloc::string::String
 pub rust_web_server::gateway_api::translate::ListenerConfig::tls: core::option::Option<(alloc::vec::Vec<u8>, alloc::vec::Vec<u8>)>
 pub rust_web_server::gateway_api::translate::Settings::controller_name: alloc::string::String
+pub rust_web_server::gateway_api::translate::Settings::mesh: bool
 pub rust_web_server::gateway_api::translate::Settings::provision: core::option::Option<rust_web_server::gateway_api::provision::ProvisionSettings>
 pub rust_web_server::gateway_api::translate::Settings::services: rust_web_server::gateway_api::services::ServiceSettings
 pub rust_web_server::gateway_api::translate::Snapshot::backend_tls_policies: alloc::vec::Vec<rust_web_server::gateway_api::resources::BackendTlsPolicy>
@@ -13217,6 +13297,9 @@ pub struct rust_web_server::gateway_api::controller::Options
 pub struct rust_web_server::gateway_api::controller::Stores
 pub struct rust_web_server::gateway_api::dataplane::DataPlane
 pub struct rust_web_server::gateway_api::lease::LeaseSettings
+pub struct rust_web_server::gateway_api::mesh::MeshSnapshot
+pub struct rust_web_server::gateway_api::mesh::config::Publisher
+pub struct rust_web_server::gateway_api::mesh::sidecar::SidecarSettings
 pub struct rust_web_server::gateway_api::provision::ProvisionSettings
 pub struct rust_web_server::gateway_api::router::PortRouter
 pub struct rust_web_server::gateway_api::routes::Backend
@@ -13684,6 +13767,7 @@ pub trait rust_web_server::validate::Validate
 pub type rust_web_server::app_manifest::AppManifest::Err = rust_web_server::app_manifest::ManifestError
 pub type rust_web_server::application::AsyncResponse<'a> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<rust_web_server::response::Response, alloc::string::String>> + core::marker::Send + 'a)>>
 pub type rust_web_server::compression::dictionary::DictionaryHash = [u8; 32]
+pub type rust_web_server::gateway_api::mesh::MeshTable = std::collections::hash::map::HashMap<(alloc::string::String, u16), alloc::rcs::arc::Arc<alloc::vec::Vec<rust_web_server::gateway_api::translate::ListenerConfig>>>
 pub type rust_web_server::gateway_api::resources::BackendTlsPolicy = kube_core::object::Object<rust_web_server::gateway_api::types::BackendTlsPolicySpec, rust_web_server::gateway_api::types::PolicyStatus>
 pub type rust_web_server::gateway_api::resources::Gateway = kube_core::object::Object<rust_web_server::gateway_api::types::GatewaySpec, rust_web_server::gateway_api::types::GatewayStatus>
 pub type rust_web_server::gateway_api::resources::GatewayClass = kube_core::object::Object<rust_web_server::gateway_api::types::GatewayClassSpec, rust_web_server::gateway_api::types::GatewayClassStatus>

@@ -46,8 +46,8 @@ feature; it reuses `types`, `routes`, `router` and `filters`.
   Service, and compiles a **mesh table** per client namespace: for each
   (ClusterIP, port) the routes that apply (consumer routes of that namespace
   first, else the Service's own).
-- Serves the table on an HTTP endpoint (`/mesh/v1/config?namespace=<ns>`,
-  with an ETag and long-poll), unauthenticated in stage 1: it holds routing
+- Serves the mesh snapshot on an HTTP endpoint (`/mesh/v1/snapshot`,
+  versioned, long-poll); each sidecar compiles its own namespace's table, unauthenticated in stage 1: it holds routing
   only — Service addresses and route rules, which every pod can already read
   from DNS and traffic. Stated in the docs.
 - Writes route `status.parents` for Service parents with rws's
@@ -93,7 +93,7 @@ feature; it reuses `types`, `routes`, `router` and `filters`.
 | Step | What | Status |
 |---|---|---|
 | M0 | This spec | done |
-| M1 | Mesh table: Service parentRefs in `translate`, consumer/producer precedence, route status for Service parents | |
-| M2 | Sidecar: outbound listener, original destination, routed or relayed, h2c; config long-poll | |
+| M1 | Mesh table: Service parentRefs in `translate`, consumer/producer precedence, route status for Service parents | **done**: `mesh::{snapshot, table, parent_acceptance}`; sidecars get raw Services/EndpointSlices/routes and compile them with `routes::compile`; consumer routes may reach their parent Service without a ReferenceGrant |
+| M2 | Sidecar: outbound listener, original destination, routed or relayed, h2c; config long-poll | **done**: `mesh::sidecar` (127.0.0.1:15001, `SO_ORIGINAL_DST`, HTTP sniffed by peek, else relayed), `mesh::config` (`/mesh/v1/snapshot`, `X-Rws-Mesh-Version`, 30 s long poll), settings `RWS_CONFIG_GATEWAY_API_MESH*`, docs page `deployment/kubernetes-mesh` |
 | M3 | Injection webhook + init image + Helm `mesh.*` values | |
 | M4 | CI job, suite green, report; docs page, CHANGELOG | |

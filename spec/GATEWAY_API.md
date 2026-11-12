@@ -244,8 +244,8 @@ experimental CRDs. A standard-channel report can reach 38 of 43.
 
 | Step | What | Status |
 |---|---|---|
-| A | Suite + CRDs to `v1.7.0`, types to v1.7, claimed set unchanged; fix what v1.7's tests break | |
-| B | The six new standard features | |
+| A | Suite + CRDs to `v1.7.0`, types to v1.7, claimed set unchanged; fix what v1.7's tests break | **done**: b4cfe9e1. Run 43303953885 (both modes): all passed but three new core tests — `BackendTLSPolicyGRPCRoute` (gRPC backends under a policy were sent HTTP/1.1 on TLS → now HTTP/2 on TLS, `forward_h2_tls_with_host`, policy hostname as SNI; the h2 pool is keyed by server name too), `BackendTLSPolicyTLSRouteTerminate` (terminated TLSRoutes went to the backend in the clear → re-encrypted per policy) and `GatewayPreserveForeignConditions` (other controllers' domain-qualified conditions are kept; Gateway/ListenerSet status sent with `resourceVersion`) |
+| B | The six new standard features | **done** (b7e155e9): backend `URLRewrite`, `Terminate` + `Passthrough` on one port by SNI (`l4::serve_tls_mixed`, peeked ClientHello); retries, gRPC header modifier and hostname precedence already worked and are claimed |
 | C | Experimental features + an experimental-channel report (separate decision) | |
 | D | Reports for both modes; upstream PR prepared (the user opens it) | |
 

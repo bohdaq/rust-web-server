@@ -1741,6 +1741,7 @@ impl crate::middleware::Middleware for H2ReverseProxy {
                 connect_timeout: self.inner.connect_timeout,
                 read_timeout: self.inner.read_timeout,
                 authority: None,
+                server_name: None,
             };
             match h2_upstream::forward(request, Peer::of(connection), &target) {
                 Ok(mut response) => {
@@ -1972,7 +1973,7 @@ pub fn forward_h2(
         Some(t) => t.h2_config(),
         None => h2_upstream::default_tls(),
     });
-    h2_upstream::forward(request, client, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout, authority: None })
+    h2_upstream::forward(request, client, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout, authority: None, server_name: None })
 }
 
 /// Forward over TLS to `ip:port` with `config`, `server_name` as SNI (and
@@ -2018,7 +2019,29 @@ pub fn forward_h2c_with_host(
     read_timeout: Duration,
 ) -> Result<Response, String> {
     let backend = Backend { host: host.to_string(), port, tls: false };
-    h2_upstream::forward(request, client, &h2_upstream::Target { backend: &backend, tls: None, connect_timeout, read_timeout, authority: Some(authority) })
+    h2_upstream::forward(request, client, &h2_upstream::Target { backend: &backend, tls: None, connect_timeout, read_timeout, authority: Some(authority), server_name: None })
+}
+
+/// Forward over HTTP/2 on TLS to `ip:port` with `config` (offering `h2` by
+/// ALPN), `server_name` as SNI, sending `authority` as `:authority` — the
+/// Gateway API router's gRPC and h2c backends a BackendTLSPolicy covers.
+#[cfg(feature = "gateway-api")]
+#[allow(clippy::too_many_arguments)]
+#[doc(hidden)]
+pub fn forward_h2_tls_with_host(
+    config: &Arc<rustls::ClientConfig>,
+    request: &Request,
+    client: Peer<'_>,
+    ip: &str,
+    port: u16,
+    server_name: &str,
+    authority: &str,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    let backend = Backend { host: ip.to_string(), port, tls: true };
+    let target = h2_upstream::Target { backend: &backend, tls: Some(config), connect_timeout, read_timeout, authority: Some(authority), server_name: Some(server_name) };
+    h2_upstream::forward(request, client, &target)
 }
 
 // ── gRPC proxy ────────────────────────────────────────────────────────────────

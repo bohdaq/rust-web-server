@@ -15,7 +15,7 @@ extern crate self as rust_web_server;
 // public (hidden) so doctests can name them as `rust_web_server::…`.
 #[allow(unused_imports)]
 #[doc(hidden)]
-pub use rws_server::{application, core, error, header, request, response, server, url};
+pub use rws_server::{application, core, error, header, http_client, request, response, server, url};
 #[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
 #[doc(hidden)]
 pub use rws_server::crypto_provider;

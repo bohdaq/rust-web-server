@@ -645,3 +645,53 @@ fn mixed_tls_modes_share_a_port_and_parameters_refs_are_rejected() {
     let c = find(&g.conditions, "Accepted");
     assert_eq!(("False", "InvalidParameters"), (c.status.as_str(), c.reason.as_str()));
 }
+
+#[test]
+fn other_controllers_conditions_are_kept_on_gateways_and_listeners() {
+    let mut s = snapshot(&[]);
+    let foreign = Condition {
+        type_: "example.com/Ready".to_string(),
+        status: "True".to_string(),
+        reason: "Seeded".to_string(),
+        message: String::new(),
+        observed_generation: Some(1),
+        last_transition_time: Time(k8s_openapi::jiff::Timestamp::from_second(1_700_000_000).unwrap()),
+    };
+    let gateway = s.gateways.iter_mut().find(|g| g.name_any() == "same-namespace").unwrap();
+    let mut status = GatewayStatus::default();
+    status.conditions.push(foreign.clone());
+    // One of ours from before is replaced, not duplicated.
+    status.conditions.push(Condition { type_: "Accepted".to_string(), status: "False".to_string(), reason: "Old".to_string(), ..foreign.clone() });
+    status.listeners.push(ListenerStatus { name: "http".to_string(), supported_kinds: vec![], attached_routes: 0, conditions: vec![foreign.clone()] });
+    gateway.status = Some(status);
+    let (_, desired) = run(&s);
+    let g = &desired.gateways[&(INFRA.to_string(), "same-namespace".to_string())];
+    assert_eq!(&foreign, find(&g.conditions, "example.com/Ready"), "kept as it was");
+    assert_eq!(1, g.conditions.iter().filter(|c| c.type_ == "Accepted").count());
+    assert_eq!("True", find(&g.conditions, "Accepted").status);
+    assert_eq!(&foreign, find(&listener(&desired, "same-namespace", "http").conditions, "example.com/Ready"));
+}
+
+#[test]
+fn routes_attached_to_services_get_status_only_with_the_mesh_on() {
+    let mut s = snapshot(&[]);
+    let route: HttpRoute = serde_json::from_value(serde_json::json!({
+        "apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute",
+        "metadata": {"name": "mesh-route", "namespace": INFRA, "generation": 1},
+        "spec": {
+            "parentRefs": [{"group": "", "kind": "Service", "name": "infra-backend-v1"}, {"group": "", "kind": "Service", "name": "missing"}],
+            "rules": [{"backendRefs": [{"name": "infra-backend-v1", "port": 8080}]}]
+        }
+    }))
+    .unwrap();
+    s.http_routes.push(route);
+    let (_, off) = run(&s);
+    assert!(!off.http_routes.contains_key(&(INFRA.to_string(), "mesh-route".to_string())));
+    let settings = Settings { mesh: true, ..Default::default() };
+    let (_, on) = translate(&s, &settings, &now());
+    let parents = &on.http_routes[&(INFRA.to_string(), "mesh-route".to_string())];
+    assert_eq!(2, parents.len());
+    assert_eq!(("True", "Accepted"), (find(&parents[0].conditions, "Accepted").status.as_str(), find(&parents[0].conditions, "Accepted").reason.as_str()));
+    assert_eq!("True", find(&parents[0].conditions, "ResolvedRefs").status);
+    assert_eq!(("False", "NoMatchingParent"), (find(&parents[1].conditions, "Accepted").status.as_str(), find(&parents[1].conditions, "Accepted").reason.as_str()));
+}

@@ -58,6 +58,9 @@ pub struct Target<'a> {
     /// `:authority` to send instead of the backend's address (the Gateway
     /// API router keeps the client's `Host`).
     pub(super) authority: Option<&'a str>,
+    /// The TLS server name (SNI, and the name verified) when it isn't the
+    /// backend's host — a BackendTLSPolicy's `hostname` for an address.
+    pub(super) server_name: Option<&'a str>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -111,12 +114,16 @@ pub fn forward(request: &Request, client: crate::proxy::Peer<'_>, target: &Targe
     let backend = target.backend;
     let addr = format!("{}:{}", backend.host, backend.port);
     let head = request_head(request, client, target.authority.unwrap_or(&addr), target.tls.is_some())?;
-    let key = pool_key(&addr, target.tls);
+    let key = match target.server_name {
+        // A connection verified for one name isn't reused for another.
+        Some(name) => format!("{}|{name}", pool_key(&addr, target.tls)),
+        None => pool_key(&addr, target.tls),
+    };
     let (head_tx, head_rx) = std::sync::mpsc::sync_channel(1);
     let exchange = Exchange {
         key,
         addr,
-        host: backend.host.clone(),
+        host: target.server_name.unwrap_or(&backend.host).to_string(),
         tls: target.tls.cloned(),
         connect_timeout: target.connect_timeout,
         read_timeout: target.read_timeout,

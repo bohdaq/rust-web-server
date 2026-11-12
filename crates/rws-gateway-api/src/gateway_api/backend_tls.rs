@@ -23,6 +23,8 @@ pub struct BackendTls {
     /// Identifies the content (CAs, hostname, SANs): the pool key.
     pub label: String,
     pub config: Arc<rustls::ClientConfig>,
+    /// `config` offering `h2` by ALPN, for gRPC and h2c backends.
+    pub h2_config: Arc<rustls::ClientConfig>,
     /// SNI, and the name verified when the policy lists no SANs.
     pub server_name: String,
     /// How the backend's certificate is checked (kept to add a client
@@ -183,9 +185,16 @@ pub fn build(ca_pem: Option<&[u8]>, validation: &BackendTlsValidation) -> Result
         Arc::new(SanVerifier { webpki, sans })
     };
     let config = crate::tls_client_builder().dangerous().with_custom_certificate_verifier(Arc::clone(&verifier)).with_no_client_auth();
-    let tls = BackendTls { label: label.clone(), config: Arc::new(config), server_name: validation.hostname.clone(), verifier };
+    let tls = BackendTls { label: label.clone(), h2_config: with_h2(&config), config: Arc::new(config), server_name: validation.hostname.clone(), verifier };
     cache().lock().unwrap_or_else(|e| e.into_inner()).insert(label, tls.clone());
     Ok(tls)
+}
+
+/// A copy of `config` offering `h2` by ALPN.
+fn with_h2(config: &rustls::ClientConfig) -> Arc<rustls::ClientConfig> {
+    let mut h2 = config.clone();
+    h2.alpn_protocols = vec![b"h2".to_vec()];
+    Arc::new(h2)
 }
 
 impl BackendTls {
@@ -207,7 +216,7 @@ impl BackendTls {
             .with_custom_certificate_verifier(Arc::clone(&self.verifier))
             .with_client_auth_cert(chain, key)
             .map_err(|e| e.to_string())?;
-        let tls = BackendTls { label: label.clone(), config: Arc::new(config), server_name: self.server_name.clone(), verifier: Arc::clone(&self.verifier) };
+        let tls = BackendTls { label: label.clone(), h2_config: with_h2(&config), config: Arc::new(config), server_name: self.server_name.clone(), verifier: Arc::clone(&self.verifier) };
         cache().lock().unwrap_or_else(|e| e.into_inner()).insert(label, tls.clone());
         Ok(tls)
     }

@@ -23,11 +23,13 @@ pub struct Settings {
     pub services: ServiceSettings,
     /// Provisioned mode: a Deployment per Gateway.
     pub provision: Option<super::provision::ProvisionSettings>,
+    /// The mesh profile: routes attached to Services are reported on.
+    pub mesh: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { controller_name: super::CONTROLLER_NAME.to_string(), services: ServiceSettings::default(), provision: None }
+        Settings { controller_name: super::CONTROLLER_NAME.to_string(), services: ServiceSettings::default(), provision: None, mesh: false }
     }
 }
 
@@ -270,6 +272,34 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         let resolved = resolve_references(route.kind, &namespace, &route.references, snapshot);
         let mut parents = Vec::new();
         for parent_ref in route.parent_refs {
+            // A Service parent: the mesh profile ([`super::mesh`]).
+            if settings.mesh && matches!(route.kind, "HTTPRoute" | "GRPCRoute") && super::mesh::is_service_parent(parent_ref) {
+                let old = route
+                    .previous
+                    .iter()
+                    .find(|p| p.controller_name == controller_name && same_parent(&p.parent_ref, parent_ref, &namespace))
+                    .map(|p| p.conditions.as_slice())
+                    .unwrap_or_default();
+                let (accepted, reason, message) = super::mesh::parent_acceptance(parent_ref, &namespace, &snapshot.services);
+                // A consumer route may send to its parent Service in another
+                // namespace without a ReferenceGrant (GAMMA).
+                let resolved = match &resolved {
+                    Err(("RefNotPermitted", _)) if super::mesh::only_parent_references(&route.references, route.parent_refs, &namespace) => {
+                        let local: Vec<&BackendObjectReference> = route.references.iter().filter(|r| r.namespace.as_deref().is_none_or(|n| n == namespace)).copied().collect();
+                        resolve_references(route.kind, &namespace, &local, snapshot)
+                    }
+                    other => other.clone(),
+                };
+                let conditions = vec![
+                    condition(old, "Accepted", accepted, reason, &message, route.generation, now),
+                    match &resolved {
+                        Ok(()) => condition(old, "ResolvedRefs", true, "ResolvedRefs", "All references resolved", route.generation, now),
+                        Err((reason, message)) => condition(old, "ResolvedRefs", false, reason, message, route.generation, now),
+                    },
+                ];
+                parents.push(RouteParentStatus { parent_ref: parent_ref.clone(), controller_name: controller_name.to_string(), conditions });
+                continue;
+            }
             if parent_ref.group() != GATEWAY_GROUP {
                 continue;
             }
@@ -485,6 +515,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             let message = "Client certificate validation allows clients without a valid certificate (AllowInsecureFallback)";
             conditions.push(condition(&previous.conditions, "InsecureFrontendValidationMode", true, "ConfigurationChanged", message, generation, now));
         }
+        let conditions = with_foreign(conditions, &previous.conditions);
         desired.gateways.insert(
             key,
             GatewayStatus { addresses, conditions, listeners: listener_statuses, attached_listener_sets: Some(attached_sets) },
@@ -699,6 +730,14 @@ fn namespace_admitted(from: &str, selector: Option<&LabelSelector>, namespace: &
 }
 
 /// A listener's status from its view.
+/// `ours`, then the conditions of other controllers from `previous`, kept
+/// as they were: those with a domain-qualified type (`example.com/Ready`),
+/// which rws never writes.
+fn with_foreign(mut ours: Vec<Condition>, previous: &[Condition]) -> Vec<Condition> {
+    ours.extend(previous.iter().filter(|c| c.type_.contains('/') && !ours.iter().any(|o| o.type_ == c.type_)).cloned().collect::<Vec<_>>());
+    ours
+}
+
 fn listener_status(view: &ListenerView, attached_routes: i32, old: &[Condition], generation: Option<i64>, now: &Time) -> ListenerStatus {
     let programmed_reason = match (view.programmed, view.conflicted) {
         (true, _) => "Programmed",
@@ -709,12 +748,15 @@ fn listener_status(view: &ListenerView, attached_routes: i32, old: &[Condition],
         name: view.name.clone(),
         supported_kinds: view.supported_kinds.clone(),
         attached_routes,
-        conditions: vec![
-            condition(old, "Accepted", view.accepted, view.accepted_reason, &view.message, generation, now),
-            condition(old, "Programmed", view.programmed, programmed_reason, &view.message, generation, now),
-            condition(old, "ResolvedRefs", view.resolved_refs.is_ok(), view.resolved_refs.as_ref().err().map_or("ResolvedRefs", |(r, _)| r), view.resolved_refs.as_ref().err().map_or("", |(_, m)| m.as_str()), generation, now),
-            condition(old, "Conflicted", view.conflicted.is_some(), view.conflicted.unwrap_or("NoConflicts"), "", generation, now),
-        ],
+        conditions: with_foreign(
+            vec![
+                condition(old, "Accepted", view.accepted, view.accepted_reason, &view.message, generation, now),
+                condition(old, "Programmed", view.programmed, programmed_reason, &view.message, generation, now),
+                condition(old, "ResolvedRefs", view.resolved_refs.is_ok(), view.resolved_refs.as_ref().err().map_or("ResolvedRefs", |(r, _)| r), view.resolved_refs.as_ref().err().map_or("", |(_, m)| m.as_str()), generation, now),
+                condition(old, "Conflicted", view.conflicted.is_some(), view.conflicted.unwrap_or("NoConflicts"), "", generation, now),
+            ],
+            old,
+        ),
     }
 }
 

@@ -553,6 +553,10 @@
         "link": "/deployment/kubernetes-gateway-api/"
       },
       {
+        "label": "Service mesh (Gateway API)",
+        "link": "/deployment/kubernetes-mesh/"
+      },
+      {
         "label": "Using the Kubernetes API",
         "link": "/deployment/kubernetes-api/"
       },
