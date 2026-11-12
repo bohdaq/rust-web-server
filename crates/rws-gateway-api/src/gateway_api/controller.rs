@@ -67,6 +67,8 @@ pub struct Stores {
     pub endpoint_slices: Store<EndpointSlice>,
     pub pods: Store<Pod>,
     pub deployments: Store<k8s_openapi::api::apps::v1::Deployment>,
+    /// ClusterTrustBundles, when the cluster serves them (GEP-5075).
+    pub cluster_trust_bundles: Option<Store<kube::core::DynamicObject>>,
 }
 
 impl Stores {
@@ -95,6 +97,18 @@ impl Stores {
             endpoint_slices: all(&self.endpoint_slices),
             pods: all(&self.pods),
             deployments: all(&self.deployments),
+            cluster_trust_bundles_served: self.cluster_trust_bundles.is_some(),
+            cluster_trust_bundles: self
+                .cluster_trust_bundles
+                .as_ref()
+                .map(|store| {
+                    store
+                        .state()
+                        .iter()
+                        .map(|o| (o.metadata.name.clone().unwrap_or_default(), o.data["spec"]["trustBundle"].as_str().unwrap_or_default().to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 }
@@ -130,7 +144,7 @@ where
 
 /// Start watching everything (rws's own pods by `services`' namespace and
 /// selector); returns the stores and the change signal.
-pub fn start_watches(client: &Client, services: &super::services::ServiceSettings) -> (Stores, Arc<Notify>) {
+pub fn start_watches(client: &Client, services: &super::services::ServiceSettings, trust_bundles: Option<kube::core::ApiResource>) -> (Stores, Arc<Notify>) {
     let pod_labels = services.pod_watch_labels().iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(",");
     let managed = format!("app.kubernetes.io/managed-by={}", super::translate::MANAGED_BY);
     let changed = Arc::new(Notify::new());
@@ -152,14 +166,31 @@ pub fn start_watches(client: &Client, services: &super::services::ServiceSetting
         endpoint_slices: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         pods: watch_with(Api::namespaced(client.clone(), &services.pod_namespace), (), watcher::Config::default().labels(&pod_labels), Arc::clone(&changed)),
         deployments: watch_with(Api::namespaced(client.clone(), &services.pod_namespace), (), watcher::Config::default().labels(&managed), Arc::clone(&changed)),
+        cluster_trust_bundles: trust_bundles.map(|resource| watch(Api::all_with(client.clone(), &resource), resource, Arc::clone(&changed))),
     };
     (stores, changed)
+}
+
+/// Where the cluster serves ClusterTrustBundles (`certificates.k8s.io` v1,
+/// else v1beta1), if it does: they're watched, and the feature advertised,
+/// only then (GEP-5075).
+pub async fn served_cluster_trust_bundles(client: &Client) -> Option<kube::core::ApiResource> {
+    for version in ["v1", "v1beta1"] {
+        let gvk = kube::core::GroupVersionKind::gvk(super::translate::CLUSTER_TRUST_BUNDLE_GROUP, version, "ClusterTrustBundle");
+        let resource = kube::core::ApiResource::from_gvk_with_plural(&gvk, "clustertrustbundles");
+        let api: Api<kube::core::DynamicObject> = Api::all_with(client.clone(), &resource);
+        if api.list(&kube::api::ListParams::default().limit(1)).await.is_ok() {
+            return Some(resource);
+        }
+    }
+    None
 }
 
 /// Reconcile on every change, when this replica becomes the leader, and
 /// every [`RESYNC`], forever.
 pub async fn run(client: Client, options: Options, became_leader: Arc<Notify>) {
-    let (stores, changed) = start_watches(&client, &options.settings.services);
+    let trust_bundles = served_cluster_trust_bundles(&client).await;
+    let (stores, changed) = start_watches(&client, &options.settings.services, trust_bundles);
     loop {
         tokio::select! {
             _ = changed.notified() => {}

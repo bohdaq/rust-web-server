@@ -25,11 +25,15 @@ pub struct Settings {
     pub provision: Option<super::provision::ProvisionSettings>,
     /// The mesh profile: routes attached to Services are reported on.
     pub mesh: bool,
+    /// The experimental-channel features (the cluster has the experimental
+    /// CRDs): address routability, listener filters, ClusterTrustBundle.
+    /// Their status fields would be pruned by the standard CRDs.
+    pub experimental: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { controller_name: super::CONTROLLER_NAME.to_string(), services: ServiceSettings::default(), provision: None, mesh: false }
+        Settings { controller_name: super::CONTROLLER_NAME.to_string(), services: ServiceSettings::default(), provision: None, mesh: false, experimental: false }
     }
 }
 
@@ -56,6 +60,10 @@ pub struct Snapshot {
     pub pods: Vec<Pod>,
     /// Provisioned Deployments, in the pod namespace.
     pub deployments: Vec<k8s_openapi::api::apps::v1::Deployment>,
+    /// Whether the cluster serves ClusterTrustBundles (`certificates.k8s.io`).
+    pub cluster_trust_bundles_served: bool,
+    /// ClusterTrustBundles: (name, `spec.trustBundle` PEM).
+    pub cluster_trust_bundles: Vec<(String, String)>,
 }
 
 /// The label rws puts on the Service it creates for a Gateway (the name the
@@ -75,8 +83,8 @@ pub fn gateway_addresses(snapshot: &Snapshot, namespace: &str, name: &str) -> Ve
     ingress
         .into_iter()
         .filter_map(|i| match (i.ip, i.hostname) {
-            (Some(ip), _) => Some(GatewayStatusAddress { address_type: Some("IPAddress".to_string()), value: ip }),
-            (None, Some(hostname)) => Some(GatewayStatusAddress { address_type: Some("Hostname".to_string()), value: hostname }),
+            (Some(ip), _) => Some(GatewayStatusAddress { address_type: Some("IPAddress".to_string()), value: ip, routability: None }),
+            (None, Some(hostname)) => Some(GatewayStatusAddress { address_type: Some("Hostname".to_string()), value: hostname, routability: None }),
             _ => None,
         })
         .collect()
@@ -148,6 +156,11 @@ pub struct ClientCa {
 /// The features rws reports on its GatewayClasses (names as in the suite's
 /// `pkg/features` at Gateway API v1.7.0; sorted). Grows with each phase;
 /// `FEATURES` in `.github/workflows/gateway-api.yml` must match.
+/// The experimental-channel features rws claims with
+/// `RWS_CONFIG_GATEWAY_API_EXPERIMENTAL` (sorted); `EXPERIMENTAL_FEATURES`
+/// in `.github/workflows/gateway-api.yml` must match.
+pub const EXPERIMENTAL_FEATURES: &[&str] = &["ClusterTrustBundle", "GatewayAddressRoutability", "GatewayAddressRoutabilityCluster", "GatewayListenerFilters", "HTTPRouteDestinationPortMatching"];
+
 pub const SUPPORTED_FEATURES: &[&str] = &[
     "BackendTLSPolicy",
     "BackendTLSPolicySANValidation",
@@ -216,7 +229,13 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         let previous = class.status.as_ref().map(|s| s.conditions.as_slice()).unwrap_or_default();
         let generation = class.metadata.generation;
         let conditions = vec![condition(previous, "Accepted", true, "Accepted", "Handled by rws", generation, now)];
-        let supported_features = SUPPORTED_FEATURES.iter().map(|f| SupportedFeature { name: f.to_string() }).collect();
+        let mut names: Vec<&str> = SUPPORTED_FEATURES.to_vec();
+        if settings.experimental {
+            // ClusterTrustBundle only where the cluster serves the API (GEP-5075).
+            names.extend(EXPERIMENTAL_FEATURES.iter().filter(|f| **f != "ClusterTrustBundle" || snapshot.cluster_trust_bundles_served));
+            names.sort();
+        }
+        let supported_features = names.into_iter().map(|f| SupportedFeature { name: f.to_string() }).collect();
         desired.classes.insert(name, GatewayClassStatus { conditions, supported_features });
     }
 
@@ -447,14 +466,34 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                 });
             }
         }
-        let addresses = gateway_addresses(snapshot, &key.0, &key.1);
-        let addressed = !addresses.is_empty();
+        let mut addresses = gateway_addresses(snapshot, &key.0, &key.1);
         let unsupported_address = gateway.spec.addresses.iter().find(|a| !super::services::address_supported(a));
         // Static addresses must all be the Service's.
         let requested = super::services::requested_addresses(gateway);
-        let missing = requested.iter().find(|r| !addresses.iter().any(|a| &a.value == *r));
+        let mut missing: Option<String> = requested.iter().find(|r| !addresses.iter().any(|a| &a.value == *r)).map(|r| r.to_string());
+        // Experimental (GEP-5093): every entry matched on its own, with routability.
+        let mut addresses_assigned = None;
+        if settings.experimental {
+            let service = super::services::current(snapshot, gateway);
+            let cluster_ips: Vec<String> = service
+                .and_then(|s| s.spec.as_ref())
+                .map(|s| s.cluster_ips.clone().unwrap_or_else(|| s.cluster_ip.clone().into_iter().collect()))
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|ip| !ip.is_empty() && ip != "None")
+                .collect();
+            let assignment = super::addresses::assign(&gateway.spec.addresses, &addresses, &cluster_ips);
+            if service.is_some() {
+                addresses_assigned = Some(assignment.condition.clone());
+            }
+            if !assignment.condition.0 && missing.is_none() && !assignment.addresses.is_empty() {
+                missing = Some(assignment.condition.2.trim_start_matches("Not assigned: ").to_string());
+            }
+            addresses = assignment.addresses;
+        }
+        let addressed = !addresses.is_empty();
         let programmed = any_valid && addressed && missing.is_none() && unsupported_address.is_none();
-        let (programmed_reason, programmed_message) = if let Some(address) = missing {
+        let (programmed_reason, programmed_message) = if let Some(address) = &missing {
             ("AddressNotUsable", format!("The load balancer hasn't assigned {address}"))
         } else if !addressed {
             ("AddressNotAssigned", "Waiting for the Service's address".to_string())
@@ -510,6 +549,9 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                 Ok(_) => condition(&previous.conditions, "ResolvedRefs", true, "ResolvedRefs", "", generation, now),
                 Err((reason, message)) => condition(&previous.conditions, "ResolvedRefs", false, reason, message, generation, now),
             });
+        }
+        if let Some((assigned, reason, message)) = &addresses_assigned {
+            conditions.push(condition(&previous.conditions, "AddressesAssigned", *assigned, reason, message, generation, now));
         }
         if insecure_frontend(gateway) {
             let message = "Client certificate validation allows clients without a valid certificate (AllowInsecureFallback)";
@@ -610,7 +652,13 @@ fn listener_views(gateway: &Gateway, listeners: &[Listener], namespace: &str, ow
                 }
                 if let Some(validation) = frontend_validation(gateway, l.port) {
                     match client_cas(validation, &key.0, snapshot) {
-                        Ok(ca) => client_ca = Some(ca),
+                        Ok((ca, skipped)) => {
+                            client_ca = Some(ca);
+                            // An unusable ClusterTrustBundle beside valid sources.
+                            if let Some(e) = skipped {
+                                resolved_refs = Err(e);
+                            }
+                        }
                         Err(e) => {
                             resolved_refs = Err(e);
                             accepted = false;
@@ -620,7 +668,8 @@ fn listener_views(gateway: &Gateway, listeners: &[Listener], namespace: &str, ow
                 }
             }
             // Invalid route kinds alone don't stop the listener serving the valid ones.
-            let programmed = accepted && resolved_refs.as_ref().err().is_none_or(|(reason, _)| *reason == "InvalidRouteKinds");
+            // (Nor does a ClusterTrustBundle left out beside valid CA sources.)
+            let programmed = accepted && resolved_refs.as_ref().err().is_none_or(|(reason, _)| *reason == "InvalidRouteKinds" || (client_ca.is_some() && matches!(*reason, "InvalidCACertificateRef" | "InvalidKind")));
             ListenerView {
                 gateway: key.clone(),
                 owner: owner.clone(),
@@ -843,11 +892,44 @@ fn insecure_frontend(gateway: &Gateway) -> bool {
         .any(|v| v.mode.as_deref() == Some("AllowInsecureFallback"))
 }
 
+/// The group and kind of a ClusterTrustBundle reference (GEP-5075).
+pub const CLUSTER_TRUST_BUNDLE_GROUP: &str = "certificates.k8s.io";
+
+/// A ClusterTrustBundle's PEM certificates: `InvalidKind` when the cluster
+/// doesn't serve the API, `InvalidCACertificateRef` for a missing, empty or
+/// unparsable bundle (GEP-5075).
+pub fn cluster_trust_bundle<'a>(snapshot: &'a Snapshot, name: &str) -> Result<&'a str, (&'static str, String)> {
+    if !snapshot.cluster_trust_bundles_served {
+        return Err(("InvalidKind", "this cluster doesn't serve ClusterTrustBundles (certificates.k8s.io)".to_string()));
+    }
+    snapshot
+        .cluster_trust_bundles
+        .iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, pem)| pem.as_str())
+        .filter(|pem| crate::core::x509::cert_info_from_pem(pem.as_bytes()).is_some())
+        .ok_or_else(|| ("InvalidCACertificateRef", format!("ClusterTrustBundle {name} doesn't exist or holds no valid certificate")))
+}
+
 /// The CA certificates a validation references: ConfigMaps with `ca.crt`,
-/// in the Gateway's namespace or one a ReferenceGrant opens.
-fn client_cas(validation: &FrontendTlsValidation, gateway_namespace: &str, snapshot: &Snapshot) -> Result<ClientCa, (&'static str, String)> {
+/// in the Gateway's namespace or one a ReferenceGrant opens, and
+/// ClusterTrustBundles. An unusable ConfigMap fails the validation; an
+/// unusable bundle is left out and reported (the second value) while other
+/// sources remain (GEP-5075).
+fn client_cas(validation: &FrontendTlsValidation, gateway_namespace: &str, snapshot: &Snapshot) -> Result<(ClientCa, Option<(&'static str, String)>), (&'static str, String)> {
     let mut pem = Vec::new();
+    let mut skipped = None;
     for reference in &validation.ca_certificate_refs {
+        if reference.group == CLUSTER_TRUST_BUNDLE_GROUP && reference.kind == "ClusterTrustBundle" {
+            match cluster_trust_bundle(snapshot, &reference.name) {
+                Ok(bundle) => {
+                    pem.extend_from_slice(bundle.as_bytes());
+                    pem.push(b'\n');
+                }
+                Err(e) => skipped = Some(e),
+            }
+            continue;
+        }
         if !reference.group.is_empty() || reference.kind != "ConfigMap" {
             return Err(("InvalidCACertificateKind", format!("{} isn't a supported CA certificate reference", reference.kind)));
         }
@@ -869,9 +951,9 @@ fn client_cas(validation: &FrontendTlsValidation, gateway_namespace: &str, snaps
         pem.push(b'\n');
     }
     if pem.is_empty() {
-        return Err(("InvalidCACertificateRef", "no caCertificateRefs".to_string()));
+        return Err(skipped.unwrap_or(("InvalidCACertificateRef", "no caCertificateRefs".to_string())));
     }
-    Ok(ClientCa { pem, insecure_fallback: validation.mode.as_deref() == Some("AllowInsecureFallback") })
+    Ok((ClientCa { pem, insecure_fallback: validation.mode.as_deref() == Some("AllowInsecureFallback") }, skipped))
 }
 
 // ── routes ────────────────────────────────────────────────────────────────────

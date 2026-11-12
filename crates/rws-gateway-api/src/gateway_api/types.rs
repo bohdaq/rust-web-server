@@ -135,6 +135,10 @@ pub struct GatewaySpecAddress {
     pub address_type: Option<String>,
     #[serde(default)]
     pub value: String,
+    /// Experimental (v1.7, GEP-5093): `""` (rws's default), `Cluster` (a
+    /// ClusterIP) or a prefixed implementation-specific scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routability: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -217,6 +221,10 @@ pub struct GatewayStatusAddress {
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub address_type: Option<String>,
     pub value: String,
+    /// Experimental (v1.7, GEP-5093): reported on every address when the
+    /// experimental features are on (`Some("")` for the default scope).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routability: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

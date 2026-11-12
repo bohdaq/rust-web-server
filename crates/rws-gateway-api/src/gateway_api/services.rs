@@ -97,7 +97,13 @@ pub fn address_supported(address: &GatewaySpecAddress) -> bool {
 /// The static addresses a Gateway asks for (`spec.addresses` with a value;
 /// one with only a type asks for any address).
 pub fn requested_addresses(gateway: &Gateway) -> Vec<&str> {
-    gateway.spec.addresses.iter().filter(|a| address_supported(a) && !a.value.is_empty()).map(|a| a.value.as_str()).collect()
+    gateway
+        .spec
+        .addresses
+        .iter()
+        .filter(|a| address_supported(a) && !a.value.is_empty() && matches!(a.routability.as_deref().unwrap_or(""), "" | super::addresses::SENTINEL))
+        .map(|a| a.value.as_str())
+        .collect()
 }
 
 /// The Service every one of `gateways` should have, allocating container
@@ -159,6 +165,13 @@ pub fn desired(snapshot: &Snapshot, gateways: &[&Gateway], settings: &ServiceSet
                 type_: Some(settings.service_type.clone()),
                 // The first static address (a load balancer takes one per Service).
                 load_balancer_ip: requested_addresses(gateway).first().map(|a| a.to_string()),
+                // A `Cluster` address asked for by value (GEP-5093). A
+                // Service's ClusterIP can't change: an existing one is kept,
+                // and the entry is reported unassigned if it differs.
+                cluster_ip: match current(snapshot, gateway).and_then(|s| s.spec.as_ref()).and_then(|s| s.cluster_ip.clone()) {
+                    Some(existing) => Some(existing),
+                    None => super::addresses::requested_cluster_ip(&gateway.spec.addresses).map(str::to_string),
+                },
                 selector: None,
                 ports: Some(ports),
                 ..Default::default()

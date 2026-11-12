@@ -11,7 +11,7 @@ fn references_default_as_the_spec_says() {
 #[test]
 fn status_is_written_with_the_api_field_names() {
     let status = GatewayStatus {
-        addresses: vec![GatewayStatusAddress { address_type: Some("IPAddress".to_string()), value: "10.0.0.1".to_string() }],
+        addresses: vec![GatewayStatusAddress { address_type: Some("IPAddress".to_string()), value: "10.0.0.1".to_string(), routability: None }],
         listeners: vec![ListenerStatus { name: "http".to_string(), supported_kinds: vec![], attached_routes: 2, conditions: vec![] }],
         ..Default::default()
     };

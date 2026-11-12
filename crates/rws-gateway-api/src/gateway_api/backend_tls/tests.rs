@@ -180,3 +180,29 @@ fn the_gateways_client_certificate_reaches_a_backend_that_requires_one() {
     assert_eq!(Ok(200), status(&with, port));
     assert_ne!(tls.label, with.label, "pooled apart");
 }
+
+/// `policy` with its CA in a ClusterTrustBundle named `ca`.
+fn bundle_policy(name: &str) -> BackendTlsPolicy {
+    let mut p = policy(name, 1, "svc", None, "ClusterTrustBundle");
+    p.spec.validation.ca_certificate_refs[0].group = "certificates.k8s.io".to_string();
+    p
+}
+
+#[test]
+fn cluster_trust_bundles_are_ca_sources_where_the_cluster_serves_them() {
+    let (ca, cert, key) = pki(&["abc.example.com"], "spiffe://x");
+    let served = |bundles: Vec<(String, String)>| Snapshot { backend_tls_policies: vec![bundle_policy("p")], cluster_trust_bundles_served: true, cluster_trust_bundles: bundles, ..Default::default() };
+    let good = served(vec![("ca".to_string(), ca.clone())]);
+    let evaluated = evaluate(&good);
+    assert_eq!((None, None), verdict(&evaluated, "p"));
+    // The bundle's CA is what's trusted: the backend's certificate checks out.
+    let tls = for_service(&evaluated, &good, "ns", "svc", None).unwrap().unwrap();
+    let port = tls_backend(&cert, &key);
+    assert_eq!(Ok(200), status(&tls, port));
+
+    assert_eq!((Some("NoValidCACertificate"), Some("InvalidCACertificateRef")), verdict(&evaluate(&served(vec![])), "p"), "missing");
+    assert_eq!((Some("NoValidCACertificate"), Some("InvalidCACertificateRef")), verdict(&evaluate(&served(vec![("ca".to_string(), String::new())])), "p"), "empty");
+    let unserved = Snapshot { backend_tls_policies: vec![bundle_policy("p")], ..Default::default() };
+    assert_eq!((Some("NoValidCACertificate"), Some("InvalidKind")), verdict(&evaluate(&unserved), "p"), "the API isn't there");
+    assert!(for_service(&evaluate(&unserved), &unserved, "ns", "svc", None).is_some_and(|t| t.is_err()), "fails closed");
+}

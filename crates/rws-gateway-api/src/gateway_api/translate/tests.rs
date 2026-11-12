@@ -277,6 +277,30 @@ fn claimed_features_are_sorted_and_match_the_conformance_job() {
     let workflow = include_str!("../../../../../.github/workflows/gateway-api.yml");
     let line = workflow.lines().find_map(|l| l.trim().strip_prefix("FEATURES: ")).expect("FEATURES in the workflow");
     assert_eq!(SUPPORTED_FEATURES.join(","), line);
+    let mut sorted = EXPERIMENTAL_FEATURES.to_vec();
+    sorted.sort();
+    assert_eq!(sorted, EXPERIMENTAL_FEATURES);
+    let line = workflow.lines().find_map(|l| l.trim().strip_prefix("EXPERIMENTAL_FEATURES: ")).expect("EXPERIMENTAL_FEATURES in the workflow");
+    assert_eq!(EXPERIMENTAL_FEATURES.join(","), line);
+}
+
+#[test]
+fn experimental_features_are_advertised_only_when_on() {
+    let mut s = snapshot(&[]);
+    let names = |d: &Desired| d.classes["rws"].supported_features.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+    let (_, off) = run(&s);
+    assert!(!names(&off).contains(&"GatewayAddressRoutability".to_string()));
+    let on = Settings { experimental: true, ..Default::default() };
+    let (_, without_api) = translate(&s, &on, &now());
+    assert!(names(&without_api).contains(&"GatewayAddressRoutability".to_string()));
+    assert!(!names(&without_api).contains(&"ClusterTrustBundle".to_string()), "only where the API is served");
+    s.cluster_trust_bundles_served = true;
+    let (_, with_api) = translate(&s, &on, &now());
+    let listed = names(&with_api);
+    assert!(listed.contains(&"ClusterTrustBundle".to_string()));
+    let mut sorted = listed.clone();
+    sorted.sort();
+    assert_eq!(sorted, listed);
 }
 
 #[test]
@@ -569,7 +593,7 @@ fn static_addresses_are_asked_for_and_must_be_assigned() {
 fn an_address_without_a_value_asks_for_any() {
     let mut s = snapshot(&[]);
     let gateway = s.gateways.iter_mut().find(|g| g.name_any() == "same-namespace").unwrap();
-    gateway.spec.addresses = vec![GatewaySpecAddress { address_type: Some("IPAddress".to_string()), value: String::new() }];
+    gateway.spec.addresses = vec![GatewaySpecAddress { address_type: Some("IPAddress".to_string()), value: String::new(), routability: None }];
     let (_, desired) = run(&s);
     let g = &desired.gateways[&(INFRA.to_string(), "same-namespace".to_string())];
     assert_eq!("True", find(&g.conditions, "Programmed").status, "{:?}", g.conditions);
@@ -694,4 +718,71 @@ fn routes_attached_to_services_get_status_only_with_the_mesh_on() {
     assert_eq!(("True", "Accepted"), (find(&parents[0].conditions, "Accepted").status.as_str(), find(&parents[0].conditions, "Accepted").reason.as_str()));
     assert_eq!("True", find(&parents[0].conditions, "ResolvedRefs").status);
     assert_eq!(("False", "NoMatchingParent"), (find(&parents[1].conditions, "Accepted").status.as_str(), find(&parents[1].conditions, "Accepted").reason.as_str()));
+}
+
+#[test]
+fn a_cluster_trust_bundle_adds_client_cas_and_an_unusable_one_is_reported() {
+    let base = || {
+        let mut s = snapshot(&["gateway-with-invalid-clientcertificate-validation"]);
+        s.secrets.push(tls_secret("tls-validity-checks-certificate"));
+        s.config_maps.push(ca_config_map("tls-validity-checks-ca-certificate"));
+        let gateway = s.gateways.iter_mut().find(|g| g.name_any() == "gateway-with-invalid-client-cert-validation").unwrap();
+        let validation = gateway.spec.tls.as_mut().unwrap().frontend.as_mut().unwrap().default.validation.as_mut().unwrap();
+        validation.ca_certificate_refs.push(ObjectReference { group: CLUSTER_TRUST_BUNDLE_GROUP.to_string(), kind: "ClusterTrustBundle".to_string(), name: "corp".to_string(), namespace: None });
+        s
+    };
+    let ca_pem = || ca_config_map("x").data.unwrap()["ca.crt"].clone();
+    // Served and valid: both sources are trusted.
+    let mut s = base();
+    s.cluster_trust_bundles_served = true;
+    s.cluster_trust_bundles = vec![("corp".to_string(), ca_pem())];
+    let (config, desired) = run(&s);
+    let l = listener(&desired, "gateway-with-invalid-client-cert-validation", "https");
+    assert_eq!("True", find(&l.conditions, "ResolvedRefs").status);
+    let served = config.listeners.iter().find(|l| l.gateway.1 == "gateway-with-invalid-client-cert-validation" && l.name == "https").unwrap();
+    assert!(served.client_ca.as_ref().unwrap().pem.len() > ca_pem().len(), "the ConfigMap's CA and the bundle's");
+    // Missing beside a valid ConfigMap: reported, the listener keeps serving.
+    let mut s = base();
+    s.cluster_trust_bundles_served = true;
+    let (config, desired) = run(&s);
+    let l = listener(&desired, "gateway-with-invalid-client-cert-validation", "https");
+    assert_eq!(("False", "InvalidCACertificateRef"), (find(&l.conditions, "ResolvedRefs").status.as_str(), find(&l.conditions, "ResolvedRefs").reason.as_str()));
+    assert_eq!("True", find(&l.conditions, "Accepted").status);
+    assert!(config.listeners.iter().any(|l| l.gateway.1 == "gateway-with-invalid-client-cert-validation" && l.name == "https"));
+    // The API isn't served: InvalidKind.
+    let (_, desired) = run(&base());
+    let l = listener(&desired, "gateway-with-invalid-client-cert-validation", "https");
+    assert_eq!("InvalidKind", find(&l.conditions, "ResolvedRefs").reason);
+}
+
+#[test]
+fn experimental_addresses_report_routability_and_assignment() {
+    let mut s = snapshot(&[]);
+    let key = (INFRA.to_string(), "same-namespace".to_string());
+    let on = Settings { experimental: true, ..Default::default() };
+    // No spec addresses: the load balancer's, with the default scope.
+    let (_, desired) = translate(&s, &on, &now());
+    let g = &desired.gateways[&key];
+    assert!(g.addresses.iter().all(|a| a.routability.as_deref() == Some("")));
+    assert_eq!("True", find(&g.conditions, "AddressesAssigned").status);
+    // A Cluster entry: the Service's ClusterIP.
+    let service = s.services.iter_mut().find(|svc| svc.labels().get(GATEWAY_NAME_LABEL).map(String::as_str) == Some("same-namespace")).unwrap();
+    service.spec.get_or_insert_with(Default::default).cluster_ip = Some("10.96.0.77".to_string());
+    let gateway = s.gateways.iter_mut().find(|g| g.name_any() == "same-namespace").unwrap();
+    gateway.spec.addresses = vec![GatewaySpecAddress { address_type: None, value: String::new(), routability: Some("Cluster".to_string()) }];
+    let (_, desired) = translate(&s, &on, &now());
+    let g = &desired.gateways[&key];
+    assert_eq!(vec![("10.96.0.77", Some("Cluster"))], g.addresses.iter().map(|a| (a.value.as_str(), a.routability.as_deref())).collect::<Vec<_>>());
+    assert_eq!("True", find(&g.conditions, "Programmed").status);
+    // An unknown scope is never substituted.
+    let gateway = s.gateways.iter_mut().find(|g| g.name_any() == "same-namespace").unwrap();
+    gateway.spec.addresses = vec![GatewaySpecAddress { address_type: None, value: String::new(), routability: Some("example.com/CorpWan".to_string()) }];
+    let (_, desired) = translate(&s, &on, &now());
+    let g = &desired.gateways[&key];
+    assert!(g.addresses.is_empty());
+    assert_eq!(("False", "NotAssigned"), (find(&g.conditions, "AddressesAssigned").status.as_str(), find(&g.conditions, "AddressesAssigned").reason.as_str()));
+    assert_eq!(("False", "AddressNotAssigned"), (find(&g.conditions, "Programmed").status.as_str(), find(&g.conditions, "Programmed").reason.as_str()));
+    // Without the experimental features nothing changes.
+    let (_, standard) = run(&s);
+    assert!(standard.gateways[&key].conditions.iter().all(|c| c.type_ != "AddressesAssigned"));
 }

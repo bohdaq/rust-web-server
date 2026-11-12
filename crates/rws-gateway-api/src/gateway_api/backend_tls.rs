@@ -94,6 +94,16 @@ fn evaluate_one(policy: &BackendTlsPolicy, namespace: &str, snapshot: &Snapshot)
     };
     let mut pem = Vec::new();
     for reference in &validation.ca_certificate_refs {
+        if reference.group == super::translate::CLUSTER_TRUST_BUNDLE_GROUP && reference.kind == "ClusterTrustBundle" {
+            match super::translate::cluster_trust_bundle(snapshot, &reference.name) {
+                Ok(bundle) => {
+                    pem.extend_from_slice(bundle.as_bytes());
+                    pem.push(b'\n');
+                    continue;
+                }
+                Err((reason, message)) => return fail("NoValidCACertificate", Some((reason, message.clone())), message),
+            }
+        }
         if !reference.group.is_empty() || reference.kind != "ConfigMap" {
             let message = format!("{} isn't a supported CA certificate reference", reference.kind);
             return fail("NoValidCACertificate", Some(("InvalidKind", message.clone())), message);

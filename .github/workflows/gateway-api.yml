@@ -30,6 +30,9 @@ env:
   GATEWAY_API_VERSION: v1.7.0
   KIND_VERSION: v0.33.0
   PROFILES: GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS,GATEWAY-TCP,GATEWAY-UDP
+  # Experimental-channel features, claimed on top of FEATURES with the
+  # experimental CRDs (keep in step with gateway_api::translate::EXPERIMENTAL_FEATURES).
+  EXPERIMENTAL_FEATURES: ClusterTrustBundle,GatewayAddressRoutability,GatewayAddressRoutabilityCluster,GatewayListenerFilters,HTTPRouteDestinationPortMatching
   # The mesh profile (spec/GATEWAY_MESH.md): its own run and report.
   MESH_PROFILES: MESH-HTTP,MESH-GRPC
   MESH_FEATURES: Mesh,HTTPRoute,GRPCRoute,MeshClusterIPMatching,MeshConsumerRoute,MeshHTTPRouteBackendRequestHeaderModification,MeshHTTPRouteNamedRouteRule,MeshHTTPRouteQueryParamMatching,MeshHTTPRouteRedirectPath,MeshHTTPRouteRedirectPort,MeshHTTPRouteRewritePath,MeshHTTPRouteSchemeRedirect,HTTPRoute303RedirectStatusCode,HTTPRoute307RedirectStatusCode,HTTPRoute308RedirectStatusCode,HTTPRouteParentRefPort,HTTPRouteResponseHeaderModification,GRPCRouteRequestHeaderModifier

@@ -14,6 +14,7 @@
 //!   finds its listener, rule, backend and endpoint.
 //! - [`controller`] — watches, the reconcile loop and status writes.
 
+pub mod addresses;
 pub mod backend_tls;
 pub mod controller;
 pub mod dataplane;
@@ -65,6 +66,10 @@ pub const RWS_CONFIG_GATEWAY_API_SERVICE_ACCOUNT: &str = "RWS_CONFIG_GATEWAY_API
 /// they don't take the Lease or write anything.
 pub const RWS_CONFIG_GATEWAY_API_GATEWAY: &str = "RWS_CONFIG_GATEWAY_API_GATEWAY";
 
+/// `RWS_CONFIG_GATEWAY_API_EXPERIMENTAL` (`[gateway_api] experimental`): the
+/// cluster has the experimental-channel CRDs; rws handles and reports their
+/// fields (address routability, listener filters, ClusterTrustBundle).
+pub const RWS_CONFIG_GATEWAY_API_EXPERIMENTAL: &str = "RWS_CONFIG_GATEWAY_API_EXPERIMENTAL";
 /// `RWS_CONFIG_GATEWAY_API_MESH` (`[gateway_api] mesh`): the controller
 /// also handles routes attached to Services (the mesh profile, [`mesh`]) and
 /// serves sidecars their configuration.
@@ -133,6 +138,7 @@ pub fn settings_from_env() -> translate::Settings {
     }
     settings.services.pod_namespace = pod_namespace();
     settings.mesh = on(RWS_CONFIG_GATEWAY_API_MESH);
+    settings.experimental = on(RWS_CONFIG_GATEWAY_API_EXPERIMENTAL);
     if setting(RWS_CONFIG_GATEWAY_API_MODE).is_some_and(|m| m.eq_ignore_ascii_case("provisioned")) {
         settings.services.provisioned = true;
         settings.provision = Some(provision::ProvisionSettings {
