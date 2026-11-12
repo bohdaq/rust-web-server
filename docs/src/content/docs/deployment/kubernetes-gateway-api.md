@@ -4,7 +4,7 @@ description: rws as a Kubernetes Gateway API controller — every route kind, th
 ---
 
 :::note[Conformance]
-rws passes the Gateway API v1.7.0 conformance suite (standard channel) for the GATEWAY-HTTP, GATEWAY-GRPC, GATEWAY-TLS, GATEWAY-TCP and GATEWAY-UDP profiles with every standard-channel extended feature, in both deployment modes; CI runs the suite on every change (`.github/workflows/gateway-api.yml`). Experimental-channel features (destination-port matching, listener filters, ClusterTrustBundle, address routability) aren't claimed yet. Design and history: [`spec/GATEWAY_API.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/GATEWAY_API.md).
+rws passes the Gateway API v1.7.0 conformance suite (standard channel) for the GATEWAY-HTTP, GATEWAY-GRPC, GATEWAY-TLS, GATEWAY-TCP and GATEWAY-UDP profiles with every standard-channel extended feature, in both deployment modes; CI runs the suite on every change (`.github/workflows/gateway-api.yml`). With the experimental-channel CRDs and `RWS_CONFIG_GATEWAY_API_EXPERIMENTAL=true` (Helm `gatewayAPI.experimental`) it also handles and claims the experimental features: destination-port matching, listener filters, ClusterTrustBundle CA references and address routability (see [Experimental features](#experimental-features)). Design and history: [`spec/GATEWAY_API.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/GATEWAY_API.md).
 :::
 
 The Linux release binaries and the container image (`ghcr.io/bohdaq/rws`, `bohdaq/rws`) are built with the `gateway-api` feature; macOS and Windows binaries aren't (build those with `--features gateway-api`). With it and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, rws watches the cluster's Gateway API objects, serves the Gateways whose GatewayClass names its controller, and reports what it accepted in their status. Every replica serves traffic; one, holding the `rws-gateway-controller` Lease, writes status and manages Services.
@@ -98,3 +98,27 @@ Every gateway answered every request with 200 except as noted. Memory (working s
 ¹ NGINX Gateway Fabric answered 404 through the rewriting route in this setup, so the row isn't comparable; it also had 160 cancelled requests over HTTP/2.
 
 What this doesn't measure: many routes or Gateways, configuration churn, connection setup (every scenario reuses connections), and real backends.
+
+## Experimental features
+
+These need the experimental-channel CRDs (`experimental-install.yaml`) and `RWS_CONFIG_GATEWAY_API_EXPERIMENTAL=true` (Helm `gatewayAPI.experimental=true`); with the standard CRDs the API server would drop the fields rws reports, so they stay off. The GatewayClass then lists them in `status.supportedFeatures`.
+
+- **Listener filters** (`listeners[].filters.requests`, GEP-5224): run in order on every request an HTTP or HTTPS listener receives, before a route is picked, so a route can match on what they add. rws runs `ExternalAuth`:
+  - `protocol: HTTP`: the authorization server gets the request's method and path (after `http.path`), `Host`, `Authorization`, `Content-Length`, the `http.allowedHeaders` and the body up to `forwardBody.maxSize`. A `200` lets the request through with the server's response headers (`http.allowedResponseHeaders`, else all of them but `Host` and framing headers); any other answer is sent to the client as it is.
+  - `protocol: GRPC`: Envoy's `ext_authz` `Check` call over HTTP/2, with the request's method, path, host, scheme, headers (`grpc.allowedHeaders`, else all) and body. `OK` lets it through with the response's header changes; anything else answers with the denied response's status (`403` by default), headers and body.
+  - A filter can't change `Host` or `:authority`: the listener was chosen by them.
+  - An authorization server that can't be reached, or whose Service doesn't resolve, answers `403`: the filter fails closed. A BackendTLSPolicy on its Service is honoured.
+  - `ExtensionRef`, or a filter on a listener that isn't HTTP or HTTPS, leaves the listener unaccepted (`UnsupportedValue`).
+- **Address routability** (`spec.addresses[].routability`, GEP-5093). Each entry is matched on its own, by a distinct address:
+  - `""` (or unset): a load-balancer address of the Gateway's Service;
+  - `Cluster`: the Service's ClusterIP (a value asks the Service for that `clusterIP`, which can only be set when the Service is created);
+  - `testing.x-k8s.io/sentinel`: reported as asked;
+  - any other scope can't be satisfied; rws never substitutes another.
+
+  Every status address carries its `routability`. The `AddressesAssigned` condition says `AddressesAssigned`, `PartiallyAssigned` or `NotAssigned` (and lists what's missing); with nothing assigned the Gateway isn't programmed (`AddressNotAssigned`).
+- **ClusterTrustBundle** CA references (GEP-5075): `caCertificateRefs` entries `{group: certificates.k8s.io, kind: ClusterTrustBundle, name}` in BackendTLSPolicies and in client-certificate validation trust the bundle's `spec.trustBundle`.
+  - rws watches ClusterTrustBundles, and advertises the feature, only where the cluster serves the API (`v1`, else `v1beta1`; Kubernetes before 1.37 needs the `ClusterTrustBundle` feature gate).
+  - A missing, empty or unparsable bundle gives `ResolvedRefs=False InvalidCACertificateRef`; without the API it's `InvalidKind`.
+  - A BackendTLSPolicy left without a CA fails its requests. A client-certificate validation keeps its other sources and reports the bad bundle.
+- **Destination port matching** (`HTTPRouteDestinationPortMatching`): a parentRef `port` that no listener of the Gateway has leaves the route unattached (`NoMatchingParent`).
+

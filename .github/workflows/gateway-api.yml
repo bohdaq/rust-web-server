@@ -71,10 +71,18 @@ jobs:
           gh release download "$KIND_VERSION" --repo kubernetes-sigs/kind --pattern 'kind-linux-amd64' --dir "$RUNNER_TEMP"
           install -m 0755 "$RUNNER_TEMP/kind-linux-amd64" /usr/local/bin/kind
           git clone --depth 1 --branch "$GATEWAY_API_VERSION" https://github.com/kubernetes-sigs/gateway-api "$RUNNER_TEMP/gateway-api"
-          gh release download "$GATEWAY_API_VERSION" --repo kubernetes-sigs/gateway-api --pattern standard-install.yaml --dir "$RUNNER_TEMP/gateway-api"
+          gh release download "$GATEWAY_API_VERSION" --repo kubernetes-sigs/gateway-api --pattern standard-install.yaml --pattern experimental-install.yaml --dir "$RUNNER_TEMP/gateway-api"
       - name: Conformance suite
         run: |
-          if [ "${{ matrix.mode }}" = mesh ]; then PROFILES="$MESH_PROFILES" FEATURES="$MESH_FEATURES"; fi
+          # The Gateway runs on the experimental channel (every standard and
+          # experimental feature, as the v1.7 implementations page lists them);
+          # the mesh run on the standard one.
+          if [ "${{ matrix.mode }}" = mesh ]; then
+            PROFILES="$MESH_PROFILES" FEATURES="$MESH_FEATURES"
+          else
+            export GATEWAY_API_CHANNEL=experimental
+            FEATURES="$FEATURES,$EXPERIMENTAL_FEATURES"
+          fi
           ci/e2e/gateway_api.sh target/x86_64-unknown-linux-musl/debug/rws "$RUNNER_TEMP/gateway-api" "$RUNNER_TEMP/report.yaml" "$PROFILES" "$FEATURES" "${{ matrix.mode }}"
       - name: Report
         if: always()
@@ -84,11 +92,13 @@ jobs:
             # Named as conformance/reports/<version>/<impl>/ in gateway-api wants it:
             # <channel>-<version>-<mode>-report.yaml.
             version=$(git describe --tags --always)
-            cp "$RUNNER_TEMP/report.yaml" "$RUNNER_TEMP/standard-$version-${{ matrix.mode }}-report.yaml"
+            channel=experimental
+            [ "${{ matrix.mode }}" = mesh ] && channel=standard
+            cp "$RUNNER_TEMP/report.yaml" "$RUNNER_TEMP/$channel-$version-${{ matrix.mode }}-report.yaml"
           fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: gateway-api-conformance-report-${{ matrix.mode }}
-          path: ${{ runner.temp }}/standard-*-report.yaml
+          path: ${{ runner.temp }}/*-report.yaml
           if-no-files-found: ignore

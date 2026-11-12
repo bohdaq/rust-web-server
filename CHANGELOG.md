@@ -17,6 +17,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `GatewayRouteHostnameIntersectionPrecedence` and `TLSRouteModeMixed` —
   `Terminate` and `Passthrough` TLS listeners on one port, chosen by SNI
   (they were refused with `ProtocolConflict` before).
+- **Gateway API experimental features** (with the experimental CRDs and
+  `RWS_CONFIG_GATEWAY_API_EXPERIMENTAL` / Helm `gatewayAPI.experimental`):
+  listener filters with `ExternalAuth` over HTTP and over Envoy's
+  `ext_authz` gRPC, run before route selection; address routability
+  (`Cluster`, the `AddressesAssigned` condition); ClusterTrustBundle CA
+  references in BackendTLSPolicies and client-certificate validation;
+  destination port matching. CI runs the suite on the experimental channel.
 - **Gateway API: BackendTLSPolicy for GRPCRoute and terminated TLSRoute**
   (v1.7 core tests): gRPC backends under a policy are reached over HTTP/2
   on TLS (they were sent HTTP/1.1), and a TLSRoute a listener terminates

@@ -3632,6 +3632,7 @@ version = "18.35.1"
 dependencies = [
  "bytes",
  "futures-util",
+ "h2",
  "http",
  "http-body-util",
  "k8s-openapi",

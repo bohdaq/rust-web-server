@@ -133,6 +133,10 @@ gatewayAPI:
   # Gateway gets its own Deployment of rws pods (in this namespace, this
   # image and ServiceAccount); this release's pods only run the controller.
   mode: shared
+  # The cluster has the experimental-channel Gateway API CRDs: rws handles
+  # and reports their fields (address routability, listener filters,
+  # ClusterTrustBundle CA references) and claims those features.
+  experimental: false
   # The Gateway API mesh profile, routing only (no mTLS): HTTPRoutes and
   # GRPCRoutes attached to Services route pod-to-pod traffic through an rws
   # sidecar injected into pods of the selected namespaces.

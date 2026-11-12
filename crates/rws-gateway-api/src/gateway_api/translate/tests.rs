@@ -786,3 +786,25 @@ fn experimental_addresses_report_routability_and_assignment() {
     let (_, standard) = run(&s);
     assert!(standard.gateways[&key].conditions.iter().all(|c| c.type_ != "AddressesAssigned"));
 }
+
+#[test]
+fn listener_filters_are_compiled_or_the_listener_refused() {
+    let with_filters = |filters: serde_json::Value| {
+        let mut s = snapshot(&[]);
+        let gateway = s.gateways.iter_mut().find(|g| g.name_any() == "same-namespace").unwrap();
+        gateway.spec.listeners[0].filters = Some(serde_json::from_value(filters).unwrap());
+        run(&s)
+    };
+    let (config, desired) = with_filters(serde_json::json!({"requests": [
+        {"type": "ExternalAuth", "externalAuth": {"protocol": "HTTP", "backendRef": {"name": "infra-backend-v1", "port": 8080}}}
+    ]}));
+    let l = &desired.gateways[&(INFRA.to_string(), "same-namespace".to_string())].listeners[0];
+    assert_eq!("True", find(&l.conditions, "Accepted").status);
+    let served = config.listeners.iter().find(|l| l.gateway.1 == "same-namespace").unwrap();
+    assert_eq!(1, served.request_filters.len());
+    assert_eq!("HTTP", served.request_filters[0].filter.protocol);
+
+    let (_, desired) = with_filters(serde_json::json!({"requests": [{"type": "ExtensionRef", "extensionRef": {"group": "example.com", "kind": "Thing", "name": "x"}}]}));
+    let l = &desired.gateways[&(INFRA.to_string(), "same-namespace".to_string())].listeners[0];
+    assert_eq!(("False", "UnsupportedValue"), (find(&l.conditions, "Accepted").status.as_str(), find(&l.conditions, "Accepted").reason.as_str()));
+}

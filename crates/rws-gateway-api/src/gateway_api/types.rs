@@ -77,6 +77,76 @@ pub struct Listener {
     pub tls: Option<ListenerTlsConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_routes: Option<AllowedRoutes>,
+    /// Experimental (v1.7, GEP-5224): filters run before route selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filters: Option<ListenerFilters>,
+}
+
+/// A listener's pre-routing filters (GEP-5224).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenerFilters {
+    #[serde(default)]
+    pub requests: Vec<ListenerFilter>,
+}
+
+/// `ExternalAuth` or `ExtensionRef`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenerFilter {
+    #[serde(rename = "type")]
+    pub filter_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_auth: Option<HttpExternalAuthFilter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension_ref: Option<serde_json::Value>,
+}
+
+/// An external authorization server: HTTP, or Envoy's `ext_authz` gRPC.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpExternalAuthFilter {
+    /// `HTTP` or `GRPC`.
+    pub protocol: String,
+    pub backend_ref: BackendObjectReference,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grpc: Option<GrpcAuthConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpAuthConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_body: Option<ForwardBodyConfig>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrpcAuthConfig {
+    /// Client request headers sent; empty: all.
+    #[serde(default, rename = "allowedHeaders")]
+    pub allowed_headers: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpAuthConfig {
+    /// Prefixed to the client's path.
+    #[serde(default)]
+    pub path: String,
+    /// Client request headers sent besides `Host`, `Authorization` and
+    /// `Content-Length`.
+    #[serde(default, rename = "allowedHeaders")]
+    pub allowed_headers: Vec<String>,
+    /// Authorization response headers copied into the request; empty: all
+    /// but `Host`/`:authority`.
+    #[serde(default)]
+    pub allowed_response_headers: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForwardBodyConfig {
+    /// Bytes of the body sent (truncated); 0: none.
+    #[serde(default)]
+    pub max_size: i32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

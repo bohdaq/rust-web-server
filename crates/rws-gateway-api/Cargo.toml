@@ -54,6 +54,8 @@ rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs
 
 [dev-dependencies]
 rws-server = { workspace = true, features = ["test-support"] }
+# An ext_authz gRPC server in the listener filter tests.
+h2 = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }

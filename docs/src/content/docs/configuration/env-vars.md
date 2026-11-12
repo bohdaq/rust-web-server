@@ -235,6 +235,7 @@ The `gateway-api` build feature's controller (in progress, 18.8.0). Read at star
 | `RWS_CONFIG_GATEWAY_API_SERVICE_TYPE` | `LoadBalancer` | string | The type of the Service each Gateway gets |
 | `RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE` | the pod's namespace | string | Where the `rws-gateway-controller` leader-election Lease lives |
 | `RWS_CONFIG_GATEWAY_API_MODE` | `shared` | `shared`, `provisioned` or `mesh-sidecar` | `shared`: the controller's pods serve every Gateway. `provisioned`: each Gateway gets its own Deployment of rws pods; the controller's pods serve none. `mesh-sidecar`: rws runs as a meshed pod's sidecar ([mesh](/deployment/kubernetes-mesh/)) and serves no Gateway |
+| `RWS_CONFIG_GATEWAY_API_EXPERIMENTAL` | `false` | boolean | The cluster has the experimental-channel Gateway API CRDs: rws handles and reports their fields (address routability, listener filters, ClusterTrustBundle CA references) and claims those features |
 | `RWS_CONFIG_GATEWAY_API_MESH` | `false` | boolean | The controller also handles HTTPRoutes and GRPCRoutes attached to Services (the Gateway API mesh profile) and serves sidecars their configuration |
 | `RWS_CONFIG_GATEWAY_API_MESH_PORT` | `15010` | port | Where the controller serves the mesh configuration (`GET /mesh/v1/snapshot`) |
 | `RWS_CONFIG_GATEWAY_API_MESH_CONFIG_URL` | `http://rws-mesh.<pod namespace>:15010` | URL | The controller's mesh configuration endpoint as sidecars reach it: where a sidecar gets its routes, and what the injection webhook gives the sidecars it injects |

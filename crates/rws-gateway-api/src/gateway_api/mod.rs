@@ -18,6 +18,7 @@ pub mod addresses;
 pub mod backend_tls;
 pub mod controller;
 pub mod dataplane;
+pub mod ext_auth;
 pub mod filters;
 pub mod l4;
 pub mod lease;

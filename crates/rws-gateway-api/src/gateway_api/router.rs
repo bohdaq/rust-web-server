@@ -573,17 +573,22 @@ fn misdirected(listeners: &[ListenerConfig], by_host: &ListenerConfig, connectio
 }
 
 impl PortRouter {
-    /// The listener and rule a request goes to, or the answer when none
-    /// does (`404`, `421`).
-    fn resolve<'l>(listeners: &'l [ListenerConfig], request: &Request, host: &str, connection: &ConnectionInfo) -> Result<(&'l ListenerConfig, &'l CompiledRule, &'l HttpRouteMatch), Response> {
+    /// The listener a request belongs to, or the answer when none does
+    /// (`404`, `421`).
+    fn listener_of<'l>(listeners: &'l [ListenerConfig], host: &str, connection: &ConnectionInfo) -> Result<&'l ListenerConfig, Response> {
         let Some(listener) = pick_listener(listeners, host) else {
             return Err(status(STATUS_CODE_REASON_PHRASE.n404_not_found));
         };
         if misdirected(listeners, listener, connection) {
             return Err(status(STATUS_CODE_REASON_PHRASE.n421_misdirected_request));
         }
+        Ok(listener)
+    }
+
+    /// The rule a request goes to on its listener, or `404`.
+    fn rule_of<'l>(listener: &'l ListenerConfig, request: &Request, host: &str) -> Result<(&'l CompiledRule, &'l HttpRouteMatch), Response> {
         match select(listener, request, host) {
-            Some((_, rule, matched)) => Ok((listener, rule, matched)),
+            Some((_, rule, matched)) => Ok((rule, matched)),
             None => Err(status(STATUS_CODE_REASON_PHRASE.n404_not_found)),
         }
     }
@@ -593,8 +598,18 @@ impl Application for PortRouter {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let listeners = self.listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
         let host = request_host(request);
-        Ok(match Self::resolve(&listeners, request, &host, connection) {
-            Ok((listener, rule, matched)) => self.route(listener, rule, matched, request, &host, connection),
+        let listener = match Self::listener_of(&listeners, &host, connection) {
+            Ok(listener) => listener,
+            Err(response) => return Ok(response),
+        };
+        // Pre-routing filters (GEP-5224), then route selection on what they left.
+        let filtered = match super::ext_auth::run(&listener.request_filters, request, crate::proxy::Peer::of(connection), &self.endpoint_counter) {
+            Ok(filtered) => filtered,
+            Err(response) => return Ok(response),
+        };
+        let request = filtered.as_ref().unwrap_or(request);
+        Ok(match Self::rule_of(listener, request, &host) {
+            Ok((rule, matched)) => self.route(listener, rule, matched, request, &host, connection),
             Err(response) => response,
         })
     }
@@ -610,7 +625,23 @@ impl Application for PortRouter {
         Some(Box::pin(async move {
             let listeners = self.listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
             let host = request_host(request);
-            let (listener, rule, matched) = match Self::resolve(&listeners, request, &host, connection) {
+            let listener = match Self::listener_of(&listeners, &host, connection) {
+                Ok(listener) => listener,
+                Err(response) => return Ok(response),
+            };
+            // Authorization calls block: they run on the blocking pool.
+            let filtered = if listener.request_filters.is_empty() {
+                None
+            } else {
+                let (filters, copy, client_ip, tls, counter) = (listener.request_filters.clone(), request.clone(), connection.client.ip.clone(), connection.tls, Arc::clone(&self.endpoint_counter));
+                match tokio::task::spawn_blocking(move || super::ext_auth::run(&filters, &copy, crate::proxy::Peer { ip: &client_ip, tls }, &counter)).await {
+                    Ok(Ok(filtered)) => filtered,
+                    Ok(Err(response)) => return Ok(response),
+                    Err(_) => return Ok(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
+                }
+            };
+            let request = filtered.as_ref().unwrap_or(request);
+            let (rule, matched) = match Self::rule_of(listener, request, &host) {
                 Ok(found) => found,
                 Err(response) => return Ok(response),
             };

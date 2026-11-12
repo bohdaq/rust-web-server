@@ -156,6 +156,7 @@ pub fn table(mesh: &MeshSnapshot, client_namespace: &str) -> MeshTable {
                 tls: None,
                 client_ca: None,
                 backend_client_cert: None,
+                request_filters: Vec::new(),
                 http_routes: routes,
             };
             let listeners = Arc::new(vec![listener]);

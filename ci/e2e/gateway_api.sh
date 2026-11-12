@@ -36,11 +36,27 @@ dump() {
 }
 trap dump ERR
 
-kind create cluster --name "$CLUSTER" --wait 120s
+# GATEWAY_API_CHANNEL=experimental: the experimental CRDs, and the
+# ClusterTrustBundle API (beta: a feature gate and its API version on).
+CHANNEL="${GATEWAY_API_CHANNEL:-standard}"
+if [ "$CHANNEL" = experimental ]; then
+  kind_config=$(mktemp)
+  cat >"$kind_config" <<'KIND'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+featureGates:
+  ClusterTrustBundle: true
+runtimeConfig:
+  "certificates.k8s.io/v1beta1/clustertrustbundles": "true"
+KIND
+  kind create cluster --name "$CLUSTER" --config "$kind_config" --wait 120s
+else
+  kind create cluster --name "$CLUSTER" --wait 120s
+fi
 # kind marks its single node as excluded from external load balancers, and
 # MetalLB honours that: without this no LoadBalancer address answers ARP.
 kubectl label nodes --all node.kubernetes.io/exclude-from-external-load-balancers- || true
-kubectl apply --server-side -f "$GWAPI/standard-install.yaml"
+kubectl apply --server-side -f "$GWAPI/$CHANNEL-install.yaml"
 kubectl wait --for=condition=Established crd --all --timeout=60s
 
 # MetalLB, with addresses from the top of kind's IPv4 subnet.
@@ -67,22 +83,23 @@ build=$(mktemp -d)
 cp "$RWS" "$build/rws"
 docker build -q -t rws:e2e -f "$ROOT/ci/e2e/gateway_api/Dockerfile" "$build"
 kind load docker-image rws:e2e --name "$CLUSTER"
-mesh_values=()
+extra_values=()
 gateway_mode="$MODE"
 if [ "$MODE" = mesh ]; then
   gateway_mode=shared
   docker build -q -t rws-mesh-init:e2e "$ROOT/packaging/mesh-init"
   kind load docker-image rws-mesh-init:e2e --name "$CLUSTER"
-  mesh_values=(--set gatewayAPI.mesh.enabled=true
+  extra_values=(--set gatewayAPI.mesh.enabled=true
     --set gatewayAPI.mesh.injection.sidecarImage=rws:e2e
     --set gatewayAPI.mesh.injection.initImage=rws-mesh-init:e2e
     --set gatewayAPI.mesh.injection.namespaceSelector.matchLabels=null
     --set-json 'gatewayAPI.mesh.injection.namespaceSelector.matchExpressions=[{"key":"gateway-conformance","operator":"In","values":["mesh","mesh-consumer"]}]')
 fi
+[ "$CHANNEL" = experimental ] && extra_values+=(--set gatewayAPI.experimental=true)
 helm install rws "$ROOT/helm/rws" --namespace rws-system --create-namespace \
   --set image.repository=rws --set image.tag=e2e --set image.pullPolicy=Never \
   --set gatewayAPI.enabled=true --set tls.enabled=false --set quic.enabled=false \
-  --set gatewayAPI.mode="$gateway_mode" "${mesh_values[@]}" \
+  --set gatewayAPI.mode="$gateway_mode" "${extra_values[@]}" \
   --set replicaCount=2 --set podDisruptionBudget.enabled=false --wait --timeout 5m
 kubectl wait --for=condition=Accepted gatewayclass/rws --timeout=60s
 

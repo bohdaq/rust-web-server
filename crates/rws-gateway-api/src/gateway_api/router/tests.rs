@@ -44,6 +44,7 @@ fn listener(hostname: Option<&str>, routes: Vec<CompiledHttpRoute>) -> ListenerC
         tls: None,
         client_ca: None,
         backend_client_cert: None,
+        request_filters: Vec::new(),
         http_routes: routes,
     }
 }
@@ -418,4 +419,42 @@ fn a_retry_after_a_refused_connection_goes_to_the_next_endpoint() {
     for i in 0..10 {
         assert_eq!(200, router.forward(&policy, &r, &connection()).status_code, "request {i}");
     }
+}
+
+#[test]
+fn listener_filters_run_before_routes_are_picked() {
+    use std::io::{Read, Write};
+    // An authorization server: Bearer ok → 200 with X-User: ann; else 401.
+    let auth = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let auth_address = auth.local_addr().unwrap().to_string();
+    std::thread::spawn(move || {
+        for stream in auth.incoming().flatten() {
+            let mut stream = stream;
+            let mut buffer = [0u8; 4096];
+            let n = stream.read(&mut buffer).unwrap_or(0);
+            let ok = String::from_utf8_lossy(&buffer[..n]).to_ascii_lowercase().contains("authorization: bearer ok");
+            let reply = if ok { "HTTP/1.1 200 OK\r\nX-User: ann\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" } else { "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" };
+            let _ = stream.write_all(reply.as_bytes());
+        }
+    });
+    let (ann_backend, _) = flaky_backend(0, 500, std::time::Duration::ZERO);
+    let mut by_user = path("PathPrefix", "/");
+    by_user.headers = vec![HttpHeaderMatch { match_type: None, name: "X-User".to_string(), value: "ann".to_string() }];
+    let routes = vec![route(
+        "r",
+        "2026-01-01T00:00:00Z",
+        &[],
+        vec![rule("ann", vec![by_user], vec![backend(1, Ok(vec![ann_backend]))]), rule("anyone", vec![path("PathPrefix", "/")], vec![backend(1, Err("none".to_string()))])],
+    )];
+    let mut l = listener(None, routes);
+    l.request_filters = vec![crate::gateway_api::ext_auth::CompiledAuth {
+        filter: crate::gateway_api::types::HttpExternalAuthFilter { protocol: "HTTP".to_string(), ..Default::default() },
+        endpoints: Ok(vec![auth_address]),
+        tls: None,
+    }];
+    let router = PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![l]))));
+    let authorized = router.execute(&request("GET", "/", &[("host", "example.org"), ("Authorization", "Bearer ok")]), &connection()).unwrap();
+    assert_eq!(200, authorized.status_code, "X-User from the authorization server picked the rule");
+    let anonymous = router.execute(&request("GET", "/", &[("host", "example.org"), ("X-User", "ann")]), &connection()).unwrap();
+    assert_eq!(401, anonymous.status_code, "denied before any route: a client's own X-User doesn't help");
 }

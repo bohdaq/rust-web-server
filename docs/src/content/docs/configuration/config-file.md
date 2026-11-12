@@ -319,6 +319,7 @@ port_range      = "10000-10999"
 service_type    = "LoadBalancer"
 mode            = "shared"           # or "provisioned": a Deployment per Gateway
 mesh            = false              # routes attached to Services, for meshed pods' sidecars
+experimental    = false              # the cluster has the experimental-channel CRDs
 image           = "ghcr.io/bohdaq/rws:18.8.0"   # provisioned pods' image
 
 [circuit_breaker]                    # RWS_CONFIG_CIRCUIT_BREAKER_*: read by RedisCircuitBreaker::from_env()

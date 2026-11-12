@@ -36,6 +36,7 @@ impl !core::marker::Freeze for rust_web_server::storage::S3Storage
 impl !core::marker::Freeze for rust_web_server::tower::Body
 impl !core::marker::Send for rust_web_server::otel::ContextGuard
 impl !core::marker::Send for rust_web_server::otel::Span
+impl !core::marker::Sync for rust_web_server::gateway_api::ext_auth::Decision
 impl !core::marker::Sync for rust_web_server::k8s::controller::Operator
 impl !core::marker::Sync for rust_web_server::otel::ContextGuard
 impl !core::marker::Sync for rust_web_server::otel::Span
@@ -56,6 +57,8 @@ impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::backend_tls::Evaluated
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::controller::Options
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::controller::Stores
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::ext_auth::Decision
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::routes::Backend
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::routes::CompiledHttpRoute
 impl !core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::routes::CompiledRule
@@ -107,6 +110,8 @@ impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::bac
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::backend_tls::Evaluated
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::controller::Options
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::controller::Stores
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::ext_auth::Decision
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::routes::Backend
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::routes::CompiledHttpRoute
 impl !core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::routes::CompiledRule
@@ -235,6 +240,7 @@ impl core::clone::Clone for rust_web_server::fleet::Source
 impl core::clone::Clone for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::clone::Clone for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::clone::Clone for rust_web_server::gateway_api::controller::Stores
+impl core::clone::Clone for rust_web_server::gateway_api::ext_auth::CompiledAuth
 impl core::clone::Clone for rust_web_server::gateway_api::mesh::MeshSnapshot
 impl core::clone::Clone for rust_web_server::gateway_api::mesh::config::Publisher
 impl core::clone::Clone for rust_web_server::gateway_api::mesh::inject::InjectSettings
@@ -258,6 +264,7 @@ impl core::clone::Clone for rust_web_server::gateway_api::types::BackendObjectRe
 impl core::clone::Clone for rust_web_server::gateway_api::types::BackendRef
 impl core::clone::Clone for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::clone::Clone for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::clone::Clone for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::clone::Clone for rust_web_server::gateway_api::types::Fraction
 impl core::clone::Clone for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::clone::Clone for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -270,12 +277,15 @@ impl core::clone::Clone for rust_web_server::gateway_api::types::GatewaySpecAddr
 impl core::clone::Clone for rust_web_server::gateway_api::types::GatewayStatus
 impl core::clone::Clone for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::clone::Clone for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::clone::Clone for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::clone::Clone for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::clone::Clone for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::clone::Clone for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::clone::Clone for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::clone::Clone for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::clone::Clone for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::clone::Clone for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::clone::Clone for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::clone::Clone for rust_web_server::gateway_api::types::HttpHeader
 impl core::clone::Clone for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::clone::Clone for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -293,6 +303,8 @@ impl core::clone::Clone for rust_web_server::gateway_api::types::HttpUrlRewriteF
 impl core::clone::Clone for rust_web_server::gateway_api::types::L4RouteRule
 impl core::clone::Clone for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::clone::Clone for rust_web_server::gateway_api::types::Listener
+impl core::clone::Clone for rust_web_server::gateway_api::types::ListenerFilter
+impl core::clone::Clone for rust_web_server::gateway_api::types::ListenerFilters
 impl core::clone::Clone for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::clone::Clone for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::clone::Clone for rust_web_server::gateway_api::types::ListenerStatus
@@ -703,8 +715,11 @@ impl core::cmp::PartialEq for rust_web_server::flash::FlashMessage
 impl core::cmp::PartialEq for rust_web_server::fleet::Fetched
 impl core::cmp::PartialEq for rust_web_server::fleet::Outcome
 impl core::cmp::PartialEq for rust_web_server::fleet::Source
+impl core::cmp::PartialEq for rust_web_server::gateway_api::addresses::Assignment
 impl core::cmp::PartialEq for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::cmp::PartialEq for rust_web_server::gateway_api::backend_tls::Evaluated
+impl core::cmp::PartialEq for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::cmp::PartialEq for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::cmp::PartialEq for rust_web_server::gateway_api::filters::Cors
 impl core::cmp::PartialEq for rust_web_server::gateway_api::l4::Hello
 impl core::cmp::PartialEq for rust_web_server::gateway_api::lease::Decision
@@ -722,6 +737,7 @@ impl core::cmp::PartialEq for rust_web_server::gateway_api::types::BackendObject
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::BackendRef
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::cmp::PartialEq for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::Fraction
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -734,12 +750,15 @@ impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GatewaySpecAd
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GatewayStatus
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpHeader
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -757,6 +776,8 @@ impl core::cmp::PartialEq for rust_web_server::gateway_api::types::HttpUrlRewrit
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::L4RouteRule
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::Listener
+impl core::cmp::PartialEq for rust_web_server::gateway_api::types::ListenerFilter
+impl core::cmp::PartialEq for rust_web_server::gateway_api::types::ListenerFilters
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::cmp::PartialEq for rust_web_server::gateway_api::types::ListenerStatus
@@ -956,6 +977,7 @@ impl core::default::Default for rust_web_server::events::EventBus
 impl core::default::Default for rust_web_server::flash::Flash
 impl core::default::Default for rust_web_server::flash::FlashLayer
 impl core::default::Default for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::default::Default for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::default::Default for rust_web_server::gateway_api::mesh::MeshSnapshot
 impl core::default::Default for rust_web_server::gateway_api::mesh::config::Publisher
 impl core::default::Default for rust_web_server::gateway_api::provision::ProvisionSettings
@@ -969,6 +991,7 @@ impl core::default::Default for rust_web_server::gateway_api::types::BackendObje
 impl core::default::Default for rust_web_server::gateway_api::types::BackendRef
 impl core::default::Default for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::default::Default for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::default::Default for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::default::Default for rust_web_server::gateway_api::types::Fraction
 impl core::default::Default for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::default::Default for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -981,12 +1004,15 @@ impl core::default::Default for rust_web_server::gateway_api::types::GatewaySpec
 impl core::default::Default for rust_web_server::gateway_api::types::GatewayStatus
 impl core::default::Default for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::default::Default for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::default::Default for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::default::Default for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::default::Default for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::default::Default for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::default::Default for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::default::Default for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::default::Default for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::default::Default for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::default::Default for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::default::Default for rust_web_server::gateway_api::types::HttpHeader
 impl core::default::Default for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::default::Default for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -1004,6 +1030,8 @@ impl core::default::Default for rust_web_server::gateway_api::types::HttpUrlRewr
 impl core::default::Default for rust_web_server::gateway_api::types::L4RouteRule
 impl core::default::Default for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::default::Default for rust_web_server::gateway_api::types::Listener
+impl core::default::Default for rust_web_server::gateway_api::types::ListenerFilter
+impl core::default::Default for rust_web_server::gateway_api::types::ListenerFilters
 impl core::default::Default for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::default::Default for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::default::Default for rust_web_server::gateway_api::types::ListenerStatus
@@ -1190,8 +1218,12 @@ impl core::fmt::Debug for rust_web_server::fleet::Fetched
 impl core::fmt::Debug for rust_web_server::fleet::FleetConfig
 impl core::fmt::Debug for rust_web_server::fleet::Outcome
 impl core::fmt::Debug for rust_web_server::fleet::Source
+impl core::fmt::Debug for rust_web_server::gateway_api::addresses::Assignment
 impl core::fmt::Debug for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::fmt::Debug for rust_web_server::gateway_api::backend_tls::Evaluated
+impl core::fmt::Debug for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::fmt::Debug for rust_web_server::gateway_api::ext_auth::Decision
+impl core::fmt::Debug for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::fmt::Debug for rust_web_server::gateway_api::filters::Cors
 impl core::fmt::Debug for rust_web_server::gateway_api::l4::Hello
 impl core::fmt::Debug for rust_web_server::gateway_api::lease::Decision
@@ -1214,6 +1246,7 @@ impl core::fmt::Debug for rust_web_server::gateway_api::types::BackendObjectRefe
 impl core::fmt::Debug for rust_web_server::gateway_api::types::BackendRef
 impl core::fmt::Debug for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::fmt::Debug for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::fmt::Debug for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::fmt::Debug for rust_web_server::gateway_api::types::Fraction
 impl core::fmt::Debug for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::fmt::Debug for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -1226,12 +1259,15 @@ impl core::fmt::Debug for rust_web_server::gateway_api::types::GatewaySpecAddres
 impl core::fmt::Debug for rust_web_server::gateway_api::types::GatewayStatus
 impl core::fmt::Debug for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::fmt::Debug for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::fmt::Debug for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::fmt::Debug for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::fmt::Debug for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::fmt::Debug for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::fmt::Debug for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpHeader
 impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -1249,6 +1285,8 @@ impl core::fmt::Debug for rust_web_server::gateway_api::types::HttpUrlRewriteFil
 impl core::fmt::Debug for rust_web_server::gateway_api::types::L4RouteRule
 impl core::fmt::Debug for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::fmt::Debug for rust_web_server::gateway_api::types::Listener
+impl core::fmt::Debug for rust_web_server::gateway_api::types::ListenerFilter
+impl core::fmt::Debug for rust_web_server::gateway_api::types::ListenerFilters
 impl core::fmt::Debug for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::fmt::Debug for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::fmt::Debug for rust_web_server::gateway_api::types::ListenerStatus
@@ -1673,11 +1711,15 @@ impl core::marker::Freeze for rust_web_server::fleet::Fetched
 impl core::marker::Freeze for rust_web_server::fleet::FleetConfig
 impl core::marker::Freeze for rust_web_server::fleet::Outcome
 impl core::marker::Freeze for rust_web_server::fleet::Source
+impl core::marker::Freeze for rust_web_server::gateway_api::addresses::Assignment
 impl core::marker::Freeze for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::marker::Freeze for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::marker::Freeze for rust_web_server::gateway_api::controller::Options
 impl core::marker::Freeze for rust_web_server::gateway_api::controller::Stores
 impl core::marker::Freeze for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::marker::Freeze for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::marker::Freeze for rust_web_server::gateway_api::ext_auth::Decision
+impl core::marker::Freeze for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::marker::Freeze for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Freeze for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Freeze for rust_web_server::gateway_api::lease::Decision
@@ -1706,6 +1748,7 @@ impl core::marker::Freeze for rust_web_server::gateway_api::types::BackendObject
 impl core::marker::Freeze for rust_web_server::gateway_api::types::BackendRef
 impl core::marker::Freeze for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::marker::Freeze for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::marker::Freeze for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::marker::Freeze for rust_web_server::gateway_api::types::Fraction
 impl core::marker::Freeze for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::marker::Freeze for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -1718,12 +1761,15 @@ impl core::marker::Freeze for rust_web_server::gateway_api::types::GatewaySpecAd
 impl core::marker::Freeze for rust_web_server::gateway_api::types::GatewayStatus
 impl core::marker::Freeze for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::marker::Freeze for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::marker::Freeze for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::marker::Freeze for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::marker::Freeze for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::marker::Freeze for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::marker::Freeze for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpHeader
 impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -1741,6 +1787,8 @@ impl core::marker::Freeze for rust_web_server::gateway_api::types::HttpUrlRewrit
 impl core::marker::Freeze for rust_web_server::gateway_api::types::L4RouteRule
 impl core::marker::Freeze for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::marker::Freeze for rust_web_server::gateway_api::types::Listener
+impl core::marker::Freeze for rust_web_server::gateway_api::types::ListenerFilter
+impl core::marker::Freeze for rust_web_server::gateway_api::types::ListenerFilters
 impl core::marker::Freeze for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::marker::Freeze for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::marker::Freeze for rust_web_server::gateway_api::types::ListenerStatus
@@ -2194,11 +2242,15 @@ impl core::marker::Send for rust_web_server::fleet::Fleet
 impl core::marker::Send for rust_web_server::fleet::FleetConfig
 impl core::marker::Send for rust_web_server::fleet::Outcome
 impl core::marker::Send for rust_web_server::fleet::Source
+impl core::marker::Send for rust_web_server::gateway_api::addresses::Assignment
 impl core::marker::Send for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::marker::Send for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::marker::Send for rust_web_server::gateway_api::controller::Options
 impl core::marker::Send for rust_web_server::gateway_api::controller::Stores
 impl core::marker::Send for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::marker::Send for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::marker::Send for rust_web_server::gateway_api::ext_auth::Decision
+impl core::marker::Send for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::marker::Send for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Send for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Send for rust_web_server::gateway_api::lease::Decision
@@ -2227,6 +2279,7 @@ impl core::marker::Send for rust_web_server::gateway_api::types::BackendObjectRe
 impl core::marker::Send for rust_web_server::gateway_api::types::BackendRef
 impl core::marker::Send for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::marker::Send for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::marker::Send for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::marker::Send for rust_web_server::gateway_api::types::Fraction
 impl core::marker::Send for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::marker::Send for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -2239,12 +2292,15 @@ impl core::marker::Send for rust_web_server::gateway_api::types::GatewaySpecAddr
 impl core::marker::Send for rust_web_server::gateway_api::types::GatewayStatus
 impl core::marker::Send for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::marker::Send for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::marker::Send for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::marker::Send for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::marker::Send for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::marker::Send for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::marker::Send for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::marker::Send for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::marker::Send for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::marker::Send for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::marker::Send for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::marker::Send for rust_web_server::gateway_api::types::HttpHeader
 impl core::marker::Send for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::marker::Send for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -2262,6 +2318,8 @@ impl core::marker::Send for rust_web_server::gateway_api::types::HttpUrlRewriteF
 impl core::marker::Send for rust_web_server::gateway_api::types::L4RouteRule
 impl core::marker::Send for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::marker::Send for rust_web_server::gateway_api::types::Listener
+impl core::marker::Send for rust_web_server::gateway_api::types::ListenerFilter
+impl core::marker::Send for rust_web_server::gateway_api::types::ListenerFilters
 impl core::marker::Send for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::marker::Send for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::marker::Send for rust_web_server::gateway_api::types::ListenerStatus
@@ -2653,7 +2711,10 @@ impl core::marker::StructuralPartialEq for rust_web_server::flash::FlashMessage
 impl core::marker::StructuralPartialEq for rust_web_server::fleet::Fetched
 impl core::marker::StructuralPartialEq for rust_web_server::fleet::Outcome
 impl core::marker::StructuralPartialEq for rust_web_server::fleet::Source
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::addresses::Assignment
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::backend_tls::Evaluated
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::filters::Cors
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::l4::Hello
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::lease::Decision
@@ -2671,6 +2732,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::BackendRef
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::Fraction
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -2683,12 +2745,15 @@ impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GatewayStatus
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::HttpHeader
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -2706,6 +2771,8 @@ impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::L4RouteRule
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::Listener
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::ListenerFilter
+impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::ListenerFilters
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::marker::StructuralPartialEq for rust_web_server::gateway_api::types::ListenerStatus
@@ -2979,11 +3046,14 @@ impl core::marker::Sync for rust_web_server::fleet::Fleet
 impl core::marker::Sync for rust_web_server::fleet::FleetConfig
 impl core::marker::Sync for rust_web_server::fleet::Outcome
 impl core::marker::Sync for rust_web_server::fleet::Source
+impl core::marker::Sync for rust_web_server::gateway_api::addresses::Assignment
 impl core::marker::Sync for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::marker::Sync for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::marker::Sync for rust_web_server::gateway_api::controller::Options
 impl core::marker::Sync for rust_web_server::gateway_api::controller::Stores
 impl core::marker::Sync for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::marker::Sync for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::marker::Sync for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::marker::Sync for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Sync for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Sync for rust_web_server::gateway_api::lease::Decision
@@ -3012,6 +3082,7 @@ impl core::marker::Sync for rust_web_server::gateway_api::types::BackendObjectRe
 impl core::marker::Sync for rust_web_server::gateway_api::types::BackendRef
 impl core::marker::Sync for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::marker::Sync for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::marker::Sync for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::marker::Sync for rust_web_server::gateway_api::types::Fraction
 impl core::marker::Sync for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::marker::Sync for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -3024,12 +3095,15 @@ impl core::marker::Sync for rust_web_server::gateway_api::types::GatewaySpecAddr
 impl core::marker::Sync for rust_web_server::gateway_api::types::GatewayStatus
 impl core::marker::Sync for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::marker::Sync for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::marker::Sync for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::marker::Sync for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::marker::Sync for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::marker::Sync for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::marker::Sync for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::marker::Sync for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::marker::Sync for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::marker::Sync for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::marker::Sync for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::marker::Sync for rust_web_server::gateway_api::types::HttpHeader
 impl core::marker::Sync for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::marker::Sync for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -3047,6 +3121,8 @@ impl core::marker::Sync for rust_web_server::gateway_api::types::HttpUrlRewriteF
 impl core::marker::Sync for rust_web_server::gateway_api::types::L4RouteRule
 impl core::marker::Sync for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::marker::Sync for rust_web_server::gateway_api::types::Listener
+impl core::marker::Sync for rust_web_server::gateway_api::types::ListenerFilter
+impl core::marker::Sync for rust_web_server::gateway_api::types::ListenerFilters
 impl core::marker::Sync for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::marker::Sync for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::marker::Sync for rust_web_server::gateway_api::types::ListenerStatus
@@ -3512,11 +3588,15 @@ impl core::marker::Unpin for rust_web_server::fleet::Fleet
 impl core::marker::Unpin for rust_web_server::fleet::FleetConfig
 impl core::marker::Unpin for rust_web_server::fleet::Outcome
 impl core::marker::Unpin for rust_web_server::fleet::Source
+impl core::marker::Unpin for rust_web_server::gateway_api::addresses::Assignment
 impl core::marker::Unpin for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::marker::Unpin for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::marker::Unpin for rust_web_server::gateway_api::controller::Options
 impl core::marker::Unpin for rust_web_server::gateway_api::controller::Stores
 impl core::marker::Unpin for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::marker::Unpin for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::marker::Unpin for rust_web_server::gateway_api::ext_auth::Decision
+impl core::marker::Unpin for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::marker::Unpin for rust_web_server::gateway_api::filters::Cors
 impl core::marker::Unpin for rust_web_server::gateway_api::l4::Hello
 impl core::marker::Unpin for rust_web_server::gateway_api::lease::Decision
@@ -3545,6 +3625,7 @@ impl core::marker::Unpin for rust_web_server::gateway_api::types::BackendObjectR
 impl core::marker::Unpin for rust_web_server::gateway_api::types::BackendRef
 impl core::marker::Unpin for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::marker::Unpin for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::marker::Unpin for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::marker::Unpin for rust_web_server::gateway_api::types::Fraction
 impl core::marker::Unpin for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::marker::Unpin for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -3557,12 +3638,15 @@ impl core::marker::Unpin for rust_web_server::gateway_api::types::GatewaySpecAdd
 impl core::marker::Unpin for rust_web_server::gateway_api::types::GatewayStatus
 impl core::marker::Unpin for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::marker::Unpin for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::marker::Unpin for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::marker::Unpin for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::marker::Unpin for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::marker::Unpin for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::marker::Unpin for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpHeader
 impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -3580,6 +3664,8 @@ impl core::marker::Unpin for rust_web_server::gateway_api::types::HttpUrlRewrite
 impl core::marker::Unpin for rust_web_server::gateway_api::types::L4RouteRule
 impl core::marker::Unpin for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::marker::Unpin for rust_web_server::gateway_api::types::Listener
+impl core::marker::Unpin for rust_web_server::gateway_api::types::ListenerFilter
+impl core::marker::Unpin for rust_web_server::gateway_api::types::ListenerFilters
 impl core::marker::Unpin for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::marker::Unpin for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::marker::Unpin for rust_web_server::gateway_api::types::ListenerStatus
@@ -4052,11 +4138,15 @@ impl core::marker::UnsafeUnpin for rust_web_server::fleet::Fleet
 impl core::marker::UnsafeUnpin for rust_web_server::fleet::FleetConfig
 impl core::marker::UnsafeUnpin for rust_web_server::fleet::Outcome
 impl core::marker::UnsafeUnpin for rust_web_server::fleet::Source
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::addresses::Assignment
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::backend_tls::BackendTls
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::backend_tls::Evaluated
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::controller::Options
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::controller::Stores
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::ext_auth::CompiledAuth
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::ext_auth::Decision
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::filters::Cors
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::l4::Hello
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::lease::Decision
@@ -4085,6 +4175,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::BackendO
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::BackendRef
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::Fraction
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -4097,12 +4188,15 @@ impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GatewayS
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GatewayStatus
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpHeader
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -4120,6 +4214,8 @@ impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::HttpUrlR
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::L4RouteRule
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::Listener
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::ListenerFilter
+impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::ListenerFilters
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::marker::UnsafeUnpin for rust_web_server::gateway_api::types::ListenerStatus
@@ -4590,7 +4686,9 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fleet::Fleet
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fleet::FleetConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fleet::Outcome
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::fleet::Source
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::addresses::Assignment
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::filters::Cors
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::l4::Hello
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::lease::Decision
@@ -4613,6 +4711,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::t
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::BackendRef
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::Fraction
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -4625,12 +4724,15 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::t
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GatewayStatus
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::HttpHeader
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -4648,6 +4750,8 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::t
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::L4RouteRule
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::Listener
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::ListenerFilter
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::ListenerFilters
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::types::ListenerStatus
@@ -5079,7 +5183,9 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fleet::Fleet
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fleet::FleetConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fleet::Outcome
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::fleet::Source
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::addresses::Assignment
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::dataplane::DataPlane
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::ext_auth::proto::Verdict
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::filters::Cors
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::l4::Hello
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::lease::Decision
@@ -5102,6 +5208,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::type
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::BackendRef
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::BackendTlsValidation
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::Fraction
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -5114,12 +5221,15 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::type
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GatewayStatus
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GrpcRouteRule
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::HttpAuthConfig
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::HttpBackendRef
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::HttpCorsFilter
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::HttpHeader
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -5137,6 +5247,8 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::type
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::L4RouteRule
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::L4RouteSpec
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::Listener
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::ListenerFilter
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::ListenerFilters
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::ListenerSetSpec
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::ListenerSetStatus
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::types::ListenerStatus
@@ -5947,6 +6059,7 @@ impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::Backend
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::BackendRef
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::BackendTlsValidation
+impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::Fraction
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -5959,12 +6072,15 @@ impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::Gateway
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GatewayStatus
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GrpcRouteRule
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpAuthConfig
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpBackendRef
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpCorsFilter
+impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpHeader
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -5982,6 +6098,8 @@ impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::HttpUrl
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::L4RouteRule
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::L4RouteSpec
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::Listener
+impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::ListenerFilter
+impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::ListenerFilters
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::ListenerSetSpec
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::ListenerSetStatus
 impl serde_core::ser::Serialize for rust_web_server::gateway_api::types::ListenerStatus
@@ -6076,39 +6194,46 @@ impl<'a> core::clone::Clone for rust_web_server::i18n::Translator<'a>
 impl<'a> core::clone::Clone for rust_web_server::mcp::ToolCallRecord<'a>
 impl<'a> core::fmt::Debug for rust_web_server::i18n::Translator<'a>
 impl<'a> core::fmt::Debug for rust_web_server::mcp::ToolCallRecord<'a>
+impl<'a> core::marker::Freeze for rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
 impl<'a> core::marker::Freeze for rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> core::marker::Freeze for rust_web_server::http_client::RequestBuilder<'a>
 impl<'a> core::marker::Freeze for rust_web_server::i18n::Translator<'a>
 impl<'a> core::marker::Freeze for rust_web_server::mcp::ToolCallRecord<'a>
 impl<'a> core::marker::Freeze for rust_web_server::sso::jwks::VerifyOptions<'a>
 impl<'a> core::marker::Freeze for rust_web_server::tower::Next<'a>
+impl<'a> core::marker::Send for rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
 impl<'a> core::marker::Send for rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> core::marker::Send for rust_web_server::http_client::RequestBuilder<'a>
 impl<'a> core::marker::Send for rust_web_server::i18n::Translator<'a>
 impl<'a> core::marker::Send for rust_web_server::mcp::ToolCallRecord<'a>
 impl<'a> core::marker::Send for rust_web_server::sso::jwks::VerifyOptions<'a>
+impl<'a> core::marker::Sync for rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
 impl<'a> core::marker::Sync for rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> core::marker::Sync for rust_web_server::http_client::RequestBuilder<'a>
 impl<'a> core::marker::Sync for rust_web_server::i18n::Translator<'a>
 impl<'a> core::marker::Sync for rust_web_server::mcp::ToolCallRecord<'a>
 impl<'a> core::marker::Sync for rust_web_server::sso::jwks::VerifyOptions<'a>
+impl<'a> core::marker::Unpin for rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
 impl<'a> core::marker::Unpin for rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> core::marker::Unpin for rust_web_server::http_client::RequestBuilder<'a>
 impl<'a> core::marker::Unpin for rust_web_server::i18n::Translator<'a>
 impl<'a> core::marker::Unpin for rust_web_server::mcp::ToolCallRecord<'a>
 impl<'a> core::marker::Unpin for rust_web_server::sso::jwks::VerifyOptions<'a>
 impl<'a> core::marker::Unpin for rust_web_server::tower::Next<'a>
+impl<'a> core::marker::UnsafeUnpin for rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
 impl<'a> core::marker::UnsafeUnpin for rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> core::marker::UnsafeUnpin for rust_web_server::http_client::RequestBuilder<'a>
 impl<'a> core::marker::UnsafeUnpin for rust_web_server::i18n::Translator<'a>
 impl<'a> core::marker::UnsafeUnpin for rust_web_server::mcp::ToolCallRecord<'a>
 impl<'a> core::marker::UnsafeUnpin for rust_web_server::sso::jwks::VerifyOptions<'a>
 impl<'a> core::marker::UnsafeUnpin for rust_web_server::tower::Next<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::http_client::RequestBuilder<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::i18n::Translator<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::ToolCallRecord<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for rust_web_server::sso::jwks::VerifyOptions<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
 impl<'a> core::panic::unwind_safe::UnwindSafe for rust_web_server::http_client::AsyncRequestBuilder<'a>
 impl<'a> core::panic::unwind_safe::UnwindSafe for rust_web_server::http_client::RequestBuilder<'a>
 impl<'a> core::panic::unwind_safe::UnwindSafe for rust_web_server::i18n::Translator<'a>
@@ -6122,6 +6247,7 @@ impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::typ
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::BackendRef
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::BackendTlsPolicySpec
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::BackendTlsValidation
+impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::ForwardBodyConfig
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::Fraction
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::FrontendTlsConfig
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -6134,12 +6260,15 @@ impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::typ
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GatewayStatus
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GatewayStatusAddress
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GatewayTlsConfig
+impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GrpcAuthConfig
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GrpcMethodMatch
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GrpcRouteMatch
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GrpcRouteRule
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::GrpcRouteSpec
+impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::HttpAuthConfig
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::HttpBackendRef
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::HttpCorsFilter
+impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::HttpExternalAuthFilter
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::HttpHeader
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::HttpHeaderFilter
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -6157,6 +6286,8 @@ impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::typ
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::L4RouteRule
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::L4RouteSpec
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::Listener
+impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::ListenerFilter
+impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::ListenerFilters
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::ListenerSetSpec
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::ListenerSetStatus
 impl<'de> serde_core::de::Deserialize<'de> for rust_web_server::gateway_api::types::ListenerStatus
@@ -6586,6 +6717,7 @@ pub async fn rust_web_server::cache::ValueCache<V>::fetch_or_async<F, Fut>(&self
 pub async fn rust_web_server::cache::ValueCache<V>::try_fetch_or_async<E, F, Fut>(&self, &str, core::time::Duration, F) -> core::result::Result<V, E> where F: core::ops::function::FnOnce() -> Fut, Fut: core::future::future::Future<Output = core::result::Result<V, E>>
 pub async fn rust_web_server::gateway_api::controller::reconcile(&kube_client::client::Client, &rust_web_server::gateway_api::controller::Stores, &rust_web_server::gateway_api::controller::Options) -> core::result::Result<(), alloc::string::String>
 pub async fn rust_web_server::gateway_api::controller::run(kube_client::client::Client, rust_web_server::gateway_api::controller::Options, alloc::rcs::arc::Arc<tokio::sync::notify::Notify>)
+pub async fn rust_web_server::gateway_api::controller::served_cluster_trust_bundles(&kube_client::client::Client) -> core::option::Option<kube_core::discovery::ApiResource>
 pub async fn rust_web_server::gateway_api::l4::serve_tcp(tokio::net::tcp::stream::TcpStream, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
 pub async fn rust_web_server::gateway_api::l4::serve_tls_mixed(tokio::net::tcp::stream::TcpStream, core::option::Option<tokio_rustls::server::TlsAcceptor>, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
 pub async fn rust_web_server::gateway_api::l4::serve_tls_passthrough(tokio::net::tcp::stream::TcpStream, rust_web_server::gateway_api::router::PortListeners, alloc::rcs::arc::Arc<core::sync::atomic::AtomicUsize>)
@@ -6993,6 +7125,7 @@ pub const rust_web_server::gateway_api::CONTROLLER_NAME: &str
 pub const rust_web_server::gateway_api::FIELD_MANAGER: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_CONTROLLER_NAME: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_ENABLED: &str
+pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_EXPERIMENTAL: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_GATEWAY: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_IMAGE: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE: &str
@@ -7009,6 +7142,8 @@ pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_POD_SELECTOR: &st
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_PORT_RANGE: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_SERVICE_ACCOUNT: &str
 pub const rust_web_server::gateway_api::RWS_CONFIG_GATEWAY_API_SERVICE_TYPE: &str
+pub const rust_web_server::gateway_api::addresses::CLUSTER: &str
+pub const rust_web_server::gateway_api::addresses::SENTINEL: &str
 pub const rust_web_server::gateway_api::controller::DEBOUNCE: core::time::Duration
 pub const rust_web_server::gateway_api::controller::RESYNC: core::time::Duration
 pub const rust_web_server::gateway_api::l4::UDP_IDLE: core::time::Duration
@@ -7031,6 +7166,8 @@ pub const rust_web_server::gateway_api::provision::APP_NAME: &str
 pub const rust_web_server::gateway_api::provision::GATEWAY_NAMESPACE_LABEL: &str
 pub const rust_web_server::gateway_api::routes::GRPC_METHOD_MATCH: &str
 pub const rust_web_server::gateway_api::services::ENDPOINTS_MANAGED_BY: &str
+pub const rust_web_server::gateway_api::translate::CLUSTER_TRUST_BUNDLE_GROUP: &str
+pub const rust_web_server::gateway_api::translate::EXPERIMENTAL_FEATURES: &[&str]
 pub const rust_web_server::gateway_api::translate::GATEWAY_NAME_LABEL: &str
 pub const rust_web_server::gateway_api::translate::MANAGED_BY: &str
 pub const rust_web_server::gateway_api::translate::SUPPORTED_FEATURES: &[&str]
@@ -7723,6 +7860,7 @@ pub enum rust_web_server::fastcgi::Address
 pub enum rust_web_server::fleet::Fetched
 pub enum rust_web_server::fleet::Outcome
 pub enum rust_web_server::fleet::Source
+pub enum rust_web_server::gateway_api::ext_auth::Decision
 pub enum rust_web_server::gateway_api::filters::Cors
 pub enum rust_web_server::gateway_api::l4::Hello
 pub enum rust_web_server::gateway_api::lease::Decision
@@ -8686,6 +8824,11 @@ pub fn rust_web_server::fleet::signed_message(u64, &[u8]) -> alloc::vec::Vec<u8>
 pub fn rust_web_server::fleet::start_from_env()
 pub fn rust_web_server::fleet::status_json() -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::fleet::verify(&[u8], &[u8], &[u8]) -> core::result::Result<u64, alloc::string::String>
+pub fn rust_web_server::gateway_api::addresses::Assignment::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::addresses::Assignment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::addresses::assign(&[rust_web_server::gateway_api::types::GatewaySpecAddress], &[rust_web_server::gateway_api::types::GatewayStatusAddress], &[alloc::string::String]) -> rust_web_server::gateway_api::addresses::Assignment
+pub fn rust_web_server::gateway_api::addresses::requested_cluster_ip(&[rust_web_server::gateway_api::types::GatewaySpecAddress]) -> core::option::Option<&str>
+pub fn rust_web_server::gateway_api::addresses::routability_supported(&str) -> bool
 pub fn rust_web_server::gateway_api::backend_tls::BackendTls::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::backend_tls::BackendTls::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::backend_tls::BackendTls::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -8699,12 +8842,26 @@ pub fn rust_web_server::gateway_api::backend_tls::for_service(&[((alloc::string:
 pub fn rust_web_server::gateway_api::controller::Stores::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::controller::Stores::snapshot(&self) -> rust_web_server::gateway_api::translate::Snapshot
 pub fn rust_web_server::gateway_api::controller::merge_parents(&[rust_web_server::gateway_api::types::RouteParentStatus], &[rust_web_server::gateway_api::types::RouteParentStatus], &str) -> alloc::vec::Vec<rust_web_server::gateway_api::types::RouteParentStatus>
-pub fn rust_web_server::gateway_api::controller::start_watches(&kube_client::client::Client, &rust_web_server::gateway_api::services::ServiceSettings) -> (rust_web_server::gateway_api::controller::Stores, alloc::rcs::arc::Arc<tokio::sync::notify::Notify>)
+pub fn rust_web_server::gateway_api::controller::start_watches(&kube_client::client::Client, &rust_web_server::gateway_api::services::ServiceSettings, core::option::Option<kube_core::discovery::ApiResource>) -> (rust_web_server::gateway_api::controller::Stores, alloc::rcs::arc::Arc<tokio::sync::notify::Notify>)
 pub fn rust_web_server::gateway_api::dataplane::DataPlane::apply(&self, &rust_web_server::gateway_api::translate::GatewayConfig)
 pub fn rust_web_server::gateway_api::dataplane::DataPlane::default() -> Self
 pub fn rust_web_server::gateway_api::dataplane::DataPlane::new(&str) -> rust_web_server::gateway_api::dataplane::DataPlane
 pub fn rust_web_server::gateway_api::dataplane::DataPlane::ports(&self) -> alloc::vec::Vec<u16>
 pub fn rust_web_server::gateway_api::enabled() -> bool
+pub fn rust_web_server::gateway_api::ext_auth::CompiledAuth::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::ext_auth::CompiledAuth::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::ext_auth::CompiledAuth::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::ext_auth::Decision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::ext_auth::check(&rust_web_server::gateway_api::ext_auth::CompiledAuth, &rust_web_server::request::Request, rust_web_server::proxy::Peer<'_>, &core::sync::atomic::AtomicUsize) -> rust_web_server::gateway_api::ext_auth::Decision
+pub fn rust_web_server::gateway_api::ext_auth::grpc_decision(rust_web_server::gateway_api::ext_auth::proto::Verdict) -> rust_web_server::gateway_api::ext_auth::Decision
+pub fn rust_web_server::gateway_api::ext_auth::http_decision(&rust_web_server::gateway_api::types::HttpExternalAuthFilter, rust_web_server::response::Response) -> rust_web_server::gateway_api::ext_auth::Decision
+pub fn rust_web_server::gateway_api::ext_auth::http_request(&rust_web_server::gateway_api::types::HttpExternalAuthFilter, &rust_web_server::request::Request) -> rust_web_server::request::Request
+pub fn rust_web_server::gateway_api::ext_auth::proto::Verdict::default() -> Self
+pub fn rust_web_server::gateway_api::ext_auth::proto::Verdict::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::ext_auth::proto::Verdict::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::ext_auth::proto::check_request(&rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'_>) -> alloc::vec::Vec<u8>
+pub fn rust_web_server::gateway_api::ext_auth::proto::check_response(&[u8]) -> core::result::Result<rust_web_server::gateway_api::ext_auth::proto::Verdict, alloc::string::String>
+pub fn rust_web_server::gateway_api::ext_auth::run(&[rust_web_server::gateway_api::ext_auth::CompiledAuth], &rust_web_server::request::Request, rust_web_server::proxy::Peer<'_>, &core::sync::atomic::AtomicUsize) -> core::result::Result<core::option::Option<rust_web_server::request::Request>, rust_web_server::response::Response>
 pub fn rust_web_server::gateway_api::filters::Cors::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::filters::Cors::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::filters::backend_request<'a>(&'a rust_web_server::request::Request, &[rust_web_server::gateway_api::types::HttpRouteFilter], core::option::Option<&rust_web_server::gateway_api::types::HttpRouteMatch>) -> alloc::borrow::Cow<'a, rust_web_server::request::Request>
@@ -8826,6 +8983,7 @@ pub fn rust_web_server::gateway_api::translate::Settings::default() -> Self
 pub fn rust_web_server::gateway_api::translate::Settings::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::translate::Snapshot::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::translate::Snapshot::default() -> Self
+pub fn rust_web_server::gateway_api::translate::cluster_trust_bundle<'a>(&'a rust_web_server::gateway_api::translate::Snapshot, &str) -> core::result::Result<&'a str, (&'static str, alloc::string::String)>
 pub fn rust_web_server::gateway_api::translate::gateway_addresses(&rust_web_server::gateway_api::translate::Snapshot, &str, &str) -> alloc::vec::Vec<rust_web_server::gateway_api::types::GatewayStatusAddress>
 pub fn rust_web_server::gateway_api::translate::translate(&rust_web_server::gateway_api::translate::Snapshot, &rust_web_server::gateway_api::translate::Settings, &k8s_openapi::v1_32::apimachinery::pkg::apis::meta::v1::time::Time) -> (rust_web_server::gateway_api::translate::GatewayConfig, rust_web_server::gateway_api::translate::Desired)
 pub fn rust_web_server::gateway_api::types::AllowedRoutes::clone(&self) -> Self
@@ -8860,6 +9018,12 @@ pub fn rust_web_server::gateway_api::types::BackendTlsValidation::deserialize<__
 pub fn rust_web_server::gateway_api::types::BackendTlsValidation::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::types::BackendTlsValidation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::types::BackendTlsValidation::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::gateway_api::types::ForwardBodyConfig::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::types::ForwardBodyConfig::default() -> Self
+pub fn rust_web_server::gateway_api::types::ForwardBodyConfig::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn rust_web_server::gateway_api::types::ForwardBodyConfig::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::types::ForwardBodyConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::types::ForwardBodyConfig::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
 pub fn rust_web_server::gateway_api::types::Fraction::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::types::Fraction::default() -> Self
 pub fn rust_web_server::gateway_api::types::Fraction::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
@@ -8932,6 +9096,12 @@ pub fn rust_web_server::gateway_api::types::GatewayTlsConfig::deserialize<__D>(_
 pub fn rust_web_server::gateway_api::types::GatewayTlsConfig::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::types::GatewayTlsConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::types::GatewayTlsConfig::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::gateway_api::types::GrpcAuthConfig::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::types::GrpcAuthConfig::default() -> Self
+pub fn rust_web_server::gateway_api::types::GrpcAuthConfig::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn rust_web_server::gateway_api::types::GrpcAuthConfig::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::types::GrpcAuthConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::types::GrpcAuthConfig::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
 pub fn rust_web_server::gateway_api::types::GrpcMethodMatch::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::types::GrpcMethodMatch::default() -> Self
 pub fn rust_web_server::gateway_api::types::GrpcMethodMatch::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
@@ -8956,6 +9126,12 @@ pub fn rust_web_server::gateway_api::types::GrpcRouteSpec::deserialize<__D>(__D)
 pub fn rust_web_server::gateway_api::types::GrpcRouteSpec::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::types::GrpcRouteSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::types::GrpcRouteSpec::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::gateway_api::types::HttpAuthConfig::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::types::HttpAuthConfig::default() -> Self
+pub fn rust_web_server::gateway_api::types::HttpAuthConfig::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn rust_web_server::gateway_api::types::HttpAuthConfig::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::types::HttpAuthConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::types::HttpAuthConfig::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
 pub fn rust_web_server::gateway_api::types::HttpBackendRef::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::types::HttpBackendRef::default() -> Self
 pub fn rust_web_server::gateway_api::types::HttpBackendRef::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
@@ -8968,6 +9144,12 @@ pub fn rust_web_server::gateway_api::types::HttpCorsFilter::deserialize<__D>(__D
 pub fn rust_web_server::gateway_api::types::HttpCorsFilter::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::types::HttpCorsFilter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::types::HttpCorsFilter::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::gateway_api::types::HttpExternalAuthFilter::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::types::HttpExternalAuthFilter::default() -> Self
+pub fn rust_web_server::gateway_api::types::HttpExternalAuthFilter::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn rust_web_server::gateway_api::types::HttpExternalAuthFilter::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::types::HttpExternalAuthFilter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::types::HttpExternalAuthFilter::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
 pub fn rust_web_server::gateway_api::types::HttpHeader::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::types::HttpHeader::default() -> Self
 pub fn rust_web_server::gateway_api::types::HttpHeader::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
@@ -9070,6 +9252,18 @@ pub fn rust_web_server::gateway_api::types::Listener::deserialize<__D>(__D) -> c
 pub fn rust_web_server::gateway_api::types::Listener::eq(&self, &Self) -> bool
 pub fn rust_web_server::gateway_api::types::Listener::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::gateway_api::types::Listener::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::gateway_api::types::ListenerFilter::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::types::ListenerFilter::default() -> Self
+pub fn rust_web_server::gateway_api::types::ListenerFilter::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn rust_web_server::gateway_api::types::ListenerFilter::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::types::ListenerFilter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::types::ListenerFilter::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn rust_web_server::gateway_api::types::ListenerFilters::clone(&self) -> Self
+pub fn rust_web_server::gateway_api::types::ListenerFilters::default() -> Self
+pub fn rust_web_server::gateway_api::types::ListenerFilters::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub fn rust_web_server::gateway_api::types::ListenerFilters::eq(&self, &Self) -> bool
+pub fn rust_web_server::gateway_api::types::ListenerFilters::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::gateway_api::types::ListenerFilters::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
 pub fn rust_web_server::gateway_api::types::ListenerSetSpec::clone(&self) -> Self
 pub fn rust_web_server::gateway_api::types::ListenerSetSpec::default() -> Self
 pub fn rust_web_server::gateway_api::types::ListenerSetSpec::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
@@ -11320,9 +11514,12 @@ pub mod rust_web_server::feature
 pub mod rust_web_server::flash
 pub mod rust_web_server::fleet
 pub mod rust_web_server::gateway_api
+pub mod rust_web_server::gateway_api::addresses
 pub mod rust_web_server::gateway_api::backend_tls
 pub mod rust_web_server::gateway_api::controller
 pub mod rust_web_server::gateway_api::dataplane
+pub mod rust_web_server::gateway_api::ext_auth
+pub mod rust_web_server::gateway_api::ext_auth::proto
 pub mod rust_web_server::gateway_api::filters
 pub mod rust_web_server::gateway_api::l4
 pub mod rust_web_server::gateway_api::lease
@@ -11834,6 +12031,8 @@ pub rust_web_server::fleet::Source::Http(alloc::string::String)
 pub rust_web_server::fleet::Source::S3
 pub rust_web_server::fleet::Source::S3::bucket: alloc::string::String
 pub rust_web_server::fleet::Source::S3::key: alloc::string::String
+pub rust_web_server::gateway_api::addresses::Assignment::addresses: alloc::vec::Vec<rust_web_server::gateway_api::types::GatewayStatusAddress>
+pub rust_web_server::gateway_api::addresses::Assignment::condition: (bool, &'static str, alloc::string::String)
 pub rust_web_server::gateway_api::backend_tls::BackendTls::config: alloc::rcs::arc::Arc<rustls::client::client_conn::ClientConfig>
 pub rust_web_server::gateway_api::backend_tls::BackendTls::h2_config: alloc::rcs::arc::Arc<rustls::client::client_conn::ClientConfig>
 pub rust_web_server::gateway_api::backend_tls::BackendTls::label: alloc::string::String
@@ -11847,6 +12046,7 @@ pub rust_web_server::gateway_api::controller::Options::on_config: alloc::rcs::ar
 pub rust_web_server::gateway_api::controller::Options::settings: rust_web_server::gateway_api::translate::Settings
 pub rust_web_server::gateway_api::controller::Stores::backend_tls_policies: kube_runtime::reflector::store::Store<rust_web_server::gateway_api::resources::BackendTlsPolicy>
 pub rust_web_server::gateway_api::controller::Stores::classes: kube_runtime::reflector::store::Store<rust_web_server::gateway_api::resources::GatewayClass>
+pub rust_web_server::gateway_api::controller::Stores::cluster_trust_bundles: core::option::Option<kube_runtime::reflector::store::Store<kube_core::dynamic::DynamicObject>>
 pub rust_web_server::gateway_api::controller::Stores::config_maps: kube_runtime::reflector::store::Store<k8s_openapi::v1_32::api::core::v1::config_map::ConfigMap>
 pub rust_web_server::gateway_api::controller::Stores::deployments: kube_runtime::reflector::store::Store<k8s_openapi::v1_32::api::apps::v1::deployment::Deployment>
 pub rust_web_server::gateway_api::controller::Stores::endpoint_slices: kube_runtime::reflector::store::Store<k8s_openapi::v1_32::api::discovery::v1::endpoint_slice::EndpointSlice>
@@ -11862,6 +12062,25 @@ pub rust_web_server::gateway_api::controller::Stores::services: kube_runtime::re
 pub rust_web_server::gateway_api::controller::Stores::tcp_routes: kube_runtime::reflector::store::Store<rust_web_server::gateway_api::resources::TcpRoute>
 pub rust_web_server::gateway_api::controller::Stores::tls_routes: kube_runtime::reflector::store::Store<rust_web_server::gateway_api::resources::TlsRoute>
 pub rust_web_server::gateway_api::controller::Stores::udp_routes: kube_runtime::reflector::store::Store<rust_web_server::gateway_api::resources::UdpRoute>
+pub rust_web_server::gateway_api::ext_auth::CompiledAuth::endpoints: core::result::Result<alloc::vec::Vec<alloc::string::String>, alloc::string::String>
+pub rust_web_server::gateway_api::ext_auth::CompiledAuth::filter: rust_web_server::gateway_api::types::HttpExternalAuthFilter
+pub rust_web_server::gateway_api::ext_auth::CompiledAuth::tls: core::option::Option<core::result::Result<rust_web_server::gateway_api::backend_tls::BackendTls, alloc::string::String>>
+pub rust_web_server::gateway_api::ext_auth::Decision::Allow
+pub rust_web_server::gateway_api::ext_auth::Decision::Allow::remove: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::gateway_api::ext_auth::Decision::Allow::set: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub rust_web_server::gateway_api::ext_auth::Decision::Deny(rust_web_server::response::Response)
+pub rust_web_server::gateway_api::ext_auth::proto::HttpAttributes::body: &'a [u8]
+pub rust_web_server::gateway_api::ext_auth::proto::HttpAttributes::headers: &'a [(alloc::string::String, alloc::string::String)]
+pub rust_web_server::gateway_api::ext_auth::proto::HttpAttributes::host: &'a str
+pub rust_web_server::gateway_api::ext_auth::proto::HttpAttributes::method: &'a str
+pub rust_web_server::gateway_api::ext_auth::proto::HttpAttributes::path: &'a str
+pub rust_web_server::gateway_api::ext_auth::proto::HttpAttributes::scheme: &'a str
+pub rust_web_server::gateway_api::ext_auth::proto::HttpAttributes::source_ip: &'a str
+pub rust_web_server::gateway_api::ext_auth::proto::Verdict::code: i32
+pub rust_web_server::gateway_api::ext_auth::proto::Verdict::denied_body: alloc::string::String
+pub rust_web_server::gateway_api::ext_auth::proto::Verdict::denied_status: i32
+pub rust_web_server::gateway_api::ext_auth::proto::Verdict::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub rust_web_server::gateway_api::ext_auth::proto::Verdict::headers_to_remove: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::gateway_api::filters::Cors::Actual(alloc::vec::Vec<rust_web_server::header::Header>)
 pub rust_web_server::gateway_api::filters::Cors::Pass
 pub rust_web_server::gateway_api::filters::Cors::Preflight(alloc::vec::Vec<rust_web_server::header::Header>)
@@ -11941,13 +12160,17 @@ pub rust_web_server::gateway_api::translate::ListenerConfig::http_routes: alloc:
 pub rust_web_server::gateway_api::translate::ListenerConfig::name: alloc::string::String
 pub rust_web_server::gateway_api::translate::ListenerConfig::port: i32
 pub rust_web_server::gateway_api::translate::ListenerConfig::protocol: alloc::string::String
+pub rust_web_server::gateway_api::translate::ListenerConfig::request_filters: alloc::vec::Vec<rust_web_server::gateway_api::ext_auth::CompiledAuth>
 pub rust_web_server::gateway_api::translate::ListenerConfig::tls: core::option::Option<(alloc::vec::Vec<u8>, alloc::vec::Vec<u8>)>
 pub rust_web_server::gateway_api::translate::Settings::controller_name: alloc::string::String
+pub rust_web_server::gateway_api::translate::Settings::experimental: bool
 pub rust_web_server::gateway_api::translate::Settings::mesh: bool
 pub rust_web_server::gateway_api::translate::Settings::provision: core::option::Option<rust_web_server::gateway_api::provision::ProvisionSettings>
 pub rust_web_server::gateway_api::translate::Settings::services: rust_web_server::gateway_api::services::ServiceSettings
 pub rust_web_server::gateway_api::translate::Snapshot::backend_tls_policies: alloc::vec::Vec<rust_web_server::gateway_api::resources::BackendTlsPolicy>
 pub rust_web_server::gateway_api::translate::Snapshot::classes: alloc::vec::Vec<rust_web_server::gateway_api::resources::GatewayClass>
+pub rust_web_server::gateway_api::translate::Snapshot::cluster_trust_bundles: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub rust_web_server::gateway_api::translate::Snapshot::cluster_trust_bundles_served: bool
 pub rust_web_server::gateway_api::translate::Snapshot::config_maps: alloc::vec::Vec<k8s_openapi::v1_32::api::core::v1::config_map::ConfigMap>
 pub rust_web_server::gateway_api::translate::Snapshot::deployments: alloc::vec::Vec<k8s_openapi::v1_32::api::apps::v1::deployment::Deployment>
 pub rust_web_server::gateway_api::translate::Snapshot::endpoint_slices: alloc::vec::Vec<k8s_openapi::v1_32::api::discovery::v1::endpoint_slice::EndpointSlice>
@@ -11979,6 +12202,7 @@ pub rust_web_server::gateway_api::types::BackendTlsValidation::ca_certificate_re
 pub rust_web_server::gateway_api::types::BackendTlsValidation::hostname: alloc::string::String
 pub rust_web_server::gateway_api::types::BackendTlsValidation::subject_alt_names: alloc::vec::Vec<rust_web_server::gateway_api::types::PolicySubjectAltName>
 pub rust_web_server::gateway_api::types::BackendTlsValidation::well_known_ca_certificates: core::option::Option<alloc::string::String>
+pub rust_web_server::gateway_api::types::ForwardBodyConfig::max_size: i32
 pub rust_web_server::gateway_api::types::Fraction::denominator: core::option::Option<i32>
 pub rust_web_server::gateway_api::types::Fraction::numerator: i32
 pub rust_web_server::gateway_api::types::FrontendTlsConfig::default: rust_web_server::gateway_api::types::TlsConfig
@@ -12001,15 +12225,18 @@ pub rust_web_server::gateway_api::types::GatewaySpec::infrastructure: core::opti
 pub rust_web_server::gateway_api::types::GatewaySpec::listeners: alloc::vec::Vec<rust_web_server::gateway_api::types::Listener>
 pub rust_web_server::gateway_api::types::GatewaySpec::tls: core::option::Option<rust_web_server::gateway_api::types::GatewayTlsConfig>
 pub rust_web_server::gateway_api::types::GatewaySpecAddress::address_type: core::option::Option<alloc::string::String>
+pub rust_web_server::gateway_api::types::GatewaySpecAddress::routability: core::option::Option<alloc::string::String>
 pub rust_web_server::gateway_api::types::GatewaySpecAddress::value: alloc::string::String
 pub rust_web_server::gateway_api::types::GatewayStatus::addresses: alloc::vec::Vec<rust_web_server::gateway_api::types::GatewayStatusAddress>
 pub rust_web_server::gateway_api::types::GatewayStatus::attached_listener_sets: core::option::Option<i32>
 pub rust_web_server::gateway_api::types::GatewayStatus::conditions: alloc::vec::Vec<k8s_openapi::v1_32::apimachinery::pkg::apis::meta::v1::condition::Condition>
 pub rust_web_server::gateway_api::types::GatewayStatus::listeners: alloc::vec::Vec<rust_web_server::gateway_api::types::ListenerStatus>
 pub rust_web_server::gateway_api::types::GatewayStatusAddress::address_type: core::option::Option<alloc::string::String>
+pub rust_web_server::gateway_api::types::GatewayStatusAddress::routability: core::option::Option<alloc::string::String>
 pub rust_web_server::gateway_api::types::GatewayStatusAddress::value: alloc::string::String
 pub rust_web_server::gateway_api::types::GatewayTlsConfig::backend: core::option::Option<rust_web_server::gateway_api::types::GatewayBackendTls>
 pub rust_web_server::gateway_api::types::GatewayTlsConfig::frontend: core::option::Option<rust_web_server::gateway_api::types::FrontendTlsConfig>
+pub rust_web_server::gateway_api::types::GrpcAuthConfig::allowed_headers: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::gateway_api::types::GrpcMethodMatch::match_type: core::option::Option<alloc::string::String>
 pub rust_web_server::gateway_api::types::GrpcMethodMatch::method: core::option::Option<alloc::string::String>
 pub rust_web_server::gateway_api::types::GrpcMethodMatch::service: core::option::Option<alloc::string::String>
@@ -12022,6 +12249,9 @@ pub rust_web_server::gateway_api::types::GrpcRouteRule::name: core::option::Opti
 pub rust_web_server::gateway_api::types::GrpcRouteSpec::hostnames: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::gateway_api::types::GrpcRouteSpec::parent_refs: alloc::vec::Vec<rust_web_server::gateway_api::types::ParentReference>
 pub rust_web_server::gateway_api::types::GrpcRouteSpec::rules: alloc::vec::Vec<rust_web_server::gateway_api::types::GrpcRouteRule>
+pub rust_web_server::gateway_api::types::HttpAuthConfig::allowed_headers: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::gateway_api::types::HttpAuthConfig::allowed_response_headers: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::gateway_api::types::HttpAuthConfig::path: alloc::string::String
 pub rust_web_server::gateway_api::types::HttpBackendRef::backend_ref: rust_web_server::gateway_api::types::BackendRef
 pub rust_web_server::gateway_api::types::HttpBackendRef::filters: alloc::vec::Vec<rust_web_server::gateway_api::types::HttpRouteFilter>
 pub rust_web_server::gateway_api::types::HttpCorsFilter::allow_credentials: core::option::Option<bool>
@@ -12030,6 +12260,11 @@ pub rust_web_server::gateway_api::types::HttpCorsFilter::allow_methods: alloc::v
 pub rust_web_server::gateway_api::types::HttpCorsFilter::allow_origins: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::gateway_api::types::HttpCorsFilter::expose_headers: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::gateway_api::types::HttpCorsFilter::max_age: i32
+pub rust_web_server::gateway_api::types::HttpExternalAuthFilter::backend_ref: rust_web_server::gateway_api::types::BackendObjectReference
+pub rust_web_server::gateway_api::types::HttpExternalAuthFilter::forward_body: core::option::Option<rust_web_server::gateway_api::types::ForwardBodyConfig>
+pub rust_web_server::gateway_api::types::HttpExternalAuthFilter::grpc: core::option::Option<rust_web_server::gateway_api::types::GrpcAuthConfig>
+pub rust_web_server::gateway_api::types::HttpExternalAuthFilter::http: core::option::Option<rust_web_server::gateway_api::types::HttpAuthConfig>
+pub rust_web_server::gateway_api::types::HttpExternalAuthFilter::protocol: alloc::string::String
 pub rust_web_server::gateway_api::types::HttpHeader::name: alloc::string::String
 pub rust_web_server::gateway_api::types::HttpHeader::value: alloc::string::String
 pub rust_web_server::gateway_api::types::HttpHeaderFilter::add: alloc::vec::Vec<rust_web_server::gateway_api::types::HttpHeader>
@@ -12085,11 +12320,16 @@ pub rust_web_server::gateway_api::types::L4RouteSpec::hostnames: alloc::vec::Vec
 pub rust_web_server::gateway_api::types::L4RouteSpec::parent_refs: alloc::vec::Vec<rust_web_server::gateway_api::types::ParentReference>
 pub rust_web_server::gateway_api::types::L4RouteSpec::rules: alloc::vec::Vec<rust_web_server::gateway_api::types::L4RouteRule>
 pub rust_web_server::gateway_api::types::Listener::allowed_routes: core::option::Option<rust_web_server::gateway_api::types::AllowedRoutes>
+pub rust_web_server::gateway_api::types::Listener::filters: core::option::Option<rust_web_server::gateway_api::types::ListenerFilters>
 pub rust_web_server::gateway_api::types::Listener::hostname: core::option::Option<alloc::string::String>
 pub rust_web_server::gateway_api::types::Listener::name: alloc::string::String
 pub rust_web_server::gateway_api::types::Listener::port: i32
 pub rust_web_server::gateway_api::types::Listener::protocol: alloc::string::String
 pub rust_web_server::gateway_api::types::Listener::tls: core::option::Option<rust_web_server::gateway_api::types::ListenerTlsConfig>
+pub rust_web_server::gateway_api::types::ListenerFilter::extension_ref: core::option::Option<serde_json::value::Value>
+pub rust_web_server::gateway_api::types::ListenerFilter::external_auth: core::option::Option<rust_web_server::gateway_api::types::HttpExternalAuthFilter>
+pub rust_web_server::gateway_api::types::ListenerFilter::filter_type: alloc::string::String
+pub rust_web_server::gateway_api::types::ListenerFilters::requests: alloc::vec::Vec<rust_web_server::gateway_api::types::ListenerFilter>
 pub rust_web_server::gateway_api::types::ListenerSetSpec::listeners: alloc::vec::Vec<rust_web_server::gateway_api::types::Listener>
 pub rust_web_server::gateway_api::types::ListenerSetSpec::parent_ref: rust_web_server::gateway_api::types::ParentGatewayReference
 pub rust_web_server::gateway_api::types::ListenerSetStatus::conditions: alloc::vec::Vec<k8s_openapi::v1_32::apimachinery::pkg::apis::meta::v1::condition::Condition>
@@ -13332,11 +13572,15 @@ pub struct rust_web_server::flash::FlashMessage
 pub struct rust_web_server::flash::Redirect
 pub struct rust_web_server::fleet::Fleet
 pub struct rust_web_server::fleet::FleetConfig
+pub struct rust_web_server::gateway_api::addresses::Assignment
 pub struct rust_web_server::gateway_api::backend_tls::BackendTls
 pub struct rust_web_server::gateway_api::backend_tls::Evaluated
 pub struct rust_web_server::gateway_api::controller::Options
 pub struct rust_web_server::gateway_api::controller::Stores
 pub struct rust_web_server::gateway_api::dataplane::DataPlane
+pub struct rust_web_server::gateway_api::ext_auth::CompiledAuth
+pub struct rust_web_server::gateway_api::ext_auth::proto::HttpAttributes<'a>
+pub struct rust_web_server::gateway_api::ext_auth::proto::Verdict
 pub struct rust_web_server::gateway_api::lease::LeaseSettings
 pub struct rust_web_server::gateway_api::mesh::MeshSnapshot
 pub struct rust_web_server::gateway_api::mesh::config::Publisher
@@ -13362,6 +13606,7 @@ pub struct rust_web_server::gateway_api::types::BackendObjectReference
 pub struct rust_web_server::gateway_api::types::BackendRef
 pub struct rust_web_server::gateway_api::types::BackendTlsPolicySpec
 pub struct rust_web_server::gateway_api::types::BackendTlsValidation
+pub struct rust_web_server::gateway_api::types::ForwardBodyConfig
 pub struct rust_web_server::gateway_api::types::Fraction
 pub struct rust_web_server::gateway_api::types::FrontendTlsConfig
 pub struct rust_web_server::gateway_api::types::FrontendTlsValidation
@@ -13374,12 +13619,15 @@ pub struct rust_web_server::gateway_api::types::GatewaySpecAddress
 pub struct rust_web_server::gateway_api::types::GatewayStatus
 pub struct rust_web_server::gateway_api::types::GatewayStatusAddress
 pub struct rust_web_server::gateway_api::types::GatewayTlsConfig
+pub struct rust_web_server::gateway_api::types::GrpcAuthConfig
 pub struct rust_web_server::gateway_api::types::GrpcMethodMatch
 pub struct rust_web_server::gateway_api::types::GrpcRouteMatch
 pub struct rust_web_server::gateway_api::types::GrpcRouteRule
 pub struct rust_web_server::gateway_api::types::GrpcRouteSpec
+pub struct rust_web_server::gateway_api::types::HttpAuthConfig
 pub struct rust_web_server::gateway_api::types::HttpBackendRef
 pub struct rust_web_server::gateway_api::types::HttpCorsFilter
+pub struct rust_web_server::gateway_api::types::HttpExternalAuthFilter
 pub struct rust_web_server::gateway_api::types::HttpHeader
 pub struct rust_web_server::gateway_api::types::HttpHeaderFilter
 pub struct rust_web_server::gateway_api::types::HttpHeaderMatch
@@ -13397,6 +13645,8 @@ pub struct rust_web_server::gateway_api::types::HttpUrlRewriteFilter
 pub struct rust_web_server::gateway_api::types::L4RouteRule
 pub struct rust_web_server::gateway_api::types::L4RouteSpec
 pub struct rust_web_server::gateway_api::types::Listener
+pub struct rust_web_server::gateway_api::types::ListenerFilter
+pub struct rust_web_server::gateway_api::types::ListenerFilters
 pub struct rust_web_server::gateway_api::types::ListenerSetSpec
 pub struct rust_web_server::gateway_api::types::ListenerSetStatus
 pub struct rust_web_server::gateway_api::types::ListenerStatus

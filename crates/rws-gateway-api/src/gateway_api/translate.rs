@@ -141,6 +141,8 @@ pub struct ListenerConfig {
     /// The certificate (PEM chain, key) its Gateway presents to TLS
     /// backends (`spec.tls.backend.clientCertificateRef`).
     pub backend_client_cert: Option<(Vec<u8>, Vec<u8>)>,
+    /// Pre-routing filters (`filters.requests`, GEP-5224), in order.
+    pub request_filters: Vec<super::ext_auth::CompiledAuth>,
     pub http_routes: Vec<CompiledHttpRoute>,
 }
 
@@ -462,6 +464,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                     tls: view.tls.clone(),
                     client_ca: view.client_ca.clone(),
                     backend_client_cert: backend_client_cert.as_ref().and_then(|c| c.as_ref().ok()).cloned(),
+                    request_filters: view.request_filters.clone(),
                     http_routes: view.http_routes.clone(),
                 });
             }
@@ -591,6 +594,7 @@ struct ListenerView {
     message: String,
     tls: Option<(Vec<u8>, Vec<u8>)>,
     client_ca: Option<ClientCa>,
+    request_filters: Vec<super::ext_auth::CompiledAuth>,
     http_routes: Vec<CompiledHttpRoute>,
 }
 
@@ -668,6 +672,22 @@ fn listener_views(gateway: &Gateway, listeners: &[Listener], namespace: &str, ow
                 }
             }
             // Invalid route kinds alone don't stop the listener serving the valid ones.
+            // Pre-routing filters (GEP-5224): ExternalAuth on HTTP and
+            // HTTPS listeners; anything else can't be run in order, so the
+            // listener isn't accepted.
+            let mut request_filters = Vec::new();
+            let mut message = message;
+            for filter in l.filters.as_ref().map(|f| f.requests.as_slice()).unwrap_or_default() {
+                let auth = filter.external_auth.as_ref().filter(|_| filter.filter_type == "ExternalAuth" && matches!(l.protocol.as_str(), "HTTP" | "HTTPS"));
+                let Some(auth) = auth else {
+                    accepted = false;
+                    accepted_reason = "UnsupportedValue";
+                    message = format!("listener filter {} isn't supported on a {} listener", filter.filter_type, l.protocol);
+                    break;
+                };
+                let resolved = super::routes::resolve(&auth.backend_ref, namespace, "Gateway", snapshot);
+                request_filters.push(super::ext_auth::CompiledAuth { filter: auth.clone(), endpoints: resolved.endpoints, tls: resolved.tls });
+            }
             // (Nor does a ClusterTrustBundle left out beside valid CA sources.)
             let programmed = accepted && resolved_refs.as_ref().err().is_none_or(|(reason, _)| *reason == "InvalidRouteKinds" || (client_ca.is_some() && matches!(*reason, "InvalidCACertificateRef" | "InvalidKind")));
             ListenerView {
@@ -688,6 +708,7 @@ fn listener_views(gateway: &Gateway, listeners: &[Listener], namespace: &str, ow
                 message,
                 tls,
                 client_ca,
+                request_filters,
                 http_routes: Vec::new(),
             }
         })
