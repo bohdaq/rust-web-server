@@ -15,6 +15,7 @@ pub const RWS_CONFIG_TRAFFIC_APPS: &str = "RWS_CONFIG_TRAFFIC_APPS";
 pub const RWS_CONFIG_TRAFFIC_OWNER_NETWORKS: &str = "RWS_CONFIG_TRAFFIC_OWNER_NETWORKS";
 pub const RWS_CONFIG_TRAFFIC_PROBE_ADDRESSES: &str = "RWS_CONFIG_TRAFFIC_PROBE_ADDRESSES";
 pub const RWS_CONFIG_TRAFFIC_HIDE_HOSTS: &str = "RWS_CONFIG_TRAFFIC_HIDE_HOSTS";
+pub const RWS_CONFIG_TRAFFIC_IGNORE_REFERRERS: &str = "RWS_CONFIG_TRAFFIC_IGNORE_REFERRERS";
 
 fn read(key: &str) -> String {
     std::env::var(key).unwrap_or_default().trim().to_string()
@@ -134,4 +135,11 @@ pub fn probe_addresses() -> bool {
 /// server's name, an MTA-STS policy host): counted under `other`.
 pub fn hide_hosts() -> Vec<String> {
     list(RWS_CONFIG_TRAFFIC_HIDE_HOSTS)
+}
+
+/// `ignore_referrers`: referring sites that are spam (a domain also covers
+/// its subdomains): a visit they send counts as direct, and they never
+/// show among the referrers.
+pub fn ignore_referrers() -> Vec<String> {
+    list(RWS_CONFIG_TRAFFIC_IGNORE_REFERRERS)
 }

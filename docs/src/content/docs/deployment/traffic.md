@@ -353,17 +353,21 @@ under such names move there when rws starts.
 hide_hosts = ["mail.example.com", "mta-sts.example.com"]
 ```
 
-**Sites and unknown hosts** (since 18.35.2): when your `[[route]]`s match
-sites by `host`, those are the sites. `www.<site>` counts as `<site>`, and
-every other `Host` — addresses, `localhost`, no `Host`, names no route
-serves, and the names in `hide_hosts` — counts as one **Unknown hosts**
-entry, so scanners' junk headers don't fill the site list. Counts saved
-under such names move there when rws starts.
+**Referrer spam** (since 18.36.1): sites that send fake visits to get
+listed among your referrers go in `ignore_referrers` — a domain covers its
+subdomains. A visit they send still counts, as direct, and they're never
+listed as referrers. It applies from the next request (the list follows
+config reloads); counts already made stay.
 
 ```toml
 [traffic]
-hide_hosts = ["mail.example.com", "mta-sts.example.com"]
+ignore_referrers = ["spam-links.example"]
 ```
+
+**Outbound clicks** (since 18.36.1): with `script = true`, a click on a link
+to another site (`http`/`https`, middle clicks too) is reported as the event
+`outbound` with `{to: "<host>"}`, so `goals = ["event:outbound"]` counts
+them and the Events tab lists where people went.
 
 Counting costs about 170 ns per request; the country, device and hosting
 network are worked out once per visitor per day. Memory and the file are

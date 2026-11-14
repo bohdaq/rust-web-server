@@ -194,7 +194,7 @@ export async function render() {
           <h1 class="hero-heading">The web server that gets <br />its own certificates <br />and routes your apps</h1>
           <p class="lead">rws is a free, open-source (MIT) web server and reverse proxy in one binary: it serves static files, gets and renews Let's Encrypt certificates on its own, load balances your apps and adds auth and rate limits, all from one <code>rws.config.toml</code>. It runs on Linux, macOS and Windows, speaks HTTP/1.1, HTTP/2 and HTTP/3, and is also a Rust crate for building apps.</p>
           ${heroInstall}
-          <p class="proof-line">Gateway API v1.6.3 conformant · h2spec 146 of 146 · MIT licensed</p>
+          <p class="proof-line"><a href="/benchmarks/">96,670 req/s, ahead of nginx</a> · <a href="/docs/deployment/kubernetes-gateway-api/">Gateway API v1.6.3 conformant</a> · h2spec 146 of 146 · <a href="https://github.com/bohdaq/rust-web-server">MIT licensed, on GitHub</a></p>
         </div>
         <div class="terminal" role="img" aria-label="A terminal: running rws in a folder starts a server on port 7878, and curl gets HTTP 200 OK.">
           <div class="terminal-bar" aria-hidden="true"><span></span><span></span><span></span></div>

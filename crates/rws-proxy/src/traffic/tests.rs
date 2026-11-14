@@ -1190,3 +1190,40 @@ fn saved_counts_of_renamed_hosts_move_with_them() {
     assert_eq!(totals(&other, "bots").2, 1, "{other}");
     assert!(summary(48, None, now).contains(r#""kind":"tool","name":"curl""#), "legacy lists keep their keys");
 }
+
+#[test]
+fn ignored_referrers_count_as_direct_and_are_never_listed() {
+    let _g = fresh();
+    use super::record::{is_ignored_referrer, set_ignored_referrers};
+    set_ignored_referrers(&["www.Spam.example".into(), " ".into()]);
+    assert!(is_ignored_referrer("spam.example"));
+    assert!(is_ignored_referrer("www.spam.example"), "subdomains too");
+    assert!(is_ignored_referrer("SPAM.example."), "case and a trailing dot");
+    assert!(!is_ignored_referrer("notspam.example"), "not a suffix match");
+    assert!(!is_ignored_referrer("example"));
+
+    let mut spam = hit("203.0.113.1", CHROME, "/", T0);
+    spam.referer = Some("https://www.spam.example/links");
+    record(&spam);
+    record(&hit("203.0.113.1", CHROME, "/main.js", T0 + 1));
+    let mut real = hit("203.0.113.2", CHROME, "/docs/", T0 + 2);
+    real.referer = Some("https://news.example/x");
+    record(&real);
+    record(&hit("203.0.113.2", CHROME, "/main.js", T0 + 3));
+    let s = summary(24, None, T0 + 60);
+    assert_eq!(totals(&s, "people").2, 2, "the visit still counts: {s}");
+    assert!(s.contains(r#""referrers":[["news.example",1]]"#), "{s}");
+    assert!(dim(&s, "channels").contains(r#"["direct",1]"#), "{s}");
+    assert!(dim(&s, "channels").contains(r#"["referral",1]"#), "{s}");
+
+    set_ignored_referrers(&[]);
+    assert!(!is_ignored_referrer("spam.example"), "an empty list ignores nothing");
+}
+
+#[test]
+fn the_script_reports_clicks_on_links_to_other_sites() {
+    let js = super::script::SCRIPT;
+    assert!(js.contains(r#"w.rws.track("outbound",{to:h})"#));
+    assert!(js.contains(r#"addEventListener("auxclick",out,true)"#), "middle clicks too");
+    assert!(js.contains("^https?:$"), "only web links, not mailto:");
+}

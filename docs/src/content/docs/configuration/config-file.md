@@ -249,6 +249,7 @@ retention_days   = 30                        # 1–90
 # apps           = ["MyApp=MyApp/", "MyApp=chrome-extension://<id>"]  # native apps and extensions: counted as Apps (18.35)
 # owner_networks = ["203.0.113.7", "198.51.100.0/24"]  # your own visits, counted apart (18.35)
 # hide_hosts     = ["mail.example.com", "mta-sts.example.com"]  # routed names that aren't sites: counted as Unknown hosts (18.35.2)
+# ignore_referrers = ["spam-links.example"]  # referrer spam: counted as direct, never listed; covers subdomains (18.36.1)
 # probe_addresses = false                    # keep scanners' addresses in Probe sources (18.35)
 # database_url_env = "TRAFFIC_DATABASE_URL"  # keep every page view in PostgreSQL (the variable holding the URL)
 ```

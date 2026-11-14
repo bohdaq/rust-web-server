@@ -94,8 +94,9 @@ pub fn start() {
 pub fn configure_sites(toml: &str) {
     let config = crate::proxy_config::ProxyConfig::from_str(toml);
     record::set_configured_hosts(config.routes.iter().filter_map(|r| r.match_.host.clone()));
-    // `[traffic] apps` and `owner_networks` follow the file too.
+    // `[traffic] apps`, `owner_networks` and `ignore_referrers` follow the file too.
     apps::set_apps(&config::apps());
+    record::set_ignored_referrers(&config::ignore_referrers());
     owner::set_networks(&config::owner_networks());
 }
 

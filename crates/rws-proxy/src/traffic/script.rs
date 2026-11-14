@@ -1,7 +1,8 @@
 //! The optional first-party script (`[traffic] script = true`, 18.31.0):
 //! rws serves `/_rws/t.js` itself, and the script reports to `/_rws/t` on
 //! the same origin what the server can't see — time on page, scroll depth,
-//! screen size, single-page-app route changes and custom events
+//! screen size, single-page-app route changes, clicks on links to other
+//! sites (event `outbound`, `{to: host}`, 18.36.1) and custom events
 //! (`rws.track("signup", {plan: "pro"})`). Nothing is stored in the
 //! browser; the visitor is the same daily hash as for every request.
 //!
@@ -25,7 +26,7 @@ pub const MAX_BEACON: usize = 2048;
 /// Where the site's apps send events (18.35, [`super::record::app_event`]).
 pub const APP_EVENTS_PATH: &str = "/_rws/e";
 
-/// The script. No dependencies, no storage, ~1.6 KB (0.8 KB compressed). The first page view is
+/// The script. No dependencies, no storage, ~2 KB (1 KB compressed). The first page view is
 /// already counted by the server, so it reports only what happens after:
 /// leaving a page (time, scroll, width), route changes, events.
 pub const SCRIPT: &str = r#"(()=>{"use strict";const w=window,d=document,n=navigator,E="/_rws/t";if(n.webdriver&&!w.rwsTrackAutomation)return;
@@ -42,6 +43,8 @@ const nav=()=>{const np=location.pathname+location.search;if(np===p)return;const
 for(const k of["pushState","replaceState"]){const o=history[k];history[k]=function(){const r=o.apply(this,arguments);nav();return r}}
 addEventListener("popstate",nav);
 w.rws=w.rws||{};w.rws.track=(name,props)=>{const q={};if(props&&typeof props==="object")for(const k of Object.keys(props).slice(0,4))q[String(k).slice(0,32)]=String(props[k]).slice(0,64);send({t:"event",p:location.pathname+location.search,n:String(name).slice(0,64),q})};
+const out=e=>{const a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;let u;try{u=new URL(a.href,location.href)}catch(x){return}if(!/^https?:$/.test(u.protocol))return;const h=u.hostname.replace(/^www\./,"");if(h===location.hostname.replace(/^www\./,""))return;w.rws.track("outbound",{to:h})};
+d.addEventListener("click",out,true);d.addEventListener("auxclick",out,true);
 depth()})();
 "#;
 

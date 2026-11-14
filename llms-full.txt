@@ -1931,6 +1931,7 @@ don't use them.
 | `RWS_CONFIG_TRAFFIC_APPS` | (none) | comma list of `name=pattern` | The site's native apps and browser extensions (since 18.35): a `User-Agent` token (`HITOP=HITOP/`; after a `/` the version is read) or an extension origin (`HITOP=chrome-extension://<id>`). They count as **Apps**, not bots, and may send events to `/_rws/e`; at most 64. See [Apps and extensions](/deployment/traffic/#apps-and-extensions). |
 | `RWS_CONFIG_TRAFFIC_OWNER_NETWORKS` | (none) | comma list of addresses or CIDR ranges | Requests from these are the owner's, counted apart from everyone else's (since 18.35). See [Your own visits](/deployment/traffic/#your-own-visits). |
 | `RWS_CONFIG_TRAFFIC_HIDE_HOSTS` | (none) | comma list of host names | Names your routes serve that aren't sites to report — a mail server's name, an MTA-STS policy host (since 18.35.2). Counted under *Unknown hosts*, not listed as sites. |
+| `RWS_CONFIG_TRAFFIC_IGNORE_REFERRERS` | (none) | comma list of domains | Referrer spam (since 18.36.1): visits these sites (and their subdomains) send count as direct, and they are never listed as referrers. |
 | `RWS_CONFIG_TRAFFIC_PROBE_ADDRESSES` | `false` | boolean | Keep the addresses of scanners (requests for `/.env`, `/.git/config`…) in the **Probe sources** list, to block them (since 18.35). Off: country and network only, no address kept. |
 | `RWS_CONFIG_TRAFFIC_GEO_DB` | the built-in table | path | A country table in `ci/gen_geo.py`'s format to use instead of the built-in one (since 18.31.0). Unreadable: the built-in one, with a warning. |
 | `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
@@ -2295,6 +2296,7 @@ retention_days   = 30                        # 1–90
 # apps           = ["MyApp=MyApp/", "MyApp=chrome-extension://<id>"]  # native apps and extensions: counted as Apps (18.35)
 # owner_networks = ["203.0.113.7", "198.51.100.0/24"]  # your own visits, counted apart (18.35)
 # hide_hosts     = ["mail.example.com", "mta-sts.example.com"]  # routed names that aren't sites: counted as Unknown hosts (18.35.2)
+# ignore_referrers = ["spam-links.example"]  # referrer spam: counted as direct, never listed; covers subdomains (18.36.1)
 # probe_addresses = false                    # keep scanners' addresses in Probe sources (18.35)
 # database_url_env = "TRAFFIC_DATABASE_URL"  # keep every page view in PostgreSQL (the variable holding the URL)
 ```
@@ -25083,17 +25085,21 @@ under such names move there when rws starts.
 hide_hosts = ["mail.example.com", "mta-sts.example.com"]
 ```
 
-**Sites and unknown hosts** (since 18.35.2): when your `[[route]]`s match
-sites by `host`, those are the sites. `www.<site>` counts as `<site>`, and
-every other `Host` — addresses, `localhost`, no `Host`, names no route
-serves, and the names in `hide_hosts` — counts as one **Unknown hosts**
-entry, so scanners' junk headers don't fill the site list. Counts saved
-under such names move there when rws starts.
+**Referrer spam** (since 18.36.1): sites that send fake visits to get
+listed among your referrers go in `ignore_referrers` — a domain covers its
+subdomains. A visit they send still counts, as direct, and they're never
+listed as referrers. It applies from the next request (the list follows
+config reloads); counts already made stay.
 
 ```toml
 [traffic]
-hide_hosts = ["mail.example.com", "mta-sts.example.com"]
+ignore_referrers = ["spam-links.example"]
 ```
+
+**Outbound clicks** (since 18.36.1): with `script = true`, a click on a link
+to another site (`http`/`https`, middle clicks too) is reported as the event
+`outbound` with `{to: "<host>"}`, so `goals = ["event:outbound"]` counts
+them and the Events tab lists where people went.
 
 Counting costs about 170 ns per request; the country, device and hosting
 network are worked out once per visitor per day. Memory and the file are

@@ -5,6 +5,18 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## 18.36.1 — 2026-11-14
+
+### Added
+
+- **Traffic: referrer spam.** `[traffic] ignore_referrers` lists referring
+  sites that only send fake visits (a domain covers its subdomains): their
+  visits count as direct and they never show among the referrers. Follows
+  config reloads.
+- **Traffic: outbound clicks.** With `script = true`, clicks on links to
+  other sites (middle clicks too) are reported as the event `outbound`
+  with `{to: "<host>"}`; `goals = ["event:outbound"]` counts them.
+
 ## 18.36.0 — 2026-11-13
 
 ### Added

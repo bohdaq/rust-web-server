@@ -680,6 +680,33 @@ fn site_of(raw: &str) -> String {
     canonical(normalize_host(raw), &recorder().configured.read().unwrap_or_else(|e| e.into_inner()))
 }
 
+fn ignored_referrers() -> &'static RwLock<Vec<String>> {
+    static IGNORED: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
+    IGNORED.get_or_init(|| RwLock::new(normalize_ignored(&super::config::ignore_referrers())))
+}
+
+fn normalize_ignored(entries: &[String]) -> Vec<String> {
+    entries.iter().map(|e| e.trim().trim_start_matches("www.").trim_end_matches('.').to_ascii_lowercase()).filter(|e| !e.is_empty()).collect()
+}
+
+/// Replace `[traffic] ignore_referrers` (start, reload, tests).
+#[doc(hidden)]
+pub fn set_ignored_referrers(entries: &[String]) {
+    *ignored_referrers().write().unwrap_or_else(|e| e.into_inner()) = normalize_ignored(entries);
+}
+
+/// Whether a referring host is in `[traffic] ignore_referrers` (the
+/// domain itself or one of its subdomains).
+#[doc(hidden)]
+pub fn is_ignored_referrer(referrer_host: &str) -> bool {
+    let ignored = ignored_referrers().read().unwrap_or_else(|e| e.into_inner());
+    if ignored.is_empty() {
+        return false;
+    }
+    let h = referrer_host.trim_end_matches('.').to_ascii_lowercase();
+    ignored.iter().any(|d| h == *d || (h.len() > d.len() && h.ends_with(d.as_str()) && h.as_bytes()[h.len() - d.len() - 1] == b'.'))
+}
+
 fn referrer_host(referer: Option<&str>, host: &str) -> Option<String> {
     let rest = referer?.split_once("://")?.1;
     let other = rest.split(['/', '?', '#']).next()?.split(':').next()?.to_ascii_lowercase();
@@ -771,7 +798,10 @@ fn arrival(hit: &Hit<'_>) -> Option<Arrival> {
     } else {
         match hit.referer {
             None => "direct",
-            Some(_) => channel_of(&referrer_host(hit.referer, hit.host)?),
+            Some(_) => match referrer_host(hit.referer, hit.host)? {
+                h if is_ignored_referrer(&h) => "direct",
+                h => channel_of(&h),
+            },
         }
     };
     Some(Arrival { channel, utm })
@@ -937,7 +967,7 @@ fn record_shared(hit: &Hit<'_>, day: u64, hour: u64, host: u8, visitor: u64, pat
     let class = if scanner { Class { kind: Kind::Scanner, name: "", operator: "", verified: false } } else { class };
     let page = is_page(hit).then(|| page_key(hit.host, path));
     let not_found = (hit.status == 404).then(|| page_key(hit.host, path));
-    let referrer = referrer_host(hit.referer, hit.host);
+    let referrer = referrer_host(hit.referer, hit.host).filter(|h| !is_ignored_referrer(h));
     // Where a person's page view came from (only browsers become people).
     let arrival = if page.is_some() && class.kind == Kind::Browser { arrival(hit) } else { None };
 
@@ -1854,4 +1884,5 @@ pub fn reset_for_tests() {
     }
     recorder.hosts.write().unwrap_or_else(|e| e.into_inner()).clear();
     recorder.configured.write().unwrap_or_else(|e| e.into_inner()).clear();
+    ignored_referrers().write().unwrap_or_else(|e| e.into_inner()).clear();
 }
