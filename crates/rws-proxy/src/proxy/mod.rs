@@ -303,7 +303,7 @@ impl Middleware for ReverseProxy {
                 Ok(resp)
             }
             Err(e) => {
-                let mut resp = bad_gateway();
+                let mut resp = bad_gateway_for(request);
                 status::failed_with(&mut resp, &e, None);
                 Ok(resp)
             }
@@ -701,6 +701,12 @@ pub fn normalize_upstream_response(mut response: Response) -> Response {
 #[doc(hidden)]
 pub fn bad_gateway() -> Response {
     crate::error::problem(STATUS_CODE_REASON_PHRASE.n502_bad_gateway, "")
+}
+
+/// [`bad_gateway`] as the HTML error page when `request` is a browser's.
+#[doc(hidden)]
+pub fn bad_gateway_for(request: &Request) -> Response {
+    crate::error::page::negotiated(bad_gateway(), request)
 }
 
 // ── Streaming proxy helpers ───────────────────────────────────────────────────
@@ -1720,7 +1726,7 @@ impl crate::middleware::Middleware for H2ReverseProxy {
             return next.execute(request, connection);
         }
         if self.inner.backends.is_empty() {
-            let mut response = bad_gateway();
+            let mut response = bad_gateway_for(request);
             status::failed(&mut response, status::ProxyError::DestinationUnavailable, None, None);
             return Ok(response);
         }
@@ -1751,7 +1757,7 @@ impl crate::middleware::Middleware for H2ReverseProxy {
                 Err(e) => last_error = e,
             }
         }
-        let mut response = bad_gateway();
+        let mut response = bad_gateway_for(request);
         status::failed_with(&mut response, &last_error, None);
         Ok(response)
     }
@@ -1920,7 +1926,7 @@ impl crate::middleware::Middleware for H3ReverseProxy {
             return next.execute(request, connection);
         }
         if self.inner.backends.is_empty() {
-            let mut response = bad_gateway();
+            let mut response = bad_gateway_for(request);
             status::failed(&mut response, status::ProxyError::DestinationUnavailable, None, None);
             return Ok(response);
         }
@@ -1938,7 +1944,7 @@ impl crate::middleware::Middleware for H3ReverseProxy {
                 Err(e) => last_error = e,
             }
         }
-        let mut response = bad_gateway();
+        let mut response = bad_gateway_for(request);
         status::failed_with(&mut response, &last_error, None);
         Ok(response)
     }

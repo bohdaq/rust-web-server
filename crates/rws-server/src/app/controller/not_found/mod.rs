@@ -55,10 +55,11 @@ impl Controller for NotFoundController {
                 response.reason_phrase = STATUS_CODE_REASON_PHRASE.n500_internal_server_error.reason_phrase.to_string();
             }
         } else {
-            let not_found_file = include_bytes!("404.html");
-
+            // The built-in page (18.37.0: the same template as rws's other
+            // error pages); a 404.html in the working directory replaces it.
+            let page = crate::error::page::html(404, "Not Found", "");
             let content_range =
-                Range::get_content_range(not_found_file.to_vec(), MimeType::TEXT_HTML.to_string());
+                Range::get_content_range(page.into_bytes(), MimeType::TEXT_HTML.to_string());
 
 
             let content_range_list = vec![content_range];
@@ -125,10 +126,11 @@ impl NotFoundController {
                 response.reason_phrase = STATUS_CODE_REASON_PHRASE.n500_internal_server_error.reason_phrase.to_string();
             }
         } else {
-            let not_found_file = include_bytes!("404.html");
-
+            // The built-in page (18.37.0: the same template as rws's other
+            // error pages); a 404.html in the working directory replaces it.
+            let page = crate::error::page::html(404, "Not Found", "");
             let content_range =
-                Range::get_content_range(not_found_file.to_vec(), MimeType::TEXT_HTML.to_string());
+                Range::get_content_range(page.into_bytes(), MimeType::TEXT_HTML.to_string());
 
 
             let content_range_list = vec![content_range];

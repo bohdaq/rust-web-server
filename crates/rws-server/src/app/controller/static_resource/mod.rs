@@ -823,8 +823,8 @@ impl StaticResourceController {
                 "/".to_string()
             };
             format!(
-                "<tr class=\"entry parent\"><td class=\"name\"><span class=\"icon\">\u{21A9}\u{FE0F}</span><a href=\"{}\">.. (parent directory)</a></td><td class=\"size\">\u{2014}</td><td class=\"modified\">\u{2014}</td></tr>\n",
-                parent_path
+                "<tr class=\"entry parent\"><td class=\"name\"><span class=\"icon\">{}</span><a href=\"{}\">.. (parent directory)</a></td><td class=\"size\">\u{2014}</td><td class=\"modified\">\u{2014}</td></tr>\n",
+                ICON_UP, parent_path
             )
         } else {
             String::new()
@@ -853,11 +853,11 @@ impl StaticResourceController {
         }
 
         let mut html = String::new();
-        html.push_str(DIRECTORY_LISTING_HEAD);
+        html.push_str(&DIRECTORY_LISTING_HEAD.replace("<title>Directory listing</title>", &format!("<title>Index of {}</title>", html_escape(&normalized_request_path))));
         html.push_str(&format!("<div class=\"breadcrumb\">{}</div>\n", breadcrumb_html));
         html.push_str(&format!("<h1>Index of {}</h1>\n", html_escape(&normalized_request_path)));
         html.push_str(DIRECTORY_LISTING_TOOLBAR);
-        html.push_str("<div class=\"card\"><table><thead><tr><th>Name</th><th>Size</th><th>Modified</th></tr></thead><tbody id=\"rows\">\n");
+        html.push_str("<div class=\"card\"><table><thead><tr><th>Name</th><th class=\"size\">Size</th><th class=\"modified\">Modified (UTC)</th></tr></thead><tbody id=\"rows\">\n");
         html.push_str(&parent_row);
         html.push_str(&rows);
         html.push_str("</tbody></table></div>\n");
@@ -967,21 +967,14 @@ fn format_modified(epoch_secs: u64) -> String {
     format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", year, month, day, hour, min, sec)
 }
 
-fn icon_for(name: &str, is_dir: bool) -> &'static str {
-    if is_dir {
-        return "\u{1F4C1}";
-    }
+/// Inline SVG icons (18.37.0; emoji rendered as empty boxes without an
+/// emoji font). `currentColor`, 16 px, hidden from screen readers.
+const ICON_FOLDER: &str = "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M1.5 3A1.5 1.5 0 0 1 3 1.5h3.2l1.6 1.6H13A1.5 1.5 0 0 1 14.5 4.6V12A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12z\"/></svg>";
+const ICON_FILE: &str = "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" d=\"M3.5 1.5h6l3 3v10h-9z M9.5 1.5v3h3\"/></svg>";
+const ICON_UP: &str = "<svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M6 3.5 2.5 7 6 10.5M2.5 7H10a3.5 3.5 0 0 1 3.5 3.5V13\"/></svg>";
 
-    let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-    match ext.as_str() {
-        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" | "bmp" => "\u{1F5BC}\u{FE0F}",
-        "mp4" | "mov" | "avi" | "mkv" | "webm" => "\u{1F3A5}",
-        "mp3" | "wav" | "flac" | "m4a" | "ogg" => "\u{1F3A7}",
-        "zip" | "tar" | "gz" | "rar" | "7z" | "bz2" => "\u{1F4E6}",
-        "pdf" => "\u{1F4D5}",
-        "html" | "htm" | "css" | "js" | "ts" | "rs" | "py" | "json" | "toml" | "yaml" | "yml" | "sh" => "\u{1F9E9}",
-        _ => "\u{1F4C4}",
-    }
+fn icon_for(_name: &str, is_dir: bool) -> &'static str {
+    if is_dir { ICON_FOLDER } else { ICON_FILE }
 }
 
 // CSS/JS are served as same-origin `<link>`/`<script src>` assets (see

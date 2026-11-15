@@ -37,6 +37,19 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   1024 without permission.
 - **`rws --help` starts with the commands**, then the common options, then
   the ACME, CORS and other options in groups.
+- **Error pages for browsers.** A browser (an `Accept` that prefers
+  `text/html`) gets an HTML page for rws's own 502 and 503 and for
+  maintenance mode: status, one sentence, a link home, light and dark,
+  `Vary: Accept`. API clients get the same problem+json bodies as before.
+  The built-in 404 uses the same template (a `404.html` in the working
+  directory still replaces it).
+- **Maintenance: `Retry-After` and a message.** Maintenance responses send
+  `Retry-After: 120` (`[maintenance] retry_after_secs`, 0 sends none);
+  `[maintenance] message` replaces the sentence on the page browsers see.
+- **Directory listing on a phone.** Below 600 px the Modified column is
+  hidden and names wrap at word boundaries instead of mid-word; icons are
+  inline SVG instead of emoji; the page title is the path; the time column
+  says UTC.
 - **`rws trust --print` and `rws untrust` only read**: they no longer
   create a local CA when there is none.
 

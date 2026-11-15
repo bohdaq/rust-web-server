@@ -2,6 +2,7 @@
 mod tests;
 
 pub mod problem;
+pub mod page;
 pub use problem::problem;
 
 use crate::header::Header;

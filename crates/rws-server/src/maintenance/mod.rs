@@ -33,8 +33,16 @@ use crate::server::ConnectionInfo;
 /// Flip to `true` to activate maintenance mode; back to `false` to resume.
 pub static MAINTENANCE_MODE: AtomicBool = AtomicBool::new(false);
 
-fn service_unavailable() -> Response {
-    crate::error::problem::problem_with_text(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "maintenance", "Service Temporarily Unavailable")
+/// The maintenance response: problem details (unchanged for API clients)
+/// or, for a browser, the HTML page with `[maintenance] message`; with
+/// `Retry-After` (`[maintenance] retry_after_secs`, default 120) since 18.37.0.
+fn service_unavailable(request: &Request) -> Response {
+    let mut response = crate::error::problem::problem_with_text(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "maintenance", "Service Temporarily Unavailable");
+    let retry = crate::error::page::maintenance_retry_after();
+    if retry > 0 {
+        response.headers.push(crate::header::Header { name: "Retry-After".into(), value: retry.to_string().into() });
+    }
+    crate::error::page::negotiated(response, request)
 }
 
 /// Middleware that returns `503` when [`MAINTENANCE_MODE`] is `true`.
@@ -59,7 +67,7 @@ impl Middleware for MaintenanceLayer {
         if MAINTENANCE_MODE.load(Ordering::Relaxed) {
             let path = request.request_uri.split('?').next().unwrap_or(&request.request_uri);
             if path != "/healthz" && path != "/readyz" {
-                return Ok(service_unavailable());
+                return Ok(service_unavailable(request));
             }
         }
         next.execute(request, connection)

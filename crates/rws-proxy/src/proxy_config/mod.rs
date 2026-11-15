@@ -1620,7 +1620,7 @@ impl Application for H2Forward<'_> {
         let route = self.0;
         let backends = route.live.read().unwrap_or_else(|e| e.into_inner()).clone();
         if backends.is_empty() {
-            let mut response = crate::proxy::bad_gateway();
+            let mut response = crate::proxy::bad_gateway_for(request);
             crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::DestinationUnavailable, None, None);
             return Ok(response);
         }
@@ -1644,7 +1644,7 @@ impl Application for H2Forward<'_> {
                 }
             }
         }
-        let mut response = crate::proxy::bad_gateway();
+        let mut response = crate::proxy::bad_gateway_for(request);
         if let Some((e, url)) = &failure {
             crate::proxy::status::failed_with(&mut response, e, Some(url));
         }
@@ -1994,7 +1994,7 @@ impl DynamicProxy {
         };
         if self.tls || prepared.backend.starts_with("https://") || prepared.backend.starts_with("wss://") {
             eprintln!("[proxy] upgrade to {}: TLS backends can't take upgraded connections yet", prepared.backend);
-            return bad_gateway();
+            return bad_gateway(request);
         }
         let default_host = if prepared.port == 80 { prepared.host.clone() } else { format!("{}:{}", prepared.host, prepared.port) };
         let host_header = self.host_override(request).map(str::to_string).unwrap_or(default_host);
@@ -2002,7 +2002,7 @@ impl DynamicProxy {
             Ok(response) => response,
             Err(e) => {
                 eprintln!("[proxy] upgrade to {}: {e}", prepared.backend);
-                let mut response = bad_gateway();
+                let mut response = bad_gateway(request);
                 crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ConnectionRefused, Some(&prepared.backend), None);
                 response
             }
@@ -2015,7 +2015,7 @@ impl DynamicProxy {
     /// unparsable backend address).
     fn prepare<'a>(&self, request: &'a Request, conn: &ConnectionInfo, tried: &[String]) -> Result<Prepared<'a>, Response> {
         let backend = self.next_backend(request, &crate::ip_filter::client_ip(request, &conn.client.ip), tried).map_err(|ejected| {
-            let mut response = if ejected { service_unavailable() } else { bad_gateway() };
+            let mut response = if ejected { service_unavailable(request) } else { bad_gateway(request) };
             crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::DestinationUnavailable, None, None);
             response
         })?;
@@ -2029,7 +2029,7 @@ impl DynamicProxy {
         };
 
         let (host, port, _) = crate::proxy_config::health::parse_backend_url(&backend).ok_or_else(|| {
-            let mut response = bad_gateway();
+            let mut response = bad_gateway(request);
             crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ProxyConfigurationError, Some(&backend), None);
             response
         })?;
@@ -2180,7 +2180,7 @@ impl DynamicProxy {
             tried.push(prepared.backend.clone());
         }
         Ok(last.unwrap_or_else(|| {
-            let mut response = bad_gateway();
+            let mut response = bad_gateway(request);
             match &failure {
                 Some((e, backend)) => crate::proxy::status::failed_with(&mut response, e, Some(backend)),
                 None => crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ProxyInternalError, None, None),
@@ -2270,7 +2270,7 @@ impl Application for DynamicProxy {
             tried.push(prepared.backend.clone());
         }
         Ok(last.unwrap_or_else(|| {
-            let mut response = bad_gateway();
+            let mut response = bad_gateway(request);
             match &failure {
                 Some((e, backend)) => crate::proxy::status::failed_with(&mut response, e, Some(backend)),
                 None => crate::proxy::status::failed(&mut response, crate::proxy::status::ProxyError::ProxyInternalError, None, None),
@@ -2285,14 +2285,20 @@ impl Application for DynamicProxy {
 #[doc(hidden)]
 pub const H3_FALLBACK: Duration = Duration::from_secs(300);
 
-fn service_unavailable() -> Response {
+fn service_unavailable_problem() -> Response {
     let mut r = crate::error::problem(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "every backend is out of rotation");
     r.headers.push(crate::header::Header { name: "Retry-After".into(), value: "5".into() });
     r
 }
 
-fn bad_gateway() -> Response {
-    crate::error::problem(STATUS_CODE_REASON_PHRASE.n502_bad_gateway, "")
+/// [`service_unavailable_problem`], or the HTML error page for a browser.
+fn service_unavailable(request: &Request) -> Response {
+    crate::error::page::negotiated(service_unavailable_problem(), request)
+}
+
+/// 502 as problem details, or the HTML error page for a browser.
+fn bad_gateway(request: &Request) -> Response {
+    crate::error::page::negotiated(crate::error::problem(STATUS_CODE_REASON_PHRASE.n502_bad_gateway, ""), request)
 }
 
 // ── RedirectAdapter ────────────────────────────────────────────────────────────

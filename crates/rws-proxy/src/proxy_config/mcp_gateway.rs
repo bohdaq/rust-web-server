@@ -340,7 +340,7 @@ impl Application for GatewayAdapter {
 }
 
 fn unavailable() -> Response {
-    let mut response = super::service_unavailable();
+    let mut response = super::service_unavailable_problem();
     response.headers.retain(|h| !h.name.eq_ignore_ascii_case("retry-after"));
     response.headers.push(crate::header::Header::new("Retry-After", RETRY.as_secs().to_string()));
     response
