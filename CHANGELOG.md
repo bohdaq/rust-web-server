@@ -5,6 +5,41 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- **Compatibility: the `rws` binary rejects arguments it doesn't know.**
+  An unknown argument (`--bogus`, `--prot=1`, `help me`) or a flag without
+  a value now stops rws with exit code 2 and a hint ("did you mean
+  --port?") instead of being ignored while a server starts. Check service
+  units and scripts that pass extra arguments. Applications built on the
+  library keep their own arguments: only the binary checks.
+- **Compatibility: `rws -h` prints help** (so do `rws help` and
+  `rws --help`). `-h=<list>` and `--cors-allow-headers=<list>` still set
+  the allowed CORS headers.
+- **`-p 8080` works**: every option takes its value after a space as well
+  as after `=`.
+- **`rws --check` reads the file as TOML.** An unclosed `[[route]` header,
+  an unclosed string or array, or a line that isn't `key = value` is an
+  error with line and column (it said "configuration OK" before); a bare
+  word where TOML wants a quoted string is a warning. Unknown settings
+  suggest the closest one (`[admn] listen` → `[admin] listen`), at startup
+  too.
+- **A quieter start.** rws prints its version, where the configuration
+  came from, what it serves and the address, plus a warning when it
+  listens on all interfaces with directory listing on. `--verbose` (or
+  `RWS_VERBOSE=true`) prints every setting as before. No
+  `rws.config.toml` in the working directory is no longer reported as
+  "Unable to read".
+- **A port in use is one line, not a panic**: rws names the address and
+  how to pick another port, and exits with code 1. So does a port below
+  1024 without permission.
+- **`rws --help` starts with the commands**, then the common options, then
+  the ACME, CORS and other options in groups.
+- **`rws trust --print` and `rws untrust` only read**: they no longer
+  create a local CA when there is none.
+
 ## 18.36.2 — 2026-11-15
 
 No code changes: a docs and website release.

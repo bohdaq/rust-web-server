@@ -5,20 +5,107 @@ use crate::entry_point::Config;
 mod tests;
 
 pub fn override_environment_variables_from_command_line_args() {
-    println!("\n  Start of Reading Command Line Arguments Section");
+    crate::entry_point::note("\n  Start of Reading Command Line Arguments Section");
 
-    let args = env::args().collect();
+    let args = joined_value_forms(&env::args().collect::<Vec<_>>());
     let params = CommandLineArgument::get_command_line_arg_list();
     CommandLineArgument::_parse(args, params);
 
-    println!("  End of Reading Command Line Arguments\n");
+    crate::entry_point::note("  End of Reading Command Line Arguments\n");
+}
+
+/// `-p 8080` / `--port 8080` written as `-p=8080` / `--port=8080`, for every
+/// flag in [`CommandLineArgument::get_command_line_arg_list`] (since
+/// 18.37.0). A flag is joined with the next argument only when that one
+/// doesn't start with `-`. `-h` stays as it is: alone it asks for help.
+pub fn joined_value_forms(args: &[String]) -> Vec<String> {
+    let flags = CommandLineArgument::get_command_line_arg_list();
+    let mut out = Vec::with_capacity(args.len());
+    let mut iter = args.iter().peekable();
+    if let Some(program) = iter.next() {
+        out.push(program.clone());
+    }
+    while let Some(arg) = iter.next() {
+        let flag = flags.iter().find(|f| {
+            (!f.short_form.is_empty() && f.short_form != "h" && *arg == format!("-{}", f.short_form))
+                || *arg == format!("--{}", f.long_form)
+        });
+        match (flag, iter.peek()) {
+            (Some(flag), Some(next)) if !next.starts_with('-') => {
+                out.push(format!("--{}={}", flag.long_form, next));
+                iter.next();
+            }
+            _ => out.push(arg.clone()),
+        }
+    }
+    out
+}
+
+/// Arguments the `rws` binary takes besides the settings flags.
+const BINARY_ARGS: &[&str] = &["--check", "--format=json", "--verbose", "--version", "-V", "--help", "-h", "help", "--manifests"];
+const BINARY_ARG_PREFIXES: &[&str] = &["--check=", "--windows-service=", "--format="];
+
+/// Check the `rws` binary's arguments (program name first) before it starts
+/// a server: every argument must be a settings flag with a value
+/// (`--port=8080`, `-p 8080`) or one of the binary's own (`--check`,
+/// `--verbose`, …). `Err` is the message to print, for exit code 2. Only the
+/// binary calls this: an application built on the library may take
+/// arguments of its own.
+pub fn check_binary_args(args: &[String]) -> Result<(), String> {
+    let flags = CommandLineArgument::get_command_line_arg_list();
+    let joined = joined_value_forms(args);
+    let mut iter = joined.iter().skip(1).peekable();
+    while let Some(arg) = iter.next() {
+        if BINARY_ARGS.contains(&arg.as_str()) || BINARY_ARG_PREFIXES.iter().any(|p| arg.starts_with(p)) {
+            // `--check <file>`: the file is its value.
+            if arg == "--check" && iter.peek().is_some_and(|n| !n.starts_with('-')) {
+                iter.next();
+            }
+            continue;
+        }
+        let (name, has_value) = match arg.split_once('=') {
+            Some((name, _)) => (name, true),
+            None => (arg.as_str(), false),
+        };
+        let flag = flags.iter().find(|f| {
+            (!f.short_form.is_empty() && name == format!("-{}", f.short_form)) || name == format!("--{}", f.long_form)
+        });
+        match flag {
+            Some(_) if has_value => {}
+            Some(flag) => {
+                return Err(format!("rws: {arg} needs a value: --{}=<value>\nrws --help lists every option.", flag.long_form));
+            }
+            None => {
+                let hint = closest_flag(name, &flags).map(|f| format!(" Did you mean --{f}?")).unwrap_or_default();
+                return Err(format!("rws: unknown argument '{arg}'.{hint}\nrws --help lists every option."));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The flag closest to `name` (edit distance at most 2, or a prefix of one).
+fn closest_flag(name: &str, flags: &[CommandLineArgument]) -> Option<String> {
+    let bare = name.trim_start_matches('-');
+    if bare.len() < 2 {
+        return None;
+    }
+    let mut best: Option<(usize, &str)> = None;
+    for f in flags {
+        let long = f.long_form.as_str();
+        let d = if long.starts_with(bare) { 1 } else { crate::entry_point::edit_distance(bare, long) };
+        if d <= 2 && best.is_none_or(|(b, _)| d < b) {
+            best = Some((d, long));
+        }
+    }
+    best.map(|(_, f)| f.to_string())
 }
 
 /// Returns the text to print for an informational flag — `--version` / `-V`
-/// or `--help` — if `args` (as from `env::args()`, program name first)
-/// contains one, so the binary can print it and exit before starting a
-/// server. `None` means start normally. `-h` is not a help alias: it's
-/// already `--cors-allow-headers`'s short form.
+/// or `--help` / `-h` / `help` — if `args` (as from `env::args()`, program
+/// name first) contains one, so the binary can print it and exit before
+/// starting a server. `None` means start normally. `-h` alone is help since
+/// 18.37.0; `-h=<list>` is still `--cors-allow-headers`.
 pub fn informational_flag_output(args: &[String]) -> Option<String> {
     let flags = args.iter().skip(1);
     for arg in flags {
@@ -27,44 +114,67 @@ pub fn informational_flag_output(args: &[String]) -> Option<String> {
                 // A FIPS build says so (18.23.0); others print just the version.
                 return Some(format!("rws {}{}\n", env!("CARGO_PKG_VERSION"), if cfg!(feature = "fips") { " (FIPS)" } else { "" }));
             }
-            "--help" => return Some(help_text()),
+            "--help" | "-h" => return Some(help_text()),
             _ => {}
         }
+    }
+    if args.get(1).map(String::as_str) == Some("help") && args.len() == 2 {
+        return Some(help_text());
     }
     None
 }
 
 fn help_text() -> String {
     let mut text = format!(
-        "rws {} — HTTP/1.1, HTTP/2 and HTTP/3 web server and reverse proxy\n\n\
-         Usage: rws [OPTIONS]\n\n\
-         Serves the current directory on http://0.0.0.0:7878 by default. Drop an\n\
-         rws.config.toml with [[route]]/[[upstream]] sections in the working\n\
-         directory to run as a config-driven reverse proxy instead.\n\n\
-         Options (each also settable via the environment variable shown):\n",
+        "rws {} — web server, reverse proxy and automatic HTTPS\n\n\
+         Usage:\n\
+         \x20 rws [OPTIONS]                 Serve the working directory (http://localhost:7878)\n\
+         \x20 rws --check[=<file>]          Validate rws.config.toml (or <file>); exit 0 if it has no errors\n\
+         \x20 rws ctl <command>             Drive a running server's admin API (rws ctl help; also rwsctl)\n\
+         \x20 rws gen model|route|migration|test <name>\n\
+         \x20                               Generate code into the project (rws gen --help)\n\
+         \x20 rws db <command>              Run the project's migrations and seeds (rws db --help)\n\
+         \x20 rws trust [--print]           Trust rws's local CA (tls = \"internal\"); --print shows it\n\
+         \x20 rws untrust                   Take the local CA out of the trust store\n\n\
+         An rws.config.toml with [[route]]/[[upstream]] sections in the working\n\
+         directory runs rws as a config-driven reverse proxy instead.\n\n\
+         Each option is also an environment variable (shown) and a key in rws.config.toml.\n\
+         Values: --port=8080 or --port 8080.\n",
         env!("CARGO_PKG_VERSION")
     );
-    for argument in CommandLineArgument::get_command_line_arg_list() {
-        let flag = if argument.short_form.is_empty() {
-            format!("    --{}=<value>", argument.long_form)
-        } else {
-            format!("-{}, --{}=<value>", argument.short_form, argument.long_form)
-        };
-        let hint = argument._hint.unwrap_or_default();
-        text.push_str(&format!("  {:<44} {}\n  {:<44} [env: {}]\n", flag, hint, "", argument.environment_variable));
+    let list = CommandLineArgument::get_command_line_arg_list();
+    let common = ["port", "ip", "thread-count", "tls", "tls-cert-file", "tls-key-file"];
+    let groups: [(&str, Box<dyn Fn(&str) -> bool>); 4] = [
+        ("Common options", Box::new(move |l: &str| common.contains(&l))),
+        ("Automatic HTTPS (ACME)", Box::new(|l: &str| l.starts_with("acme-") || l == "http-redirect-port")),
+        ("CORS", Box::new(|l: &str| l.starts_with("cors-"))),
+        ("Other", Box::new(move |l: &str| !common.contains(&l) && !l.starts_with("acme-") && l != "http-redirect-port" && !l.starts_with("cors-"))),
+    ];
+    for (title, wanted) in groups.iter() {
+        let mut section = String::new();
+        let mut items: Vec<&CommandLineArgument> = list.iter().filter(|a| wanted(&a.long_form)).collect();
+        if *title == "Common options" {
+            items.sort_by_key(|a| common.iter().position(|c| *c == a.long_form));
+        }
+        for argument in items {
+            let flag = if argument.short_form.is_empty() {
+                format!("    --{}=<value>", argument.long_form)
+            } else {
+                format!("-{}, --{}=<value>", argument.short_form, argument.long_form)
+            };
+            let hint = argument._hint.clone().unwrap_or_default();
+            section.push_str(&format!("  {:<44} {}\n  {:<44} [env: {}]\n", flag, hint, "", argument.environment_variable));
+        }
+        if !section.is_empty() {
+            text.push_str(&format!("\n{title}:\n{section}"));
+        }
     }
-    text.push_str("      --check[=<file>]                         Validate rws.config.toml (or <file>) and exit:\n");
-    text.push_str("                                               0 if it has no errors, 1 otherwise\n");
-    text.push_str("      trust [--print] | untrust                Put rws's local CA (tls = \"internal\") in the\n");
-    text.push_str("                                               system trust store, or take it out\n");
-    text.push_str("      ctl <command>                            Drive a running server's admin API\n");
-    text.push_str("                                               (rws ctl help; also installed as rwsctl)\n");
-    text.push_str("      gen model|route|migration|test <name>    Generate code into the project in the working\n");
-    text.push_str("                                               directory (rws gen --help)\n");
+    text.push_str("\nGeneral:\n");
+    text.push_str("      --verbose                                Print every setting and step at startup\n");
     text.push_str("  -V, --version                                Print version and exit\n");
-    text.push_str("      --help                                   Print this help and exit\n");
+    text.push_str("  -h, --help                                   Print this help and exit\n");
     text.push_str("      --windows-service=<dir>                  (Windows) Run as a service serving <dir>\n\n");
-    text.push_str("Docs: https://rws8.tech\n");
+    text.push_str("Docs: https://rws8.tech/docs/ · every setting: https://rws8.tech/docs/configuration/env-vars/\n");
     text
 }
 
@@ -265,7 +375,7 @@ impl CommandLineArgument {
             if boxed_split.is_some() {
 
                 let (parameter, value) = boxed_split.unwrap();
-                println!("\n    {}={}", parameter, crate::entry_point::shown(parameter, value));
+                crate::entry_point::note(&format!("\n    {}={}", parameter, crate::entry_point::shown(parameter, value)));
                 let boxed_predefined_argument =
                     argument_list
                         .iter()
@@ -297,6 +407,6 @@ impl CommandLineArgument {
         }
         env::set_var(&argument.environment_variable, &value);
         crate::server_config::invalidate();
-        println!("    Set env variable '{}' to value '{}'", argument.environment_variable, crate::entry_point::shown(&argument.environment_variable, &value));
+        crate::entry_point::note(&format!("    Set env variable '{}' to value '{}'", argument.environment_variable, crate::entry_point::shown(&argument.environment_variable, &value)));
     }
 }

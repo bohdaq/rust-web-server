@@ -288,9 +288,43 @@ pub fn read_config_file(
         set_setting(name, value);
     }
     for key in &resolved.unknown {
-        eprintln!("    Warning: unknown setting '{}' in rws.config.toml — ignored", key);
+        eprintln!("Warning: unknown setting '{}' in rws.config.toml — ignored{}", key, crate::entry_point::config_file::suggestion(key).map(|s| format!(" (did you mean '{s}'?)")).unwrap_or_default());
     }
     Ok(true)
+}
+
+/// The known setting closest to an unknown `key` (`[admn] listen` →
+/// `[admin] listen`), written the way the unknown one was.
+pub fn suggestion(key: &str) -> Option<String> {
+    let (table, name) = match key.strip_prefix('[').and_then(|k| k.split_once("] ")) {
+        Some((t, n)) => (t.to_string(), n.to_string()),
+        None => (String::new(), key.to_string()),
+    };
+    let path = if table.is_empty() { name.clone() } else { format!("{}_{}", table.replace('.', "_"), name) };
+    let path = path.to_ascii_lowercase();
+    let mut known: Vec<String> = CommandLineArgument::get_command_line_arg_list().iter().map(|f| f.long_form.replace('-', "_")).collect();
+    known.extend(SETTINGS_WITHOUT_FLAG.iter().map(|n| n.trim_start_matches("RWS_CONFIG_").to_ascii_lowercase()));
+    let limit = if path.len() < 4 { 1 } else { 2 };
+    let best = known
+        .iter()
+        .map(|k| (crate::entry_point::edit_distance(&path, k), k))
+        .filter(|(d, _)| *d <= limit && *d > 0)
+        .min_by_key(|(d, _)| *d)?
+        .1
+        .clone();
+    // Same shape as the unknown key: `[table] key` when the key matches.
+    if let Some(t) = best.strip_suffix(&format!("_{}", name.to_ascii_lowercase())) {
+        return Some(format!("[{t}] {name}"));
+    }
+    if !table.is_empty() {
+        for (i, _) in best.match_indices('_') {
+            let (t, k) = (&best[..i], &best[i + 1..]);
+            if crate::entry_point::edit_distance(t, &table) <= 2 {
+                return Some(format!("[{t}] {k}"));
+            }
+        }
+    }
+    Some(best)
 }
 
 fn set_setting(name: &str, value: &str) {
@@ -301,7 +335,7 @@ fn set_setting(name: &str, value: &str) {
     }
     env::set_var(name, value);
     crate::server_config::invalidate();
-    println!("    Set env variable '{}' to value '{}'", name, crate::entry_point::shown(name, value));
+    startup_note!("    Set env variable '{}' to value '{}'", name, crate::entry_point::shown(name, value));
 }
 
 fn qualified_key(table: &str, key: &str) -> String {
@@ -356,7 +390,7 @@ fn split_array(inner: &str) -> Vec<&str> {
 /// `proxy_config` reads routes from — else `rws.config.toml` in the working
 /// directory.
 pub fn override_environment_variables_from_config(filepath: Option<&str>) {
-    println!("\n  Start of Config Section");
+    startup_note!("\n  Start of Config Section");
 
     let from_env = env::var("RWS_CONFIG_FILE").ok().filter(|p| !p.trim().is_empty());
     let resolved = match (filepath, from_env) {
@@ -368,19 +402,30 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{}", e);
-            println!("  End of Config Section");
+            startup_note!("  End of Config Section");
             return;
         }
     };
 
+    let named = filepath.is_some() || env::var("RWS_CONFIG_FILE").is_ok_and(|p| !p.trim().is_empty());
+    let mut source = None;
     match std::fs::read_to_string(&path) {
         Ok(content) => {
             if let Err(e) = read_config_file(Cursor::new(content.as_bytes()), String::new()) {
                 eprintln!("    Unable to parse {}: {}", path, e);
             }
+            source = Some(path.clone());
         }
-        Err(e) => eprintln!("    Unable to read {}: {}", path, e),
+        // No ./rws.config.toml is the normal config-less start, not an
+        // error; a file named by RWS_CONFIG_FILE that can't be read is.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !named => {
+            startup_note!("    No {} — defaults, environment and flags only", path);
+        }
+        Err(e) => eprintln!("Unable to read {}: {}", path, e),
+    }
+    if let Ok(mut slot) = crate::entry_point::CONFIG_SOURCE.lock() {
+        *slot = source;
     }
 
-    println!("  End of Config Section");
+    startup_note!("  End of Config Section");
 }

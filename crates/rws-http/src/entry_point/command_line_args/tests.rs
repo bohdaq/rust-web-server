@@ -354,3 +354,37 @@ fn long_only_arguments_are_never_matched_by_a_bare_dash() {
     env::set_var(Config::RWS_CONFIG_ACME_EMAIL, "");
     assert_eq!("unchanged", email);
 }
+
+fn strings(list: &[&str]) -> Vec<String> {
+    list.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn space_separated_values_are_joined() {
+    assert_eq!(
+        super::joined_value_forms(&strings(&["rws", "-p", "8080", "--ip", "127.0.0.1", "-h", "--port=1"])),
+        strings(&["rws", "--port=8080", "--ip=127.0.0.1", "-h", "--port=1"])
+    );
+    // A flag followed by another flag keeps its form.
+    assert_eq!(super::joined_value_forms(&strings(&["rws", "-p", "--ip=x"])), strings(&["rws", "-p", "--ip=x"]));
+}
+
+#[test]
+fn binary_arguments_are_checked() {
+    let ok = |a: &[&str]| super::check_binary_args(&strings(a));
+    assert!(ok(&["rws"]).is_ok());
+    assert!(ok(&["rws", "--port=8080", "-p", "9", "--check", "x.toml", "--format=json", "--verbose", "-h=content-type"]).is_ok());
+    assert!(ok(&["rws", "--bogus"]).unwrap_err().contains("unknown argument '--bogus'"));
+    assert!(ok(&["rws", "help", "me"]).unwrap_err().contains("'me'"));
+    assert!(ok(&["rws", "--prot=1"]).unwrap_err().contains("Did you mean --port?"));
+    assert!(ok(&["rws", "--port"]).unwrap_err().contains("needs a value"));
+}
+
+#[test]
+fn short_h_and_help_print_help() {
+    for args in [&["rws", "-h"][..], &["rws", "help"][..], &["rws", "--help"][..]] {
+        let text = super::informational_flag_output(&strings(args)).expect("help");
+        assert!(text.starts_with("rws ") && text.contains("Usage:") && text.contains("Common options:"));
+    }
+    assert_eq!(super::informational_flag_output(&strings(&["rws", "-h=content-type"])), None);
+}

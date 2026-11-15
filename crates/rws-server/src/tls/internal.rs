@@ -63,6 +63,11 @@ pub struct LocalCa {
 }
 
 impl LocalCa {
+    /// Whether `dir` holds a complete CA (`ca.pem`, `ca.key`, `ca.name`).
+    pub fn exists(dir: &Path) -> bool {
+        ["ca.pem", "ca.key", "ca.name"].iter().all(|f| dir.join(f).is_file())
+    }
+
     /// The CA in `dir`, created on first use (`ca.pem`, `ca.key` 0600,
     /// `ca.name`: its subject, so the issuer is rebuilt without parsing).
     pub fn load_or_create(dir: &Path) -> Result<LocalCa, String> {
@@ -269,7 +274,21 @@ pub fn trust_command(args: &[String]) -> Option<i32> {
         return None;
     }
     let rest: Vec<&str> = args[2..].iter().map(String::as_str).collect();
+    if let Some(unknown) = rest.iter().find(|a| **a != "--print") {
+        eprintln!("rws {verb}: unknown argument {unknown}\nUsage: rws trust [--print] | rws untrust");
+        return Some(2);
+    }
     let dir = dir();
+    // `--print` and `untrust` only read: they never create a CA (18.37.0).
+    let read_only = rest.contains(&"--print") || verb == "untrust";
+    if read_only && !LocalCa::exists(&dir) {
+        if verb == "untrust" {
+            println!("rws untrust: no local CA in {}; nothing to remove", dir.display());
+            return Some(0);
+        }
+        eprintln!("rws trust --print: no local CA in {} yet; `rws trust` or a server with tls = \"internal\" creates it", dir.display());
+        return Some(1);
+    }
     let ca = match LocalCa::load_or_create(&dir) {
         Ok(ca) => ca,
         Err(e) => {
@@ -280,10 +299,6 @@ pub fn trust_command(args: &[String]) -> Option<i32> {
     if rest.contains(&"--print") {
         print!("{}", ca.cert_pem());
         return Some(0);
-    }
-    if let Some(unknown) = rest.iter().find(|a| **a != "--print") {
-        eprintln!("rws {verb}: unknown argument {unknown}\nUsage: rws trust [--print] | rws untrust");
-        return Some(2);
     }
     let steps = trust_steps(verb == "trust", &ca.cert_path());
     if steps.is_empty() {

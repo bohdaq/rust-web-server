@@ -100,7 +100,7 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
     //    MCP_ALLOWED_ORIGINS (comma-separated).
     let token = std::env::var("MCP_TOKEN").unwrap_or_default();
     let served = if token.trim().is_empty() {
-        println!("MCP tools not mounted: set MCP_TOKEN to enable /mcp.");
+        rust_web_server::entry_point::note("MCP tools not mounted: set MCP_TOKEN to enable /mcp.");
         Served::Plain(app)
     } else {
         let origins: Vec<String> = std::env::var("MCP_ALLOWED_ORIGINS")
@@ -282,6 +282,18 @@ async fn start_acme(listener: Option<&std::net::TcpListener>) {
     }
 }
 
+/// [`Server::setup`], or one line on stderr and exit code 1 (a port in
+/// use, no permission for a low port) instead of a panic.
+fn setup_or_exit() -> (std::net::TcpListener, rust_web_server::thread_pool::ThreadPool) {
+    match Server::setup() {
+        Ok(setup) => setup,
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(1);
+        }
+    }
+}
+
 /// `rws --version` / `rws --help`: print and exit before binding any socket.
 /// `rws --check[=<file>]`: validate the configuration, exit 0 if it has no
 /// errors, 1 otherwise.
@@ -316,6 +328,12 @@ fn exit_if_informational_flag() {
         print!("{output}");
         std::process::exit(0);
     }
+    // Anything else must be a setting (`--port=8080`, `-p 8080`): an
+    // argument rws doesn't know stops it instead of being ignored (18.37.0).
+    if let Err(message) = rust_web_server::entry_point::command_line_args::check_binary_args(&args) {
+        eprintln!("{message}");
+        std::process::exit(2);
+    }
     if let Some(path) = rust_web_server::config_check::check_target_from_args(&args) {
         let report = rust_web_server::config_check::check_file(&path);
         if rust_web_server::config_check::wants_json_output(&args) {
@@ -330,7 +348,7 @@ fn exit_if_informational_flag() {
 #[cfg(not(feature = "http2"))]
 fn main() {
     exit_if_informational_flag();
-    let (listener, pool) = Server::setup().expect("server setup failed");
+    let (listener, pool) = setup_or_exit();
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
     rust_web_server::admin::start_from_env();
@@ -359,7 +377,7 @@ fn main() {
 #[cfg(all(feature = "http2", not(feature = "http3")))]
 async fn serve() {
     rust_web_server::server::per_core::default_to_per_core();
-    let (listener, pool) = Server::setup().expect("server setup failed");
+    let (listener, pool) = setup_or_exit();
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     telemetry();
     #[cfg(feature = "gateway-api")]
@@ -403,7 +421,7 @@ async fn serve() {
 #[cfg(feature = "http3")]
 async fn serve() {
     rust_web_server::server::per_core::default_to_per_core();
-    let (listener, pool) = Server::setup().expect("server setup failed");
+    let (listener, pool) = setup_or_exit();
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     telemetry();
     #[cfg(feature = "gateway-api")]

@@ -735,15 +735,15 @@ impl Server {
     /// Reads configuration (IP, port, thread count, TLS paths) from the layered config system
     /// and returns a bound `TcpListener` and a sized `ThreadPool`. Call once at startup.
     pub fn setup() -> Result<(TcpListener, ThreadPool), String> {
-        let info = Log::info("Rust Web Server");
-        println!("{}", info);
-
-        // Not the whole usage text on every start (it was ~150 lines ahead
-        // of the lines that matter); `rws --help` prints it.
-        println!("Every setting: rws --help, or https://rws8.tech/docs/configuration/env-vars/\n");
-
-
-        println!("RWS Configuration Start: \n");
+        let verbose = crate::entry_point::verbose();
+        if verbose {
+            let info = Log::info("Rust Web Server");
+            println!("{}", info);
+            // Not the whole usage text on every start (it was ~150 lines ahead
+            // of the lines that matter); `rws --help` prints it.
+            println!("Every setting: rws --help, or https://rws8.tech/docs/configuration/env-vars/\n");
+            println!("RWS Configuration Start: \n");
+        }
 
         set_default_values();
         bootstrap();
@@ -751,7 +751,9 @@ impl Server {
         #[cfg(feature = "secrets")]
         crate::secrets::resolve_env_vars().map_err(|e| e.to_string())?;
 
-        println!("\nRWS Configuration End\n\n");
+        if verbose {
+            println!("\nRWS Configuration End\n\n");
+        }
 
 
         let (ip, port, thread_count) = get_ip_port_thread_count();
@@ -773,7 +775,7 @@ impl Server {
         #[cfg(not(feature = "http2"))]
         let protocol = "http";
 
-        println!("Setting up {}://{}...", protocol, &bind_addr);
+        crate::entry_point::note(&format!("Setting up {}://{}...", protocol, &bind_addr));
 
         // A socket systemd passed (socket activation), else our own.
         #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
@@ -784,17 +786,19 @@ impl Server {
             Some(listener) => Ok(listener),
             None => TcpListener::bind(&bind_addr),
         };
-        if boxed_listener.is_err() {
-            let message = format!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
-            return Err(message);
+        if let Err(e) = &boxed_listener {
+            return Err(bind_error_message(&bind_addr, e));
         }
 
         let listener = boxed_listener.unwrap();
         let pool = ThreadPool::new(thread_count as usize);
 
-
-        let server_url_thread_count = Log::server_url_thread_count(protocol, &bind_addr, thread_count);
-        println!("{}", server_url_thread_count);
+        if verbose {
+            let server_url_thread_count = Log::server_url_thread_count(protocol, &bind_addr, thread_count);
+            println!("{}", server_url_thread_count);
+        } else {
+            print!("{}", startup_summary(protocol, &ip, port));
+        }
 
         Ok((listener, pool))
     }
@@ -1333,7 +1337,7 @@ impl Server {
             .unwrap_or_default();
 
         if cert_path.is_empty() || key_path.is_empty() {
-            println!("No TLS certificate configured — serving plain HTTP/1.1.");
+            crate::entry_point::note("No TLS certificate configured — serving plain HTTP/1.1.");
             drop(pool);
             Server::run_plain(listener, app).await;
             return;
@@ -1355,7 +1359,7 @@ impl Server {
 
         #[cfg(unix)]
         if per_core::enabled() {
-            println!("Listening for TLS connections (HTTP/1.1 + HTTP/2), per-core runtimes...");
+            crate::entry_point::note("Listening for TLS connections (HTTP/1.1 + HTTP/2), per-core runtimes...");
             let (acceptor_tx, acceptor_rx) = tokio::sync::watch::channel(tls_acceptor);
             let accept_loop = move |listener: tokio::net::TcpListener, mut stop: tokio::sync::watch::Receiver<bool>| {
                 let app = app.clone();
@@ -1515,7 +1519,7 @@ impl Server {
         let count = per_core::runtime_count();
         let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
         let handles = per_core::spawn(addr, count, stop_rx, accept_loop);
-        println!("Started {} per-core runtimes on {}.", handles.len(), addr);
+        crate::entry_point::note(&format!("Started {} per-core runtimes on {}.", handles.len(), addr));
 
         loop {
             tokio::select! {
@@ -1776,3 +1780,49 @@ impl Server {
 }
 
 
+
+
+/// The message for a listener that can't be bound: one line naming the
+/// address and what to do, instead of a panic (18.37.0).
+pub fn bind_error_message(bind_addr: &str, e: &std::io::Error) -> String {
+    match e.kind() {
+        std::io::ErrorKind::AddrInUse => format!(
+            "rws: {bind_addr} is already in use: another program (or another rws) listens there.\n\
+             Stop it, or pick another port: rws --port=8080 (or port = 8080 in rws.config.toml)."
+        ),
+        std::io::ErrorKind::PermissionDenied => format!(
+            "rws: no permission to listen on {bind_addr}: ports below 1024 need root or CAP_NET_BIND_SERVICE.\n\
+             Pick a port from 1024 up: rws --port=8080."
+        ),
+        std::io::ErrorKind::AddrNotAvailable => format!(
+            "rws: {bind_addr} is not an address of this machine. Use --ip=0.0.0.0 (all interfaces) or --ip=127.0.0.1."
+        ),
+        _ => format!("rws: unable to listen on {bind_addr}: {e}"),
+    }
+}
+
+/// The few lines a start prints without `--verbose`: version, where the
+/// configuration came from, what is served and where.
+pub fn startup_summary(protocol: &str, ip: &str, port: i32) -> String {
+    let config = match crate::entry_point::config_source() {
+        Some(path) => format!("config {path}"),
+        None => "no rws.config.toml: defaults, environment and flags".to_string(),
+    };
+    let proxy = std::env::var("RWS_CONFIG_FILE").is_ok() || crate::entry_point::config_source().is_some_and(|p| {
+        std::fs::read_to_string(p).is_ok_and(|c| c.contains("[[route]]") || c.contains("[[upstream]]"))
+    });
+    let dir = crate::app::controller::static_resource::working_directory().to_string();
+    let serving = if proxy { "reverse proxy (routes from the config)".to_string() } else { format!("files from {dir}") };
+    let all = ip == "0.0.0.0" || ip == "::";
+    let host = if all { "localhost".to_string() } else if ip.contains(':') { format!("[{ip}]") } else { ip.to_string() };
+    let mut out = format!("rws {} · {config}\nServing {serving}\n", env!("CARGO_PKG_VERSION"));
+    out.push_str(&format!("Server is up and running at: {protocol}://{host}:{port}\n"));
+    if all {
+        out.push_str(&format!("  Listening on all interfaces ({ip}:{port}): other machines on the network can reach it.\n"));
+        if !proxy && crate::server_config::ServerConfig::current().directory_listing {
+            out.push_str("  Directory listing is on, so they can browse this folder. Local only: --ip=127.0.0.1; no listing: directory_listing = false.\n");
+        }
+    }
+    out.push_str("Ctrl+C stops it · --verbose prints every setting\n");
+    out
+}

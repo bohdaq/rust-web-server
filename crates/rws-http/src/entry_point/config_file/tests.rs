@@ -223,3 +223,10 @@ fn an_escaped_quote_does_not_end_a_string_before_a_comment() {
     // Literal strings have no escapes: the backslash doesn't hide the quote.
     assert_eq!(strip_comment(r"x = 'C:\' # note").trim(), r"x = 'C:\'");
 }
+
+#[test]
+fn unknown_settings_get_a_suggestion() {
+    assert_eq!(super::suggestion("[admn] listen").as_deref(), Some("[admin] listen"));
+    assert_eq!(super::suggestion("prot").as_deref(), Some("port"));
+    assert_eq!(super::suggestion("[nothing] like_it_at_all"), None);
+}

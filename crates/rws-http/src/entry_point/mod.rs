@@ -1,5 +1,15 @@
 #[cfg(test)]
 mod tests;
+/// `println!` for startup detail, printed only with `--verbose` (or
+/// `RWS_VERBOSE=true`): see [`verbose`].
+macro_rules! startup_note {
+    ($($arg:tt)*) => {
+        if $crate::entry_point::verbose() {
+            println!($($arg)*);
+        }
+    };
+}
+
 pub mod command_line_args;
 pub mod config_file;
 pub mod environment_variables;
@@ -13,6 +23,46 @@ use crate::virtual_host::VirtualHostConfig;
 use crate::entry_point::command_line_args::{override_environment_variables_from_command_line_args};
 use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::entry_point::environment_variables::read_system_environment_variables;
+
+/// Whether startup prints every setting and step (`--verbose` or
+/// `RWS_VERBOSE=true`, since 18.37.0). Without it rws prints a few lines:
+/// version, where the configuration came from, the address it serves on.
+pub fn verbose() -> bool {
+    static VERBOSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *VERBOSE.get_or_init(|| {
+        env::args().any(|a| a == "--verbose")
+            || env::var("RWS_VERBOSE").is_ok_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+    })
+}
+
+/// One line of startup detail (see [`verbose`]).
+pub fn note(line: &str) {
+    if verbose() {
+        println!("{line}");
+    }
+}
+
+/// The configuration file the last load read, or `None` when there was
+/// none (rws runs on defaults, environment and flags).
+pub fn config_source() -> Option<String> {
+    CONFIG_SOURCE.lock().ok().and_then(|s| s.clone())
+}
+
+pub(crate) static CONFIG_SOURCE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Levenshtein distance, for "did you mean" hints.
+pub fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut cur = vec![i + 1; b.len() + 1];
+        for (j, cb) in b.iter().enumerate() {
+            cur[j + 1] = (prev[j] + usize::from(ca != *cb)).min(prev[j + 1] + 1).min(cur[j] + 1);
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
 
 /// `value` as startup output may show it: secrets (a name with `SECRET`,
 /// `PASSWORD` or `TOKEN`) are replaced.
@@ -247,135 +297,135 @@ pub fn bootstrap() {
 }
 
 pub fn set_default_values() {
-    println!("  Initializing default values");
+    startup_note!("  Initializing default values");
 
     let is_var_set = env::var(Config::RWS_CONFIG_IP).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_IP, Config::RWS_CONFIG_IP_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_IP, Config::RWS_CONFIG_IP_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_IP, Config::RWS_CONFIG_IP_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_IP);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_IP);
     }
 
 
     let is_var_set = env::var(Config::RWS_CONFIG_PORT).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_PORT);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_PORT);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES, Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES, Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES, Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES);
     }
 
 
     let is_var_set = env::var(Config::RWS_CONFIG_THREAD_COUNT).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_THREAD_COUNT);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_THREAD_COUNT);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_ALL);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_ALL);
     }
 
 
     let is_var_set = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
     }
 
 
     let is_var_set = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, Config::RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_METHODS, Config::RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_METHODS, Config::RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_METHODS);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_METHODS);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, Config::RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, Config::RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, Config::RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, Config::RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_MAX_AGE, Config::RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_MAX_AGE, Config::RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_MAX_AGE);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_MAX_AGE);
     }
 
 
     let is_var_set = env::var(Config::RWS_CONFIG_TLS_CERT_FILE).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_TLS_CERT_FILE, Config::RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_TLS_CERT_FILE, Config::RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_TLS_CERT_FILE, Config::RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_TLS_CERT_FILE);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_TLS_CERT_FILE);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_TLS_KEY_FILE).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_TLS_KEY_FILE, Config::RWS_CONFIG_TLS_KEY_FILE_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_TLS_KEY_FILE, Config::RWS_CONFIG_TLS_KEY_FILE_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_TLS_KEY_FILE, Config::RWS_CONFIG_TLS_KEY_FILE_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_TLS_KEY_FILE);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_TLS_KEY_FILE);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_HTTP_REDIRECT_PORT).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_HTTP_REDIRECT_PORT, Config::RWS_CONFIG_HTTP_REDIRECT_PORT_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_HTTP_REDIRECT_PORT, Config::RWS_CONFIG_HTTP_REDIRECT_PORT_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_HTTP_REDIRECT_PORT, Config::RWS_CONFIG_HTTP_REDIRECT_PORT_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_HTTP_REDIRECT_PORT);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_HTTP_REDIRECT_PORT);
     }
 
     let is_var_set = env::var(Config::RWS_CONFIG_LOG_FORMAT).is_ok();
     if !is_var_set {
         env::set_var(Config::RWS_CONFIG_LOG_FORMAT, Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE);
-        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_LOG_FORMAT, Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE);
+        startup_note!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_LOG_FORMAT, Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_LOG_FORMAT);
+        startup_note!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_LOG_FORMAT);
     }
 
     crate::server_config::invalidate();
-    println!("  End of initializing default values\n");
+    startup_note!("  End of initializing default values\n");
 }
 
 

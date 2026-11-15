@@ -14,6 +14,7 @@
 
 #[cfg(test)]
 mod tests;
+pub mod syntax;
 
 use std::io::Cursor;
 use std::path::Path;
@@ -188,10 +189,16 @@ pub fn check_str(content: &str) -> ConfigReport {
         return report;
     }
 
+    for finding in syntax::check(content) {
+        let message = format!("line {}, column {}: {}", finding.line, finding.column, finding.message);
+        if finding.error { report.error(message) } else { report.warn(message) }
+    }
+
     match collect_settings(Cursor::new(content.as_bytes()), String::new()) {
         Ok(resolved) => {
             for key in &resolved.unknown {
-                report.error(format!("unknown setting '{key}' — ignored"));
+                let hint = crate::entry_point::config_file::suggestion(key).map(|s| format!("; did you mean '{s}'?")).unwrap_or_default();
+                report.error(format!("unknown setting '{key}'{hint} (the server would skip it)"));
             }
             check_settings(&resolved.settings, &mut report);
         }
