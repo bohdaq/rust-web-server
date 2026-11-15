@@ -5,6 +5,21 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## 18.36.2 — 2026-11-15
+
+No code changes: a docs and website release.
+
+### Changed
+
+- **rws8.tech.** The home page says what rws replaces and where it isn't
+  the best fit, shows the newest version in its terminal and has an admin
+  UI and Traffic tile; benchmark numbers carry their date and version; the
+  comparison adds Traefik, axum and actix-web.
+- **Docs.** Gateway API conformance is stated one way everywhere (passes
+  the v1.7.0 suite in CI); the proxy overview, roadmap and environment
+  variables no longer call shipped features planned; hot reload lists
+  routes and upstreams. Changelog links to docs pages skip the redirect.
+
 ## 18.36.1 — 2026-11-14
 
 ### Added
