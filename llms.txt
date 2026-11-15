@@ -32,7 +32,7 @@ Use it as:
 
 ## Cookbook
 
-- [Cookbook](https://rws8.tech/docs/cookbook/overview.md): Complete, CI-checked rws configurations for common stacks — static sites, SPAs, Node, Python, Ruby and PHP apps, internal tools behind single sign-on, API gateways and local development.
+- [Cookbook](https://rws8.tech/docs/cookbook/overview.md): CI-checked rws configs for common stacks: static sites, SPAs, Node, Python, Ruby and PHP apps, tools behind single sign-on, API gateways and local dev.
 - [Cookbook: static site](https://rws8.tech/docs/cookbook/static-site.md): Serve a directory of files with automatic HTTPS from Let's Encrypt, HTTP→HTTPS redirects, compression and browser caching.
 - [Cookbook: single-page app + API](https://rws8.tech/docs/cookbook/single-page-app.md): A React, Vue or Svelte build served with client-side routing, and an API proxied under /api on the same host.
 - [Cookbook: Node apps](https://rws8.tech/docs/cookbook/node-apps.md): Next.js, Nuxt, Remix, SvelteKit or Express behind rws — HTTPS, several app processes, health checks, WebSockets and cached static assets.
@@ -52,7 +52,7 @@ Use it as:
 ## Building Apps
 
 - [Building Apps Overview](https://rws8.tech/docs/building-apps/overview.md): Three ways to add routes to rust-web-server and how a request flows from the TCP socket to your handler.
-- [Project layout and rws.app.toml](https://rws8.tech/docs/building-apps/project-layout.md): The conventional layout of an rws application — where routes, models, jobs, migrations, templates and tests go — and the rws.app.toml manifest that names the app and any path that differs.
+- [Project layout and rws.app.toml](https://rws8.tech/docs/building-apps/project-layout.md): Where routes, models, jobs, migrations, templates and tests go in an rws application, and the rws.app.toml manifest for paths that differ.
 - [Generators (rws gen)](https://rws8.tech/docs/building-apps/generators.md): rws gen model, route, migration and test — code for a project in the conventional layout, written against the exact API of the rws release you run, never overwriting a file.
 - [Controllers](https://rws8.tech/docs/building-apps/controllers.md): The Controller trait is the lowest-level way to handle HTTP requests in rust-web-server.
 - [Routing](https://rws8.tech/docs/building-apps/routing.md): Path-based routing with named parameters, wildcards, and virtual-host scoping using Router and the routes! macro.
@@ -104,7 +104,7 @@ Use it as:
 - [Request/Response Rewriting](https://rws8.tech/docs/features/rewrite.md): Transform requests before dispatch and responses on the way back with the RewriteLayer middleware.
 - [WebAssembly Plugins](https://rws8.tech/docs/features/wasm-plugins.md): Extend rws without recompiling it. A WebAssembly module checks or changes each request and response, sandboxed with no imports, and bounded in CPU and memory.
 - [IP Filtering](https://rws8.tech/docs/features/ip-filter.md): Allow or deny requests by client IPv4 or IPv6 address or CIDR range with the IpFilter middleware.
-- [Web application firewall](https://rws8.tech/docs/features/waf.md): rws's built-in WAF — SQL injection, XSS, path traversal, command injection, Log4Shell, SSRF and scanner detection with anomaly scoring, detect or block, exclusions and custom rules.
+- [Web application firewall](https://rws8.tech/docs/features/waf.md): The built-in WAF: SQL injection, XSS, path traversal, command injection, Log4Shell, SSRF and scanner detection, anomaly scoring and custom rules.
 - [Request ID / Correlation ID](https://rws8.tech/docs/features/request-id.md): Give every request/response pair a stable ID so log lines can be correlated across services.
 - [Background Scheduler](https://rws8.tech/docs/features/scheduler.md): Run background tasks on a fixed rate, fixed delay, or 6-field cron schedule without an external crate.
 - [Background Job Queue](https://rws8.tech/docs/features/jobs.md): Run one-shot, fire-and-forget work from request handlers, with retry-with-backoff and optional crash-safe persistence.
@@ -129,14 +129,14 @@ Use it as:
 - [UDP Proxy](https://rws8.tech/docs/proxy/udp-proxy.md): Forward UDP datagrams to backend servers with round-robin load balancing for DNS, syslog, and other request-reply UDP protocols.
 - [WebSocket Proxy](https://rws8.tech/docs/proxy/websocket-proxy.md): Proxy WebSocket upgrade requests to backend servers and relay all frames bidirectionally with round-robin load balancing.
 - [gRPC Proxy](https://rws8.tech/docs/proxy/grpc-proxy.md): Route gRPC traffic to HTTP/2 backends — every call type streaming, status trailers kept, pooled connections, private CAs and client certificates.
-- [LLM Proxy](https://rws8.tech/docs/proxy/llm-proxy.md): One endpoint in front of OpenAI-compatible and Anthropic providers, with virtual keys, token usage from JSON and streams, budgets shared through Redis, provider fallback and rws_llm_* metrics.
+- [LLM Proxy](https://rws8.tech/docs/proxy/llm-proxy.md): One endpoint in front of OpenAI-compatible and Anthropic providers: virtual keys, token usage, shared budgets, provider fallback and rws_llm_* metrics.
 
 ## Database / ORM
 
 - [Database Overview](https://rws8.tech/docs/database/overview.md): Async SQLite, PostgreSQL, and/or MySQL — even more than one at once — with a built-in connection pool via sqlx.
 - [#[derive(Model)]](https://rws8.tech/docs/database/model-derive.md): Map a Rust struct to a database table with the Model proc-macro and its field attributes.
 - [Repository](https://rws8.tech/docs/database/repository.md): Async CRUD operations for a model type via the Repository trait and ModelRepository.
-- [Keys, timestamps, soft delete and locking](https://rws8.tech/docs/database/conventions.md): String and UUID primary keys, created_at/updated_at, soft delete with restore, and optimistic locking with #[version] — maintained by the repository, on SQLite, PostgreSQL and MySQL.
+- [Keys, timestamps, soft delete and locking](https://rws8.tech/docs/database/conventions.md): String and UUID keys, timestamps, soft delete with restore and optimistic locking with #[version], on SQLite, PostgreSQL and MySQL.
 - [Query Builder](https://rws8.tech/docs/database/query-builder.md): Use QueryBuilder to construct typed async SELECT, COUNT, DELETE, and UPDATE queries without writing SQL.
 - [Pagination](https://rws8.tech/docs/database/pagination.md): Paginate query results with Page<T> (offset) and CursorPage<T> (keyset), plus a built-in Link header builder.
 - [Raw SQL](https://rws8.tech/docs/database/raw-sql.md): Execute hand-written SQL queries and map results to typed structs or untyped rows.
@@ -178,7 +178,7 @@ Use it as:
 - [Operators](https://rws8.tech/docs/deployment/kubernetes-operators.md): Controllers with reconcile, requeue, finalizers and status; admission and conversion webhooks; CRDs and RBAC from Rust types; tests against a real API server.
 - [Observability](https://rws8.tech/docs/deployment/observability.md): Metrics, structured logs, distributed tracing, and health endpoints for rust-web-server.
 - [Admin API](https://rws8.tech/docs/deployment/admin.md): Inspect and change a running rws on a listener of its own, behind a bearer token, never on the public routes.
-- [Several replicas](https://rws8.tech/docs/deployment/cluster.md): Run rws on several machines behind a load balancer and keep runtime changes — the IP blocklist, maintenance mode, drained backends, feature flags and cache purges — the same on all of them through Redis.
+- [Several replicas](https://rws8.tech/docs/deployment/cluster.md): Run rws on several machines behind a load balancer and keep the blocklist, maintenance mode, drained backends, flags and cache purges in sync through Redis.
 - [Fleet config](https://rws8.tech/docs/deployment/fleet.md): Many rws instances, one source of truth — instances pull a signed config from HTTPS, S3 or git, check it, apply it and report back.
 - [Traffic insights](https://rws8.tech/docs/deployment/traffic.md): See who visits your sites (people, AI agents and bots) on the admin UI's Traffic page, counted by rws itself with no tracking script.
 - [systemd](https://rws8.tech/docs/deployment/systemd.md): Run rws as a hardened systemd service — from the deb/rpm packages or by hand; unprivileged user, read-only system, ports below 1024, reload and log rotation by signal.
@@ -193,8 +193,8 @@ Use it as:
 - [Migrating to 18.0](https://rws8.tech/docs/reference/migrating-18.md): What changes when upgrading rws from 17.x to 18.0 — Header field types, default response headers, and RSA public keys.
 - [Architecture](https://rws8.tech/docs/reference/architecture.md): How rws handles a request — listeners, the HTTP/1.1, HTTP/2 and HTTP/3 front ends, the Application trait, middleware, the static-file and proxy fast paths, and configuration.
 - [Benchmarks](https://rws8.tech/docs/reference/benchmarks.md): rws compared with Caddy and nginx on static files and reverse proxying, and how to reproduce the numbers.
-- [rws vs nginx vs Caddy](https://rws8.tech/docs/reference/compare.md): How rws compares with nginx and Caddy as a web server and reverse proxy — certificates, config, HTTP/3, load balancing, auth, observability, Kubernetes and speed — with sources and measured benchmarks.
-- [Roadmap](https://rws8.tech/docs/reference/roadmap.md): Planned features for rust-web-server — each appears as a callout on the relevant docs page.
+- [rws vs nginx vs Caddy](https://rws8.tech/docs/reference/compare.md): rws compared with nginx, Caddy, Traefik, axum and actix-web: certificates, config, HTTP/3, load balancing, auth, Kubernetes and speed, with sources.
+- [Roadmap](https://rws8.tech/docs/reference/roadmap.md): What is still planned for rust-web-server, what shipped from earlier versions of this page, and where the full ordered list of open work lives.
 - [Support policy](https://rws8.tech/docs/reference/support-policy.md): Which rws releases get fixes and for how long, the long-term-support (LTS) lines, security response targets and how fixes are released.
 
 ## Optional

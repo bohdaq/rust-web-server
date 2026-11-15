@@ -798,7 +798,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Virtual-host routing** — per-domain TLS certificates via `SniCertResolver`; `.with_host("example.com")` on any `Router` — `http2`
 - **HTTP → HTTPS redirect** — `Server::run_redirect()` listens on a second port and issues `301` responses — `http2`
 - **ACME / automatic TLS** — automatic certificate provisioning compatible with Let's Encrypt — `acme`
-- **Hot reload** — `SIGHUP` (or `POST /admin/config/reload`) reloads CORS rules, rate limits, log format, and TLS certs without restarting — `http2`
+- **Hot reload** — `SIGHUP` (or `POST /admin/config/reload`) reloads routes, upstreams, health checks, CORS rules, rate limits, log format and TLS certs without restarting — `http2`
 - **Graceful shutdown** — `SIGINT` / `SIGTERM` drain in-flight requests before exit; `SERVER_READY` flag cleared on shutdown
 - **Gzip compression** — applied automatically based on `Accept-Encoding` to text bodies of at least 512 bytes (`compression::MIN_COMPRESS_SIZE`)
 - **Static file serving** — a directory with no `index.html` renders a dark/light-adaptive directory listing page by default; files over 256 KiB streamed (`sendfile(2)` on plain TCP); ETag + `Last-Modified` with `304` revalidation, `Cache-Control: no-cache` by default (`RWS_CONFIG_STATIC_CACHE_CONTROL`)
@@ -897,7 +897,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **`OtelLayer`** — OpenTelemetry trace propagation middleware
 - **`CacheLayer`** — response caching middleware
 - **Structured logging** — `RWS_CONFIG_LOG_FORMAT=json` (default), `combined`, or `off`; hot-reloadable
-- **Config hot reload** — `SIGHUP` or `POST /admin/config/reload` reloads CORS, rate limits, log format, TLS certs; no restart required
+- **Config hot reload** — `SIGHUP` or `POST /admin/config/reload` reloads routes, upstreams, health checks, CORS, rate limits, log format and TLS certs; no restart required
 - **Kubernetes-ready** — `/healthz`, `/readyz`, `/metrics` all built in; graceful `SIGTERM` drain; static binary with no system dependencies
 - **`rws --check`** — validates `rws.config.toml` (unknown keys, bad values, TLS files, undeclared upstreams, unset auth secrets) and exits 1 on errors, like `nginx -t`; `--format=json`
 - **Helm chart** — `helm/rws/`
@@ -1940,7 +1940,7 @@ The log format is hot-reloadable.
 
 ## Kubernetes Gateway API
 
-The `gateway-api` build feature's controller (in progress, 18.8.0). Read at startup. See [Kubernetes Gateway API](/deployment/kubernetes-gateway-api/).
+The `gateway-api` build feature's controller. Read at startup. See [Kubernetes Gateway API](/deployment/kubernetes-gateway-api/).
 
 | Variable | Default | Type | Description |
 |----------|---------|------|-------------|
@@ -14818,9 +14818,9 @@ Server::run(listener, pool, app); // async builds: Server::run_tls(listener, poo
 | Auth | Yes (bearer token from env var, JWT, htpasswd basic) | Yes (`JwtLayer`, `BasicAuthLayer`) |
 | Response caching | Yes (`[route.middleware.cache]`) | Yes (`CacheLayer`) |
 | gRPC | Yes (`type = "grpc"`) | Yes (`GrpcProxy`, requires `http2` feature) |
-| Canary / traffic splitting | No (planned) | Yes (`CanaryLayer`) |
-| Service discovery | No (planned) | Yes (`BackendPool`) |
-| Circuit breaker / retry | No (planned) | Yes (`CircuitBreaker`, `RetryLayer`) |
+| Canary / traffic splitting | Yes (`weights` per backend) | Yes (`CanaryLayer`) |
+| Service discovery | No (Gateway API mode reads Kubernetes endpoints) | Yes (`BackendPool`) |
+| Circuit breaker / retry | Yes (`[upstream.circuit_breaker]`, retries) | Yes (`CircuitBreaker`, `RetryLayer`) |
 
 ## Behind an L4 load balancer (PROXY protocol)
 
@@ -26645,7 +26645,7 @@ the same engine available as a Rust library. Pick **Caddy** for the same
 or modules only nginx has.
 
 Facts about nginx and Caddy were checked against their documentation on
-2026-11-06 ([sources](#sources)). Tell us on
+2026-11-06, Traefik, axum and actix-web on 2026-11-15 ([sources](#sources)). Tell us on
 [GitHub](https://github.com/bohdaq/rust-web-server/issues) if something
 has changed.
 
@@ -26657,9 +26657,9 @@ has changed.
 | Config | One `rws.config.toml`; `rws --check`; hot reload on SIGHUP or file change; admin API | Caddyfile or JSON; `caddy validate`; admin API | `nginx.conf`; `nginx -t`; reload; Control API since 1.31.5 (off by default) |
 | HTTP/3 (QUIC) | On by default with TLS | On by default | Yes, since 1.25.0 (marked experimental) |
 | Load balancing | Round robin, random, least connections, IP hash, weights, sticky cookies, circuit breaker, retries, active health checks | Random, round robin, weighted, least connections, IP/URI/header/cookie hash, active and passive health checks, retries | Round robin, least connections, least time, hash, random, sticky (1.29.6+); active health checks in NGINX Plus |
-| Auth | Bearer, JWT, basic, forward auth, OIDC sign-in; fails closed when misconfigured. SAML in the library | Basic, forward auth; more via plugins | Basic, `auth_request`; JWT and OIDC in NGINX Plus |
+| Auth | Config: bearer, JWT, basic, failing closed when misconfigured; OIDC sign-in for the admin UI. Library: forward auth, OIDC, SAML | Basic, forward auth; more via plugins | Basic, `auth_request`; JWT and OIDC in NGINX Plus |
 | Observability | Prometheus metrics with native histograms, OpenTelemetry traces, metrics and logs, JSON access log, admin UI with traffic analytics (people, AI agents, bots) | Prometheus metrics (HTTP metrics opt-in), OTLP metrics, OpenTelemetry tracing, structured JSON logs | `stub_status`, OpenTelemetry tracing module; full metrics API in NGINX Plus |
-| Kubernetes | Gateway API controller (v1.6.3 conformance, all five Gateway profiles), Helm chart | Ingress controller (caddyserver/ingress, work in progress); no Gateway API implementation | NGINX Gateway Fabric (Gateway API), NGINX Ingress Controller |
+| Kubernetes | Gateway API controller (passes the v1.7.0 conformance suite in CI, listed upstream at v1.6.3; all five Gateway profiles), Helm chart | Ingress controller (caddyserver/ingress, work in progress); no Gateway API implementation | NGINX Gateway Fabric (Gateway API), NGINX Ingress Controller |
 | Extending | A Rust crate: routes, middleware, MCP server, ORM; WASM plugins | Go plugins compiled in (xcaddy) | C modules, njs, Lua via OpenResty |
 | License | MIT | Apache-2.0 | BSD-2-Clause |
 
@@ -26679,6 +26679,29 @@ least memory in every scenario.
 - **Caddy**: you want automatic HTTPS and already rely on a Caddy plugin.
 - **nginx**: very high traffic on minimal memory, an existing nginx setup, or
   a module only nginx has.
+
+## rws vs Traefik
+
+Traefik (Go, MIT) also gets certificates itself (HTTP-01, TLS-ALPN-01,
+DNS-01), serves HTTP/3 and implements the Gateway API. Its strength is
+discovery: containers announce their own routes through Docker labels or
+Kubernetes objects, and middleware plugins load from a catalogue. rws reads
+routes from its file or the Gateway API, has no Docker-label provider, and
+also serves static files and runs as a Rust library. Pick Traefik for a
+fleet of containers that come and go; rws for a fixed set of sites and apps
+in one file.
+
+## rws vs axum or actix-web
+
+axum and actix-web are Rust web frameworks: you write the app, and put
+something like rws, nginx or Caddy in front for certificates and proxying.
+axum builds on hyper and Tower; it has no TLS, ACME or reverse proxy of its
+own. actix-web has its own HTTP stack and serves TLS through its `rustls`
+or `openssl` features, with certificates you bring. The `rust-web-server`
+crate is the framework and the front door in one: routes and middleware in
+Rust, plus automatic certificates, HTTP/3 and the proxy, so a Rust service
+can ship as one binary. Pick axum for the Tower ecosystem, actix-web for
+its maturity and community; rws when you want one less process.
 
 ## Moving from nginx or Caddy
 
@@ -26703,6 +26726,12 @@ least memory in every scenario.
   [OpenTelemetry](https://nginx.org/en/docs/ngx_otel_module.html),
   [Control API (1.31.5)](https://blog.nginx.org/blog/nginx-1-31-5-control-api-predicate-locations-early-body-inspection-and-more),
   [license](https://nginx.org/LICENSE)
+- Traefik: [ACME](https://doc.traefik.io/traefik/reference/install-configuration/tls/certificate-resolvers/acme/),
+  [entry points (HTTP/3)](https://doc.traefik.io/traefik/reference/install-configuration/entrypoints/),
+  [Docker provider](https://doc.traefik.io/traefik/providers/docker/),
+  [plugins](https://plugins.traefik.io/),
+  [license](https://github.com/traefik/traefik/blob/master/LICENSE.md)
+- axum: [docs.rs](https://docs.rs/axum/latest/axum/); actix-web: [HTTP/2 and TLS](https://actix.rs/docs/http2/)
 - Kubernetes: [Gateway API implementations](https://gateway-api.sigs.k8s.io/implementations/)
 
 ---
@@ -26711,7 +26740,7 @@ least memory in every scenario.
 
 <https://rws8.tech/docs/reference/roadmap/>
 
-These features are planned. Each appears as a callout on the relevant docs page.
+Still planned:
 
 :::caution[Coming Soon]
 **Baggage and automatic child spans**
@@ -26719,17 +26748,10 @@ These features are planned. Each appears as a callout on the relevant docs page.
 W3C baggage propagation, and spans created automatically for each database query and outbound call. Child spans already work when started by hand with `otel::span` / `otel::client_span` — see [Distributed Tracing](/features/tracing/#child-spans).
 :::
 
-:::caution[Coming Soon]
-**Admin UI**
+Shipped since this page first listed them:
 
-`GET /admin` — a browser-based dashboard showing live metrics, current configuration, and a tail of the access log. Requires authentication.
-:::
-
-:::caution[Coming Soon]
-**Access log rotation**
-
-Built-in log-file rotation (by size or time) so the server can write logs to disk without an external `logrotate` configuration.
-:::
+- **Admin UI**: live metrics, configuration, the access log and a Traffic page, behind sign-in. See [Admin API and UI](/deployment/admin/) and [Traffic](/deployment/traffic/).
+- **Access log rotation** (18.15.0): set `access_log_max_size` and rws rotates the file itself. See [systemd](/deployment/systemd/).
 
 ---
 
