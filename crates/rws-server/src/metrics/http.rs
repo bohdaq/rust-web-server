@@ -260,6 +260,9 @@ thread_local! {
 
 /// Record a finished request: `started` is when it was handed to the app.
 pub fn observe(method: &str, status: i16, https: bool, http_version: &str, started: Instant) {
+    if super::thread_uncounted() {
+        return;
+    }
     let secs = started.elapsed().as_secs_f64();
     record(Series::new(method, status, https, http_version), secs);
 }

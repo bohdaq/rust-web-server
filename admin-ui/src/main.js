@@ -10,7 +10,6 @@ import "@lit-material/log-viewer";
 import "@lit-material/table";
 import "@lit-material/chart";
 import "@lit-material/skeleton";
-import "@lit-material/snackbar";
 import "@lit-material/switch";
 import "@lit-material/text-field";
 import "./traffic.js";

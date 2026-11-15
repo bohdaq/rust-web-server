@@ -49,7 +49,13 @@ await page.goto(`${admin}/admin/#/controls`);
 const maintenance = page.locator('lit-material-switch[aria-label="Maintenance mode"]');
 await maintenance.waitFor({ timeout: 5000 });
 await maintenance.click();
+// Turning it on asks first (18.37.0).
+await page.locator("dialog#confirm[open]").waitFor({ timeout: 5000 }).catch(() => fail("no confirmation before maintenance mode"));
+await page.locator("dialog#confirm").getByText("Turn on", { exact: true }).click();
 await page.getByText("On: 503 for visitors").waitFor({ timeout: 5000 }).catch(() => fail("maintenance didn't switch on in the UI"));
+await page.getByText("Maintenance mode is on").waitFor({ timeout: 5000 }).catch(() => fail("no maintenance banner"));
+const browser503 = await fetch(publicUrl, { headers: { Accept: "text/html" } });
+if (browser503.status !== 503 || !(await browser503.text()).includes("Down for maintenance") || !browser503.headers.get("retry-after")) fail("browsers don't get the maintenance page with Retry-After");
 if ((await fetch(publicUrl)).status !== 503) fail("maintenance mode didn't reach the public port");
 await maintenance.click();
 await page.waitForTimeout(500);
@@ -60,8 +66,8 @@ const entries = async () => (await api("/caches")).find((c) => c.name === "route
 for (const path of ["cached/a", "cached/b", "cached/c/1"]) await fetch(`${publicUrl}${path}`);
 if ((await entries()) !== 3) fail(`expected 3 cached pages, got ${await entries()}`);
 await page.reload();
-await page.locator("#purge-path input").fill("/cached/c/*");
-await page.getByRole("button", { name: "Purge" }).first().click();
+await page.locator("form.purge lit-material-text-field input").first().fill("/cached/c/*");
+await page.getByRole("button", { name: "Purge path" }).first().click();
 await page.getByText("1 entry purged from route:pages").waitFor({ timeout: 5000 }).catch(() => fail("no purge confirmation in the UI"));
 if ((await entries()) !== 2) fail(`the prefix purge left ${await entries()} entries`);
 const purge = (auth) => fetch(`${publicUrl}cached/a`, { method: "PURGE", headers: auth ? { Authorization: `Bearer ${auth}` } : {} });
@@ -202,8 +208,9 @@ for (const [group, heading] of [["Apps", "App events"], ["AI agents", "AI agents
 }
 await t2.locator(".t-seg button", { hasText: "Humans" }).click();
 // Without a database, clicking a row explains what filtering needs.
-await t2.locator("button.t-row").first().click();
-await t2.locator(".t-notice").waitFor({ timeout: 5000 }).catch(() => fail("no notice for a filter without the database"));
+// Without the traffic database rows are plain text, with one line saying how to filter (18.37.0).
+await t2.locator(".t-nodb").waitFor({ timeout: 5000 }).catch(() => fail("no hint that filtering needs the database"));
+if (await t2.locator("button.t-row").count()) fail("rows look clickable without the traffic database");
 await t2.getByRole("button", { name: "30 days" }).click();
 await t2.locator('.t-seg button[aria-pressed="true"]', { hasText: "30 days" }).waitFor({ timeout: 5000 }).catch(() => fail("the period didn't switch"));
 console.log("ok: Traffic page counts a person, a spoofed GPTBot and curl");

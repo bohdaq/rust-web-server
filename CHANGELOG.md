@@ -50,6 +50,42 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   hidden and names wrap at word boundaries instead of mid-word; icons are
   inline SVG instead of emoji; the page title is the path; the time column
   says UTC.
+- **Admin UI: confirmations and Undo.** Turning maintenance mode on,
+  emptying a response cache and draining the last healthy backend of an
+  upstream ask first and name the consequence; draining, unblocking and
+  blocking offer Undo. A cache has "Purge path" (its own field, a prefix
+  ending in `*`) and "Purge all"; there is no shared path field any more.
+- **Admin UI: a truthful header.** One chip on every page: Disconnected
+  (with the last answer's time, retried every 5 s), Maintenance (plus a
+  banner with "Turn off" on every page), Degraded (N of M backends), Not
+  ready or Ready. Overview has a "Backends healthy" tile. `/status` has a
+  `maintenance` field.
+- **The admin listener's own requests aren't counted.** The UI's polling
+  no longer raises "Requests served" or fills the access log;
+  `[admin] count_own_requests = true` counts them again.
+- **Admin UI: Logs as columns** (time, status, method, host and path,
+  size, client) with a filter box and 2xx–5xx chips, wrapped, filling the
+  window.
+- **Admin UI on a phone.** The bottom bar has Overview, Traffic, Upstreams,
+  Controls and More (a sheet with the rest); tables scroll inside
+  themselves instead of the page; Traffic's tabs scroll with a fade and
+  arrow keys move between them; nothing scrolls the page sideways.
+- **Admin UI: browser history and titles.** Each section is a history
+  entry, so Back returns to the previous one, and the tab is titled
+  "Traffic · rws admin". The token field is focused on the sign-in page.
+  Form errors (an address that isn't one) show at the field; action errors
+  show as a message at the bottom, not at the top of the page.
+- **Traffic.** Opens on Visitors. Old numbers stay, dimmed, while a new
+  period loads; a failed load shows a Retry card. Without the traffic
+  database rows are plain text and one line says how to turn filtering on
+  (rows used to look clickable and end in a notice). "Compare" says when no
+  earlier period is kept (30 days with the default retention). Full lists
+  show 50 rows and "Show more", the visit feed has a filter box, "All N →"
+  sits in each card's header, and empty scroll-depth rows read "Nothing in
+  this period". Hour and day axis labels name whole hours and days; the
+  legend no longer repeats the line labels. "What do these mean?" explains
+  Verified, Likely, Page only and Server networks; the live count reads "N
+  in the last 5 min" everywhere.
 - **`rws trust --print` and `rws untrust` only read**: they no longer
   create a local CA when there is none.
 

@@ -88,11 +88,36 @@ impl Drop for InFlight {
 /// Jobs queued in the thread pool waiting for a free worker.
 pub static THREAD_POOL_QUEUED: AtomicI64 = AtomicI64::new(0);
 
+thread_local! {
+    static UNCOUNTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Requests served on this thread are left out of the counters and the
+/// access log while `true`: the admin listener sets it on its connection
+/// threads, so the admin UI's own polling doesn't show up as traffic
+/// (18.37.0; `[admin] count_own_requests = true` keeps counting them).
+#[doc(hidden)]
+pub fn set_thread_uncounted(uncounted: bool) {
+    UNCOUNTED.with(|u| u.set(uncounted));
+}
+
+/// See [`set_thread_uncounted`].
+#[doc(hidden)]
+pub fn thread_uncounted() -> bool {
+    UNCOUNTED.with(|u| u.get())
+}
+
 pub fn record_request() {
+    if thread_uncounted() {
+        return;
+    }
     REQUESTS_TOTAL.fetch_add(1, Ordering::Relaxed);
 }
 
 pub fn record_error() {
+    if thread_uncounted() {
+        return;
+    }
     ERRORS_TOTAL.fetch_add(1, Ordering::Relaxed);
 }
 

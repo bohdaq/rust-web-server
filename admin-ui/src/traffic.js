@@ -66,6 +66,23 @@ function ago(t) {
 const DEVICES = { desktop: "Desktop", mobile: "Phone", tablet: "Tablet" };
 const SCREENS = { phone: "Phone (< 600 px)", tablet: "Tablet (600–1023 px)", laptop: "Laptop (1024–1439 px)", wide: "Wide (≥ 1440 px)", "(unknown)": "Unknown" };
 
+/** x (ms) on the nearest whole hour or day, so axis labels name real hours and days. */
+const roundTo = (x, ms) => {
+  const d = new Date(x);
+  if (ms === 3_600_000) {
+    d.setMinutes(d.getMinutes() + 30, 0, 0);
+    d.setMinutes(0);
+  } else {
+    d.setHours(d.getHours() + 12, 0, 0, 0);
+    d.setHours(0);
+  }
+  return d;
+};
+const hourLabel = (x) => roundTo(x, 3_600_000).toLocaleTimeString([], { hour: "numeric" });
+const dayLabel = (x) => roundTo(x, 86_400_000).toLocaleDateString([], { month: "short", day: "numeric" });
+// Rows a full tab shows before "Show more".
+const PAGE_ROWS = 50;
+
 const day = (offset = 0) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
 const num = (n) => (n ?? 0).toLocaleString();
 const secs = (s) => (s >= 1 ? formatDuration(Math.round(s) * 1000, { unitDisplay: "narrow" }) : "0s");
@@ -115,6 +132,11 @@ export class RwsTraffic extends LitElement {
     off: { state: true },
     customOpen: { state: true },
     owner: { state: true },
+    loading: { state: true },
+    failed: { state: true },
+    shown: { state: true },
+    visitFilter: { state: true },
+    tiersOpen: { state: true },
   };
 
   constructor() {
@@ -126,7 +148,7 @@ export class RwsTraffic extends LitElement {
     this.to = "";
     this.host = "";
     this.filters = {};
-    this.metric = "pages";
+    this.metric = "visitors";
     this.compare = true;
     this.data = undefined;
     this.live = null;
@@ -135,6 +157,12 @@ export class RwsTraffic extends LitElement {
     this.off = false;
     this.customOpen = false;
     this.owner = null;
+    this.loading = false;
+    this.failed = "";
+    // How many rows each full list shows ("Show more" adds PAGE_ROWS).
+    this.shown = {};
+    this.visitFilter = "";
+    this.tiersOpen = false;
     try {
       const saved = JSON.parse(localStorage.getItem("rws-traffic") ?? "{}");
       if (TABS.some(([id]) => id === saved.tab)) this.tab = saved.tab;
@@ -184,7 +212,8 @@ export class RwsTraffic extends LitElement {
   }
 
   async reload({ quiet = false } = {}) {
-    if (!quiet) this.data = undefined;
+    // The numbers on screen stay (dimmed) until the new ones arrive.
+    if (!quiet) this.loading = true;
     try {
       const params = this.range();
       const [data, live] = await Promise.all([
@@ -194,10 +223,13 @@ export class RwsTraffic extends LitElement {
       this.data = data;
       this.live = live;
       this.off = false;
+      this.failed = "";
       if (this.filtered) await this.runQuery();
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) this.off = true;
-      else this.notice = e.message ?? String(e);
+      else if (!quiet || !this.data) this.failed = e instanceof ApiError ? e.message : "The admin API didn't answer.";
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -235,6 +267,7 @@ export class RwsTraffic extends LitElement {
     const preset = PRESETS.find(([p]) => p === id);
     this.preset = id;
     this.customOpen = false;
+    this.notice = "";
     this.from = day(preset[2]);
     this.to = "";
     this.reload();
@@ -284,6 +317,8 @@ export class RwsTraffic extends LitElement {
 
   setTab(id) {
     this.tab = id;
+    this.notice = "";
+    this.shown = {};
     this.remember();
   }
 
@@ -345,7 +380,8 @@ export class RwsTraffic extends LitElement {
     const list = limit ? rows.slice(0, limit) : rows;
     if (!list.length) return html`<p class="t-none">Nothing in this period.</p>`;
     const max = Math.max(...list.map((r) => r[1]), 1);
-    const clickable = dim && dim in DIMS && !(dim in this.filters);
+    // Rows filter only with the traffic database; without it they're plain text.
+    const clickable = dim && dim in DIMS && !(dim in this.filters) && Boolean(this.data?.store);
     return html`<ol class="t-rank" aria-label=${unit}>
       ${list.map(([key, n, ...rest]) => {
         const name = dim ? this.label(dim, key) : pages ? this.pageName(key) : key;
@@ -360,10 +396,18 @@ export class RwsTraffic extends LitElement {
   }
 
   card(title, rows, opts = {}, tab = null) {
+    // A card on Overview shows 6 and links to its tab; a tab's card shows
+    // PAGE_ROWS at a time.
+    const limit = opts.limit ?? (tab ? 6 : this.shown[title] ?? PAGE_ROWS);
     return html`<section class="t-card" aria-label=${title}>
-      <header><h3>${title}</h3>${opts.hint ? html`<span class="t-hint">${opts.hint}</span>` : nothing}</header>
-      ${this.ranked(rows, { limit: tab ? 6 : 0, ...opts })}
-      ${tab && rows.length > 6 ? html`<button class="t-more" @click=${() => this.setTab(tab)}>All ${rows.length > 25 ? "25" : rows.length} →</button>` : nothing}
+      <header><h3>${title}</h3>
+        ${tab && rows.length > 6
+          ? html`<button class="t-more" @click=${() => this.setTab(tab)}>All ${rows.length} →</button>`
+          : opts.hint ? html`<span class="t-hint">${opts.hint}</span>` : nothing}</header>
+      ${this.ranked(rows, { ...opts, limit })}
+      ${!tab && !opts.limit && rows.length > limit
+        ? html`<button class="t-more t-show" @click=${() => (this.shown = { ...this.shown, [title]: limit + PAGE_ROWS })}>Show ${Math.min(PAGE_ROWS, rows.length - limit)} more of ${rows.length - limit}</button>`
+        : nothing}
     </section>`;
   }
 
@@ -390,6 +434,15 @@ export class RwsTraffic extends LitElement {
       bounce: [s.sessions ? s.bounces / s.sessions : 0, p.sessions ? p.bounces / p.sessions : null],
       duration: [s.sessions ? s.duration / s.sessions : 0, p.sessions ? p.duration / p.sessions : null],
     };
+  }
+
+  /** Whether the period before has any data (counts kept long enough). */
+  hasEarlier() {
+    const t = this.data;
+    if (!t) return false;
+    if (this.query) return Boolean(this.query.before);
+    if (this.group !== "people") return Object.values(t.previous ?? {}).some((g) => (g?.requests ?? 0) > 0);
+    return (t.previous?.people?.pages ?? 0) > 0 || (t.previous_sessions?.sessions ?? 0) > 0;
   }
 
   /** Which metrics the chart can draw for this view. */
@@ -466,14 +519,15 @@ export class RwsTraffic extends LitElement {
             </select></label>`
         : nothing}
       <label class="t-check"><input type="checkbox" .checked=${this.compare} @change=${(e) => { this.compare = e.target.checked; this.remember(); }}> Compare</label>
+      ${this.compare && t && !this.hasEarlier() ? html`<span class="t-hint" title="Counts are kept for retention_days (30 by default); the traffic database keeps more">No earlier period kept to compare with</span>` : nothing}
       <span class="t-spacer"></span>
       ${this.live
         ? html`<span class="t-live" title=${this.live.pages.map(([p, n]) => `${this.pageName(p)}: ${n}`).join("\n") || "Nobody right now"}>
-            <span class="t-dot" data-on=${this.live.visitors > 0}></span>${num(this.live.visitors)} online</span>`
+            <span class="t-dot" data-on=${this.live.visitors > 0}></span>${num(this.live.visitors)} in the last 5 min</span>`
         : nothing}
     </div>
     ${this.customOpen
-      ? html`<form class="t-custom" @submit=${(e) => this.applyCustom(e)}>
+      ? html`<form class="t-custom" @submit=${(e) => this.applyCustom(e)} @keydown=${(e) => e.key === "Escape" && (this.customOpen = false)}>
           <label>From <input id="traffic-from" type="date" .value=${this.from} max=${day(0)} min=${day(89)}></label>
           <label>To <input id="traffic-to" type="date" .value=${this.to || day(0)} max=${day(0)} min=${day(89)}></label>
           <lit-material-button type="submit" variant="tonal">Apply</lit-material-button>
@@ -487,7 +541,10 @@ export class RwsTraffic extends LitElement {
           ${this.filtered ? html`<button class="t-chip t-clear" @click=${() => { this.filters = {}; this.query = null; }}>Clear filters</button>` : nothing}
         </div>`
       : nothing}
-    ${this.notice ? html`<p class="t-notice" role="status">${this.notice} <button class="t-more" @click=${() => (this.notice = "")}>Dismiss</button></p>` : nothing}`;
+    ${this.notice ? html`<p class="t-notice" role="status">${this.notice} <button class="t-more" @click=${() => (this.notice = "")}>Dismiss</button></p>` : nothing}
+    ${t && !t.store && this.group === "people"
+      ? html`<p class="t-foot t-nodb">Rows filter the page with the traffic database: <a href="https://rws8.tech/docs/deployment/traffic/" target="_blank" rel="noopener">how to turn it on</a>.</p>`
+      : nothing}`;
   }
 
   renderKpis() {
@@ -499,10 +556,11 @@ export class RwsTraffic extends LitElement {
       ["bounce", "Bounce rate", pct(n.bounce[0]), change(n.bounce[0], n.bounce[1], { points: true, lowerIsBetter: true }), "Sessions of one page view"],
       ["duration", "Session length", n.duration[0] === null ? "—" : secs(n.duration[0]), n.duration[0] === null ? null : change(n.duration[0], n.duration[1]), "First page view to last, on average"],
     ];
+    const drawn = this.chartable(this.metric) ? this.metric : "pages";
     return html`<div class="t-kpis" role="group" aria-label="Key numbers">
       ${kpis.map(([id, label, value, delta, hint]) => {
         const can = this.chartable(id);
-        return html`<button class="t-kpi" aria-pressed=${can && this.metric === id} ?disabled=${!can} title=${hint}
+        return html`<button class="t-kpi" aria-pressed=${can && drawn === id} ?disabled=${!can} title=${hint}
           @click=${() => (this.metric = id)}>
           <span class="t-kpi-label">${label}</span>
           <span class="t-kpi-value">${value}</span>
@@ -517,7 +575,7 @@ export class RwsTraffic extends LitElement {
     const hourly = !this.query && this.data.bucket === "hour" && this.chartable(this.metric) && this.metric === "pages";
     return html`<section class="t-chart" aria-label="Chart">
       <lit-material-line-chart label=${`${series[0].name} per ${hourly ? "hour" : "day"}`} unit=${unit} height="240" .series=${series}
-        .formatX=${(x) => (hourly ? new Date(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(x).toLocaleDateString([], { month: "short", day: "numeric" }))}></lit-material-line-chart>
+        .formatX=${hourly ? hourLabel : dayLabel}></lit-material-line-chart>
     </section>`;
   }
 
@@ -565,7 +623,7 @@ export class RwsTraffic extends LitElement {
         ${this.card("Devices", l.devices, { dim: "device", unit: "visitors" }, "audience")}
         ${live && !this.filtered
           ? html`<section class="t-card" aria-label="Right now">
-              <header><h3>Right now</h3><span class="t-hint">${num(live.visitors)} ${live.visitors === 1 ? "person" : "people"}, last 5 minutes</span></header>
+              <header><h3>Right now</h3><span class="t-hint">${num(live.visitors)} in the last 5 min · views per minute, last 30 min</span></header>
               ${live.series.some((p) => p.views > 0)
                 ? html`<lit-material-sparkline label="Page views per minute, last 30 minutes" .values=${live.series.map((p) => p.views)}></lit-material-sparkline>
                     ${this.ranked(live.pages, { dim: "page", limit: 5, unit: "views" })}`
@@ -590,12 +648,17 @@ export class RwsTraffic extends LitElement {
     ];
     return html`<div class="t-tiers" role="group" aria-label="How sure">
       ${items.map(([label, n, hint]) => html`<span class="t-tier" title=${hint}><b>${num(n)}</b> ${label}</span>`)}
+      <button class="t-more" aria-expanded=${this.tiersOpen} @click=${() => (this.tiersOpen = !this.tiersOpen)}>${this.tiersOpen ? "Hide" : "What do these mean?"}</button>
       <span class="t-spacer"></span>
       <span class="t-tier t-owner" title="Your own visits (admin sign-in, owner networks, or this browser's owner link) aren't in these numbers">
         ${mine.pages ? html`<b>${num(mine.pages)}</b> of your page views not counted` : "Your visits aren't counted"}
         <button class="t-more" @click=${() => this.showOwner()}>${this.owner ? "Hide" : "Exclude a browser…"}</button>
       </span>
     </div>
+    ${this.tiersOpen
+      ? html`<dl class="t-explain">${items.map(([label, , hint]) => html`<dt>${label}</dt><dd>${hint}.</dd>`)}
+          <dt>Not counted</dt><dd>Your own visits: admin sign-in, owner networks, or a browser you excluded.</dd></dl>`
+      : nothing}
     ${this.owner ? this.renderOwner() : nothing}`;
   }
 
@@ -623,8 +686,16 @@ export class RwsTraffic extends LitElement {
       return html`<lit-material-empty-state headline="No visits yet">Visits appear here when they end (after 30 quiet minutes), and while they're open.</lit-material-empty-state>`;
     }
     const many = !this.host && (this.data.hosts?.length ?? 0) > 1;
-    return html`<ol class="t-visits" aria-label="Recent visits">
-      ${visits.map((v) => {
+    const needle = this.visitFilter.trim().toLowerCase();
+    const matching = needle
+      ? visits.filter((v) => [v.country && countryName(v.country), v.host, v.channel, v.referrer, v.browser, v.os, v.device, v.campaign, ...v.pages].filter(Boolean).join(" ").toLowerCase().includes(needle))
+      : visits;
+    const limit = this.shown.visits ?? PAGE_ROWS;
+    return html`<label class="t-search"><span class="t-sr">Filter visits</span>
+      <input type="search" placeholder="Filter by page, country, source, browser…" .value=${this.visitFilter} @input=${(e) => { this.visitFilter = e.target.value; this.shown = { ...this.shown, visits: PAGE_ROWS }; }}></label>
+    ${matching.length === 0 ? html`<p class="t-none">No visit matches “${this.visitFilter}”.</p>` : nothing}
+    <ol class="t-visits" aria-label="Recent visits">
+      ${matching.slice(0, limit).map((v) => {
         const how = v.channel === "direct" || !v.channel ? "Direct" : `${CHANNELS[v.channel] ?? v.channel}${v.referrer ? ` · ${v.referrer}` : ""}`;
         const device = [DEVICES[v.device] ?? v.device, v.os, v.browser].filter(Boolean).join(" · ");
         const more = v.views - v.pages.length;
@@ -642,6 +713,9 @@ export class RwsTraffic extends LitElement {
         </li>`;
       })}
     </ol>
+    ${matching.length > limit
+      ? html`<button class="t-more t-show" @click=${() => (this.shown = { ...this.shown, visits: limit + PAGE_ROWS })}>Show ${Math.min(PAGE_ROWS, matching.length - limit)} more of ${matching.length - limit}</button>`
+      : nothing}
     <p class="t-foot">The last ${visits.length} visits kept (up to 300 across days). No addresses or User-Agents are kept; a person who comes back another day is a new visitor.</p>`;
   }
 
@@ -720,7 +794,8 @@ export class RwsTraffic extends LitElement {
       </lit-material-empty-state>`;
     }
     const sessions = t.sessions?.sessions ?? 0;
-    const scroll = ["25", "50", "75", "100"].map((b) => [`up to ${b}%`, (t.scroll.find(([k]) => k === b) ?? [b, 0])[1]]);
+    let scroll = ["25", "50", "75", "100"].map((b) => [`up to ${b}%`, ((t.scroll ?? []).find(([k]) => k === b) ?? [b, 0])[1]]);
+    if (scroll.every(([, n]) => !n)) scroll = [];
     const props = (t.event_props ?? []).map(([k, n]) => [k.replace("\t", " · "), n]);
     return html`<div class="t-cards">
       ${this.card("Time on page", (t.time_on_page ?? []).map(([k, avg, n]) => [k, avg, n]), { dim: "page", unit: "seconds", value: (r) => `${secs(r[1])} · ${num(r[2])}×`, hint: "Average, views reported" })}
@@ -765,7 +840,7 @@ export class RwsTraffic extends LitElement {
     }
     return html`<section class="t-chart${groups.length > 1 ? " t-chart-multi" : ""}" aria-label="Chart">
       <lit-material-line-chart label=${`Requests per ${hourly ? "hour" : "day"}`} unit="requests" height="240" .series=${series}
-        .formatX=${(x) => (hourly ? new Date(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : new Date(x).toLocaleDateString([], { month: "short", day: "numeric" }))}></lit-material-line-chart>
+        .formatX=${hourly ? hourLabel : dayLabel}></lit-material-line-chart>
     </section>`;
   }
 
@@ -883,13 +958,34 @@ export class RwsTraffic extends LitElement {
     ></lit-material-world-map>`;
   }
 
+  /** Arrow keys move between the tabs (the tab pattern). */
+  tabKeys(e) {
+    const i = TABS.findIndex(([id]) => id === this.tab);
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    const j = (next + TABS.length) % TABS.length;
+    this.setTab(TABS[j][0]);
+    this.updateComplete.then(() => {
+      const b = this.querySelectorAll('.t-tabs [role="tab"]')[j];
+      b?.focus();
+      b?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }
+
   render() {
     if (this.off) {
       return html`<h1>Traffic</h1><lit-material-empty-state headline="Traffic counting is off">It's on whenever the admin API is, unless <code>[traffic] enabled = false</code>.</lit-material-empty-state>`;
     }
     const t = this.data;
-    const body = !t
-      ? html`<div class="t-loading">${[0, 1, 2].map(() => html`<lit-material-skeleton variant="rect" style="height: 96px"></lit-material-skeleton>`)}</div>`
+    const body = !t && this.failed
+      ? html`<lit-material-empty-state headline="Traffic couldn't be loaded">${this.failed}
+          <lit-material-button slot="actions" variant="tonal" @click=${() => this.reload()}>Retry</lit-material-button></lit-material-empty-state>`
+      : !t
+      ? html`<div class="t-loading" aria-busy="true" aria-label="Loading">
+          <lit-material-skeleton variant="rounded" height="88px"></lit-material-skeleton>
+          <lit-material-skeleton variant="rounded" height="240px"></lit-material-skeleton>
+          <div class="t-cards">${[0, 1].map(() => html`<lit-material-skeleton variant="rounded" height="200px"></lit-material-skeleton>`)}</div></div>`
       : this.query === null && this.filtered && !this.notice
         ? html`<p class="t-none">Loading…</p>`
         : this.group !== "people"
@@ -907,12 +1003,13 @@ export class RwsTraffic extends LitElement {
         <h1>Traffic</h1>
         ${this.renderBar()}
         ${this.group === "people"
-          ? html`<div class="t-tabs" role="tablist" aria-label="Traffic sections">
-              ${TABS.map(([id, label]) => html`<button role="tab" aria-selected=${this.tab === id} @click=${() => this.setTab(id)}>${label}</button>`)}
+          ? html`<div class="t-tabs" role="tablist" aria-label="Traffic sections" @keydown=${(e) => this.tabKeys(e)}>
+              ${TABS.map(([id, label]) => html`<button role="tab" aria-selected=${this.tab === id} tabindex=${this.tab === id ? 0 : -1} @click=${(e) => { this.setTab(id); e.target.scrollIntoView({ block: "nearest", inline: "nearest" }); }}>${label}</button>`)}
             </div>`
           : html`<div class="t-tabs t-tabs-empty"></div>`}
       </div>
-      <div role="tabpanel" aria-label=${this.group === "people" ? (TABS.find(([id]) => id === this.tab) ?? TABS[0])[1] : GROUP_NAMES[this.group] ?? "All"}>${body}</div>`;
+      ${t && this.failed ? html`<p class="t-notice" role="alert">Couldn't refresh: ${this.failed} <button class="t-more" @click=${() => this.reload()}>Retry</button></p>` : nothing}
+      <div role="tabpanel" class=${this.loading && t ? "t-stale" : ""} aria-busy=${this.loading} aria-label=${this.group === "people" ? (TABS.find(([id]) => id === this.tab) ?? TABS[0])[1] : GROUP_NAMES[this.group] ?? "All"}>${body}</div>`;
   }
 }
 

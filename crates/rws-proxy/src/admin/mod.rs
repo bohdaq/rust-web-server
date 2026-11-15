@@ -711,11 +711,13 @@ fn status_json(connection: &ConnectionInfo) -> String {
         .map(|(dir, free, total, low)| format!(r#"{{"dir":"{}","free_bytes":{free},"total_bytes":{total},"low":{low}}}"#, json_escape(&dir)))
         .collect();
     format!(
-        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}},"disk":[{}],"cluster":{},"fleet":{}}}"#,
+        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"maintenance":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}},"disk":[{}],"cluster":{},"fleet":{}}}"#,
         env!("CARGO_PKG_VERSION"),
         std::process::id(),
         started().elapsed().as_secs(),
         crate::metrics::SERVER_READY.load(Ordering::SeqCst),
+        // Since 18.37.0: the admin UI's header shows it on every page.
+        crate::maintenance::MAINTENANCE_MODE.load(Ordering::Relaxed),
         features.join(","),
         json_escape(&env(Config::RWS_CONFIG_IP)),
         json_escape(&env(Config::RWS_CONFIG_PORT)),
@@ -847,6 +849,12 @@ pub fn start_from_env() {
     }
 }
 
+/// `[admin] count_own_requests = true`: count the admin listener's requests
+/// in the metrics and the access log, as before 18.37.0.
+fn count_own_requests() -> bool {
+    std::env::var("RWS_CONFIG_ADMIN_COUNT_OWN_REQUESTS").is_ok_and(|v| v.trim().eq_ignore_ascii_case("true"))
+}
+
 fn serve(listener: std::net::TcpListener, api: AdminApi) {
     let open = Arc::new(AtomicUsize::new(0));
     for stream in listener.incoming() {
@@ -865,6 +873,9 @@ fn serve(listener: std::net::TcpListener, api: AdminApi) {
             connection.request_size = 16 * 1024;
             let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
             let _ = stream.set_nodelay(true);
+            // The admin UI polls every few seconds: its requests aren't the
+            // site's traffic (18.37.0).
+            crate::metrics::set_thread_uncounted(!count_own_requests());
             let _ = crate::server::Server::process(stream, connection, api);
             held.fetch_sub(1, Ordering::SeqCst);
         });

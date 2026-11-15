@@ -248,6 +248,9 @@ impl Log {
     /// record but not the client.
     #[doc(hidden)]
     pub fn log_served(request: &Request, response: &mut Response, peer_addr: &SocketAddr) {
+        if crate::metrics::thread_uncounted() {
+            return;
+        }
         let trace = crate::otel::logs::take_trace(response);
         Log::log_access_traced(request, response, peer_addr, trace)
     }

@@ -20,6 +20,7 @@ import trash from "../node_modules/@phosphor-icons/core/assets/regular/trash.svg
 import plus from "../node_modules/@phosphor-icons/core/assets/regular/plus.svg?raw";
 import lock_key from "../node_modules/@phosphor-icons/core/assets/regular/lock-key.svg?raw";
 import clipboard_text from "../node_modules/@phosphor-icons/core/assets/regular/clipboard-text.svg?raw";
+import dots_three from "../node_modules/@phosphor-icons/core/assets/regular/dots-three.svg?raw";
 import user_circle from "../node_modules/@phosphor-icons/core/assets/regular/user-circle.svg?raw";
 
 registerIcons({
@@ -42,6 +43,7 @@ registerIcons({
   "lock-key": lock_key,
   "clipboard-text": clipboard_text,
   "user-circle": user_circle,
+  "dots-three": dots_three,
 });
 
 /** The icon `name` as a template value (a `lit-material-icon`). */

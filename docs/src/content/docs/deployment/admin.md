@@ -247,7 +247,7 @@ Library users: the admin API reports the cache and routes registered with `admin
 Example `GET /status`:
 
 ```json
-{"version":"18.10.0","pid":4242,"uptime_secs":3605,"ready":true,"features":["http2","http3","acme","auth","mimalloc"],"listeners":{"main":{"address":"0.0.0.0:443","tls":true},"redirect":"80","admin":"127.0.0.1:9901"}}
+{"version":"18.10.0","pid":4242,"uptime_secs":3605,"ready":true,"maintenance":false,"features":["http2","http3","acme","auth","mimalloc"],"listeners":{"main":{"address":"0.0.0.0:443","tls":true},"redirect":"80","admin":"127.0.0.1:9901"}}
 ```
 
 `POST /admin/config/reload` on the main listener (the older reload endpoint) is unchanged.
