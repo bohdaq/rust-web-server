@@ -15,7 +15,7 @@ const REASONS = [
   ["code", "Its own HTTP stack", "HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, ranges, JWT and the ACME client are written in the crate, and so is the HTTP/2 server, checked by h2spec and fuzzing. HTTP/3 uses quinn and h3; TLS uses rustls, so there is no OpenSSL."],
   ["git-merge", "Config and code share one engine", "Everything the TOML file does is a type you can use from Rust. Moving from configuration to code doesn't mean moving to another tool."],
   ["test-tube", "Tested against the real thing", "CI fuzzes every parser that sees untrusted input, runs h2spec, the Gateway API conformance suite and the ACME flow against Let's Encrypt's test CA on every push."],
-  ["gauge", "Fast, with the numbers public", "Up to 5.2 times Caddy's throughput and less CPU per request than nginx in every published scenario, from CI runs anyone can open and rerun."],
+  ["gauge", "Fast, with the numbers public", "Up to 5.2 times Caddy's throughput and less CPU per request than nginx in the published scenarios on AMD runners (about level on Intel for large files and proxying), from CI runs anyone can open and rerun."],
   ["seal-check", "Semantic versioning", "Breaking changes only in a major version, each with a migration guide."],
 ];
 
@@ -29,7 +29,7 @@ const ELSEWHERE = [
   ["Lowest memory and decades of operations knowledge", "nginx. It uses less memory than rws in every benchmark scenario, and almost every problem you can hit with it has been written up."],
   ["A large plugin ecosystem with automatic HTTPS", "Caddy. Its modules cover DNS providers, auth systems and storage backends rws does not."],
   ["Routing discovered from Docker labels", "Traefik. Containers announce their own routes; rws reads routes from its file or the Gateway API."],
-  ["A service mesh", "Istio or Linkerd. rws is a gateway and a server, not a sidecar."],
+  ["A service mesh", "Istio or Linkerd. rws has a mesh profile, but its sidecars only route: no mutual TLS or workload identity."],
 ];
 
 export function render() {

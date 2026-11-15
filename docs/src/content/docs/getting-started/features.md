@@ -17,7 +17,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Virtual-host routing** — per-domain TLS certificates via `SniCertResolver`; `.with_host("example.com")` on any `Router` — `http2`
 - **HTTP → HTTPS redirect** — `Server::run_redirect()` listens on a second port and issues `301` responses — `http2`
 - **ACME / automatic TLS** — automatic certificate provisioning compatible with Let's Encrypt — `acme`
-- **Hot reload** — `SIGHUP` (or `POST /admin/config/reload`) reloads CORS rules, rate limits, log format, and TLS certs without restarting — `http2`
+- **Hot reload** — `SIGHUP` (or `POST /admin/config/reload`) reloads routes, upstreams, health checks, CORS rules, rate limits, log format and TLS certs without restarting — `http2`
 - **Graceful shutdown** — `SIGINT` / `SIGTERM` drain in-flight requests before exit; `SERVER_READY` flag cleared on shutdown
 - **Gzip compression** — applied automatically based on `Accept-Encoding` to text bodies of at least 512 bytes (`compression::MIN_COMPRESS_SIZE`)
 - **Static file serving** — a directory with no `index.html` renders a dark/light-adaptive directory listing page by default; files over 256 KiB streamed (`sendfile(2)` on plain TCP); ETag + `Last-Modified` with `304` revalidation, `Cache-Control: no-cache` by default (`RWS_CONFIG_STATIC_CACHE_CONTROL`)
@@ -116,7 +116,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **`OtelLayer`** — OpenTelemetry trace propagation middleware
 - **`CacheLayer`** — response caching middleware
 - **Structured logging** — `RWS_CONFIG_LOG_FORMAT=json` (default), `combined`, or `off`; hot-reloadable
-- **Config hot reload** — `SIGHUP` or `POST /admin/config/reload` reloads CORS, rate limits, log format, TLS certs; no restart required
+- **Config hot reload** — `SIGHUP` or `POST /admin/config/reload` reloads routes, upstreams, health checks, CORS, rate limits, log format and TLS certs; no restart required
 - **Kubernetes-ready** — `/healthz`, `/readyz`, `/metrics` all built in; graceful `SIGTERM` drain; static binary with no system dependencies
 - **`rws --check`** — validates `rws.config.toml` (unknown keys, bad values, TLS files, undeclared upstreams, unset auth secrets) and exits 1 on errors, like `nginx -t`; `--format=json`
 - **Helm chart** — `helm/rws/`

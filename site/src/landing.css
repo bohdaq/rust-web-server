@@ -206,3 +206,9 @@
 /* /changelog/ */
 .changelog-nav { position: sticky; top: var(--space-900); max-height: calc(100vh - var(--space-900) - var(--space-300)); overflow-y: auto; }
 @media (max-width: 899px) { .changelog .docs-sidebar { display: none; } }
+
+/* "Instead of …" line under the hero install, and the honest cons list. */
+.replaces { margin: 0; font-size: var(--text-sm); line-height: var(--leading-sm); color: var(--md-sys-color-on-surface); }
+.replaces a { color: var(--md-sys-color-primary); text-underline-offset: 2px; }
+.cons-list { margin: 0 0 var(--space-200); padding-left: 1.25em; display: grid; gap: var(--space-100); color: var(--md-sys-color-on-surface-variant); max-width: 72ch; }
+.cons-list strong { color: var(--md-sys-color-on-surface); }

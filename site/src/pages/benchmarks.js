@@ -12,7 +12,7 @@ import { footer, header } from "../shell.js";
 
 export const meta = {
   path: "/benchmarks/",
-  title: "Benchmarks · rws against nginx, Caddy and five Gateway API implementations",
+  title: "Benchmarks · rws vs nginx, Caddy and Gateway API gateways",
   description:
     "Requests per second, CPU per request and memory for rws, nginx and Caddy, and for rws against kgateway, Istio, Traefik, Envoy Gateway and NGINX Gateway Fabric. Method and reproduction steps included.",
 };
@@ -44,8 +44,8 @@ export async function render() {
         <h1>Benchmarks</h1>
         <p class="lead">Every number here comes from a public CI run you can open and rerun. Compare servers within one run: shared runners vary threefold between runs.</p>
         <ul class="bench-facts">
-          <li>${unsafeHTML(icon("cpu"))}<span><b>Web servers:</b> one 4 CPU GitHub Actions runner, <code>oha</code> with 64 keep-alive connections, 20 s per scenario, no compression, access logs off. <a href="https://github.com/bohdaq/rust-web-server/actions/runs/40243377254">Run 40243377254</a></span></li>
-          <li>${unsafeHTML(icon("cube"))}<span><b>Gateway API:</b> one kind cluster, the same nginx backend, chart defaults with one data plane replica each. <a href="https://github.com/bohdaq/rust-web-server/actions/runs/40681376798">Run 40681376798</a></span></li>
+          <li>${unsafeHTML(icon("cpu"))}<span><b>Web servers:</b> one 4 CPU GitHub Actions runner, <code>oha</code> with 64 keep-alive connections, 20 s per scenario, no compression, access logs off. Measured 2026-10-26 with rws 18.0.0 (main 2af098f5) and Caddy 2.11.7. <a href="https://github.com/bohdaq/rust-web-server/actions/runs/40243377254">Run 40243377254</a></span></li>
+          <li>${unsafeHTML(icon("cube"))}<span><b>Gateway API:</b> one kind cluster, the same nginx backend, chart defaults with one data plane replica each, rws 18.8.1. <a href="https://github.com/bohdaq/rust-web-server/actions/runs/40681376798">Run 40681376798</a></span></li>
           <li>${unsafeHTML(icon("arrows-clockwise"))}<span><b>Reproduce:</b> <a href="https://github.com/bohdaq/rust-web-server/blob/main/bench/run.sh"><code>bench/run.sh</code></a> and <a href="https://github.com/bohdaq/rust-web-server/blob/main/bench/gateway/run.sh"><code>bench/gateway/run.sh</code></a>, or the manual workflows.</span></li>
         </ul>
       </section>

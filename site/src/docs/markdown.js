@@ -3,6 +3,8 @@
 // GitHub-flavoured Markdown, `:::note[Title]` asides and fenced code with an
 // optional `title="file"`. Site-root links (/features/acme/) are rebased under
 // the docs route (/docs/features/acme/ or /docs/18.7/features/acme/).
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import rehypeShiki from "@shikijs/rehype";
 import { toString } from "hast-util-to-string";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
@@ -93,11 +95,24 @@ function rehypeCodeBlocks() {
 
 // Site-root links point at the docs route; tables scroll inside a wrapper;
 // collect h2/h3 for the on-page table of contents.
+// Docs sections (the folders of docs/src/content/docs/): an absolute
+// https://rws8.tech/<section>/... link, as CHANGELOG.md and the README write
+// them, is a docs page too and gets the same /docs/ route.
+const SECTIONS = new Set(
+  readdirSync(join(import.meta.dirname, "..", "..", "..", "docs", "src", "content", "docs"), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name),
+);
+const SITE = "https://rws8.tech";
+
 function rehypeDocsLinks({ base, toc }) {
   return (tree) => {
     visit(tree, "element", (node, index, parent) => {
       if (node.tagName === "a") {
-        const href = String(node.properties.href ?? "");
+        let href = String(node.properties.href ?? "");
+        if (href.startsWith(`${SITE}/`) && SECTIONS.has(href.slice(SITE.length + 1).split(/[/#]/)[0])) {
+          href = href.slice(SITE.length);
+        }
         if (href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/docs/")) {
           // Pages are directories: /a/b and /a/b#x mean /a/b/ and /a/b/#x.
           const [path, hash = ""] = href.split(/(?=#)/);

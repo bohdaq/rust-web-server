@@ -43,6 +43,7 @@ for (const v of versions) {
   docs.push(...(await buildDocs({ contentRoot: v.contentRoot, sidebar: v.sidebar, base: v.base, version })));
   console.log("docs", v.key, v.latest ? "(latest, working tree)" : `(tag ${v.tag})`);
 }
+homePage.setVersion(versions[0].tag);
 homePage.meta.jsonLd = homePage.structuredData(versions[0].tag);
 const pages = [homePage, whyPage, benchmarksPage, playgroundPage, changelogPage, privacyPage, notFoundPage, themePage, ...docs];
 for (const page of pages) {

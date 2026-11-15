@@ -67,9 +67,9 @@ Server::run(listener, pool, app); // async builds: Server::run_tls(listener, poo
 | Auth | Yes (bearer token from env var, JWT, htpasswd basic) | Yes (`JwtLayer`, `BasicAuthLayer`) |
 | Response caching | Yes (`[route.middleware.cache]`) | Yes (`CacheLayer`) |
 | gRPC | Yes (`type = "grpc"`) | Yes (`GrpcProxy`, requires `http2` feature) |
-| Canary / traffic splitting | No (planned) | Yes (`CanaryLayer`) |
-| Service discovery | No (planned) | Yes (`BackendPool`) |
-| Circuit breaker / retry | No (planned) | Yes (`CircuitBreaker`, `RetryLayer`) |
+| Canary / traffic splitting | Yes (`weights` per backend) | Yes (`CanaryLayer`) |
+| Service discovery | No (Gateway API mode reads Kubernetes endpoints) | Yes (`BackendPool`) |
+| Circuit breaker / retry | Yes (`[upstream.circuit_breaker]`, retries) | Yes (`CircuitBreaker`, `RetryLayer`) |
 
 ## Behind an L4 load balancer (PROXY protocol)
 

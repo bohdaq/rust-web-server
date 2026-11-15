@@ -1,9 +1,9 @@
 ---
 title: Roadmap
-description: Planned features for rust-web-server — each appears as a callout on the relevant docs page.
+description: What is still planned for rust-web-server, what shipped from earlier versions of this page, and where the full ordered list of open work lives.
 ---
 
-These features are planned. Each appears as a callout on the relevant docs page.
+Still planned:
 
 :::caution[Coming Soon]
 **Baggage and automatic child spans**
@@ -11,17 +11,10 @@ These features are planned. Each appears as a callout on the relevant docs page.
 W3C baggage propagation, and spans created automatically for each database query and outbound call. Child spans already work when started by hand with `otel::span` / `otel::client_span` — see [Distributed Tracing](/features/tracing/#child-spans).
 :::
 
-:::caution[Coming Soon]
-**Admin UI**
+Shipped since this page first listed them:
 
-`GET /admin` — a browser-based dashboard showing live metrics, current configuration, and a tail of the access log. Requires authentication.
-:::
-
-:::caution[Coming Soon]
-**Access log rotation**
-
-Built-in log-file rotation (by size or time) so the server can write logs to disk without an external `logrotate` configuration.
-:::
+- **Admin UI**: live metrics, configuration, the access log and a Traffic page, behind sign-in. See [Admin API and UI](/deployment/admin/) and [Traffic](/deployment/traffic/).
+- **Access log rotation** (18.15.0): set `access_log_max_size` and rws rotates the file itself. See [systemd](/deployment/systemd/).
 
 ---
 

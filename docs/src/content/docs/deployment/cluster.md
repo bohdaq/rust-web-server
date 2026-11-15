@@ -1,6 +1,6 @@
 ---
 title: Several replicas
-description: Run rws on several machines behind a load balancer and keep runtime changes — the IP blocklist, maintenance mode, drained backends, feature flags and cache purges — the same on all of them through Redis.
+description: Run rws on several machines behind a load balancer and keep the blocklist, maintenance mode, drained backends, flags and cache purges in sync through Redis.
 ---
 
 Most of rws's configuration is the config file, so replicas agree by

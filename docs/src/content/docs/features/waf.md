@@ -1,6 +1,6 @@
 ---
 title: Web application firewall
-description: rws's built-in WAF — SQL injection, XSS, path traversal, command injection, Log4Shell, SSRF and scanner detection with anomaly scoring, detect or block, exclusions and custom rules.
+description: "The built-in WAF: SQL injection, XSS, path traversal, command injection, Log4Shell, SSRF and scanner detection, anomaly scoring and custom rules."
 ---
 
 Since 18.22.0 rws checks requests itself before they reach your app. No

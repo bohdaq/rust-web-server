@@ -66,13 +66,13 @@ strategy = "least_connections"
   auth       = { type = "bearer", token_env = "API_TOKEN" }
 ```
 
-Load balancing (round-robin, least-connections, random, IP hash), active health checks, bearer / JWT / basic auth, rate limits, caching, IP allow/deny lists, header and URL rewrites, per-route timeouts and body limits — plus TCP, UDP, WebSocket, and gRPC proxying. Misconfigured auth fails closed. Circuit breakers, canary splits, forward auth, and service discovery are available from the library. Combine with `[acme]` for HTTPS in front of your apps. → [Config-driven proxy](https://rws8.tech/proxy/config-driven/) · [full config reference](https://rws8.tech/configuration/config-file/)
+Load balancing (round-robin, least-connections, random, IP hash), active health checks, bearer / JWT / basic auth, rate limits, caching, IP allow/deny lists, header and URL rewrites, per-route timeouts and body limits — plus TCP, UDP, WebSocket, and gRPC proxying. Misconfigured auth fails closed. Weighted splits, sticky sessions, retries and circuit breakers are in the config file too; forward auth and service discovery are available from the library. Combine with `[acme]` for HTTPS in front of your apps. → [Config-driven proxy](https://rws8.tech/proxy/config-driven/) · [full config reference](https://rws8.tech/configuration/config-file/)
 
 ---
 
 ## Kubernetes Gateway API
 
-Built with the `gateway-api` feature, rws is a [Gateway API](https://gateway-api.sigs.k8s.io) controller and data plane in one binary: HTTPRoute, GRPCRoute, TLSRoute, TCPRoute and UDPRoute, conformant with Gateway API v1.6.3 (all five Gateway profiles, every standard-channel extended feature), installed with the Helm chart (`gatewayAPI.enabled=true`). See [Kubernetes Gateway API](https://rws8.tech/deployment/kubernetes-gateway-api/).
+Built with the `gateway-api` feature, rws is a [Gateway API](https://gateway-api.sigs.k8s.io) controller and data plane in one binary: HTTPRoute, GRPCRoute, TLSRoute, TCPRoute and UDPRoute, passing the Gateway API v1.7.0 conformance suite in CI (listed upstream at v1.6.3; all five Gateway profiles, every standard-channel extended feature), installed with the Helm chart (`gatewayAPI.enabled=true`). See [Kubernetes Gateway API](https://rws8.tech/deployment/kubernetes-gateway-api/).
 
 ## Need custom logic? It's also a Rust library
 

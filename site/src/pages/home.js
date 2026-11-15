@@ -7,7 +7,7 @@ import { footer, header } from "../shell.js";
 
 export const meta = {
   path: "/",
-  title: "rws: web server, reverse proxy and automatic HTTPS in one binary",
+  title: "rws: web server, reverse proxy and automatic HTTPS",
   description:
     "rws serves static files, gets Let's Encrypt certificates and load balances your apps from one TOML file. HTTP/3, auth, rate limits and a Gateway API controller. MIT licensed.",
 };
@@ -73,6 +73,7 @@ const TILES = [
   ["arrows-split", "Traffic you can steer", "Round robin, least connections, IP hash, weights, health checks, retries, circuit breakers, sticky sessions and canary splits.", "/docs/proxy/load-balancing/"],
   ["shield-check", "Protection on by config", "Bearer, JWT and basic auth that fail closed, rate limits, IP allow and deny lists, request size limits.", "/docs/features/auth/"],
   ["chart-line", "Answers you can measure", "Prometheus metrics with native histograms, OpenTelemetry traces and metrics, JSON access logs.", "/docs/features/metrics/"],
+  ["users", "See who visits, without a tracker", "The admin UI shows live metrics, config and a Traffic page: visitors, referrers, countries, AI agents and bots, from the access log, with no script on your pages.", "/docs/deployment/traffic/"],
   ["cube", "Kubernetes without another controller", "Built with gateway-api, rws is the Gateway API controller and data plane: HTTP, gRPC, TLS, TCP and UDP routes, installed with the Helm chart.", "/docs/deployment/kubernetes-gateway-api/"],
 ];
 
@@ -90,11 +91,18 @@ const STATS = [
 
 const PROOF = [
   ["h2spec: 146 of 146 HTTP/2 conformance tests", "https://github.com/bohdaq/rust-web-server/blob/main/ci/e2e/h2spec.sh"],
-  ["Gateway API v1.6.3: all five Gateway profiles, core and extended", "https://github.com/kubernetes-sigs/gateway-api/pull/5430"],
+  ["Gateway API: the v1.7.0 conformance suite in CI, all five Gateway profiles (listed upstream at v1.6.3)", "https://github.com/kubernetes-sigs/gateway-api/pull/5430"],
   ["ACME tested end to end against Pebble, Let's Encrypt's test CA", "https://github.com/bohdaq/rust-web-server/blob/main/ci/e2e/acme_pebble.sh"],
   ["Every parser of untrusted input is fuzzed", "https://github.com/bohdaq/rust-web-server/tree/main/fuzz"],
   ["Releases carry build attestations and a cosign signature", "/docs/getting-started/installation/#verifying-a-release"],
   ["MSRV pinned at Rust 1.99, MIT licensed", "https://github.com/bohdaq/rust-web-server/blob/main/LICENSE"],
+];
+
+const CONS = [
+  ["More memory than nginx.", "nginx uses the least memory in every benchmark scenario; rws trades some for speed."],
+  ["A young project.", "18.0.0 shipped on 2026-10-26, with frequent releases since. Pin a version and read the changelog."],
+  ["A small ecosystem.", "No plugin catalogue like Caddy's or nginx's modules: extend it in Rust or with WASM plugins."],
+  ["Its own HTTP stack.", "Tower middleware works only through opt-in adapters, and Docker-label discovery (Traefik's strength) isn't there."],
 ];
 
 const LIBRARY = `\`\`\`rust title="src/main.rs"
@@ -120,14 +128,14 @@ async fn main() {
 \`\`\``;
 
 export const FAQ = [
-  ["Is rws a replacement for nginx?", "For most small and medium sites, yes: static files, the reverse proxy, automatic HTTPS, auth and rate limits in one file. nginx still uses less memory and has more modules; see rws vs nginx vs Caddy in the docs."],
-  ["How is rws different from nginx or Caddy?", "One binary covers static files, certificates, the reverse proxy and a Kubernetes gateway, configured in TOML. When config runs out, the same engine is a Rust library, so you don't switch tools."],
+  ["Is rws a replacement for nginx?", "For most small and medium sites, yes: static files, the reverse proxy, automatic HTTPS, auth and rate limits in one file. nginx still uses less memory and has more modules; see rws vs nginx vs Caddy in the docs.", "/docs/reference/compare/"],
+  ["How is rws different from nginx or Caddy?", "One binary covers static files, certificates, the reverse proxy and a Kubernetes gateway, configured in TOML. When config runs out, the same engine is a Rust library, so you don't switch tools.", "/docs/reference/compare/"],
   ["Is it ready for production?", "It runs the HTTP/2 conformance suite, the Gateway API suite and ACME against Pebble on every change, and fuzzes its parsers. It is a younger project than nginx; read the changelog and pin a version."],
   ["Does it run on Windows?", "Yes. There are prebuilt binaries for Windows, Linux (static, any distribution) and macOS, and it can run as a Windows service."],
   ["What does it cost?", "Nothing. rws is MIT licensed, with no paid tier."],
   ["How do I upgrade?", "Replace the binary and restart, or reload. Breaking changes are listed in the changelog with a migration guide per major version."],
   ["Does it support HTTP/3?", "Yes, over QUIC on the same port as HTTPS, alongside HTTP/2 and HTTP/1.1."],
-  ["Can I run it on Kubernetes?", "Yes: as a plain Deployment from the container image, or as a Gateway API controller (v1.6.3 conformance) with the Helm chart."],
+  ["Can I run it on Kubernetes?", "Yes: as a plain Deployment from the container image, or as a Gateway API controller (passes the v1.7.0 conformance suite) with the Helm chart."],
   ["Can my AI coding agent use these docs?", "Yes. llms.txt and llms-full.txt cover every page, and an agent skill pack lives at /agents/."],
   ["What if I outgrow the config file?", "Use the rust-web-server crate: the config file's features are library types you can compose in code."],
   ["How do I remove it?", "Delete the binary and the config file. rws keeps nothing else, except certificates under .rws/acme/ if you used ACME."],
@@ -135,11 +143,17 @@ export const FAQ = [
 
 const TAGLINE = ["One binary serves your files, gets your certificates", "and routes your traffic. One file tells it how."];
 
-// Real output of `rws` 18.8.2 in a folder, condensed (the startup help text is left out).
-const TERMINAL = [
+// Real output of `rws` in a folder, condensed (the startup help text is left
+// out). The version line shows the newest release: prerender.js calls
+// setVersion() with it.
+let version = "18.36.1";
+export function setVersion(v) {
+  if (v) version = v;
+}
+const terminal = () => [
   { cmd: "cd my-site && rws" },
   { out: "Rust Web Server" },
-  { out: "Version:           18.8.2" },
+  { out: `Version:           ${version}` },
   { out: "No TLS certificate configured — serving plain HTTP/1.1." },
   { out: "Started 8 per-core runtimes on 0.0.0.0:7878.", accent: true },
   { cmd: "curl -I http://localhost:7878" },
@@ -194,11 +208,12 @@ export async function render() {
           <h1 class="hero-heading">The web server that gets <br />its own certificates <br />and routes your apps</h1>
           <p class="lead">rws is a free, open-source (MIT) web server and reverse proxy in one binary: it serves static files, gets and renews Let's Encrypt certificates on its own, load balances your apps and adds auth and rate limits, all from one <code>rws.config.toml</code>. It runs on Linux, macOS and Windows, speaks HTTP/1.1, HTTP/2 and HTTP/3, and is also a Rust crate for building apps.</p>
           ${heroInstall}
-          <p class="proof-line"><a href="/benchmarks/">96,670 req/s, ahead of nginx</a> · <a href="/docs/deployment/kubernetes-gateway-api/">Gateway API v1.6.3 conformant</a> · h2spec 146 of 146 · <a href="https://github.com/bohdaq/rust-web-server">MIT licensed, on GitHub</a></p>
+          <p class="replaces">Instead of nginx with certbot and a cron job, Caddy, or Traefik in front of your app. <a href="/docs/reference/compare/">How it compares</a> · <a href="/why/">When to pick something else</a></p>
+          <p class="proof-line"><a href="/benchmarks/">96,670 req/s, ahead of nginx</a> · <a href="/docs/deployment/kubernetes-gateway-api/">Gateway API v1.7.0 conformance suite</a> · h2spec 146 of 146 · <a href="https://github.com/bohdaq/rust-web-server">MIT licensed, on GitHub</a></p>
         </div>
         <div class="terminal" role="img" aria-label="A terminal: running rws in a folder starts a server on port 7878, and curl gets HTTP 200 OK.">
           <div class="terminal-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-          <pre aria-hidden="true" data-terminal=${JSON.stringify(TERMINAL)}>${TERMINAL.map((l) =>
+          <pre aria-hidden="true" data-terminal=${JSON.stringify(terminal())}>${terminal().map((l) =>
             l.cmd ? html`<span class="t-line"><span class="t-prompt">$ </span>${l.cmd}</span>` : html`<span class=${l.accent ? "t-line t-accent" : "t-line t-out"}>${l.out}</span>`,
           )}</pre>
         </div>
@@ -238,7 +253,7 @@ export async function render() {
 
       <section class="section container reveal" aria-labelledby="perf-title">
         <h2 id="perf-title" class="section-title">Fast where it counts</h2>
-        <p class="section-lead">Same 4 CPU runner, same load: HTTP/1.1, 64 connections, 20 seconds per scenario.</p>
+        <p class="section-lead">Same 4 CPU runner, same load: HTTP/1.1, 64 connections, 20 seconds per scenario. Static numbers measured on 2026-10-26 (rws 18.0.0, Caddy 2.11.7); gateway numbers with rws 18.8.1.</p>
         <div class="stats">
           ${STATS.map(([n, unit, caption]) => html`<div class="stat"><p class="stat-number">${n}<span>${unit}</span></p><p class="stat-caption">${caption}</p></div>`)}
         </div>
@@ -250,6 +265,14 @@ export async function render() {
         <ul class="proof-list">
           ${PROOF.map(([text, href]) => html`<li>${unsafeHTML(icon("check-circle"))}<a href=${href}>${text}</a></li>`)}
         </ul>
+      </section>
+
+      <section class="section container reveal" aria-labelledby="fit-title">
+        <h2 id="fit-title" class="section-title">Where it isn't the best fit</h2>
+        <ul class="cons-list">
+          ${CONS.map(([title, body]) => html`<li><strong>${title}</strong> ${body}</li>`)}
+        </ul>
+        <a class="text-link" href="/why/#else-title">When another server is the better choice ${unsafeHTML(icon("arrow-right"))}</a>
       </section>
 
       <section class="section container reveal library" aria-labelledby="lib-title">
@@ -264,7 +287,7 @@ export async function render() {
       <section class="section container reveal" aria-labelledby="faq-title">
         <h2 id="faq-title" class="section-title">Questions</h2>
         <div class="faq">
-          ${FAQ.map(([q, a]) => html`<details><summary>${q}${unsafeHTML(icon("plus"))}</summary><p>${a}</p></details>`)}
+          ${FAQ.map(([q, a, href]) => html`<details><summary>${q}${unsafeHTML(icon("plus"))}</summary><p>${a}${href ? html` <a href=${href}>Compare them</a>.` : ""}</p></details>`)}
         </div>
       </section>
 

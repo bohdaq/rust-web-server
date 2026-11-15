@@ -225,7 +225,7 @@ The log format is hot-reloadable.
 
 ## Kubernetes Gateway API
 
-The `gateway-api` build feature's controller (in progress, 18.8.0). Read at startup. See [Kubernetes Gateway API](/deployment/kubernetes-gateway-api/).
+The `gateway-api` build feature's controller. Read at startup. See [Kubernetes Gateway API](/deployment/kubernetes-gateway-api/).
 
 | Variable | Default | Type | Description |
 |----------|---------|------|-------------|

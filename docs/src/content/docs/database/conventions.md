@@ -1,6 +1,6 @@
 ---
 title: Keys, timestamps, soft delete and locking
-description: String and UUID primary keys, created_at/updated_at, soft delete with restore, and optimistic locking with #[version] — maintained by the repository, on SQLite, PostgreSQL and MySQL.
+description: String and UUID keys, timestamps, soft delete with restore and optimistic locking with #[version], on SQLite, PostgreSQL and MySQL.
 ---
 
 Since 18.30.0 `#[derive(Model)]` and the repository handle four things apps otherwise write by hand: keys that aren't auto-increment integers, `created_at` / `updated_at`, soft delete, and optimistic locking. Each is opt-in per model, and none adds a callback or a lazy load: the repository writes the columns in the same statements it already runs.

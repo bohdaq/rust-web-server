@@ -1,6 +1,6 @@
 ---
 title: Project layout and rws.app.toml
-description: The conventional layout of an rws application — where routes, models, jobs, migrations, templates and tests go — and the rws.app.toml manifest that names the app and any path that differs.
+description: Where routes, models, jobs, migrations, templates and tests go in an rws application, and the rws.app.toml manifest for paths that differ.
 ---
 
 Since 18.28.0 an rws application has one conventional layout, so a person or

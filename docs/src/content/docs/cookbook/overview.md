@@ -1,6 +1,6 @@
 ---
 title: Cookbook
-description: Complete, CI-checked rws configurations for common stacks — static sites, SPAs, Node, Python, Ruby and PHP apps, internal tools behind single sign-on, API gateways and local development.
+description: "CI-checked rws configs for common stacks: static sites, SPAs, Node, Python, Ruby and PHP apps, tools behind single sign-on, API gateways and local dev."
 ---
 
 Each recipe is one `rws.config.toml` you can copy, change the names in, and
