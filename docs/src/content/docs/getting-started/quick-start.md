@@ -3,7 +3,40 @@ title: Quick Start
 description: Four paths to a running rust-web-server in under five minutes — static files, a first route, a config-driven proxy, and automatic HTTPS.
 ---
 
-To run rws, install it (`brew install bohdaq/tap/rws`, `cargo binstall rust-web-server` or `docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws`) and start `rws` in a folder: it serves that folder on http://localhost:7878. The four paths below add a route, a proxy and automatic HTTPS; each ends with a working server you can hit with `curl`.
+To run rws, install it, then start `rws` in a folder: it serves that folder on http://localhost:7878. The four paths below add a route, a proxy and automatic HTTPS; each ends with a working server you can hit with `curl`.
+
+::::tabs[Install rws]
+:::tab[Script]
+```bash
+curl -fsSL https://rws8.tech/install.sh | sh
+```
+Linux and macOS. Checks the release checksum, installs to `/usr/local/bin` or `~/.local/bin`.
+:::
+:::tab[Homebrew]
+```bash
+brew install bohdaq/tap/rws
+```
+macOS and Linux, x86_64 and arm64.
+:::
+:::tab[Cargo]
+```bash
+cargo binstall rust-web-server
+```
+A prebuilt binary through cargo binstall; works on Windows too.
+:::
+:::tab[Docker]
+```bash
+docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws
+```
+linux/amd64 and linux/arm64, also on ghcr.io/bohdaq/rws.
+:::
+:::tab[apt / dnf]
+```bash
+sudo apt install rws    # or: sudo dnf install rws
+```
+After [adding the repository](/deployment/systemd/#install-from-a-package); installs and starts the rws service.
+:::
+::::
 
 ---
 
@@ -12,15 +45,19 @@ To run rws, install it (`brew install bohdaq/tap/rws`, `cargo binstall rust-web-
 Install the binary and point it at a directory. No config file, no code.
 
 ```bash
-brew install bohdaq/tap/rws      # or: cargo binstall rust-web-server
 # create something to serve
 mkdir www && echo "<h1>Hello</h1>" > www/index.html
 cd www
 rws
 ```
 
-```
-Server is up and running at: http://0.0.0.0:7878
+```text title="Output"
+rws 18.37.0 · no rws.config.toml: defaults, environment and flags
+Serving files from /home/you/www
+Server is up and running at: http://localhost:7878
+  Listening on all interfaces (0.0.0.0:7878): other machines on the network can reach it.
+  Directory listing is on, so they can browse this folder. Local only: --ip=127.0.0.1; no listing: directory_listing = false.
+Ctrl+C stops it · --verbose prints every setting
 ```
 
 ```bash
@@ -171,7 +208,12 @@ body   = "Gateway ready"
 
 ```bash
 rws
-# Server is up and running at: http://0.0.0.0:8080
+```
+
+```text title="Output"
+rws 18.37.0 · config rws.config.toml
+Serving reverse proxy (routes from the config)
+Server is up and running at: http://localhost:8080
 ```
 
 ```bash

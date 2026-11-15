@@ -33,6 +33,8 @@
   font-weight: 600;
 }
 .site-header a[aria-current="page"] { color: var(--md-sys-color-primary); }
+/* Tap targets of 40 px (they were 20 px tall). */
+.nav-links a, .mobile-menu a { display: inline-flex; align-items: center; min-height: 40px; }
 
 .lockup {
   display: inline-flex;
@@ -74,7 +76,7 @@
 :root {
   /* color-mix() over light-dark() resolves to transparent in Chromium, so the
      translucent surfaces are spelled out per scheme. */
-  --rws-glass: light-dark(rgb(242 235 227 / 0.8), rgb(19 18 9 / 0.8));
+  --rws-glass: light-dark(rgb(242 235 227 / 0.96), rgb(19 18 9 / 0.96));
   --rws-glass-strong: light-dark(rgb(242 235 227 / 0.97), rgb(19 18 9 / 0.97));
   --rws-mark-rack: light-dark(#16120f, #f2ebe3);
   --rws-mark-dot: light-dark(#f2ebe3, #16120f);
@@ -89,8 +91,8 @@
   font-size: var(--text-sm);
   line-height: var(--leading-sm);
 }
-.site-footer ul { display: flex; flex-wrap: wrap; gap: var(--space-300); list-style: none; margin: 0; padding: 0; }
-.site-footer a { color: inherit; }
+.site-footer ul { display: flex; flex-wrap: wrap; gap: 0 var(--space-300); list-style: none; margin: 0; padding: 0; }
+.site-footer a { color: inherit; display: inline-flex; align-items: center; min-height: 40px; }
 .site-footer .footer-by { margin: var(--space-300) 0 0; }
 
 /* /theme/ page */
@@ -234,7 +236,7 @@ lit-material-navigation-rail-item [slot="icon"] { width: 24px; height: 24px; }
 .docs-group ul, .docs-toc ul { list-style: none; margin: 0; padding: 0; }
 .docs-group li a {
   display: block;
-  padding: var(--space-50) var(--space-100);
+  padding: var(--space-75) var(--space-100);
   border-radius: var(--md-sys-shape-corner-medium);
   color: var(--md-sys-color-on-surface-variant);
   text-decoration: none;
@@ -283,6 +285,8 @@ lit-material-jump-links.docs-toc::part(title) { font-weight: 600; }
 /* Shiki dual themes: colours come as --shiki-light / --shiki-dark */
 .shiki, .shiki span { color: light-dark(var(--shiki-light), var(--shiki-dark)); }
 .shiki { background: transparent !important; margin: 0; }
+/* The theme's comment grey is 4.26:1 on the cream page; a step darker passes 4.5:1. */
+.shiki span[style*="--shiki-light:#66707B"] { --shiki-light: #555d66; }
 
 /* Code blocks and alerts inside Markdown are server-rendered too (declarative
    shadow DOM), so they need no styles for the not-yet-upgraded state. */
@@ -346,13 +350,19 @@ lit-material-jump-links.docs-toc::part(title) { font-weight: 600; }
   cursor: pointer; list-style: none;
 }
 .version-switch summary::after { content: "▾"; margin-left: auto; color: var(--md-sys-color-on-surface-variant); }
-.version-switch ul {
-  list-style: none; margin: var(--space-50) 0 0; padding: var(--space-50);
+/* A menu over the sidebar, not a list that pushes it down. */
+.version-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + var(--space-50)); z-index: 6;
+  max-height: min(420px, 60vh); overflow-y: auto; padding: var(--space-50);
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-medium);
   background: var(--md-sys-color-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
 }
-.version-switch li a { display: block; padding: var(--space-50) var(--space-100); border-radius: var(--md-sys-shape-corner-small); color: var(--md-sys-color-on-surface); text-decoration: none; }
+.version-switch ul { list-style: none; margin: 0; padding: 0; }
+.version-older summary { cursor: pointer; padding: var(--space-75) var(--space-100); color: var(--md-sys-color-on-surface-variant); border: 0; list-style: revert; }
+.version-older summary::after { content: none; }
+.version-switch li a { display: block; padding: var(--space-75) var(--space-100); border-radius: var(--md-sys-shape-corner-small); color: var(--md-sys-color-on-surface); text-decoration: none; }
 .version-switch li a:hover { background: var(--md-sys-color-surface-container); }
 .version-switch li a[aria-current="page"] { font-weight: 600; color: var(--md-sys-color-primary); }
 .latest-tag {
@@ -361,3 +371,52 @@ lit-material-jump-links.docs-toc::part(title) { font-weight: 600; }
   font-size: var(--text-xs); line-height: var(--leading-xs); font-weight: 600;
 }
 .version-notice { display: block; margin-bottom: var(--space-400); }
+
+/* 18.37: anchored headings clear the floating header; it no longer shows text through it. */
+html { scroll-padding-top: calc(var(--space-900) + var(--space-200)); }
+
+/* "On this page" under the title when there is no side column. */
+.docs-toc-inline {
+  margin-top: var(--space-300); padding: var(--space-75) var(--space-200);
+  border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-large);
+  font-size: var(--text-sm); line-height: var(--leading-sm);
+}
+.docs-toc-inline summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+.docs-toc-inline ul { list-style: none; margin: var(--space-75) 0 var(--space-50); padding: 0; display: grid; gap: var(--space-25); }
+.docs-toc-inline a { display: block; padding: var(--space-50) 0; color: var(--md-sys-color-on-surface-variant); text-decoration: none; }
+.docs-toc-inline .depth-3 a { padding-left: var(--space-200); }
+@media (min-width: 1200px) { .docs-toc-inline { display: none; } }
+
+/* The docs index: a jump list for its groups. */
+.docs-jump { display: flex; flex-wrap: wrap; gap: var(--space-75); margin-top: var(--space-300); }
+.docs-jump a {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 0 var(--space-200);
+  border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-full);
+  color: var(--md-sys-color-on-surface); text-decoration: none; font-size: var(--text-sm);
+}
+.docs-jump a:hover { background: var(--md-sys-color-surface-container); }
+.docs-index h2 { scroll-margin-top: calc(var(--space-900) + var(--space-200)); }
+
+/* Changelog: older releases grouped by minor version. */
+.changelog-older { margin-top: var(--space-800); font-size: var(--text-2xl); line-height: var(--leading-2xl); }
+.changelog-group { border-top: 1px solid var(--md-sys-color-outline-variant); }
+.changelog-group > summary { cursor: pointer; padding: var(--space-200) 0; display: flex; gap: var(--space-200); align-items: baseline; }
+.changelog-group > summary span { color: var(--md-sys-color-on-surface-variant); font-size: var(--text-sm); }
+.changelog-group[open] > .prose { margin-top: 0; padding-bottom: var(--space-300); }
+.changelog-older-title { margin-top: var(--space-300); }
+.changelog-minors { display: flex; flex-wrap: wrap; gap: var(--space-50) var(--space-100); }
+.changelog-minors a { display: inline-flex; align-items: center; min-height: 32px; min-width: 40px; }
+
+/* Search: the highlighted result, a page's sections under it, the keys. */
+.search-results [role="option"][aria-selected="true"] { background: var(--md-sys-color-surface-container); outline: 2px solid var(--md-sys-color-primary); outline-offset: -2px; }
+.search-results .search-sub { margin-left: var(--space-300); padding-top: var(--space-50); padding-bottom: var(--space-50); }
+.search-results .search-sub b { font-weight: 500; font-size: var(--text-sm); }
+.search-page + .search-page { margin-top: var(--space-75); }
+.search-keys { margin: 0; padding: var(--space-75) var(--space-200); border-top: 1px solid var(--md-sys-color-outline-variant); color: var(--md-sys-color-on-surface-variant); font-size: var(--text-xs); display: flex; gap: var(--space-75); align-items: center; }
+.search-keys kbd { padding: 0 var(--space-50); border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-extra-small); }
+@media (pointer: coarse) { .search-keys { display: none; } }
+
+/* Long lines in code blocks wrap on phones instead of scrolling sideways. */
+@media (max-width: 599.98px) {
+  .prose lit-material-code-block pre.shiki, .tab-panel lit-material-code-block pre.shiki { white-space: pre-wrap; overflow-wrap: anywhere; }
+}

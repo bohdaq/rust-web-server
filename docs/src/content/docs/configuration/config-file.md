@@ -227,6 +227,17 @@ allowed_origins = ["https://ops.example.com"] # browser origins besides the list
 # oidc_cookie_secret_env = "RWS_ADMIN_COOKIE_SECRET"
 # oidc_roles    = ["rws-admins=admin", "sre=operator", "*=viewer"]  # group (or email, or *) = role
 # oidc_role_claim = "groups"
+# count_own_requests = true   # count the admin listener's requests in the metrics and access log (off since 18.37.0)
+```
+
+## `[maintenance]`
+
+What visitors see while maintenance mode is on (switched from the admin UI, `rws ctl maintenance on` or MCP; since 18.37.0). API clients get `503` with problem details as before; a browser gets a page with this message.
+
+```toml
+[maintenance]
+message          = "We're upgrading the database. Back by 14:00 UTC."
+retry_after_secs = 600   # Retry-After on maintenance responses (default 120; 0 = none)
 ```
 
 

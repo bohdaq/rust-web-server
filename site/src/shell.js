@@ -11,7 +11,14 @@ export const NAV = [
   ["/benchmarks/", "Benchmarks"],
   ["/playground/", "Playground"],
   ["/docs/", "Docs"],
+  ["/changelog/", "Changelog"],
 ];
+
+// The newest docs version: search on pages outside the docs looks in it.
+let latestDocs = "";
+export function setLatestDocsVersion(key) {
+  latestDocs = key;
+}
 
 function links(path) {
   return html`${NAV.slice(1).map(
@@ -28,6 +35,9 @@ export function header(path) {
           <span class="word"><b>rust-web-server</b><small>RWS</small></span>
         </a>
         <span class="nav-links">${links(path)}</span>
+        <button class="icon-button" type="button" data-search-open aria-label="Search docs (/)" title="Search docs (/)">
+          ${unsafeHTML(icon("magnifying-glass"))}
+        </button>
         <button class="icon-button" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch theme">
           <span class="sun">${unsafeHTML(icon("sun"))}</span>
           <span class="moon">${unsafeHTML(icon("moon"))}</span>
@@ -39,7 +49,24 @@ export function header(path) {
       <div id="mobile-menu" class="mobile-menu" hidden>
         <nav aria-label="Main">${links(path)}</nav>
       </div>
-    </header>`;
+    </header>
+    ${searchDialog()}`;
+}
+
+// One search dialog on every page (it was in the docs pages only). The
+// results list is a listbox the arrow keys move through.
+function searchDialog() {
+  return html`
+    <dialog class="search-dialog" aria-label="Search docs" data-latest-version=${latestDocs}>
+      <form method="dialog" class="search-form" role="search">
+        ${unsafeHTML(icon("magnifying-glass"))}
+        <input type="search" name="q" placeholder="Search the docs" autocomplete="off" aria-label="Search the docs"
+          role="combobox" aria-expanded="false" aria-controls="search-results" aria-autocomplete="list" />
+        <button class="icon-button" value="close" aria-label="Close search">${unsafeHTML(icon("x"))}</button>
+      </form>
+      <div class="search-results" id="search-results" aria-live="polite"></div>
+      <p class="search-keys" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> move <kbd>Enter</kbd> open <kbd>Esc</kbd> close</p>
+    </dialog>`;
 }
 
 export function footer() {
@@ -92,7 +119,8 @@ ${markdown ? `<link rel="alternate" type="text/markdown" href="${markdown}" titl
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 ${modified ? `<meta property="article:modified_time" content="${attr(modified)}">` : ""}
-<meta name="theme-color" content="#16120F">
+<meta name="theme-color" content="#F2EBE3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16120F" media="(prefers-color-scheme: dark)">
 <script>${THEME_BOOT}</script>
 ${jsonLd.map((d) => `<script type="application/ld+json">${JSON.stringify(d).replace(/</g, "\\u003c")}</script>`).join("")}
 ${css}

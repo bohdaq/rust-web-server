@@ -79,6 +79,9 @@
 .tiles { display: grid; gap: var(--space-200); grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1024px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* An odd last tile spans the row instead of sitting alone (7 tiles in 3 or 2 columns). */
+@media (min-width: 640px) and (max-width: 1023.98px) { .tile:last-child:nth-child(odd) { grid-column: 1 / -1; } }
+@media (min-width: 1024px) { .tile:last-child:nth-child(3n + 1) { grid-column: 1 / -1; } }
 .tile {
   display: grid; align-content: start; gap: var(--space-100);
   padding: var(--space-300);

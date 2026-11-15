@@ -1,7 +1,7 @@
 // Markdown → HTML for docs pages (prerender only). The source is the Starlight
 // content in docs/src/content/docs/, unchanged: frontmatter title/description,
-// GitHub-flavoured Markdown, `:::note[Title]` asides and fenced code with an
-// optional `title="file"`. Site-root links (/features/acme/) are rebased under
+// GitHub-flavoured Markdown, `:::note[Title]` asides, `::::tabs` with
+// `:::tab[Name]` panels and fenced code with an optional `title="file"`. Site-root links (/features/acme/) are rebased under
 // the docs route (/docs/features/acme/ or /docs/18.7/features/acme/).
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -55,6 +55,38 @@ function remarkAsides() {
         { type: "paragraph", data: { hName: "span", hProperties: { slot: "icon", dataIcon: aside.icon } }, children: [] },
         { type: "paragraph", data: { hName: "span", hProperties: { slot: "title" } }, children: [{ type: "text", value: title }] },
       );
+    });
+    // ::::tabs[Label] with :::tab[Name] blocks inside → lit-material-tabs and
+    // their panels (the tabs pair with the panels that follow them).
+    visit(tree, "containerDirective", (node) => {
+      if (node.name !== "tabs") return;
+      let label = "Options";
+      if (node.children[0]?.data?.directiveLabel) {
+        label = node.children[0].children.map((c) => c.value ?? "").join("") || label;
+        node.children.shift();
+      }
+      const tabs = node.children.filter((c) => c.type === "containerDirective" && c.name === "tab");
+      const names = tabs.map((t) => {
+        const first = t.children[0];
+        if (first?.data?.directiveLabel) {
+          t.children.shift();
+          return first.children.map((c) => c.value ?? "").join("");
+        }
+        return "Tab";
+      });
+      node.data = { hName: "div", hProperties: { className: ["md-tabs"] } };
+      node.children = [
+        {
+          type: "paragraph",
+          data: { hName: "lit-material-tabs", hProperties: { ariaLabel: label } },
+          children: names.map((name) => ({ type: "paragraph", data: { hName: "lit-material-tab" }, children: [{ type: "text", value: name }] })),
+        },
+        ...tabs.map((t, i) => ({
+          type: "blockquote",
+          data: { hName: "lit-material-tab-panel", hProperties: { className: ["tab-panel"], selected: i === 0 } },
+          children: t.children,
+        })),
+      ];
     });
     // Leaf/text directives are not used by the docs; keep their text.
     visit(tree, ["leafDirective", "textDirective"], (node, index, parent) => {
@@ -142,13 +174,15 @@ export async function renderMarkdown(source, { base = "/docs" } = {}) {
     .use(rehypeSlug)
     .use(rehypeCodeBlocks)
     .use(rehypeShiki, {
-      themes: { light: "github-light", dark: "github-dark-dimmed" },
+      // github-light's keyword red and comment grey were under 4.5:1 on the cream page.
+      themes: { light: "github-light-high-contrast", dark: "github-dark-dimmed" },
       defaultColor: false,
       fallbackLanguage: "text",
     })
     .use(rehypeAutolinkHeadings, {
       behavior: "append",
-      properties: { className: ["heading-anchor"], ariaHidden: "true", tabIndex: -1 },
+      // Kept out of the search index: excerpts read "restart# Setting…" otherwise.
+      properties: { className: ["heading-anchor"], ariaHidden: "true", tabIndex: -1, dataPagefindIgnore: "" },
       content: { type: "text", value: "#" },
     })
     .use(rehypeStringify)

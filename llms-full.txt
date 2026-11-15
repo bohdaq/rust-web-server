@@ -30,7 +30,40 @@ This file is every page of the documentation site in one document, generated fro
 
 <https://rws8.tech/docs/getting-started/quick-start/>
 
-To run rws, install it (`brew install bohdaq/tap/rws`, `cargo binstall rust-web-server` or `docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws`) and start `rws` in a folder: it serves that folder on http://localhost:7878. The four paths below add a route, a proxy and automatic HTTPS; each ends with a working server you can hit with `curl`.
+To run rws, install it, then start `rws` in a folder: it serves that folder on http://localhost:7878. The four paths below add a route, a proxy and automatic HTTPS; each ends with a working server you can hit with `curl`.
+
+::::tabs[Install rws]
+:::tab[Script]
+```bash
+curl -fsSL https://rws8.tech/install.sh | sh
+```
+Linux and macOS. Checks the release checksum, installs to `/usr/local/bin` or `~/.local/bin`.
+:::
+:::tab[Homebrew]
+```bash
+brew install bohdaq/tap/rws
+```
+macOS and Linux, x86_64 and arm64.
+:::
+:::tab[Cargo]
+```bash
+cargo binstall rust-web-server
+```
+A prebuilt binary through cargo binstall; works on Windows too.
+:::
+:::tab[Docker]
+```bash
+docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws
+```
+linux/amd64 and linux/arm64, also on ghcr.io/bohdaq/rws.
+:::
+:::tab[apt / dnf]
+```bash
+sudo apt install rws    # or: sudo dnf install rws
+```
+After [adding the repository](/deployment/systemd/#install-from-a-package); installs and starts the rws service.
+:::
+::::
 
 ---
 
@@ -39,15 +72,19 @@ To run rws, install it (`brew install bohdaq/tap/rws`, `cargo binstall rust-web-
 Install the binary and point it at a directory. No config file, no code.
 
 ```bash
-brew install bohdaq/tap/rws      # or: cargo binstall rust-web-server
 # create something to serve
 mkdir www && echo "<h1>Hello</h1>" > www/index.html
 cd www
 rws
 ```
 
-```
-Server is up and running at: http://0.0.0.0:7878
+```text title="Output"
+rws 18.37.0 · no rws.config.toml: defaults, environment and flags
+Serving files from /home/you/www
+Server is up and running at: http://localhost:7878
+  Listening on all interfaces (0.0.0.0:7878): other machines on the network can reach it.
+  Directory listing is on, so they can browse this folder. Local only: --ip=127.0.0.1; no listing: directory_listing = false.
+Ctrl+C stops it · --verbose prints every setting
 ```
 
 ```bash
@@ -198,7 +235,12 @@ body   = "Gateway ready"
 
 ```bash
 rws
-# Server is up and running at: http://0.0.0.0:8080
+```
+
+```text title="Output"
+rws 18.37.0 · config rws.config.toml
+Serving reverse proxy (routes from the config)
+Server is up and running at: http://localhost:8080
 ```
 
 ```bash
@@ -449,7 +491,7 @@ Linux binaries are statically linked against musl, so they run on any distributi
 
 ```bash
 rws --version
-rws --help      # every option, with its environment-variable equivalent
+rws --help      # the commands, then every option with its environment-variable equivalent (-h works too)
 ```
 
 Run it in any directory that contains static files and it will serve them on `http://localhost:7878` with no configuration file needed.
@@ -1740,7 +1782,10 @@ order.
 | `RWS_CONFIG_OPEN_FILE_CACHE_STRICT` | `true` | boolean | `true`: every static request checks the cached file's size and modification time (one `fstat`), so an edit in place is served at once. `false`: that check is reused for `RWS_CONFIG_OPEN_FILE_CACHE_SECS`, like nginx's `open_file_cache_valid` — about 0.7 µs less per request, but a file edited in place can be served stale (old size or bytes) for up to that long. Read at startup. |
 | `RWS_CONFIG_RUNTIME` | `per-core` (`rws` binary; `shared` for library apps) | string | Async builds, Unix only. The `rws` binary runs `per-core` since 18.0.0 (`shared` before); an application built on the library stays `shared` unless it sets this. `shared`: one multi-threaded tokio runtime (`TOKIO_WORKER_THREADS` workers) takes every connection. `per-core`: one single-threaded runtime per worker, each accepting on its own `SO_REUSEPORT` socket on the same port, like nginx's worker processes — a connection stays on one thread, with no work stealing or cross-thread wake-ups. On fast CPUs that's more throughput (on the benchmark's fastest runners +12–16% requests per second, and 4% less CPU per proxied request); on slower ones it costs about 12% more CPU per small request for a few percent more throughput. HTTP/3, the redirect listener and ACME stay on the main runtime; SIGHUP and shutdown work as usual. Unset with a `pkcs11:` TLS key, the binary uses `shared` (since 18.25.0; the token's wait can be moved off a shared worker, not a per-core one). Read at startup. |
 | `RWS_CONFIG_STATIC_CACHE_CONTROL` | `no-cache` | string | `Cache-Control` sent with static files (since 18.0.0; other responses keep `no-store, …`). The default lets browsers keep a file and revalidate it with `If-None-Match` / `If-Modified-Since`, which costs a `304` instead of the whole file. Set e.g. `public, max-age=3600` for assets with versioned names; an empty value sends the `no-store` default for static files too. |
-| `RWS_CONFIG_ERROR_FORMAT` | `problem` | string | Body of the errors rws produces itself (since 18.17.0): RFC 9457 `application/problem+json`, or `text` for the plain-text bodies of earlier releases. See [Error responses](/reference/errors/). |
+| `RWS_CONFIG_ERROR_FORMAT` | `problem` | string | Body of the errors rws produces itself (since 18.17.0): RFC 9457 `application/problem+json`, or `text` for the plain-text bodies of earlier releases. A browser (an `Accept` that prefers `text/html`) gets an HTML page for 502, 503 and maintenance instead (since 18.37.0). See [Error responses](/reference/errors/). |
+| `RWS_CONFIG_MAINTENANCE_MESSAGE` | (a default sentence) | string | `[maintenance] message`: the sentence on the page browsers see in maintenance mode (since 18.37.0). API clients still get `{"detail":"maintenance"}`. |
+| `RWS_CONFIG_MAINTENANCE_RETRY_AFTER_SECS` | `120` | seconds | `[maintenance] retry_after_secs`: the `Retry-After` of maintenance responses; `0` sends none (since 18.37.0). |
+| `RWS_VERBOSE` | `false` | bool | `true` prints every setting and step at startup, as `--verbose` does (since 18.37.0); without it rws prints its version, the configuration source, what it serves and the address. |
 | `RWS_CONFIG_PROXY_STATUS` | `always` | string | `Proxy-Status` (RFC 9209) on proxied responses (since 18.17.0): `always`, `errors` (failures only) or `off`. See [Proxy-Status](/proxy/reverse-proxy/#when-a-backend-fails-proxy-status). |
 | `RWS_CONFIG_PROXY_NAME` | `rws` | string | This hop's name in `Proxy-Status` and `Cache-Status`. |
 | `RWS_CONFIG_PROXY_STATUS_NEXT_HOP` | `false` | boolean | Add the backend address (`next-hop`) and the failure's text (`details`) to `Proxy-Status`; they reveal internal addresses. |
@@ -1895,6 +1940,7 @@ don't use them.
 | `RWS_CONFIG_CLUSTER_PREFIX` | `rws:cluster:` | string | Key prefix in that Redis. |
 | `RWS_CONFIG_CLUSTER_NODE` | host name | string | This replica's name in `status`, heartbeats and audit entries (`[cluster] node`; since 18.22.0). |
 | `RWS_CONFIG_ADMIN_AUDIT_LOG` | (memory only) | path | Append every admin change to this file as JSON lines. |
+| `RWS_CONFIG_ADMIN_COUNT_OWN_REQUESTS` | `false` | bool | `true` counts requests on the admin listener in the metrics and the access log, as before 18.37.0; by default the admin UI's own polling isn't the site's traffic. |
 | `RWS_CONFIG_ADMIN_OIDC_ISSUER` | (off) | URL | OIDC provider for signing in to the admin UI (discovery at `<issuer>/.well-known/openid-configuration`). |
 | `RWS_CONFIG_ADMIN_OIDC_PROVIDER` | (off) | `google`, `microsoft`, `github` | A provider preset instead of an issuer. |
 | `RWS_CONFIG_ADMIN_OIDC_TENANT` | `common` | string | Azure AD tenant for `microsoft`. |
@@ -2274,6 +2320,17 @@ allowed_origins = ["https://ops.example.com"] # browser origins besides the list
 # oidc_cookie_secret_env = "RWS_ADMIN_COOKIE_SECRET"
 # oidc_roles    = ["rws-admins=admin", "sre=operator", "*=viewer"]  # group (or email, or *) = role
 # oidc_role_claim = "groups"
+# count_own_requests = true   # count the admin listener's requests in the metrics and access log (off since 18.37.0)
+```
+
+## `[maintenance]`
+
+What visitors see while maintenance mode is on (switched from the admin UI, `rws ctl maintenance on` or MCP; since 18.37.0). API clients get `503` with problem details as before; a browser gets a page with this message.
+
+```toml
+[maintenance]
+message          = "We're upgrading the database. Back by 14:00 UTC."
+retry_after_secs = 600   # Retry-After on maintenance responses (default 120; 0 = none)
 ```
 
 
@@ -24415,13 +24472,15 @@ can run `rwsctl reload || rollback`.
 
 Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) and paste the token. It shows:
 
-- **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
+- **Overview**: uptime, request and error counters (the admin listener's own requests aren't counted; `[admin] count_own_requests = true` counts them), a live requests-per-second chart, how many backends are healthy, the listeners and the build.
 - **Traffic**: who visited, people, AI agents and bots, over a day, week or 30 days (18.15.0; see [Traffic insights](/deployment/traffic/)).
 - **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
-- **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), authorization tuples (add, remove, check), the IP blocklist and feature flags.
+- **Controls**: maintenance mode, reload, the response caches (purge a path or a prefix, or everything), authorization tuples (add, remove, check), the IP blocklist and feature flags.
 - **Config**: every setting in effect, filterable, secrets hidden.
-- **Logs**: the access log as it's written, with pause.
+- **Logs**: the access log as it's written, as columns, with a filter, status chips and pause.
+
+The header shows one state on every page: Ready, Not ready, Degraded (healthy backends out of all), Maintenance (with a banner and a Turn off button) or Disconnected (the admin API stopped answering; the time of the last answer, retried every 5 seconds). Changes that take a site down ask first: turning maintenance mode on, purging a whole cache, draining the last healthy backend of an upstream. Draining, blocking and unblocking can be undone from the message that confirms them.
 
 The token stays in the browser tab (`sessionStorage`), and the page talks only to the API below with it. The UI's own files (`/admin/`, `/admin/admin.js`, `/admin/admin.css`) are served without the token: they hold no data. They are built into the binary, so there is nothing to deploy, and they're served with a strict `Content-Security-Policy` (scripts and connections to the listener itself only, no framing).
 
@@ -24591,7 +24650,7 @@ Library users: the admin API reports the cache and routes registered with `admin
 Example `GET /status`:
 
 ```json
-{"version":"18.10.0","pid":4242,"uptime_secs":3605,"ready":true,"features":["http2","http3","acme","auth","mimalloc"],"listeners":{"main":{"address":"0.0.0.0:443","tls":true},"redirect":"80","admin":"127.0.0.1:9901"}}
+{"version":"18.10.0","pid":4242,"uptime_secs":3605,"ready":true,"maintenance":false,"features":["http2","http3","acme","auth","mimalloc"],"listeners":{"main":{"address":"0.0.0.0:443","tls":true},"redirect":"80","admin":"127.0.0.1:9901"}}
 ```
 
 `POST /admin/config/reload` on the main listener (the older reload endpoint) is unchanged.
@@ -26149,6 +26208,20 @@ error_format = "text"   # RWS_CONFIG_ERROR_FORMAT
 brings back the bodies of earlier releases: `502 Bad Gateway`,
 `503 Service Unavailable: every backend is out of rotation`, and so on, as
 `text/plain`.
+
+## Pages for browsers
+
+A browser asking for a page (an `Accept` header that lists `text/html`
+ahead of any JSON type) gets an HTML page instead of problem details for
+rws's own `502` and `503`, and for maintenance mode (since 18.37.0): the
+status, one sentence, a link to the home page, in light and dark, with
+`Vary: Accept`. `fetch()`, `curl` and API clients (`*/*`, `application/json`)
+get the same problem details as before. The built-in `404` page uses the
+same template; a `404.html` in the working directory replaces it.
+Maintenance responses carry `Retry-After` and the page shows
+`[maintenance] message` (see [the config file](/configuration/config-file/#maintenance)).
+The page's style is inline: under a `Content-Security-Policy` that forbids
+inline styles it shows unstyled, still readable.
 
 ---
 

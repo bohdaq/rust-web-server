@@ -23,6 +23,8 @@
 .bar { position: absolute; left: 0; top: 2px; display: block; height: 16px; width: max(2px, calc((100% - var(--label)) * var(--f))); border-radius: 0 4px 4px 0; background: var(--chart-muted); transition: opacity var(--duration-color) var(--ease); }
 .is-highlight .bar { background: var(--chart-accent); }
 .bars:hover .bar-row:not(:hover) .bar { opacity: 0.55; }
+.bar-row:not(.is-highlight) .bar-value { color: var(--md-sys-color-on-surface-variant); font-weight: 500; }
+.bars:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 4px; border-radius: var(--md-sys-shape-corner-small); }
 .bar-value { position: absolute; top: 0; left: calc((100% - var(--label)) * var(--f) + var(--space-75)); white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); line-height: var(--leading-xs); font-variant-numeric: tabular-nums; color: var(--md-sys-color-on-surface); font-weight: 600; }
 .chart-tooltip {
   position: fixed; left: 0; top: 0; z-index: 20; pointer-events: none;

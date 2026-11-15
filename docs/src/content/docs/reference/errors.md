@@ -61,3 +61,17 @@ error_format = "text"   # RWS_CONFIG_ERROR_FORMAT
 brings back the bodies of earlier releases: `502 Bad Gateway`,
 `503 Service Unavailable: every backend is out of rotation`, and so on, as
 `text/plain`.
+
+## Pages for browsers
+
+A browser asking for a page (an `Accept` header that lists `text/html`
+ahead of any JSON type) gets an HTML page instead of problem details for
+rws's own `502` and `503`, and for maintenance mode (since 18.37.0): the
+status, one sentence, a link to the home page, in light and dark, with
+`Vary: Accept`. `fetch()`, `curl` and API clients (`*/*`, `application/json`)
+get the same problem details as before. The built-in `404` page uses the
+same template; a `404.html` in the working directory replaces it.
+Maintenance responses carry `Retry-After` and the page shows
+`[maintenance] message` (see [the config file](/configuration/config-file/#maintenance)).
+The page's style is inline: under a `Content-Security-Policy` that forbids
+inline styles it shows unstyled, still readable.

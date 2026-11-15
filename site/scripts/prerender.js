@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import "../src/components.js";
 import { favicon, icon, mark } from "../src/brand/mark.js";
-import { documentHtml, SITE } from "../src/shell.js";
+import { documentHtml, setLatestDocsVersion, SITE } from "../src/shell.js";
 import * as themePage from "../src/pages/theme.js";
 import * as homePage from "../src/pages/home.js";
 import * as privacyPage from "../src/pages/privacy.js";
@@ -36,6 +36,7 @@ function write(path, content) {
 }
 
 const versions = docsVersions({ repo: join(site, ".."), cacheDir: join(site, ".versions") });
+setLatestDocsVersion(versions[0].key);
 for (const v of versions) v.pages = new Set(["/", ...v.sidebar.flatMap((g) => g.items.map((i) => i.link))]);
 const docs = [];
 for (const v of versions) {

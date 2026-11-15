@@ -152,10 +152,9 @@ export function setVersion(v) {
 }
 const terminal = () => [
   { cmd: "cd my-site && rws" },
-  { out: "Rust Web Server" },
-  { out: `Version:           ${version}` },
-  { out: "No TLS certificate configured — serving plain HTTP/1.1." },
-  { out: "Started 8 per-core runtimes on 0.0.0.0:7878.", accent: true },
+  { out: `rws ${version} · no rws.config.toml: defaults, environment and flags` },
+  { out: "Serving files from /home/me/site" },
+  { out: "Server is up and running at: http://localhost:7878", accent: true },
   { cmd: "curl -I http://localhost:7878" },
   { out: "HTTP/1.1 200 OK", accent: true },
   { out: "Accept-Ranges: bytes" },

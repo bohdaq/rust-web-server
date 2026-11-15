@@ -62,7 +62,7 @@ Linux binaries are statically linked against musl, so they run on any distributi
 
 ```bash
 rws --version
-rws --help      # every option, with its environment-variable equivalent
+rws --help      # the commands, then every option with its environment-variable equivalent (-h works too)
 ```
 
 Run it in any directory that contains static files and it will serve them on `http://localhost:7878` with no configuration file needed.

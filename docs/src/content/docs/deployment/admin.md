@@ -71,13 +71,15 @@ can run `rwsctl reload || rollback`.
 
 Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) and paste the token. It shows:
 
-- **Overview**: uptime, request and error counters, a live requests-per-second chart, the listeners and the build.
+- **Overview**: uptime, request and error counters (the admin listener's own requests aren't counted; `[admin] count_own_requests = true` counts them), a live requests-per-second chart, how many backends are healthy, the listeners and the build.
 - **Traffic**: who visited, people, AI agents and bots, over a day, week or 30 days (18.15.0; see [Traffic insights](/deployment/traffic/)).
 - **Upstreams**: every backend's health and circuit breaker, with a switch to drain it.
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
-- **Controls**: maintenance mode, reload, the response caches (purge everything, a path or a prefix), authorization tuples (add, remove, check), the IP blocklist and feature flags.
+- **Controls**: maintenance mode, reload, the response caches (purge a path or a prefix, or everything), authorization tuples (add, remove, check), the IP blocklist and feature flags.
 - **Config**: every setting in effect, filterable, secrets hidden.
-- **Logs**: the access log as it's written, with pause.
+- **Logs**: the access log as it's written, as columns, with a filter, status chips and pause.
+
+The header shows one state on every page: Ready, Not ready, Degraded (healthy backends out of all), Maintenance (with a banner and a Turn off button) or Disconnected (the admin API stopped answering; the time of the last answer, retried every 5 seconds). Changes that take a site down ask first: turning maintenance mode on, purging a whole cache, draining the last healthy backend of an upstream. Draining, blocking and unblocking can be undone from the message that confirms them.
 
 The token stays in the browser tab (`sessionStorage`), and the page talks only to the API below with it. The UI's own files (`/admin/`, `/admin/admin.js`, `/admin/admin.css`) are served without the token: they hold no data. They are built into the binary, so there is nothing to deploy, and they're served with a strict `Content-Security-Policy` (scripts and connections to the listener itself only, no framing).
 

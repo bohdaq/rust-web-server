@@ -86,6 +86,20 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   legend no longer repeats the line labels. "What do these mean?" explains
   Verified, Likely, Page only and Server networks; the live count reads "N
   in the last 5 min" everywhere.
+- **rws8.tech.** Search is in the header of every page (and `/`, Ctrl+K):
+  arrow keys move through the results, Enter opens one, a page's matching
+  sections are listed under it, and excerpts lost the stray `#` of heading
+  anchors. The docs version menu opens over the sidebar with the five
+  newest versions and the rest under "Older versions", and closes on Esc.
+  Below 1200 px an "On this page" list sits under the title. The changelog
+  shows the ten newest releases and groups older ones by minor version
+  (53,000 px → 12,000 px tall) and is in the top navigation; the docs index
+  has a jump list. Benchmark charts print every bar's value and are one tab
+  stop each. The quick start has the install tabs and labelled output that
+  matches what rws prints. Light-theme code passes 4.5:1, header and footer
+  links are 40 px tall, the header no longer shows text through it,
+  anchored headings clear it, `theme-color` follows the theme and long
+  code lines wrap on phones.
 - **`rws trust --print` and `rws untrust` only read**: they no longer
   create a local CA when there is none.
 
