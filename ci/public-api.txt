@@ -696,6 +696,7 @@ impl core::cmp::PartialEq for rust_web_server::compression::Encoding
 impl core::cmp::PartialEq for rust_web_server::compression::Level
 impl core::cmp::PartialEq for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::cmp::PartialEq for rust_web_server::config_check::ConfigReport
+impl core::cmp::PartialEq for rust_web_server::config_check::syntax::Finding
 impl core::cmp::PartialEq for rust_web_server::cookie::Cookie
 impl core::cmp::PartialEq for rust_web_server::core::base64::Alphabet
 impl core::cmp::PartialEq for rust_web_server::core::base64::DecodeError
@@ -1187,6 +1188,7 @@ impl core::fmt::Debug for rust_web_server::compression::Encoding
 impl core::fmt::Debug for rust_web_server::compression::Level
 impl core::fmt::Debug for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::fmt::Debug for rust_web_server::config_check::ConfigReport
+impl core::fmt::Debug for rust_web_server::config_check::syntax::Finding
 impl core::fmt::Debug for rust_web_server::config_reload::ConfigSnapshot
 impl core::fmt::Debug for rust_web_server::cookie::Cookie
 impl core::fmt::Debug for rust_web_server::core::base64::Alphabet
@@ -1670,6 +1672,7 @@ impl core::marker::Freeze for rust_web_server::compression::Encoding
 impl core::marker::Freeze for rust_web_server::compression::Level
 impl core::marker::Freeze for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::marker::Freeze for rust_web_server::config_check::ConfigReport
+impl core::marker::Freeze for rust_web_server::config_check::syntax::Finding
 impl core::marker::Freeze for rust_web_server::config_reload::ConfigSnapshot
 impl core::marker::Freeze for rust_web_server::cookie::Cookie
 impl core::marker::Freeze for rust_web_server::cookie::CookieJar
@@ -2199,6 +2202,7 @@ impl core::marker::Send for rust_web_server::compression::Encoding
 impl core::marker::Send for rust_web_server::compression::Level
 impl core::marker::Send for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::marker::Send for rust_web_server::config_check::ConfigReport
+impl core::marker::Send for rust_web_server::config_check::syntax::Finding
 impl core::marker::Send for rust_web_server::config_reload::ConfigSnapshot
 impl core::marker::Send for rust_web_server::cookie::Cookie
 impl core::marker::Send for rust_web_server::cookie::CookieJar
@@ -2692,6 +2696,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::compression::Encodin
 impl core::marker::StructuralPartialEq for rust_web_server::compression::Level
 impl core::marker::StructuralPartialEq for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::marker::StructuralPartialEq for rust_web_server::config_check::ConfigReport
+impl core::marker::StructuralPartialEq for rust_web_server::config_check::syntax::Finding
 impl core::marker::StructuralPartialEq for rust_web_server::cookie::Cookie
 impl core::marker::StructuralPartialEq for rust_web_server::core::base64::Alphabet
 impl core::marker::StructuralPartialEq for rust_web_server::core::base64::DecodeError
@@ -3003,6 +3008,7 @@ impl core::marker::Sync for rust_web_server::compression::Encoding
 impl core::marker::Sync for rust_web_server::compression::Level
 impl core::marker::Sync for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::marker::Sync for rust_web_server::config_check::ConfigReport
+impl core::marker::Sync for rust_web_server::config_check::syntax::Finding
 impl core::marker::Sync for rust_web_server::config_reload::ConfigSnapshot
 impl core::marker::Sync for rust_web_server::cookie::Cookie
 impl core::marker::Sync for rust_web_server::cookie::CookieJar
@@ -3545,6 +3551,7 @@ impl core::marker::Unpin for rust_web_server::compression::Encoding
 impl core::marker::Unpin for rust_web_server::compression::Level
 impl core::marker::Unpin for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::marker::Unpin for rust_web_server::config_check::ConfigReport
+impl core::marker::Unpin for rust_web_server::config_check::syntax::Finding
 impl core::marker::Unpin for rust_web_server::config_reload::ConfigSnapshot
 impl core::marker::Unpin for rust_web_server::cookie::Cookie
 impl core::marker::Unpin for rust_web_server::cookie::CookieJar
@@ -4095,6 +4102,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::compression::Encoding
 impl core::marker::UnsafeUnpin for rust_web_server::compression::Level
 impl core::marker::UnsafeUnpin for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::marker::UnsafeUnpin for rust_web_server::config_check::ConfigReport
+impl core::marker::UnsafeUnpin for rust_web_server::config_check::syntax::Finding
 impl core::marker::UnsafeUnpin for rust_web_server::config_reload::ConfigSnapshot
 impl core::marker::UnsafeUnpin for rust_web_server::cookie::Cookie
 impl core::marker::UnsafeUnpin for rust_web_server::cookie::CookieJar
@@ -4646,6 +4654,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::compression::E
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::compression::Level
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::config_check::ConfigReport
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::config_check::syntax::Finding
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::config_reload::ConfigSnapshot
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::cookie::Cookie
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::cookie::CookieJar
@@ -5143,6 +5152,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::compression::Enco
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::compression::Level
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::compression::dictionary::DictionaryEncoding
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::config_check::ConfigReport
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::config_check::syntax::Finding
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::config_reload::ConfigSnapshot
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::cookie::Cookie
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::cookie::CookieJar
@@ -8535,6 +8545,9 @@ pub fn rust_web_server::config_check::check_str(&str) -> rust_web_server::config
 pub fn rust_web_server::config_check::check_str_offline(&str) -> rust_web_server::config_check::ConfigReport
 pub fn rust_web_server::config_check::check_target_from_args(&[alloc::string::String]) -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::config_check::default_config_path() -> alloc::string::String
+pub fn rust_web_server::config_check::syntax::Finding::eq(&self, &Self) -> bool
+pub fn rust_web_server::config_check::syntax::Finding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::config_check::syntax::check(&str) -> alloc::vec::Vec<rust_web_server::config_check::syntax::Finding>
 pub fn rust_web_server::config_check::wants_json_output(&[alloc::string::String]) -> bool
 pub fn rust_web_server::config_reload::ConfigSnapshot::clone(&self) -> Self
 pub fn rust_web_server::config_reload::ConfigSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -8691,7 +8704,9 @@ pub fn rust_web_server::entry_point::bootstrap()
 pub fn rust_web_server::entry_point::command_line_args::CommandLineArgument::_parse(alloc::vec::Vec<alloc::string::String>, alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>) -> alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>
 pub fn rust_web_server::entry_point::command_line_args::CommandLineArgument::get_command_line_arg_list() -> alloc::vec::Vec<rust_web_server::entry_point::command_line_args::CommandLineArgument>
 pub fn rust_web_server::entry_point::command_line_args::CommandLineArgument::set_environment_variable(&rust_web_server::entry_point::command_line_args::CommandLineArgument, alloc::string::String)
+pub fn rust_web_server::entry_point::command_line_args::check_binary_args(&[alloc::string::String]) -> core::result::Result<(), alloc::string::String>
 pub fn rust_web_server::entry_point::command_line_args::informational_flag_output(&[alloc::string::String]) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::entry_point::command_line_args::joined_value_forms(&[alloc::string::String]) -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::entry_point::command_line_args::override_environment_variables_from_command_line_args()
 pub fn rust_web_server::entry_point::config_file::ConfigSettings::default() -> Self
 pub fn rust_web_server::entry_point::config_file::ConfigSettings::eq(&self, &Self) -> bool
@@ -8699,6 +8714,9 @@ pub fn rust_web_server::entry_point::config_file::ConfigSettings::fmt(&self, &mu
 pub fn rust_web_server::entry_point::config_file::collect_settings(core::io::cursor::Cursor<&[u8]>, alloc::string::String) -> core::result::Result<rust_web_server::entry_point::config_file::ConfigSettings, alloc::string::String>
 pub fn rust_web_server::entry_point::config_file::override_environment_variables_from_config(core::option::Option<&str>)
 pub fn rust_web_server::entry_point::config_file::read_config_file(core::io::cursor::Cursor<&[u8]>, alloc::string::String) -> core::result::Result<bool, alloc::string::String>
+pub fn rust_web_server::entry_point::config_file::suggestion(&str) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::entry_point::config_source() -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::entry_point::edit_distance(&str, &str) -> usize
 pub fn rust_web_server::entry_point::environment_variables::read_system_environment_variables()
 pub fn rust_web_server::entry_point::get_ip_port_thread_count() -> (alloc::string::String, i32, i32)
 pub fn rust_web_server::entry_point::get_max_body_size() -> u64
@@ -8707,11 +8725,18 @@ pub fn rust_web_server::entry_point::get_spa_fallback() -> core::option::Option<
 pub fn rust_web_server::entry_point::get_spa_fallback_exclude_prefixes() -> alloc::vec::Vec<alloc::string::String>
 pub fn rust_web_server::entry_point::get_spa_fallback_routes() -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub fn rust_web_server::entry_point::get_virtual_hosts() -> alloc::vec::Vec<rust_web_server::virtual_host::VirtualHostConfig>
+pub fn rust_web_server::entry_point::note(&str)
 pub fn rust_web_server::entry_point::set_default_values()
 pub fn rust_web_server::entry_point::shown<'a>(&str, &'a str) -> alloc::borrow::Cow<'a, str>
+pub fn rust_web_server::entry_point::verbose() -> bool
 pub fn rust_web_server::error::AppError::eq(&self, &Self) -> bool
 pub fn rust_web_server::error::AppError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn rust_web_server::error::IntoResponse::into_response(self) -> rust_web_server::response::Response
+pub fn rust_web_server::error::page::html(i16, &str, &str) -> alloc::string::String
+pub fn rust_web_server::error::page::maintenance_message() -> alloc::string::String
+pub fn rust_web_server::error::page::maintenance_retry_after() -> u64
+pub fn rust_web_server::error::page::negotiated(rust_web_server::response::Response, &rust_web_server::request::Request) -> rust_web_server::response::Response
+pub fn rust_web_server::error::page::wants_html(&rust_web_server::request::Request) -> bool
 pub fn rust_web_server::error::problem(&rust_web_server::response::StatusCodeReasonPhrase, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem::problem(&rust_web_server::response::StatusCodeReasonPhrase, &str) -> rust_web_server::response::Response
 pub fn rust_web_server::error::problem::problem_with_text(&rust_web_server::response::StatusCodeReasonPhrase, &str, &str) -> rust_web_server::response::Response
@@ -10859,6 +10884,7 @@ pub fn rust_web_server::server::Server::process_request(impl alloc::io::read::Re
 pub fn rust_web_server::server::Server::request_timeout_response() -> alloc::vec::Vec<u8>
 pub fn rust_web_server::server::Server::run(std::net::tcp::TcpListener, rust_web_server::thread_pool::ThreadPool, impl rust_web_server::application::Application + core::marker::Send + 'static + core::clone::Clone)
 pub fn rust_web_server::server::Server::setup() -> core::result::Result<(std::net::tcp::TcpListener, rust_web_server::thread_pool::ThreadPool), alloc::string::String>
+pub fn rust_web_server::server::bind_error_message(&str, &core::io::error::Error) -> alloc::string::String
 pub fn rust_web_server::server::per_core::default_to_per_core()
 pub fn rust_web_server::server::per_core::enabled() -> bool
 pub fn rust_web_server::server::per_core::pkcs11_warning() -> core::option::Option<&'static str>
@@ -10869,6 +10895,7 @@ pub fn rust_web_server::server::proxy_protocol::enabled() -> bool
 pub fn rust_web_server::server::proxy_protocol::parse(&[u8]) -> rust_web_server::server::proxy_protocol::Parsed
 pub fn rust_web_server::server::proxy_protocol::read_blocking<S: alloc::io::read::Read>(&mut S) -> core::io::error::Result<core::option::Option<core::net::socket_addr::SocketAddr>>
 pub fn rust_web_server::server::request_shutdown()
+pub fn rust_web_server::server::startup_summary(&str, &str, i32) -> alloc::string::String
 pub fn rust_web_server::server_config::ServerConfig::clone(&self) -> Self
 pub fn rust_web_server::server_config::ServerConfig::current() -> alloc::rcs::arc::Arc<rust_web_server::server_config::ServerConfig>
 pub fn rust_web_server::server_config::ServerConfig::default() -> Self
@@ -11484,6 +11511,7 @@ pub mod rust_web_server::compression
 pub mod rust_web_server::compression::dictionary
 pub mod rust_web_server::config_binding
 pub mod rust_web_server::config_check
+pub mod rust_web_server::config_check::syntax
 pub mod rust_web_server::config_reload
 pub mod rust_web_server::config_watch
 pub mod rust_web_server::controller
@@ -11505,6 +11533,7 @@ pub mod rust_web_server::entry_point::command_line_args
 pub mod rust_web_server::entry_point::config_file
 pub mod rust_web_server::entry_point::environment_variables
 pub mod rust_web_server::error
+pub mod rust_web_server::error::page
 pub mod rust_web_server::error::problem
 pub mod rust_web_server::error_pages
 pub mod rust_web_server::events
@@ -11936,6 +11965,10 @@ pub rust_web_server::compression::dictionary::DictionaryEncoding::Dcb
 pub rust_web_server::compression::dictionary::DictionaryEncoding::Dcz
 pub rust_web_server::config_check::ConfigReport::errors: alloc::vec::Vec<alloc::string::String>
 pub rust_web_server::config_check::ConfigReport::warnings: alloc::vec::Vec<alloc::string::String>
+pub rust_web_server::config_check::syntax::Finding::column: usize
+pub rust_web_server::config_check::syntax::Finding::error: bool
+pub rust_web_server::config_check::syntax::Finding::line: usize
+pub rust_web_server::config_check::syntax::Finding::message: alloc::string::String
 pub rust_web_server::config_reload::ConfigSnapshot::cors_allow_all: bool
 pub rust_web_server::config_reload::ConfigSnapshot::cors_allow_credentials: alloc::string::String
 pub rust_web_server::config_reload::ConfigSnapshot::cors_allow_headers: alloc::string::String
@@ -13539,6 +13572,7 @@ pub struct rust_web_server::cluster::ProcessState
 pub struct rust_web_server::cluster::RedisStore
 pub struct rust_web_server::cluster::State
 pub struct rust_web_server::config_check::ConfigReport
+pub struct rust_web_server::config_check::syntax::Finding
 pub struct rust_web_server::config_reload::ConfigSnapshot
 pub struct rust_web_server::config_watch::Watcher<F: core::ops::function::FnMut() -> alloc::vec::Vec<std::path::PathBuf>>
 pub struct rust_web_server::cookie::Cookie

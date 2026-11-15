@@ -775,7 +775,7 @@ impl Server {
         #[cfg(not(feature = "http2"))]
         let protocol = "http";
 
-        crate::entry_point::note(&format!("Setting up {}://{}...", protocol, &bind_addr));
+        crate::entry_point::note(&format!("Setting up {}://{}...", protocol, bind_addr));
 
         // A socket systemd passed (socket activation), else our own.
         #[cfg(all(unix, any(feature = "http1", feature = "http2")))]

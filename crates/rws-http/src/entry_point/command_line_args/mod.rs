@@ -144,7 +144,8 @@ fn help_text() -> String {
     );
     let list = CommandLineArgument::get_command_line_arg_list();
     let common = ["port", "ip", "thread-count", "tls", "tls-cert-file", "tls-key-file"];
-    let groups: [(&str, Box<dyn Fn(&str) -> bool>); 4] = [
+    type Wanted = Box<dyn Fn(&str) -> bool>;
+    let groups: [(&str, Wanted); 4] = [
         ("Common options", Box::new(move |l: &str| common.contains(&l))),
         ("Automatic HTTPS (ACME)", Box::new(|l: &str| l.starts_with("acme-") || l == "http-redirect-port")),
         ("CORS", Box::new(|l: &str| l.starts_with("cors-"))),

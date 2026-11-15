@@ -8211,7 +8211,9 @@ on Debian/Ubuntu, `update-ca-trust` on Fedora/RHEL, `trust` on Arch (with
 current user's Root store on Windows — and to the NSS database Chrome and
 Firefox use on Linux (`~/.pki/nssdb`, needs `certutil` from
 `libnss3-tools`). `rws untrust` takes it out; `rws trust --print` writes the
-CA certificate to stdout, e.g. for a phone or another machine:
+CA certificate to stdout, e.g. for a phone or another machine. Both only
+read (since 18.37.0): with no CA yet, `--print` says so and exits 1 instead
+of creating one.
 
 ```sh
 rws trust --print > rws-ca.pem
