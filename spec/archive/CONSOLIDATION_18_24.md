@@ -1,4 +1,4 @@
-[Read Me](../README.md) > [Spec](.) > Consolidation 18.24
+[Read Me](../../README.md) > [Spec](..) > Consolidation 18.24
 
 # 18.24.0 — Consolidation
 

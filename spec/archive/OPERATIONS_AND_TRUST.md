@@ -1,4 +1,4 @@
-[Read Me](../README.md) > [Spec](.) > Operations and trust
+[Read Me](../../README.md) > [Spec](..) > Operations and trust
 
 # Operations and trust (18.20.0)
 

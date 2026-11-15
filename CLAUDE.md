@@ -193,7 +193,7 @@ Configuration is layered (lowest → highest priority):
 1. Defaults hardcoded in `crates/rws-http/src/entry_point/mod.rs` (`Config::*_DEFAULT_VALUE`)
 2. System environment variables
 3. `rws.config.toml` in the working directory
-4. Command-line args (`rws.command_line`)
+4. Command-line args (`rws --help`)
 
 All config is read at startup into process environment variables (`RWS_CONFIG_*`); per-request code reads the typed `ServerConfig::current()` snapshot (`crates/rws-http/src/server_config/`, rebuilt after `server_config::invalidate()`), not `env::var(...)` — see the static-file hot path below.
 

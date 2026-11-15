@@ -1,4 +1,4 @@
-[Read Me](../README.md) > [Spec](.) > A2A server
+[Read Me](../../README.md) > [Spec](..) > A2A server
 
 # A2A server module (18.17.0–18.18.0)
 

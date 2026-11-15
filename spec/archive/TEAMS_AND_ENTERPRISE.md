@@ -1,4 +1,4 @@
-[Read Me](../README.md) > [Spec](.) > Teams and enterprise
+[Read Me](../../README.md) > [Spec](..) > Teams and enterprise
 
 # Teams and enterprise (18.21.0–18.23.0)
 

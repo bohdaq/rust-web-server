@@ -1,4 +1,4 @@
-[Read Me](../README.md) > [Spec](.) > OpenAPI to MCP tools
+[Read Me](../../README.md) > [Spec](..) > OpenAPI to MCP tools
 
 # OpenAPI → MCP tools (18.19.0)
 

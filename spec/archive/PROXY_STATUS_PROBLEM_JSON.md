@@ -1,4 +1,4 @@
-[Read Me](../README.md) > [Spec](.) > Proxy-Status, Cache-Status, problem+json
+[Read Me](../../README.md) > [Spec](..) > Proxy-Status, Cache-Status, problem+json
 
 # Proxy-Status, Cache-Status and problem+json (18.17.0)
 

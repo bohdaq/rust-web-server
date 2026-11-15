@@ -197,26 +197,26 @@ Change a running server without editing files, and extend it without recompiling
 
 ## 18.17.0 — Standard status headers and errors (released 2026-10-31)
 
-- **#64** **`Proxy-Status`, `Cache-Status`, problem+json** (RFC 9209, 9211, 9457) — why a proxied request failed, whether a cache answered, rws-made errors as `application/problem+json` for clients that ask for JSON. Plan: [PROXY_STATUS_PROBLEM_JSON.md](PROXY_STATUS_PROBLEM_JSON.md) (2026-10-31).
+- **#64** **`Proxy-Status`, `Cache-Status`, problem+json** (RFC 9209, 9211, 9457) — why a proxied request failed, whether a cache answered, rws-made errors as `application/problem+json` for clients that ask for JSON. Plan: [PROXY_STATUS_PROBLEM_JSON.md](archive/PROXY_STATUS_PROBLEM_JSON.md) (2026-10-31).
 
 ## 18.18.0 — A2A (released 2026-11-01)
 
-- **#65** **A2A server module** (tranches 1–2 — card, messages, tasks, streaming, auth — shipped in 18.17.0) — A2A 1.0 JSON-RPC binding: Agent Card, messages, tasks, streaming, push notifications, graded by a2aproject/a2a-tck; then an A2A gateway route. Plan: [A2A_SERVER.md](A2A_SERVER.md) (2026-10-31).
+- **#65** **A2A server module** (tranches 1–2 — card, messages, tasks, streaming, auth — shipped in 18.17.0) — A2A 1.0 JSON-RPC binding: Agent Card, messages, tasks, streaming, push notifications, graded by a2aproject/a2a-tck; then an A2A gateway route. Plan: [A2A_SERVER.md](archive/A2A_SERVER.md) (2026-10-31).
 
 ## 18.19.0 — OpenAPI to MCP (released 2026-11-01)
 
-- **#66** **MCP tools from OpenAPI** — an upstream API's OpenAPI operations as MCP gateway tools, and an app's own described routes as in-process tools. Plan: [OPENAPI_TO_MCP.md](OPENAPI_TO_MCP.md) (2026-10-31).
+- **#66** **MCP tools from OpenAPI** — an upstream API's OpenAPI operations as MCP gateway tools, and an app's own described routes as in-process tools. Plan: [OPENAPI_TO_MCP.md](archive/OPENAPI_TO_MCP.md) (2026-10-31).
 
 ## 18.20.0 — Operations and trust (released 2026-11-01)
 
 - **#67** **systemd `Type=notify` and socket activation** — readiness, reload and watchdog notifications; listeners inherited from systemd so restarts refuse nothing.
-- **#68** **`Forwarded` (RFC 7239) and CRLs for inbound mTLS**. Plan: [OPERATIONS_AND_TRUST.md](OPERATIONS_AND_TRUST.md) (2026-11-01).
+- **#68** **`Forwarded` (RFC 7239) and CRLs for inbound mTLS**. Plan: [OPERATIONS_AND_TRUST.md](archive/OPERATIONS_AND_TRUST.md) (2026-11-01).
 - **#69** **Key rotation for HS256 and Basic** — several JWT secrets with `kid`, htpasswd re-read on change.
 - **#70** **`rws ctl` / `rwsctl`** — the admin API from the command line. 18.21.0's planned scope, shipped in 18.20.0 (the user's call).
 
 ## 18.21.0 — Solo developers and startups (released 2026-11-01)
 
-Plan: [TEAMS_AND_ENTERPRISE.md](TEAMS_AND_ENTERPRISE.md) (2026-11-01).
+Plan: [TEAMS_AND_ENTERPRISE.md](archive/TEAMS_AND_ENTERPRISE.md) (2026-11-01).
 
 - **#71** **Local HTTPS** — `tls = "internal"`: rws's own CA issues certificates for `localhost` and other local names; `rws trust` installs the CA.
 - **#72** **FastCGI** — `type = "fastcgi"` routes to php-fpm with the front-controller pattern (Laravel, Symfony, WordPress).
@@ -255,7 +255,7 @@ The crate split into layered crates with an unchanged public API. Plan and measu
 
 ## 18.25.0 — Follow-ups (released 2026-11-02)
 
-The items 18.24.0 deferred ([CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md)), except the workspace split.
+The items 18.24.0 deferred ([CONSOLIDATION_18_24.md](archive/CONSOLIDATION_18_24.md)), except the workspace split.
 
 - **One base64 decoder** — `core::base64::Decoder` replaces seven private ones and the quadratic `Base64::decode`.
 - **PKCS#11 off the worker** — the token's wait no longer stalls other connections; shared runtime by default with a `pkcs11:` key.
@@ -263,7 +263,7 @@ The items 18.24.0 deferred ([CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md)), e
 
 ## 18.24.0 — Consolidation (released 2026-11-01)
 
-No new features: the fixes and release gating from the review of 18.20–18.23. Plan: [CONSOLIDATION_18_24.md](CONSOLIDATION_18_24.md).
+No new features: the fixes and release gating from the review of 18.20–18.23. Plan: [CONSOLIDATION_18_24.md](archive/CONSOLIDATION_18_24.md).
 
 - **#83** **Release gating** — CI-gated tags, `--locked`, actionlint, a Windows check.
 - **#84** **`trusted_proxies`** — forwarding headers believed only from trusted peers.
