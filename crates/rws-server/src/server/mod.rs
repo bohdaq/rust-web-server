@@ -1337,7 +1337,7 @@ impl Server {
             .unwrap_or_default();
 
         if cert_path.is_empty() || key_path.is_empty() {
-            crate::entry_point::note("No TLS certificate configured — serving plain HTTP/1.1.");
+            println!("No TLS certificate configured — serving plain HTTP/1.1.");
             drop(pool);
             Server::run_plain(listener, app).await;
             return;
@@ -1359,7 +1359,7 @@ impl Server {
 
         #[cfg(unix)]
         if per_core::enabled() {
-            crate::entry_point::note("Listening for TLS connections (HTTP/1.1 + HTTP/2), per-core runtimes...");
+            println!("Listening for TLS connections (HTTP/1.1 + HTTP/2), per-core runtimes...");
             let (acceptor_tx, acceptor_rx) = tokio::sync::watch::channel(tls_acceptor);
             let accept_loop = move |listener: tokio::net::TcpListener, mut stop: tokio::sync::watch::Receiver<bool>| {
                 let app = app.clone();
@@ -1519,7 +1519,7 @@ impl Server {
         let count = per_core::runtime_count();
         let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
         let handles = per_core::spawn(addr, count, stop_rx, accept_loop);
-        crate::entry_point::note(&format!("Started {} per-core runtimes on {}.", handles.len(), addr));
+        println!("Started {} per-core runtimes on {}.", handles.len(), addr);
 
         loop {
             tokio::select! {

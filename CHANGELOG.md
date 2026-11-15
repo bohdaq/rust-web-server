@@ -28,7 +28,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   too.
 - **A quieter start.** rws prints its version, where the configuration
   came from, what it serves and the address, plus a warning when it
-  listens on all interfaces with directory listing on. `--verbose` (or
+  listens on all interfaces with directory listing on. The listener
+  lines scripts wait for stay ("serving plain HTTP/1.1", "Listening for
+  TLS connections", "Started N per-core runtimes"). `--verbose` (or
   `RWS_VERBOSE=true`) prints every setting as before. No
   `rws.config.toml` in the working directory is no longer reported as
   "Unable to read".
