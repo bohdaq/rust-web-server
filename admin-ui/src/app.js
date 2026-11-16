@@ -1,25 +1,41 @@
-import { LitElement, html, nothing } from "lit";
+import { LitElement, html, svg, nothing } from "lit";
 import { api, ApiError, followLogs, setToken, token } from "./api.js";
 import { formatBytes as bytes, formatDuration } from "@lit-material/format";
 import "@lit-material/truncate";
 import { icon } from "./icons.js";
 
+// Sections, grouped as the sidebar shows them. `key`: press G, then the key.
 const VIEWS = [
-  { id: "overview", label: "Overview", icon: "gauge" },
-  { id: "traffic", label: "Traffic", icon: "chart-line" },
-  { id: "upstreams", label: "Upstreams", icon: "tree-structure" },
-  { id: "certificates", label: "Certificates", icon: "certificate" },
-  { id: "controls", label: "Controls", icon: "sliders-horizontal" },
-  { id: "config", label: "Config", icon: "list-bullets" },
-  { id: "logs", label: "Logs", icon: "terminal-window" },
-  { id: "audit", label: "Audit", icon: "clipboard-text" },
+  { id: "overview", label: "Overview", icon: "gauge", key: "o", group: "Observe" },
+  { id: "traffic", label: "Traffic", icon: "chart-line", key: "t", group: "Observe" },
+  { id: "logs", label: "Logs", icon: "terminal-window", key: "l", group: "Observe" },
+  { id: "upstreams", label: "Upstreams", icon: "tree-structure", key: "u", group: "Route" },
+  { id: "certificates", label: "Certificates", icon: "certificate", key: "c", group: "Route" },
+  { id: "controls", label: "Controls", icon: "sliders-horizontal", key: "x", group: "Operate" },
+  { id: "config", label: "Config", icon: "list-bullets", key: "f", group: "Operate" },
+  { id: "audit", label: "Audit", icon: "clipboard-text", key: "a", group: "Operate" },
 ];
+const GROUPS = ["Observe", "Route", "Operate"];
 
 // The phone's bottom bar: these four, then "More" for the rest.
-const PRIMARY = ["overview", "traffic", "upstreams", "controls"];
-const NARROW = "(max-width: 599.98px)";
+const PRIMARY = ["overview", "traffic", "upstreams", "logs"];
 
-const SAMPLES = 60;
+// Requests-per-second samples kept for the Overview chart (one every 2 s).
+const SAMPLES = 150;
+// Access-log lines kept in the Logs page, and how many of them are drawn.
+const LOG_KEPT = 1000;
+const LOG_DRAWN = 300;
+
+const DOCS = [
+  ["Admin console guide", "https://rws8.tech/docs/deployment/admin/"],
+  ["Traffic analytics guide", "https://rws8.tech/docs/deployment/traffic/"],
+  ["Config file reference", "https://rws8.tech/docs/configuration/config-file/"],
+];
+
+// Stable across renders, so the palette doesn't see a new value each time.
+const PALETTE_HINTS = [{ keys: [], label: "Changes are written to Audit" }];
+
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform ?? "") ? "⌘" : "Ctrl";
 
 /** An IPv4 or IPv6 address (the block form checks before asking the server). */
 const looksLikeIp = (v) => /^(\d{1,3}\.){3}\d{1,3}$/.test(v) && v.split(".").every((n) => Number(n) <= 255) || (/^[0-9a-f:.]+$/i.test(v) && v.includes(":"));
@@ -40,61 +56,106 @@ const duration = (secs) => formatDuration(secs * 1000, { unitDisplay: "narrow" }
 const brandMark = html`<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#D2551E"/><g transform="translate(4 3.5)"><rect x="2" y="5" width="20" height="4" rx="1.5" fill="#16120F"/><rect x="2" y="10.5" width="20" height="4" rx="1.5" fill="#16120F"/><path d="M3.5 16H15L14 17L15 18L14 19L15 20H3.5A1.5 1.5 0 0 1 2 18.5V17.5A1.5 1.5 0 0 1 3.5 16Z" fill="#F2EBE3"/><rect x="16.5" y="16.5" width="2" height="2" fill="#F2EBE3"/><rect x="19.5" y="15" width="1.4" height="1.4" fill="#F2EBE3"/></g></svg>`;
 
 const status = (kind, label) => html`<lit-material-status status=${kind}>${label}</lit-material-status>`;
-const time = (ms) => new Date(ms).toLocaleTimeString();
-const logLevel = (line) => (/(?:"status":|\s)5\d\d\s/.test(` ${line} `) ? "error" : /(?:"status":|\s)4\d\d\s/.test(` ${line} `) ? "warning" : null);
+const time = (ms) => new Date(ms).toLocaleTimeString([], { hour12: false });
+const plural = (n, one, many) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
-/** A JSON access-log line as columns: time, status, method, path, duration, client. */
-function logLine(raw) {
-  let j;
-  try {
-    j = JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-  if (!j || typeof j !== "object" || j.status === undefined) return raw;
-  const when = j.time ?? j.timestamp ?? j.ts ?? "";
-  const clock = typeof when === "string" && when.includes("T") ? when.slice(11, 19) : String(when);
-  const path = j.path ?? j.uri ?? j.request_uri ?? "";
-  const ms = j.duration_ms ?? j.ms ?? (j.duration_us !== undefined ? Math.round(j.duration_us / 1000) : undefined);
-  const size = typeof j.bytes === "number" ? bytes(j.bytes) : "";
-  return [clock, String(j.status), (j.method ?? "").padEnd(6), `${j.host ? j.host : ""}${path}`, ms !== undefined ? `${ms} ms` : "", size, j.remote_addr ?? ""].filter((x) => x !== "").join("  ");
+/** A rate for people: one decimal under 10, whole numbers above. */
+const rate = (v) => (v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString());
+
+/** "just now", "40 s ago", "3 min ago", "2 h ago", then the date. */
+function ago(ms, now = Date.now()) {
+  const s = Math.max(0, Math.round((now - ms) / 1000));
+  if (s < 2) return "just now";
+  if (s < 60) return `${s} s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(ms).toLocaleDateString();
 }
 
-const BACKEND_COLUMNS = (self, upstream) => [
-  { key: "url", label: "Backend", mono: true },
-  { key: "weight", label: "Weight", numeric: true },
-  { key: "healthy", label: "Health", render: (b) => (b.healthy ? status("ok", "Healthy") : status("error", "Failing checks")) },
-  {
-    key: "breaker",
-    label: "Breaker",
-    render: (b) =>
-      b.breaker === null ? status("neutral", "None")
-      : b.breaker === "closed" ? status("ok", "Closed")
-      : b.breaker === "half_open" ? status("warning", "Probing")
-      : status("error", "Open"),
-  },
-  {
-    key: "rotation",
-    label: "In rotation",
-    render: (b) => html`<div class="row">
-      <lit-material-switch aria-label="${b.url} in rotation" .checked=${!b.drained} ?disabled=${self.busy === `drain:${b.url}`}
-        @change=${(e) => self.drain(upstream, b.url, !e.target.checked, e.target)}></lit-material-switch>
-      ${b.drained ? status("warning", "Drained") : nothing}
-    </div>`,
-  },
-];
+/** The next round number at or above `v`, for the chart's top line. */
+function niceMax(v) {
+  if (v <= 1) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  const n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+}
 
-const CERT_COLUMNS = [
-  { key: "name", label: "Name", mono: true },
-  { key: "expires", label: "Expires" },
-  {
-    key: "days_left",
-    label: "Days left",
-    numeric: true,
-    render: (x) => (x.days_left < 7 ? status("error", String(x.days_left)) : x.days_left < 21 ? status("warning", String(x.days_left)) : x.days_left),
-  },
-  { key: "source", label: "Source", render: (x) => (x.source === "on_demand" ? "On demand" : "Configured") },
-];
+/** An access-log line: `j` is the parsed JSON line, or null for other formats. */
+function parseLog(raw) {
+  try {
+    const j = JSON.parse(raw);
+    if (j && typeof j === "object" && j.status !== undefined) return { raw, j };
+  } catch {
+    // Not JSON (the combined format): shown as written.
+  }
+  return { raw, j: null };
+}
+
+/** The status class of a log line: "2", "4", "5"… or "" when unknown. */
+const statusClass = (r) => (r.j ? String(r.j.status)[0] : /"\s([1-5])\d\d\s/.exec(r.raw)?.[1] ?? "");
+const statusTone = (code) => (code >= 500 ? "bad" : code >= 400 ? "warn" : code >= 300 ? "info" : "ok");
+
+function clock(when) {
+  const at = new Date(when);
+  return Number.isNaN(at.getTime()) ? String(when ?? "") : time(at.getTime());
+}
+
+/** One request as a row: time, method, URL, status, size, client. */
+function requestRow(r) {
+  if (!r.j) return html`<div class="req" role="row"><span class="c-raw" role="cell" title=${r.raw}>${r.raw}</span></div>`;
+  const j = r.j;
+  const path = j.path ?? j.uri ?? "";
+  return html`<div class="req" role="row">
+    <span class="c-time" role="cell">${clock(j.time)}</span>
+    <span class="c-method" role="cell">${j.method ?? ""}</span>
+    <span class="c-url" role="cell" title="${j.host ?? ""}${path}">${j.host ? html`<span class="host">${j.host}</span>` : nothing}${path}</span>
+    <span class="c-status" role="cell" data-tone=${statusTone(Number(j.status))}>${j.status}</span>
+    <span class="c-size" role="cell">${typeof j.bytes === "number" ? bytes(j.bytes) : ""}</span>
+    <span class="c-from" role="cell">${j.remote_addr ?? ""}</span>
+  </div>`;
+}
+
+const requestHead = html`<div class="req req-head" role="row">
+  <span role="columnheader">Time</span><span role="columnheader">Method</span><span role="columnheader">URL</span>
+  <span role="columnheader">Status</span><span class="c-size" role="columnheader">Size</span><span class="c-from" role="columnheader">From</span>
+</div>`;
+
+/** An audit entry in words where the UI knows the change, else "PUT /path". */
+function changeText(e) {
+  const path = e.path.replace("/admin/api/v1", "");
+  let detail = null;
+  try {
+    detail = JSON.parse(e.detail);
+  } catch {
+    // No body, or not JSON.
+  }
+  if (/\/drain$/.test(path) && detail?.backend) return `${detail.drained ? "Drained" : "Put back"} ${detail.backend}`;
+  return `${e.method === "TOOL" ? "tool" : e.method} ${path}`;
+}
+
+/** "updated 4 s ago", ticking by itself so the app doesn't re-render each second. */
+class RwsAgo extends LitElement {
+  static properties = { at: { type: Number }, now: { state: true } };
+
+  createRenderRoot() {
+    return this;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.tick = setInterval(() => (this.now = Date.now()), 1000);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this.tick);
+  }
+
+  render() {
+    return this.at ? html`updated ${ago(this.at, Math.max(this.now ?? 0, Date.now()))}` : nothing;
+  }
+}
+customElements.define("rws-ago", RwsAgo);
 
 /** The whole app, rendered into the light DOM so the theme's classes apply. */
 export class RwsAdmin extends LitElement {
@@ -105,16 +166,21 @@ export class RwsAdmin extends LitElement {
     data: { state: true },
     error: { state: true },
     samples: { state: true },
+    recent: { state: true },
+    hover: { state: true },
     paused: { state: true },
+    logTick: { state: true },
+    logFilter: { state: true },
     filter: { state: true },
     busy: { state: true },
     me: { state: true },
     sso: { state: true },
-    narrow: { state: true },
     moreOpen: { state: true },
     conn: { state: true },
     notice: { state: true },
     ask: { state: true },
+    typed: { state: true },
+    query: { state: true },
     fieldError: { state: true },
   };
 
@@ -124,18 +190,25 @@ export class RwsAdmin extends LitElement {
     this.view = viewFromHash();
     this.data = {};
     this.samples = [];
+    this.recent = null;
+    this.hover = null;
     this.paused = false;
+    this.logTick = 0;
+    this.logAll = [];
+    this.logFrozen = [];
+    this.logFilter = { text: "", status: "all" };
     this.filter = "";
     this.busy = "";
     this.lastTotal = null;
     this.me = null;
     this.sso = false;
-    this.narrow = matchMedia(NARROW).matches;
     this.moreOpen = false;
     // The admin API's reachability: lost = the last poll failed; at = the last answer.
     this.conn = { lost: false, at: 0 };
     this.notice = null;
     this.ask = null;
+    this.typed = "";
+    this.query = "";
     this.fieldError = {};
   }
 
@@ -147,9 +220,8 @@ export class RwsAdmin extends LitElement {
     super.connectedCallback();
     this.onHash = () => this.show(viewFromHash(), { push: false });
     addEventListener("hashchange", this.onHash);
-    this.media = matchMedia(NARROW);
-    this.onMedia = () => (this.narrow = this.media.matches);
-    this.media.addEventListener("change", this.onMedia);
+    this.onKey = (e) => this.key(e);
+    document.addEventListener("keydown", this.onKey);
     // A token in this tab, or an OIDC sign-in cookie: try either.
     this.check({ quiet: !token() });
     api("/auth").then((m) => (this.sso = Boolean(m?.oidc))).catch(() => {});
@@ -158,7 +230,7 @@ export class RwsAdmin extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     removeEventListener("hashchange", this.onHash);
-    this.media?.removeEventListener("change", this.onMedia);
+    document.removeEventListener("keydown", this.onKey);
     this.stop();
     clearInterval(this.pulse);
   }
@@ -195,17 +267,23 @@ export class RwsAdmin extends LitElement {
 
   /**
    * Every 5 s on every page: /status (ready, maintenance) and /upstreams
-   * (healthy backends), so the header tells the truth wherever you are,
-   * and a lost connection shows with the time of the last answer.
+   * (healthy backends), and once a minute /certificates, so the header and
+   * "Needs attention" tell the truth wherever you are, and a lost
+   * connection shows with the time of the last answer.
    */
   heartbeat() {
     clearInterval(this.pulse);
+    let beats = 0;
     const beat = async () => {
       if (!this.authed) return;
       try {
         const [info, ups] = await Promise.all([api("/status"), api("/upstreams").catch(() => this.data.upstreams ?? [])]);
         this.data = { ...this.data, status: info, upstreams: ups };
         this.conn = { lost: false, at: Date.now() };
+        if (beats++ % 12 === 0) {
+          const certificates = await api("/certificates").catch(() => null);
+          if (certificates) this.data = { ...this.data, certificates };
+        }
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           this.logout();
@@ -216,6 +294,7 @@ export class RwsAdmin extends LitElement {
       }
     };
     this.pulse = setInterval(beat, 5000);
+    beat();
   }
 
   login(event) {
@@ -237,6 +316,9 @@ export class RwsAdmin extends LitElement {
     this.authed = false;
     this.data = {};
     this.me = null;
+    this.samples = [];
+    this.lastTotal = null;
+    this.recent = null;
     clearInterval(this.pulse);
     if (viaSso) location.assign("/admin/auth/logout");
   }
@@ -246,7 +328,7 @@ export class RwsAdmin extends LitElement {
     try {
       const result = await api(path, options);
       this.error = "";
-      if (this.conn.lost) this.conn = { lost: false, at: Date.now() };
+      this.conn = { lost: false, at: Date.now() };
       return result;
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
@@ -269,12 +351,24 @@ export class RwsAdmin extends LitElement {
     this.noticeTimer = setTimeout(() => (this.notice = null), undo ? 8000 : 4000);
   }
 
-  /** A confirmation dialog; resolves true when confirmed. */
-  confirm({ title, body, action, danger = true }) {
+  /**
+   * A confirmation dialog; resolves true when confirmed. `effects` lists
+   * what will happen ([tone, text] pairs); `type` is a word the person has
+   * to type before the action button works.
+   */
+  confirm({ title, body, action, tone = "danger", effects = null, type = "" }) {
     return new Promise((resolve) => {
-      this.ask = { title, body, action, danger, resolve };
-      this.updateComplete.then(() => this.querySelector("#confirm")?.showModal());
+      this.typed = "";
+      this.ask = { title, body, action, tone, effects, type, resolve };
+      this.updateComplete.then(() => {
+        this.querySelector("#confirm")?.showModal();
+        (this.querySelector("#confirm-type") ?? this.querySelector("#confirm .cancel"))?.focus();
+      });
     });
+  }
+
+  confirmReady() {
+    return !this.ask?.type || this.typed.trim().toLowerCase() === this.ask.type;
   }
 
   answer(yes) {
@@ -284,11 +378,100 @@ export class RwsAdmin extends LitElement {
     ask?.resolve(yes);
   }
 
+  // ── keyboard and the command palette ──────────────────────────────────
+  /** Ctrl/⌘ K or "/" opens the palette; G then a letter goes to a section. */
+  key(e) {
+    if (!this.authed) return;
+    const palette = this.querySelector("lit-material-command-palette");
+    const k = (e.key ?? "").toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === "k") {
+      e.preventDefault();
+      if (palette?.open) palette.hide();
+      else this.openPalette();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (palette?.open || this.ask || this.moreOpen && k !== "escape") return;
+    if (e.composedPath().some((n) => n instanceof Element && n.matches("input, textarea, select, [contenteditable]"))) return;
+    if (k === "escape" && this.moreOpen) {
+      this.moreOpen = false;
+      return;
+    }
+    if (this.chord && Date.now() - this.chord < 1000) {
+      this.chord = 0;
+      const view = VIEWS.find((v) => v.key === k);
+      if (view) {
+        e.preventDefault();
+        this.show(view.id);
+      }
+      return;
+    }
+    if (k === "g") this.chord = Date.now();
+    else if (k === "/") {
+      e.preventDefault();
+      this.openPalette();
+    }
+  }
+
+  openPalette() {
+    if (this.ask) return;
+    this.query = "";
+    this.moreOpen = false;
+    // What the palette's actions are built from, when no page loaded it yet.
+    for (const [key, path] of [["caches", "/caches"], ["config", "/config"], ["certificates", "/certificates"], ["blocklist", "/blocklist"]]) {
+      if (!this.data[key]) api(path).then((value) => (this.data = { ...this.data, [key]: value })).catch(() => {});
+    }
+    this.querySelector("lit-material-command-palette")?.show();
+  }
+
+  /** Everything the palette can do right now: actions, sections, settings, docs. */
+  paletteItems() {
+    const d = this.data;
+    const items = [];
+    const add = (section, label, run, more = {}) => items.push({ id: `${section}:${label}:${more.hint ?? ""}`, section, label, run, ...more });
+    const asks = { hint: "asks you to confirm" };
+    const query = this.query.trim();
+
+    if (looksLikeIp(query)) {
+      if ((d.blocklist ?? []).includes(query)) add("Actions", `Unblock ${query}`, () => this.unblock(query));
+      else add("Actions", `Block ${query}`, () => this.blockIp(query), { hint: "refuses every request from it" });
+    }
+    add("Actions", "Reload configuration", () => this.reload(), { hint: "re-reads rws.config.toml", keywords: ["config", "restart", "apply"] });
+    if (d.status?.maintenance) add("Actions", "Turn off maintenance mode", () => this.setMaintenance(false), { keywords: ["503"] });
+    else add("Actions", "Turn on maintenance mode", () => this.setMaintenance(true), { ...asks, keywords: ["503", "down"] });
+    if (d.certificates?.acme?.running) add("Actions", "Renew certificates now", () => this.renew(), { keywords: ["acme", "tls", "https"] });
+    for (const u of d.upstreams ?? []) {
+      for (const b of u.backends) {
+        if (b.drained) add("Actions", `Put back ${b.url}`, () => this.drain(u.name, b.url, false), { hint: u.name, keywords: ["undrain", "rotation", u.name] });
+        else add("Actions", `Drain ${b.url}`, () => this.drain(u.name, b.url, true), { hint: u.name, keywords: ["rotation", "deploy", u.name] });
+      }
+    }
+    for (const c of d.caches ?? []) {
+      if (c.entries) add("Actions", `Purge cache ${c.name}`, () => this.purgeAll(c.name, c.entries), { ...asks, keywords: ["clear", "empty"] });
+    }
+    add("Actions", "Sign out", () => this.logout(), { keywords: ["log out", "logout"] });
+
+    for (const v of VIEWS) add("Go to", v.label, () => this.show(v.id), { shortcut: ["G", v.key.toUpperCase()] });
+
+    if (query.length >= 2 && d.config) {
+      const needle = query.toLowerCase();
+      const hits = Object.entries(d.config).filter(([k, v]) => k.toLowerCase().includes(needle) || v.toLowerCase().includes(needle)).slice(0, 6);
+      for (const [setting, value] of hits) {
+        add("Settings", setting, () => { this.filter = setting; this.show("config"); },
+          { hint: value === "" ? "empty" : value.length > 36 ? `${value.slice(0, 35)}…` : value, keywords: [value] });
+      }
+    }
+
+    for (const [label, url] of DOCS) add("Docs", label, () => window.open(url, "_blank", "noopener"), { hint: "opens in a new tab", keywords: ["help", "documentation"] });
+    return items;
+  }
+
   // ── views and their polling ───────────────────────────────────────────
   show(view, { push = true } = {}) {
     this.stop();
     this.view = view;
     this.moreOpen = false;
+    this.hover = null;
     // A new history entry per section, so Back returns to the last one.
     if (location.hash !== `#/${view}`) {
       if (push && location.hash) history.pushState(null, "", `#/${view}`);
@@ -300,7 +483,7 @@ export class RwsAdmin extends LitElement {
     const every = { overview: 2000, upstreams: 3000, certificates: 30000, controls: 5000, audit: 10000 }[view];
     this.load(view);
     if (every) this.timer = setInterval(() => this.load(view), every);
-    if (view === "logs") this.updateComplete.then(() => this.follow());
+    if (view === "logs") this.follow();
     queueMicrotask(() => this.querySelector("main")?.focus({ preventScroll: true }));
   }
 
@@ -309,6 +492,8 @@ export class RwsAdmin extends LitElement {
     this.timer = undefined;
     this.abort?.abort();
     this.abort = undefined;
+    clearTimeout(this.logTimer);
+    this.logTimer = undefined;
   }
 
   async load(view) {
@@ -320,19 +505,25 @@ export class RwsAdmin extends LitElement {
         // Shown through this.error.
       }
     };
+    // Extras a page is fine without (a role may not read them).
+    const quiet = (path) => api(path).catch(() => null);
     if (view === "overview") {
-      await Promise.all([get("status", "/status"), get("metrics", "/metrics")]);
-      const total = this.data.metrics?.requests_total;
-      if (typeof total === "number") {
+      const [, , lines] = await Promise.all([get("status", "/status"), get("metrics", "/metrics"), quiet("/logs?n=8")]);
+      if (Array.isArray(lines)) this.recent = lines.map(parseLog).reverse();
+      const m = this.data.metrics;
+      if (typeof m?.requests_total === "number") {
         const now = Date.now();
-        if (this.lastTotal) {
-          const rate = Math.max(0, (total - this.lastTotal.total) / ((now - this.lastTotal.at) / 1000));
-          this.samples = [...this.samples, { x: now, y: Math.round(rate * 100) / 100 }].slice(-SAMPLES);
+        const secs = this.lastTotal ? (now - this.lastTotal.at) / 1000 : 0;
+        if (secs > 0.5) {
+          const perSecond = Math.max(0, (m.requests_total - this.lastTotal.total) / secs);
+          const errors = Math.max(0, (m.errors_total ?? 0) - this.lastTotal.errors);
+          this.samples = [...this.samples, { x: now, y: Math.round(perSecond * 100) / 100, e: errors }].slice(-SAMPLES);
         }
-        this.lastTotal = { total, at: now };
+        if (!this.lastTotal || secs > 0.5) this.lastTotal = { total: m.requests_total, errors: m.errors_total ?? 0, at: now };
       }
     } else if (view === "upstreams") {
-      await get("upstreams", "/upstreams");
+      const [, audit] = await Promise.all([get("upstreams", "/upstreams"), quiet("/audit?n=200")]);
+      if (Array.isArray(audit)) this.data = { ...this.data, audit };
     } else if (view === "certificates") {
       await get("certificates", "/certificates");
     } else if (view === "controls") {
@@ -344,44 +535,61 @@ export class RwsAdmin extends LitElement {
     }
   }
 
+  /** The Logs page: the last 200 lines, then every new one as it's written. */
   async follow() {
-    this.abort = new AbortController();
-    const log = this.querySelector("lit-material-log-viewer");
-    if (!log) return;
-    log.highlight = logLevel;
+    const abort = (this.abort = new AbortController());
     this.logAll = [];
+    this.logFrozen = [];
+    this.paused = false;
     const keep = (lines) => {
-      const list = (Array.isArray(lines) ? lines : [lines]).map(logLine);
-      this.logAll.push(...list);
-      if (this.logAll.length > 1000) this.logAll.splice(0, this.logAll.length - 1000);
-      return list.filter((l) => this.logShown(l));
+      if (abort.signal.aborted) return;
+      for (const raw of Array.isArray(lines) ? lines : [lines]) this.logAll.push(parseLog(raw));
+      if (this.logAll.length > LOG_KEPT) this.logAll.splice(0, this.logAll.length - LOG_KEPT);
+      // Draw at most four times a second, however fast lines arrive.
+      if (!this.paused && !this.logTimer) {
+        this.logTimer = setTimeout(() => {
+          this.logTimer = undefined;
+          this.logTick++;
+        }, 250);
+      }
     };
     try {
-      log.lines = keep(await this.call("/logs?n=200"));
-      await followLogs((line) => {
-        const shown = keep(line);
-        if (shown.length) log.appendLines(shown);
-      }, this.abort.signal);
+      keep(await this.call("/logs?n=200"));
+      this.logTick++;
+      await followLogs(keep, abort.signal);
     } catch (e) {
-      if (e.name !== "AbortError" && !this.error) this.error = `The live log stopped: ${e.message}`;
+      if (e.name !== "AbortError" && !abort.signal.aborted && !this.error) this.error = `The live log stopped: ${e.message}`;
     }
   }
 
-  /** Whether a formatted log line passes the filter box and status chips. */
-  logShown(line) {
-    const f = this.logFilter ?? { text: "", status: "all" };
-    if (f.status !== "all") {
-      const code = /(?:^|\s)([1-5])\d\d(?:\s|$)/.exec(line)?.[1];
-      if (code !== f.status[0]) return false;
-    }
-    return !f.text || line.toLowerCase().includes(f.text.toLowerCase());
+  /** Whether a log line passes the filter box and status chips. */
+  logShown(r) {
+    const f = this.logFilter;
+    if (f.status !== "all" && statusClass(r) !== f.status[0]) return false;
+    return !f.text || r.raw.toLowerCase().includes(f.text.toLowerCase());
   }
 
   setLogFilter(change) {
-    this.logFilter = { text: "", status: "all", ...this.logFilter, ...change };
-    const log = this.querySelector("lit-material-log-viewer");
-    if (log) log.lines = (this.logAll ?? []).filter((l) => this.logShown(l));
-    this.requestUpdate();
+    this.logFilter = { ...this.logFilter, ...change };
+  }
+
+  setPaused(paused) {
+    if (paused) this.logFrozen = [...this.logAll];
+    this.paused = paused;
+  }
+
+  /** Saves the kept lines (those passing the filter) as a text file. */
+  downloadLog() {
+    const lines = this.logAll.filter((r) => this.logShown(r)).map((r) => r.raw);
+    const url = URL.createObjectURL(new Blob([`${lines.join("\n")}\n`], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `rws-access-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.log`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    this.toast(`${plural(lines.length, "line", "lines")} saved`);
   }
 
   // ── actions ───────────────────────────────────────────────────────────
@@ -405,7 +613,7 @@ export class RwsAdmin extends LitElement {
     }
   }
 
-  async drain(upstream, backend, drained, control) {
+  async drain(upstream, backend, drained) {
     const backends = (this.data.upstreams ?? []).find((u) => u.name === upstream)?.backends ?? [];
     const serving = backends.filter((b) => !b.drained && b.healthy && b.url !== backend);
     if (drained && serving.length === 0) {
@@ -414,35 +622,53 @@ export class RwsAdmin extends LitElement {
         body: `It is the last healthy backend of ${upstream}: every request to ${upstream} will get 503 until one is back.`,
         action: "Drain anyway",
       });
-      if (!ok) {
-        if (control) control.checked = true;
-        return false;
-      }
+      if (!ok) return false;
     }
-    return this.act(`drain:${backend}`, `/upstreams/${encodeURIComponent(upstream)}/drain`, { method: "PUT", body: { backend, drained } },
+    const done = await this.act(`drain:${backend}`, `/upstreams/${encodeURIComponent(upstream)}/drain`, { method: "PUT", body: { backend, drained } },
       () => (drained ? `${backend} drained: it gets no new requests` : `${backend} is back in rotation`),
       () => this.drain(upstream, backend, !drained));
+    if (done) {
+      // Every page shows backends (the header, Needs attention): don't wait for the next poll.
+      this.data = { ...this.data, upstreams: (this.data.upstreams ?? []).map((u) => (u.name !== upstream ? u : { ...u, backends: u.backends.map((b) => (b.url === backend ? { ...b, drained } : b)) })) };
+    }
+    return done;
   }
 
-  async setMaintenance(active, control) {
+  async setMaintenance(active) {
     if (active) {
       const ok = await this.confirm({
         title: "Turn on maintenance mode?",
-        body: "Every visitor gets 503 Service Unavailable (browsers see a maintenance page) until you turn it off. Health checks keep passing.",
-        action: "Turn on",
+        body: "Visitors stop reaching your sites until you turn it off.",
+        effects: [
+          ["warn", "Every visitor gets 503 Service Unavailable; browsers see a maintenance page."],
+          ["ok", "Health checks keep passing."],
+          ["ok", "This console and the admin API keep working."],
+          ["info", "It stays on until someone turns it off or the server restarts."],
+        ],
+        type: "maintenance",
+        action: "Turn on maintenance",
+        tone: "warn",
       });
-      if (!ok) {
-        if (control) control.checked = false;
-        return;
-      }
+      if (!ok) return;
     }
-    await this.act("maintenance", "/maintenance", { method: "PUT", body: { active } }, (r) => (r.active ? "Maintenance on: visitors get 503" : "Maintenance off"));
-    this.data = { ...this.data, status: { ...this.data.status, maintenance: active } };
+    const done = await this.act("maintenance", "/maintenance", { method: "PUT", body: { active } }, (r) => (r.active ? "Maintenance on: visitors get 503" : "Maintenance off"));
+    if (done) this.data = { ...this.data, status: { ...this.data.status, maintenance: active }, maintenance: { ...this.data.maintenance, active } };
   }
 
   reload() {
     return this.act("reload", "/reload", { method: "POST" }, (r) =>
       r.applied ? "Configuration reloaded" : `Reload kept the running configuration: ${r.errors.join("; ")}`);
+  }
+
+  renew() {
+    return this.act("renew", "/certificates/renew", { method: "POST" }, () => "Renewal requested: the new certificate is swapped in when it's issued");
+  }
+
+  async blockIp(ip) {
+    const ok = await this.act("block", "/blocklist", { method: "POST", body: { ip } }, (r) => `${r.blocked} blocked`,
+      () => this.act(`unblock:${ip}`, `/blocklist/${encodeURIComponent(ip)}`, { method: "DELETE" }, () => `${ip} unblocked`));
+    if (ok && this.data.blocklist && !this.data.blocklist.includes(ip)) this.data = { ...this.data, blocklist: [...this.data.blocklist, ip] };
+    return ok;
   }
 
   block(event) {
@@ -458,10 +684,16 @@ export class RwsAdmin extends LitElement {
       return;
     }
     this.fieldError = { ...this.fieldError, block: "" };
-    this.act("block", "/blocklist", { method: "POST", body: { ip } }, (r) => `${r.blocked} blocked`,
-      () => this.act(`unblock:${ip}`, `/blocklist/${encodeURIComponent(ip)}`, { method: "DELETE" }, () => `${ip} unblocked`)).then((ok) => {
+    this.blockIp(ip).then((ok) => {
       if (ok && field) field.value = "";
     });
+  }
+
+  async unblock(ip) {
+    const ok = await this.act(`unblock:${ip}`, `/blocklist/${encodeURIComponent(ip)}`, { method: "DELETE" }, () => `${ip} unblocked`,
+      () => this.act("block", "/blocklist", { method: "POST", body: { ip } }, () => `${ip} blocked again`));
+    if (ok && this.data.blocklist) this.data = { ...this.data, blocklist: this.data.blocklist.filter((x) => x !== ip) };
+    return ok;
   }
 
   async loadAuthz() {
@@ -478,8 +710,8 @@ export class RwsAdmin extends LitElement {
     const field = this.querySelector("#authz-tuple");
     const tuple = (field?.value ?? "").trim();
     if (!tuple) return;
-    this.act("authz-add", "/authz/tuples", { method: "POST", body: { tuple } }, (r) => (r.written ? `${r.tuple} added` : `${r.tuple} was already there`)).then(() => {
-      if (!this.error && field) field.value = "";
+    this.act("authz-add", "/authz/tuples", { method: "POST", body: { tuple } }, (r) => (r.written ? `${r.tuple} added` : `${r.tuple} was already there`)).then((ok) => {
+      if (ok && field) field.value = "";
     });
   }
 
@@ -496,11 +728,6 @@ export class RwsAdmin extends LitElement {
     }
   }
 
-  unblock(ip) {
-    return this.act(`unblock:${ip}`, `/blocklist/${encodeURIComponent(ip)}`, { method: "DELETE" }, () => `${ip} unblocked`,
-      () => this.act("block", "/blocklist", { method: "POST", body: { ip } }, () => `${ip} blocked again`));
-  }
-
   /** Purge one path (or a prefix ending in *) from cache `name`. */
   async purgePath(event, name) {
     event.preventDefault();
@@ -513,7 +740,7 @@ export class RwsAdmin extends LitElement {
     this.fieldError = { ...this.fieldError, [`purge:${name}`]: "" };
     const query = path.endsWith("*") ? `?prefix=${encodeURIComponent(path.slice(0, -1))}` : `?path=${encodeURIComponent(path)}`;
     const ok = await this.act(`purge:${name}`, `/caches/${encodeURIComponent(name)}${query}`, { method: "DELETE" },
-      (r) => `${r.purged} ${r.purged === 1 ? "entry" : "entries"} purged from ${r.name}`);
+      (r) => `${plural(r.purged, "entry", "entries")} purged from ${r.name}`);
     if (ok && field) field.value = "";
   }
 
@@ -526,10 +753,34 @@ export class RwsAdmin extends LitElement {
     });
     if (!ok) return;
     await this.act(`purge:${name}`, `/caches/${encodeURIComponent(name)}`, { method: "DELETE" },
-      (r) => `${r.purged} ${r.purged === 1 ? "entry" : "entries"} purged from ${r.name}`);
+      (r) => `${plural(r.purged, "entry", "entries")} purged from ${r.name}`);
   }
 
-  // ── rendering ─────────────────────────────────────────────────────────
+  /** Empty every cache, after asking. */
+  async purgeEvery() {
+    const caches = (this.data.caches ?? []).filter((c) => c.entries);
+    const total = caches.reduce((n, c) => n + c.entries, 0);
+    const ok = await this.confirm({
+      title: "Purge every cache?",
+      body: `${plural(total, "cached response", "cached responses")} in ${plural(caches.length, "cache", "caches")} are dropped; the next requests go to the backends until the caches fill again.`,
+      action: "Purge every cache",
+    });
+    if (!ok) return;
+    this.busy = "purge-every";
+    let purged = 0;
+    try {
+      for (const c of caches) purged += (await this.call(`/caches/${encodeURIComponent(c.name)}`, { method: "DELETE" })).purged;
+      this.toast(`${plural(purged, "entry", "entries")} purged from ${plural(caches.length, "cache", "caches")}`);
+    } catch {
+      this.toast(`Didn't work: ${this.error || "the server didn't answer"}`);
+      this.error = "";
+    } finally {
+      this.busy = "";
+      this.load(this.view);
+    }
+  }
+
+  // ── what the page says about the server ───────────────────────────────
   /** Backends of every upstream: [healthy and in rotation, all]. */
   backendHealth() {
     const all = (this.data.upstreams ?? []).flatMap((u) => u.backends);
@@ -537,67 +788,133 @@ export class RwsAdmin extends LitElement {
   }
 
   /** The one header chip: disconnected, maintenance, degraded, not ready or ready. */
-  renderState() {
+  serverState() {
     const info = this.data.status;
-    if (this.conn.lost) {
-      const at = this.conn.at ? ` · last update ${time(this.conn.at)}` : "";
-      return html`<span class="state" title="The admin API doesn't answer; retrying every 5 seconds">${status("error", `Disconnected${at}`)}</span>`;
-    }
-    if (!info) return nothing;
-    if (info.maintenance) return html`<span class="state">${status("warning", "Maintenance")}</span>`;
+    if (this.conn.lost) return { tone: "bad", label: "Disconnected", detail: this.conn.at ? `last answer ${time(this.conn.at)}` : "retrying", view: "overview", title: "The admin API doesn't answer; retrying every 5 seconds" };
+    if (!info) return null;
+    if (info.maintenance) return { tone: "warn", label: "Maintenance", detail: "visitors get 503", view: "controls" };
     const [up, all] = this.backendHealth();
-    if (all > 0 && up < all) return html`<span class="state" title="Healthy backends in rotation">${status(up === 0 ? "error" : "warning", `Degraded: ${up} of ${all} backends`)}</span>`;
-    return html`<span class="state">${info.ready ? status("ok", "Ready") : status("error", "Not ready")}</span>`;
+    if (all > 0 && up < all) return { tone: up === 0 ? "bad" : "warn", label: "Degraded", detail: `${up} of ${all} backends serving`, view: "upstreams" };
+    if (!info.ready) return { tone: "bad", label: "Not ready", detail: "readiness checks fail", view: "overview" };
+    return { tone: "ok", label: "Ready", detail: all ? `${all} of ${all} backends serving` : `up ${duration(info.uptime_secs)}`, view: "overview" };
   }
 
-  renderNav() {
-    if (!this.narrow) {
-      const destinations = VIEWS.map((v) => ({ label: v.label, icon: icon(v.icon) }));
-      return html`<lit-material-adaptive-navigation class="nav" label="Sections" .destinations=${destinations}
-        .selected=${VIEWS.findIndex((v) => v.id === this.view)}
-        @change=${(e) => this.show(VIEWS[e.target.selected].id)}></lit-material-adaptive-navigation>`;
+  /** Things a person should look at, worst first; each may carry one action. */
+  attention() {
+    const d = this.data;
+    const list = [];
+    if (d.status && !d.status.ready && !d.status.maintenance) {
+      list.push({ tone: "bad", title: "The server reports not ready", detail: "Load balancers that probe readiness stop sending it traffic." });
     }
-    // A phone: four sections and More (eight labels didn't fit: "Con…" twice).
-    const primary = PRIMARY.map((id) => VIEWS.find((v) => v.id === id));
-    const destinations = [...primary.map((v) => ({ label: v.label, icon: icon(v.icon) })), { label: "More", icon: icon("dots-three") }];
-    const at = PRIMARY.indexOf(this.view);
-    return html`<lit-material-adaptive-navigation class="nav" label="Sections" .destinations=${destinations}
-        .selected=${at >= 0 ? at : 4}
-        @change=${(e) => (e.target.selected === 4 ? (this.moreOpen = true) : this.show(PRIMARY[e.target.selected]))}></lit-material-adaptive-navigation>
+    for (const u of d.upstreams ?? []) {
+      for (const b of u.backends) {
+        const open = { label: "Open Upstreams", run: () => this.show("upstreams") };
+        if (!b.healthy) list.push({ tone: "bad", title: `${b.url} is failing health checks`, detail: `Upstream ${u.name}: it gets no requests until the checks pass.`, action: open });
+        else if (b.breaker === "open") list.push({ tone: "bad", title: `${b.url}: circuit breaker open`, detail: `Upstream ${u.name}: too many failures, requests are held back until a probe succeeds.`, action: open });
+        else if (b.breaker === "half_open") list.push({ tone: "warn", title: `${b.url}: circuit breaker probing`, detail: `Upstream ${u.name}: a few requests are let through to see if it recovered.`, action: open });
+        if (b.drained) {
+          list.push({
+            tone: "warn", title: `${b.url} is drained`, detail: `Upstream ${u.name}: out of rotation until you put it back.`,
+            action: { label: "Put back", busy: `drain:${b.url}`, run: () => this.drain(u.name, b.url, false) },
+          });
+        }
+      }
+    }
+    const acme = d.certificates?.acme?.running;
+    for (const c of d.certificates?.certificates ?? []) {
+      if (c.days_left >= 21) continue;
+      list.push({
+        tone: c.days_left < 7 ? "bad" : "warn",
+        title: c.days_left < 0 ? `The certificate for ${c.name} has expired` : `The certificate for ${c.name} expires in ${plural(c.days_left, "day", "days")}`,
+        detail: acme ? "ACME renews it by itself; you can also renew now." : "Replace the certificate files, then reload the configuration.",
+        action: acme ? { label: "Renew now", busy: "renew", run: () => this.renew() } : { label: "Open Certificates", run: () => this.show("certificates") },
+      });
+    }
+    for (const disk of d.status?.disk ?? []) {
+      if (disk.low) list.push({ tone: "warn", title: `Disk almost full: ${disk.dir}`, detail: `${bytes(disk.free_bytes)} free of ${bytes(disk.total_bytes)}. rws has stopped writing the access log and disk cache there.` });
+    }
+    const rank = { bad: 0, warn: 1 };
+    return list.sort((a, b) => rank[a.tone] - rank[b.tone]);
+  }
+
+  // ── rendering: the shell ──────────────────────────────────────────────
+  renderSide() {
+    const info = this.data.status;
+    return html`<aside class="side">
+      <a class="brand" href="#/overview" aria-label="rws admin, Overview">${brandMark}<span>rws</span>${info ? html`<span class="ver">${info.version}</span>` : nothing}</a>
+      <nav aria-label="Sections">
+        ${GROUPS.map((group) => html`<div class="nav-group" role="group" aria-label=${group}>
+          <div class="nav-label" aria-hidden="true">${group}</div>
+          ${VIEWS.filter((v) => v.group === group).map((v) => html`<a class="nav-link" href="#/${v.id}" aria-current=${this.view === v.id ? "page" : nothing} aria-keyshortcuts="G ${v.key.toUpperCase()}">
+            <span class="icon">${icon(v.icon)}</span>${v.label}<kbd aria-hidden="true">G ${v.key.toUpperCase()}</kbd></a>`)}
+        </div>`)}
+      </nav>
+      ${this.me ? html`<div class="side-foot">
+        <span class="who" title="Signed in ${this.me.via === "oidc" ? "with single sign-on" : "with a token"}">${this.me.user} · ${this.me.role}</span>
+        <button class="btn btn-quiet" @click=${() => this.logout()}><span class="icon">${icon("sign-out")}</span>Sign out</button>
+      </div>` : nothing}
+    </aside>`;
+  }
+
+  renderTop() {
+    const state = this.serverState();
+    const label = VIEWS.find((v) => v.id === this.view)?.label ?? "Overview";
+    return html`<header class="top">
+      <span class="top-brand">${brandMark}<span class="top-title">${label}</span></span>
+      ${state ? html`<button class="state" data-tone=${state.tone} title=${state.title ?? "The server's state. Click to see why."} @click=${() => this.show(state.view)}>
+        <span class="dot" aria-hidden="true"></span><span>${state.label}</span>${state.detail ? html`<span class="detail">${state.detail}</span>` : nothing}</button>` : nothing}
+      <button class="cmd" aria-label="Search or run a command" aria-keyshortcuts="Control+K Meta+K" @click=${() => this.openPalette()}>
+        <span class="icon">${icon("magnifying-glass")}</span><span class="cmd-text">Search or run a command</span><kbd aria-hidden="true">${MOD} K</kbd></button>
+      <rws-ago class="updated" .at=${this.conn.at}></rws-ago>
+    </header>`;
+  }
+
+  renderTabbar() {
+    const more = !PRIMARY.includes(this.view);
+    return html`<nav class="tabbar" aria-label="Sections">
+        ${PRIMARY.map((id) => VIEWS.find((v) => v.id === id)).map((v) => html`<a href="#/${v.id}" aria-current=${this.view === v.id ? "page" : nothing}><span class="icon">${icon(v.icon)}</span>${v.label}</a>`)}
+        <button class=${more ? "is-current" : ""} aria-expanded=${this.moreOpen} aria-controls="more-sheet" @click=${() => this.toggleMore()}><span class="icon">${icon("dots-three")}</span>More</button>
+      </nav>
       ${this.moreOpen
         ? html`<div class="more-scrim" @click=${() => (this.moreOpen = false)}></div>
-          <nav class="more-sheet" aria-label="More sections" @keydown=${(e) => e.key === "Escape" && (this.moreOpen = false)}>
-            ${VIEWS.filter((v) => !PRIMARY.includes(v.id)).map((v) => html`<a href="#/${v.id}" aria-current=${this.view === v.id ? "page" : "false"}
-              @click=${(e) => { e.preventDefault(); this.show(v.id); }}><span class="icon">${icon(v.icon)}</span>${v.label}</a>`)}
+          <nav id="more-sheet" class="more-sheet" aria-label="More sections">
+            ${VIEWS.filter((v) => !PRIMARY.includes(v.id)).map((v) => html`<a href="#/${v.id}" aria-current=${this.view === v.id ? "page" : nothing}
+              @click=${() => (this.moreOpen = false)}><span class="icon">${icon(v.icon)}</span>${v.label}</a>`)}
+            ${this.me ? html`<div class="more-foot"><span class="who">${this.me.user} · ${this.me.role}</span>
+              <button class="btn btn-quiet" @click=${() => this.logout()}><span class="icon">${icon("sign-out")}</span>Sign out</button></div>` : nothing}
           </nav>`
         : nothing}`;
+  }
+
+  toggleMore() {
+    this.moreOpen = !this.moreOpen;
+    if (this.moreOpen) this.updateComplete.then(() => this.querySelector(".more-sheet a")?.focus());
   }
 
   render() {
     if (!this.authed) return this.renderLogin();
     const info = this.data.status;
+    const ask = this.ask;
     return html`
       <div class="shell">
-        <header class="top">
-          <span class="brand">${brandMark}<span class="brand-text">rws admin</span></span>
-          ${this.renderState()}
-          <span class="spacer"></span>
-          ${info ? html`<span class="meta">${info.version} · ${info.listeners?.main?.address ?? ""}</span>` : nothing}
-          ${this.me ? html`<span class="meta" title="Signed in ${this.me.via === "oidc" ? "with single sign-on" : "with a token"}"><span class="icon">${icon("user-circle")}</span> ${this.me.user} · ${this.me.role}</span>` : nothing}
-          <lit-material-button variant="text" @click=${() => this.logout()}><span slot="icon" class="icon">${icon("sign-out")}</span>Sign out</lit-material-button>
-        </header>
-        ${this.renderNav()}
-        <main id="main" tabindex="-1">
-          ${info?.maintenance
-            ? html`<lit-material-alert variant="warning"><span slot="title">Maintenance mode is on</span>
-                Visitors get 503 Service Unavailable.
-                <lit-material-button variant="text" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(false)}>Turn off</lit-material-button></lit-material-alert>`
-            : nothing}
-          ${this.error ? html`<lit-material-alert variant="error"><span slot="title">Couldn't load this page</span>${this.error}
-              <lit-material-button variant="text" @click=${() => this.load(this.view)}>Retry</lit-material-button></lit-material-alert>` : nothing}
-          ${this.renderView()}
-        </main>
+        ${this.renderSide()}
+        <div class="body">
+          ${this.renderTop()}
+          <main id="main" tabindex="-1">
+            ${info?.maintenance
+              ? html`<div class="banner" role="status">
+                  <span class="banner-title">Maintenance mode is on</span>
+                  <span class="banner-text">Visitors get 503 Service Unavailable until you turn it off.</span>
+                  <button class="btn btn-warn-fill" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(false)}>Turn off</button>
+                </div>`
+              : nothing}
+            ${this.error ? html`<lit-material-alert variant="error"><span slot="title">Couldn't load this page</span>${this.error}
+                <lit-material-button variant="text" @click=${() => this.load(this.view)}>Retry</lit-material-button></lit-material-alert>` : nothing}
+            ${this.renderView()}
+          </main>
+        </div>
       </div>
+      ${this.renderTabbar()}
       <div class="toast" role="status" aria-live="polite">
         ${this.notice
           ? html`<div class="toast-body"><span>${this.notice.message}</span>
@@ -605,14 +922,27 @@ export class RwsAdmin extends LitElement {
               <button class="toast-close" aria-label="Dismiss" @click=${() => (this.notice = null)}>✕</button></div>`
           : nothing}
       </div>
-      <dialog id="confirm" class="confirm" aria-labelledby="confirm-title" @cancel=${(e) => { e.preventDefault(); this.answer(false); }}>
-        ${this.ask
-          ? html`<h2 id="confirm-title">${this.ask.title}</h2>
-            <p>${this.ask.body}</p>
+      <lit-material-command-palette label="Search or run a command" placeholder="Search or run a command" .items=${this.paletteItems()}
+        .hints=${PALETTE_HINTS}
+        @input=${(e) => (this.query = e.composedPath()[0]?.value ?? "")}
+        @close=${() => (this.query = "")}
+        @select=${(e) => { this.query = ""; e.detail.item.run?.(); }}></lit-material-command-palette>
+      <dialog id="confirm" class="confirm" role="alertdialog" data-tone=${ask?.tone ?? "danger"} aria-labelledby="confirm-title" aria-describedby="confirm-body"
+        @cancel=${(e) => { e.preventDefault(); this.answer(false); }}>
+        ${ask
+          ? html`<form novalidate @submit=${(e) => { e.preventDefault(); if (this.confirmReady()) this.answer(true); }}>
+            <h2 id="confirm-title">${ask.title}</h2>
+            <p id="confirm-body">${ask.body}</p>
+            ${ask.effects ? html`<ul class="effects">${ask.effects.map(([tone, text]) => html`<li><span class="sq" data-tone=${tone}></span><span>${text}</span></li>`)}</ul>` : nothing}
+            ${ask.type
+              ? html`<lit-material-text-field id="confirm-type" variant="outlined" label="Type ${ask.type} to confirm" autocomplete="off" autocapitalize="none" spellcheck="false"
+                  @input=${(e) => (this.typed = e.target.value ?? "")}></lit-material-text-field>`
+              : nothing}
             <div class="confirm-actions">
-              <lit-material-button variant="text" autofocus @click=${() => this.answer(false)}>Cancel</lit-material-button>
-              <lit-material-button class=${this.ask.danger ? "danger" : ""} @click=${() => this.answer(true)}>${this.ask.action}</lit-material-button>
-            </div>`
+              <lit-material-button class="cancel" type="button" variant="text" @click=${() => this.answer(false)}>Cancel</lit-material-button>
+              <lit-material-button class="go" type="submit" ?disabled=${!this.confirmReady()}>${ask.action}</lit-material-button>
+            </div>
+          </form>`
           : nothing}
       </dialog>
     `;
@@ -621,10 +951,11 @@ export class RwsAdmin extends LitElement {
   renderLogin() {
     return html`
       <div class="login">
-        <section class="login-card tile" aria-labelledby="login-title">
-          <h1 id="login-title"><span class="icon">${icon("lock-key")}</span>Sign in to rws admin</h1>
+        <section class="login-card card" aria-labelledby="login-title">
+          <div class="login-brand">${brandMark}<span>rws admin</span></div>
+          <h1 id="login-title">Sign in</h1>
           ${this.sso ? html`<lit-material-button href="/admin/auth/login" style="width: 100%">Sign in with single sign-on</lit-material-button>
-            <p class="lede" style="text-align: center">or with a token</p>` : nothing}
+            <p class="login-or">or with a token</p>` : nothing}
           <p>Paste an admin token: the value of <code>RWS_ADMIN_TOKEN</code> (or the variable your <code>[admin] token_env</code> names), or your own from <code>[admin] users</code>. It stays in this tab only.</p>
           <form @submit=${(e) => this.login(e)} novalidate>
             <lit-material-text-field id="token" class="token" variant="outlined" label="Admin token" type="password" autocomplete="current-password" required autofocus
@@ -649,286 +980,421 @@ export class RwsAdmin extends LitElement {
     }
   }
 
-  skeleton(rows = 3) {
-    return html`<div class="grid" aria-busy="true">${Array.from({ length: rows }, () => html`<div class="tile"><lit-material-skeleton width="40%"></lit-material-skeleton><lit-material-skeleton variant="rounded" height="32px"></lit-material-skeleton></div>`)}</div>`;
+  head(title, sub = nothing) {
+    return html`<div class="page-head"><h1>${title}</h1>${sub === nothing ? nothing : html`<span class="sub">${sub}</span>`}</div>`;
   }
 
+  skeleton(rows = 3) {
+    return html`<div class="skeleton" aria-busy="true">${Array.from({ length: rows }, () => html`<div class="card"><lit-material-skeleton width="40%"></lit-material-skeleton><lit-material-skeleton variant="rounded" height="32px"></lit-material-skeleton></div>`)}</div>`;
+  }
+
+  // ── rendering: Overview ───────────────────────────────────────────────
   renderOverview() {
     const s = this.data.status, m = this.data.metrics;
-    if (!s || !m) return html`<h1>Overview</h1>${this.skeleton(4)}`;
-    const errorRate = m.requests_total ? ((m.errors_total / m.requests_total) * 100).toFixed(2) : "0.00";
-    const rates = this.samples.map((p) => p.y);
+    if (!s || !m) return html`${this.head("Overview")}${this.skeleton(4)}`;
+    const errorRate = m.requests_total ? (m.errors_total / m.requests_total) * 100 : 0;
+    const pts = this.samples;
+    const now = pts.at(-1);
+    const peak = pts.length ? Math.max(...pts.map((p) => p.y)) : 0;
+    const mean = pts.length ? pts.reduce((n, p) => n + p.y, 0) / pts.length : 0;
+    const span = pts.length > 1 ? (now.x - pts[0].x) / 1000 : 0;
+    const over = span >= 90 ? `${Math.round(span / 60)} min` : `${Math.round(span)} s`;
+    const needs = this.attention();
     return html`
-      <h1>Overview</h1>
-      <p class="lede">Up ${duration(s.uptime_secs)}, process ${s.pid}. Counters refresh every 2 seconds; the admin listener's own requests aren't counted.</p>
-      ${(s.disk ?? []).filter((d) => d.low).map((d) => html`<lit-material-alert variant="warning" style="margin-bottom: var(--space-200)">
-        <span slot="title">Disk almost full</span>
-        ${d.dir} has ${bytes(d.free_bytes)} free of ${bytes(d.total_bytes)}: rws has stopped writing the access log and disk cache there until space is freed.</lit-material-alert>`)}
-      <div class="grid">
-        <lit-material-stat label="Requests served" value=${m.requests_total.toLocaleString()}>
-          ${rates.length > 1 ? html`<lit-material-sparkline slot="caption" label="Requests per second" .values=${rates}></lit-material-sparkline>` : nothing}
-        </lit-material-stat>
-        <lit-material-stat label="Errors" value=${m.errors_total.toLocaleString()} caption="${errorRate}% of requests"></lit-material-stat>
-        <lit-material-stat label="Open connections" value=${String(m.active_connections)}></lit-material-stat>
-        <lit-material-stat label="Queued for a worker" value=${String(m.thread_pool_queued)}></lit-material-stat>
-        ${this.renderHealthTile()}
-      </div>
-      <section class="section" aria-labelledby="rate-title">
-        <h2 id="rate-title">Requests per second</h2>
-        ${this.samples.length < 2
-          ? html`<lit-material-empty-state size="compact" headline="Collecting samples">The chart fills in as this page stays open.</lit-material-empty-state>`
-          : html`<lit-material-line-chart label="Requests per second, last ${Math.round((this.samples.at(-1).x - this.samples[0].x) / 1000)} seconds"
-              unit="req/s" height="200" .formatX=${time} .series=${[{ name: "Requests per second", points: this.samples }]}></lit-material-line-chart>`}
-      </section>
-      <section class="section" aria-labelledby="listen-title">
-        <h2 id="listen-title">Listeners</h2>
-        <div class="grid">
-          <lit-material-stat class="mono" label="Main" value=${s.listeners.main.address} caption=${s.listeners.main.tls ? "HTTPS, HTTP/2, HTTP/3" : "Plain HTTP"}></lit-material-stat>
-          <lit-material-stat class="mono" label="HTTP redirect" value=${s.listeners.redirect ?? "off"}></lit-material-stat>
-          <lit-material-stat class="mono" label="Admin" value=${s.listeners.admin}></lit-material-stat>
+      ${this.head("Overview", html`Up ${duration(s.uptime_secs)}. Numbers refresh every 2 seconds; this console's own requests aren't counted.`)}
+      <section class="card pulse" aria-labelledby="pulse-title">
+        <div class="pulse-top">
+          <div class="pulse-main">
+            <span class="pulse-label" id="pulse-title">Requests per second</span>
+            <span class="pulse-big">${now ? rate(now.y) : "–"}</span>
+            <span class="pulse-cmp">${pts.length > 1 ? html`Peak ${rate(peak)}, average ${rate(mean)} over the last ${over}.` : "Measuring: the first number arrives in a few seconds."}</span>
+          </div>
+          <dl class="vitals">
+            <div class="vital"><dt>Errors</dt><dd>${errorRate.toFixed(2)}%</dd>
+              <span class="note" data-tone=${errorRate >= 5 ? "bad" : errorRate >= 1 ? "warn" : "none"}>${m.errors_total.toLocaleString()} since start</span></div>
+            <div class="vital"><dt>Open connections</dt><dd>${m.active_connections.toLocaleString()}</dd><span class="note">right now</span></div>
+            <div class="vital"><dt>Queued for a worker</dt><dd>${m.thread_pool_queued.toLocaleString()}</dd>
+              <span class="note" data-tone=${m.thread_pool_queued > 0 ? "warn" : "none"}>${m.thread_pool_queued > 0 ? "waiting for a free thread" : "nothing waits"}</span></div>
+            <div class="vital"><dt>Requests served</dt><dd>${m.requests_total.toLocaleString()}</dd><span class="note">since start</span></div>
+          </dl>
         </div>
+        ${this.renderChart()}
       </section>
-      <section class="section" aria-labelledby="build-title">
-        <h2 id="build-title">Build</h2>
-        <p class="lede">Version ${s.version} with ${s.features.join(", ")}.</p>
-      </section>
+      <div class="cols">
+        <div class="stack">
+          <section class="card" aria-labelledby="attn-title">
+            <div class="card-head"><h2 id="attn-title">Needs attention</h2>${needs.length ? html`<span class="count">${needs.length}</span>` : nothing}</div>
+            ${needs.length === 0
+              ? html`<div class="all-clear"><span class="sq" data-tone="ok"></span>Nothing needs you: backends, certificates and disk are fine.</div>`
+              : needs.map((n) => html`<div class="attn">
+                  <span class="sq" data-tone=${n.tone}></span>
+                  <div class="attn-text"><span class="attn-title">${n.title}</span><span class="attn-detail">${n.detail}</span></div>
+                  ${n.action ? html`<button class="btn" ?disabled=${Boolean(n.action.busy) && this.busy === n.action.busy} @click=${n.action.run}>${n.action.label}</button>` : nothing}
+                </div>`)}
+          </section>
+          <section class="card" aria-labelledby="live-title">
+            <div class="card-head"><h2 id="live-title">Live requests</h2>
+              <span class="meta">The newest eight. This console's own aren't logged.</span><span class="spacer"></span>
+              <a class="link" href="#/logs">Open Logs</a></div>
+            <div class="reqs" role="table" aria-labelledby="live-title">
+              ${requestHead}
+              ${!this.recent ? html`<div class="req-none">Loading…</div>`
+                : this.recent.length === 0 ? html`<div class="req-none">No requests yet. They appear here as they arrive.</div>`
+                : this.recent.map(requestRow)}
+            </div>
+          </section>
+        </div>
+        <section class="card" aria-labelledby="server-title">
+          <div class="card-head"><h2 id="server-title">Server</h2></div>
+          <dl class="facts">
+            <dt>Main listener</dt><dd>${s.listeners.main.address} <span class="plain">${s.listeners.main.tls ? "HTTPS, HTTP/2, HTTP/3" : "plain HTTP"}</span></dd>
+            <dt>HTTP redirect</dt><dd>${s.listeners.redirect ?? html`<span class="plain">off</span>`}</dd>
+            <dt>Admin</dt><dd>${s.listeners.admin}</dd>
+            <dt>Uptime</dt><dd>${duration(s.uptime_secs)}</dd>
+            <dt>Process</dt><dd>${s.pid}</dd>
+            <dt>Version</dt><dd>${s.version}</dd>
+            <dt>Built with</dt><dd><span class="plain">${s.features.join(", ")}</span></dd>
+          </dl>
+        </section>
+      </div>
     `;
   }
 
-  renderHealthTile() {
-    const [up, all] = this.backendHealth();
-    if (!all) return nothing;
-    return html`<button class="tile tile-link" @click=${() => this.show("upstreams")}>
-      <span class="label">Backends healthy</span>
-      <span class="value">${up} of ${all}</span>
-      ${up < all ? status(up === 0 ? "error" : "warning", `${all - up} out: see Upstreams`) : status("ok", "All serving")}
-    </button>`;
+  /** Requests per second as an area chart, with a mark where errors happened. */
+  renderChart() {
+    const pts = this.samples;
+    if (pts.length < 2) return html`<div class="chart-empty">The chart fills in as this page stays open.</div>`;
+    const W = 1000, H = 200, top = 16, bottom = 8;
+    const x0 = pts[0].x, span = Math.max(1, pts.at(-1).x - x0);
+    const max = niceMax(Math.max(...pts.map((p) => p.y)));
+    const px = (p) => ((p.x - x0) / span) * W;
+    const py = (v) => top + (1 - v / max) * (H - top - bottom);
+    const line = pts.map((p, i) => `${i ? "L" : "M"}${px(p).toFixed(1)} ${py(p.y).toFixed(1)}`).join("");
+    const errors = pts.filter((p) => p.e > 0);
+    const at = this.hover !== null && pts[this.hover] ? pts[this.hover] : null;
+    const peak = Math.max(...pts.map((p) => p.y));
+    const move = (e) => {
+      const box = e.currentTarget.getBoundingClientRect();
+      const target = x0 + Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * span;
+      let best = 0;
+      for (let i = 1; i < pts.length; i++) if (Math.abs(pts[i].x - target) < Math.abs(pts[best].x - target)) best = i;
+      if (best !== this.hover) this.hover = best;
+    };
+    const pct = (v, of) => `${((v / of) * 100).toFixed(2)}%`;
+    return html`
+      <div class="chart" @pointermove=${move} @pointerdown=${move} @pointerleave=${() => (this.hover = null)}>
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+          aria-label="Requests per second over the last ${Math.round(span / 1000)} seconds: now ${rate(pts.at(-1).y)}, peak ${rate(peak)}${errors.length ? `, errors in ${plural(errors.length, "sample", "samples")}` : ""}">
+          ${[0, 0.5, 1].map((f) => svg`<line class="grid-line" x1="0" x2=${W} y1=${py(max * f)} y2=${py(max * f)} vector-effect="non-scaling-stroke"></line>`)}
+          <path class="area" d="${line}L${W} ${py(0)}L0 ${py(0)}Z"></path>
+          <path class="line" d=${line} vector-effect="non-scaling-stroke"></path>
+          ${errors.map((p) => svg`<rect class="err" x=${px(p) - 2} y=${H - 6} width="4" height="6"></rect>`)}
+          ${at ? svg`<line class="cursor" x1=${px(at)} x2=${px(at)} y1="0" y2=${H} vector-effect="non-scaling-stroke"></line>` : nothing}
+        </svg>
+        <span class="chart-y" style="top: ${pct(py(max), H)}">${rate(max)}</span>
+        <span class="chart-y" style="top: ${pct(py(max / 2), H)}">${rate(max / 2)}</span>
+        ${at ? html`<span class="chart-dot" style="left: ${pct(px(at), W)}; top: ${pct(py(at.y), H)}"></span>
+          <span class="chart-tip" style="left: clamp(90px, ${pct(px(at), W)}, calc(100% - 90px))">${time(at.x)} · ${rate(at.y)} req/s${at.e ? ` · ${plural(at.e, "error", "errors")}` : ""}</span>` : nothing}
+      </div>
+      <div class="chart-x" aria-hidden="true"><span>${time(x0)}</span>
+        ${errors.length ? html`<span class="err-key"><span class="sq" data-tone="bad"></span>errors</span>` : nothing}<span>now</span></div>
+    `;
   }
 
+  // ── rendering: Upstreams ──────────────────────────────────────────────
   renderUpstreams() {
     const ups = this.data.upstreams;
-    if (!ups) return html`<h1>Upstreams</h1>${this.skeleton(2)}`;
+    if (!ups) return html`${this.head("Upstreams")}${this.skeleton(2)}`;
+    const backends = ups.reduce((n, u) => n + u.backends.length, 0);
+    const changes = (this.data.audit ?? []).filter((e) => e.path.includes("/upstreams/") && e.status < 300).slice(0, 6);
     return html`
-      <h1>Upstreams</h1>
-      <p class="lede">Drain a backend before deploying it: new requests go elsewhere, requests already on it finish, and its health checks keep running.</p>
+      ${this.head("Upstreams", ups.length ? html`${plural(ups.length, "upstream", "upstreams")}, ${plural(backends, "backend", "backends")}. Drain a backend before deploying it: new requests go elsewhere, requests already on it finish.` : nothing)}
       ${ups.length === 0
-        ? html`<lit-material-empty-state size="compact" headline="No upstreams configured">Upstreams come from <code>[[upstream]]</code> sections in <code>rws.config.toml</code>. Add one, then reload from Controls.</lit-material-empty-state>`
-        : ups.map((u) => html`
-          <section class="section" aria-labelledby="up-${u.name}">
-            <h2 id="up-${u.name}">${u.name}</h2>
-            <div class="table-wrap"><lit-material-table class="backends" caption="Backends of ${u.name}" caption-hidden .columns=${BACKEND_COLUMNS(this, u.name)} .rows=${u.backends}></lit-material-table></div>
-          </section>`)}
+        ? html`<div class="card"><lit-material-empty-state size="compact" headline="No upstreams configured">Upstreams come from <code>[[upstream]]</code> sections in <code>rws.config.toml</code>. Add one, then reload from Controls.</lit-material-empty-state></div>`
+        : html`<div class="cols">
+          <div class="stack">${ups.map((u) => this.renderUpstream(u))}</div>
+          <section class="card" aria-labelledby="changes-title">
+            <div class="card-head"><h2 id="changes-title">Recent changes</h2><span class="spacer"></span><a class="link" href="#/audit">Open Audit</a></div>
+            ${changes.length === 0
+              ? html`<div class="all-clear">Nobody has drained or put back a backend since the server started.</div>`
+              : changes.map((e) => html`<div class="change"><span class="change-what">${changeText(e)}</span>
+                  <span class="change-who">${e.user} · ${ago(e.at * 1000)}</span></div>`)}
+          </section>
+        </div>`}
     `;
   }
 
+  renderUpstream(u) {
+    const serving = u.backends.filter((b) => b.healthy && !b.drained);
+    const weight = serving.reduce((n, b) => n + b.weight, 0);
+    return html`<section class="card" aria-labelledby="up-${u.name}">
+      <div class="card-head"><h2 id="up-${u.name}" class="mono">${u.name}</h2>
+        <span class="meta">${serving.length} of ${u.backends.length} serving</span></div>
+      <div class="table-wrap"><table class="tbl tbl-stack" role="table">
+        <thead role="rowgroup"><tr role="row"><th role="columnheader">Backend</th><th role="columnheader">Share of traffic</th><th role="columnheader">Health</th><th role="columnheader">Breaker</th><th role="columnheader"><span class="sr">Rotation</span></th></tr></thead>
+        <tbody role="rowgroup">${u.backends.map((b) => {
+          const share = b.healthy && !b.drained && weight ? Math.round((b.weight / weight) * 100) : 0;
+          return html`<tr role="row" class=${b.drained ? "is-warn" : ""}>
+            <td role="cell" class="mono nowrap">${b.url}</td>
+            <td role="cell" class="wide"><div class="share"><span class="share-track"><span class="share-fill" style="width: ${share}%"></span></span>
+              <span class="share-text">${share}%</span>${b.drained ? status("warning", "Drained") : html`<span class="share-note">weight ${b.weight}</span>`}</div></td>
+            <td role="cell">${b.healthy ? status("ok", "Healthy") : status("error", "Failing checks")}</td>
+            <td role="cell" data-label="Breaker">${b.breaker === null ? status("neutral", "None")
+              : b.breaker === "closed" ? status("ok", "Closed")
+              : b.breaker === "half_open" ? status("warning", "Probing")
+              : status("error", "Open")}</td>
+            <td role="cell" class="act"><button class="btn" aria-label="${b.drained ? "Put back" : "Drain"} ${b.url}" ?disabled=${this.busy === `drain:${b.url}`}
+                @click=${() => this.drain(u.name, b.url, !b.drained)}>${b.drained ? "Put back" : "Drain"}</button></td>
+          </tr>`;
+        })}</tbody>
+      </table></div>
+    </section>`;
+  }
+
+  // ── rendering: Certificates ───────────────────────────────────────────
   renderCertificates() {
     const c = this.data.certificates;
-    if (!c) return html`<h1>Certificates</h1>${this.skeleton(2)}`;
+    if (!c) return html`${this.head("Certificates")}${this.skeleton(2)}`;
     const acme = c.acme;
+    const days = (x) => (x.days_left < 7 ? status("error", String(x.days_left)) : x.days_left < 21 ? status("warning", String(x.days_left)) : x.days_left);
     return html`
-      <h1>Certificates</h1>
-      <p class="lede">Every certificate this server presents, soonest expiry first.</p>
-      ${c.certificates.length === 0
-        ? html`<lit-material-empty-state size="compact" headline="No TLS certificates">This server speaks plain HTTP. Set <code>tls_cert_file</code> and <code>tls_key_file</code>, or <code>[acme] domains</code>, to serve HTTPS.</lit-material-empty-state>`
-        : html`<div class="table-wrap"><lit-material-table caption="Certificates" caption-hidden .columns=${CERT_COLUMNS} .rows=${c.certificates}></lit-material-table></div>`}
-      <section class="section" aria-labelledby="acme-title">
-        <h2 id="acme-title">ACME</h2>
-        ${acme.running
-          ? html`<p class="lede">Renewal runs automatically. ${acme.last_check ? html`Last check ${new Date(acme.last_check.at * 1000).toLocaleString()}: ${acme.last_check.outcome}.` : "No check has finished yet."}</p>
-              <lit-material-button variant="outlined" ?disabled=${this.busy === "renew"}
-                @click=${() => this.act("renew", "/certificates/renew", { method: "POST" }, () => "Renewal requested: the new certificate is swapped in when it's issued")}>
-                <span slot="icon" class="icon">${icon("arrow-clockwise")}</span>Renew now</lit-material-button>`
-          : html`<lit-material-empty-state size="compact" headline="ACME is off">Set <code>[acme] domains</code> to have rws obtain and renew certificates itself.</lit-material-empty-state>`}
+      ${this.head("Certificates", "Every certificate this server presents, soonest expiry first.")}
+      <section class="card" aria-labelledby="certs-title">
+        <div class="card-head"><h2 id="certs-title">Presented</h2>${c.certificates.length ? html`<span class="count">${c.certificates.length}</span>` : nothing}</div>
+        ${c.certificates.length === 0
+          ? html`<lit-material-empty-state size="compact" headline="No TLS certificates">This server speaks plain HTTP. Set <code>tls_cert_file</code> and <code>tls_key_file</code>, or <code>[acme] domains</code>, to serve HTTPS.</lit-material-empty-state>`
+          : html`<div class="table-wrap"><table class="tbl">
+              <thead><tr><th>Name</th><th>Expires</th><th class="num">Days left</th><th>Source</th></tr></thead>
+              <tbody>${c.certificates.map((x) => html`<tr><td class="mono">${x.name}</td><td>${x.expires}</td><td class="num">${days(x)}</td>
+                <td class="dim">${x.source === "on_demand" ? "On demand" : "Configured"}</td></tr>`)}</tbody>
+            </table></div>`}
+      </section>
+      <section class="card" aria-labelledby="acme-title">
+        <div class="card-head"><h2 id="acme-title">ACME</h2>${acme.running ? status("ok", "Renews by itself") : status("neutral", "Off")}</div>
+        <div class="card-body">
+          ${acme.running
+            ? html`<p>${acme.last_check ? html`Last check ${new Date(acme.last_check.at * 1000).toLocaleString()}: ${acme.last_check.outcome}.` : "No check has finished yet."}</p>
+                <div class="row"><button class="btn" ?disabled=${this.busy === "renew"} @click=${() => this.renew()}><span class="icon">${icon("arrow-clockwise")}</span>Renew now</button></div>`
+            : html`<p>Set <code>[acme] domains</code> to have rws obtain and renew certificates itself.</p>`}
+        </div>
       </section>
     `;
   }
 
+  // ── rendering: Controls ───────────────────────────────────────────────
   renderControls() {
     const d = this.data;
-    if (!d.maintenance || !d.blocklist || !d.flags) return html`<h1>Controls</h1>${this.skeleton(3)}`;
-    const blockColumns = [
-      { key: "ip", label: "Address", mono: true },
-      {
-        key: "action",
-        label: "Action",
-        hiddenLabel: true,
-        render: (r) => html`<lit-material-button variant="text" ?disabled=${this.busy === `unblock:${r.ip}`} @click=${() => this.unblock(r.ip)}>Unblock</lit-material-button>`,
-      },
-    ];
-    const cacheColumns = [
-      { key: "name", label: "Cache", mono: true },
-      { key: "kind", label: "Store" },
-      { key: "entries", label: "Entries", numeric: true },
-      { key: "bytes", label: "On disk", numeric: true, render: (c) => (c.bytes === null ? "—" : bytes(c.bytes)) },
-      { key: "hits", label: "Hits / misses", numeric: true, render: (c) => `${c.hits} / ${c.misses}` },
-      {
-        key: "action",
-        label: "Action",
-        hiddenLabel: true,
-        render: (c) => html`<lit-material-button variant="text" class="danger-text" ?disabled=${this.busy === `purge:${c.name}` || !c.entries} @click=${() => this.purgeAll(c.name, c.entries)}><span slot="icon" class="icon">${icon("trash")}</span>Purge all</lit-material-button>`,
-      },
-    ];
-    const flagColumns = [
-      { key: "name", label: "Flag", mono: true },
-      {
-        key: "enabled",
-        label: "Enabled",
-        render: (f) => html`<lit-material-switch aria-label="${f.name}" .checked=${f.enabled}
-          @change=${(e) => this.act(`flag:${f.name}`, `/flags/${encodeURIComponent(f.name)}`, { method: "PUT", body: { enabled: e.target.checked } }, (r) => `${r.name} ${r.enabled ? "on" : "off"}`)}></lit-material-switch>`,
-      },
-    ];
+    if (!d.maintenance || !d.blocklist || !d.flags) return html`${this.head("Controls")}${this.skeleton(3)}`;
+    const on = d.maintenance.active;
+    const caches = d.caches ?? [];
     return html`
-      <h1>Controls</h1>
-      <p class="lede">Changes here apply at once and last until the server restarts.</p>
-      <div class="grid">
-        <div class="tile">
-          <div class="label">Maintenance mode</div>
-          <div class="row" style="margin-top: var(--space-75)">
-            <lit-material-switch aria-label="Maintenance mode" .checked=${d.maintenance.active} ?disabled=${this.busy === "maintenance"}
-              @change=${(e) => this.setMaintenance(e.target.checked, e.target)}></lit-material-switch>
-            ${d.maintenance.active ? status("warning", "On: 503 for visitors") : status("ok", "Off")}
+      ${this.head("Controls", "Things that change what visitors get, right now. They last until the server restarts.")}
+      <div class="trio">
+        <section class="card" aria-labelledby="maint-title">
+          <div class="card-head"><h2 id="maint-title">Maintenance mode</h2></div>
+          <div class="card-body">
+            <p>${on ? status("warning", "On: 503 for visitors") : "Off. Visitors reach every host as usual."}</p>
+            <div class="row"><button id="maintenance-toggle" class="btn ${on ? "" : "btn-warn"}" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(!on)}>${on ? "Turn off" : "Turn on"}</button></div>
           </div>
-        </div>
-        <div class="tile">
-          <div class="label">Configuration</div>
-          <p class="label" style="margin: var(--space-50) 0 var(--space-100)">Re-read rws.config.toml and the certificates.</p>
-          <lit-material-button variant="tonal" ?disabled=${this.busy === "reload"} @click=${() => this.reload()}><span slot="icon" class="icon">${icon("arrow-clockwise")}</span>Reload</lit-material-button>
-        </div>
-        <lit-material-stat label="Global rate limit" value=${d.rateLimit?.configured ? `${d.rateLimit.max_requests} per ${d.rateLimit.window_secs}s` : "Off"}></lit-material-stat>
+        </section>
+        <section class="card" aria-labelledby="reload-title">
+          <div class="card-head"><h2 id="reload-title">Configuration</h2></div>
+          <div class="card-body">
+            <p>Re-read <code>rws.config.toml</code> and the certificates. A file with errors is refused and the running configuration stays.</p>
+            <div class="row"><button class="btn" ?disabled=${this.busy === "reload"} @click=${() => this.reload()}><span class="icon">${icon("arrow-clockwise")}</span>Reload</button></div>
+          </div>
+        </section>
+        <section class="card" aria-labelledby="limit-title">
+          <div class="card-head"><h2 id="limit-title">Global rate limit</h2></div>
+          <div class="card-body">
+            ${d.rateLimit?.configured
+              ? html`<span class="big-value">${d.rateLimit.max_requests.toLocaleString()} per ${d.rateLimit.window_secs} s</span><p>Requests from one address above that get 429.</p>`
+              : html`<span class="big-value">Off</span><p>Set <code>rate_limit</code> in the config to cap requests per address.</p>`}
+          </div>
+        </section>
       </div>
 
-      <section class="section" aria-labelledby="block-title">
-        <h2 id="block-title">Blocked addresses</h2>
-        <form class="row" @submit=${(e) => this.block(e)} novalidate>
-          <lit-material-text-field id="block-ip" variant="outlined" label="IP address" supporting-text="IPv4 or IPv6, e.g. 203.0.113.7"
-            ?error=${Boolean(this.fieldError.block)} error-text=${this.fieldError.block ?? ""} @input=${() => this.fieldError.block && (this.fieldError = { ...this.fieldError, block: "" })}></lit-material-text-field>
-          <lit-material-button type="submit" ?disabled=${this.busy === "block"}><span slot="icon" class="icon">${icon("plus")}</span>Block</lit-material-button>
-        </form>
-        ${d.blocklist.length === 0
-          ? html`<p class="lede" style="margin-top: var(--space-200)">Nobody is blocked.</p>`
-          : html`<div class="table-wrap" style="margin-top: var(--space-200)"><lit-material-table caption="Blocked addresses" caption-hidden density="compact"
-              .columns=${blockColumns} .rows=${d.blocklist.map((ip) => ({ ip }))}></lit-material-table></div>`}
-      </section>
-
-      ${d.authz ? this.renderAuthz(d.authz, d.authzCheck) : nothing}
-
-      <section class="section" aria-labelledby="caches-title">
-        <h2 id="caches-title">Response caches</h2>
-        ${!d.caches || d.caches.length === 0
+      <section class="card" aria-labelledby="caches-title">
+        <div class="card-head"><h2 id="caches-title">Response caches</h2><span class="spacer"></span>
+          ${caches.length > 1 ? html`<button class="btn btn-danger" ?disabled=${this.busy === "purge-every" || !caches.some((c) => c.entries)} @click=${() => this.purgeEvery()}>Purge every cache</button>` : nothing}</div>
+        ${caches.length === 0
           ? html`<lit-material-empty-state size="compact" headline="No response cache">Add <code>[route.middleware.cache]</code> to a route; its cache appears here to purge.</lit-material-empty-state>`
-          : html`<div class="table-wrap"><lit-material-table caption="Response caches" caption-hidden density="compact" .columns=${cacheColumns} .rows=${d.caches}></lit-material-table></div>
-              ${d.caches.map((c) => html`<form class="row purge" @submit=${(e) => this.purgePath(e, c.name)} novalidate>
+          : html`<div class="table-wrap"><table class="tbl tbl-stack" role="table">
+              <thead role="rowgroup"><tr role="row"><th role="columnheader">Cache</th><th role="columnheader">Kept in</th><th role="columnheader" class="num">Entries</th><th role="columnheader" class="num">On disk</th><th role="columnheader">Served from cache</th><th role="columnheader"><span class="sr">Purge</span></th></tr></thead>
+              <tbody role="rowgroup">${caches.map((c) => {
+                const asked = c.hits + c.misses;
+                const hit = asked ? Math.round((c.hits / asked) * 100) : 0;
+                return html`<tr role="row">
+                  <td role="cell" class="mono">${c.name}</td>
+                  <td role="cell" class="dim" data-label="Kept in">${c.kind}</td>
+                  <td role="cell" class="num" data-label="Entries">${c.entries.toLocaleString()}</td>
+                  <td role="cell" class="num" data-label="On disk">${c.bytes === null ? "–" : bytes(c.bytes)}</td>
+                  <td role="cell" class="wide">${asked
+                    ? html`<div class="share" title="${c.hits.toLocaleString()} hits, ${c.misses.toLocaleString()} misses"><span class="share-track"><span class="share-fill" data-tone="ok" style="width: ${hit}%"></span></span><span class="share-text">${hit}%</span></div>`
+                    : html`<span class="dim">no requests yet</span>`}</td>
+                  <td role="cell" class="act"><button class="btn btn-danger" aria-label="Purge all of ${c.name}" ?disabled=${this.busy === `purge:${c.name}` || !c.entries} @click=${() => this.purgeAll(c.name, c.entries)}>Purge all</button></td>
+                </tr>`;
+              })}</tbody>
+            </table></div>
+            <div class="card-body">
+              ${caches.map((c) => html`<form class="field-row purge" @submit=${(e) => this.purgePath(e, c.name)} novalidate>
                 <lit-material-text-field variant="outlined" label="Path to purge from ${c.name}" supporting-text="One path, or a prefix ending in *: /products/*"
                   ?error=${Boolean(this.fieldError[`purge:${c.name}`])} error-text=${this.fieldError[`purge:${c.name}`] ?? ""}></lit-material-text-field>
                 <lit-material-button type="submit" variant="tonal" ?disabled=${this.busy === `purge:${c.name}`}>Purge path</lit-material-button>
-              </form>`)}`}
+              </form>`)}
+            </div>`}
       </section>
 
-      <section class="section" aria-labelledby="flags-title">
-        <h2 id="flags-title">Feature flags</h2>
-        ${d.flags.length === 0
-          ? html`<lit-material-empty-state size="compact" headline="No feature flags">Applications register flags with <code>feature::global()</code>; they appear here to switch at runtime.</lit-material-empty-state>`
-          : html`<div class="table-wrap"><lit-material-table caption="Feature flags" caption-hidden density="compact" .columns=${flagColumns} .rows=${d.flags}></lit-material-table></div>`}
-      </section>
+      <div class="cols">
+        <section class="card" aria-labelledby="block-title">
+          <div class="card-head"><h2 id="block-title">Blocked addresses</h2>${d.blocklist.length ? html`<span class="count">${d.blocklist.length}</span>` : nothing}</div>
+          <div class="card-body">
+            <form class="field-row" @submit=${(e) => this.block(e)} novalidate>
+              <lit-material-text-field id="block-ip" variant="outlined" label="IP address" supporting-text="IPv4 or IPv6, e.g. 203.0.113.7"
+                ?error=${Boolean(this.fieldError.block)} error-text=${this.fieldError.block ?? ""} @input=${() => this.fieldError.block && (this.fieldError = { ...this.fieldError, block: "" })}></lit-material-text-field>
+              <lit-material-button type="submit" variant="tonal" ?disabled=${this.busy === "block"}><span slot="icon" class="icon">${icon("plus")}</span>Block</lit-material-button>
+            </form>
+            ${d.blocklist.length === 0 ? html`<p>Nobody is blocked. A blocked address gets 403 on every request.</p>` : nothing}
+          </div>
+          ${d.blocklist.length === 0 ? nothing : html`<div class="table-wrap"><table class="tbl">
+            <thead><tr><th>Address</th><th><span class="sr">Unblock</span></th></tr></thead>
+            <tbody>${d.blocklist.map((ip) => html`<tr><td class="mono">${ip}</td>
+              <td class="act"><button class="btn" aria-label="Unblock ${ip}" ?disabled=${this.busy === `unblock:${ip}`} @click=${() => this.unblock(ip)}>Unblock</button></td></tr>`)}</tbody>
+          </table></div>`}
+        </section>
+        <section class="card" aria-labelledby="flags-title">
+          <div class="card-head"><h2 id="flags-title">Feature flags</h2></div>
+          ${d.flags.length === 0
+            ? html`<lit-material-empty-state size="compact" headline="No feature flags">Applications register flags with <code>feature::global()</code>; they appear here to switch at runtime.</lit-material-empty-state>`
+            : html`<div class="table-wrap"><table class="tbl">
+                <thead><tr><th>Flag</th><th><span class="sr">Enabled</span></th></tr></thead>
+                <tbody>${d.flags.map((f) => html`<tr><td class="mono">${f.name}</td>
+                  <td class="act"><lit-material-switch aria-label="${f.name}" .checked=${f.enabled}
+                    @change=${(e) => this.act(`flag:${f.name}`, `/flags/${encodeURIComponent(f.name)}`, { method: "PUT", body: { enabled: e.target.checked } }, (r) => `${r.name} ${r.enabled ? "on" : "off"}`)}></lit-material-switch></td></tr>`)}</tbody>
+              </table></div>`}
+        </section>
+      </div>
+
+      ${d.authz ? this.renderAuthz(d.authz, d.authzCheck) : nothing}
     `;
   }
 
   renderAuthz(authz, check) {
-    const columns = [
-      { key: "tuple", label: "Tuple", mono: true },
-      {
-        key: "action",
-        label: "Action",
-        hiddenLabel: true,
-        render: (r) => html`<lit-material-button variant="text" ?disabled=${this.busy === `authz-del:${r.tuple}`}
-          @click=${() => this.act(`authz-del:${r.tuple}`, `/authz/tuples?tuple=${encodeURIComponent(r.tuple)}`, { method: "DELETE" }, () => `${r.tuple} removed`)}>Remove</lit-material-button>`,
-      },
-    ];
     const types = Object.entries(authz.schema.types).filter(([, relations]) => relations.length).map(([type, relations]) => `${type}: ${relations.join(", ")}`);
     return html`
-      <section class="section" aria-labelledby="authz-title">
-        <h2 id="authz-title">Authorization</h2>
-        <p class="lede">Relationship tuples, object#relation@subject. Schema: ${types.join(" · ")}.</p>
-        <form class="row" @submit=${(e) => this.addTuple(e)} novalidate>
-          <lit-material-text-field id="authz-tuple" variant="outlined" label="Tuple" supporting-text="e.g. doc:42#viewer@user:alice"></lit-material-text-field>
-          <lit-material-button type="submit" ?disabled=${this.busy === "authz-add"}><span slot="icon" class="icon">${icon("plus")}</span>Add</lit-material-button>
-        </form>
-        ${authz.tuples.length === 0
-          ? html`<p class="lede" style="margin-top: var(--space-200)">No tuples yet.</p>`
-          : html`<lit-material-table style="margin-top: var(--space-200)" caption="Relationship tuples" caption-hidden density="compact"
-              .columns=${columns} .rows=${authz.tuples.map((tuple) => ({ tuple }))}></lit-material-table>`}
-        <form class="row" style="margin-top: var(--space-300)" @submit=${(e) => this.checkAccess(e)} novalidate>
-          <lit-material-text-field id="authz-subject" variant="outlined" label="Subject" supporting-text="user:alice"></lit-material-text-field>
-          <lit-material-text-field id="authz-relation" variant="outlined" label="Relation" supporting-text="viewer"></lit-material-text-field>
-          <lit-material-text-field id="authz-object" variant="outlined" label="Object" supporting-text="doc:42"></lit-material-text-field>
-          <lit-material-button type="submit" variant="tonal">Check</lit-material-button>
-        </form>
-        ${check
-          ? html`<p class="lede" id="authz-result" style="margin-top: var(--space-200)">
-              ${check.allowed ? status("ok", "Allowed") : status("error", "Denied")}
-              ${check.subject} ${check.relation} ${check.object}${check.allowed ? html` — via <code>${check.path.join(" → ")}</code>` : nothing}</p>`
-          : nothing}
+      <section class="card" aria-labelledby="authz-title">
+        <div class="card-head"><h2 id="authz-title">Authorization</h2><span class="meta">Relationship tuples, object#relation@subject. Schema: ${types.join(" · ")}.</span></div>
+        <div class="card-body">
+          <form class="field-row" @submit=${(e) => this.addTuple(e)} novalidate>
+            <lit-material-text-field id="authz-tuple" variant="outlined" label="Tuple" supporting-text="e.g. doc:42#viewer@user:alice"></lit-material-text-field>
+            <lit-material-button type="submit" variant="tonal" ?disabled=${this.busy === "authz-add"}><span slot="icon" class="icon">${icon("plus")}</span>Add</lit-material-button>
+          </form>
+          ${authz.tuples.length === 0 ? html`<p>No tuples yet.</p>` : nothing}
+        </div>
+        ${authz.tuples.length === 0 ? nothing : html`<div class="table-wrap"><table class="tbl">
+          <thead><tr><th>Tuple</th><th><span class="sr">Remove</span></th></tr></thead>
+          <tbody>${authz.tuples.map((tuple) => html`<tr><td class="mono">${tuple}</td>
+            <td class="act"><button class="btn" aria-label="Remove ${tuple}" ?disabled=${this.busy === `authz-del:${tuple}`}
+              @click=${() => this.act(`authz-del:${tuple}`, `/authz/tuples?tuple=${encodeURIComponent(tuple)}`, { method: "DELETE" }, () => `${tuple} removed`)}>Remove</button></td></tr>`)}</tbody>
+        </table></div>`}
+        <div class="card-body">
+          <form class="field-row" @submit=${(e) => this.checkAccess(e)} novalidate>
+            <lit-material-text-field id="authz-subject" variant="outlined" label="Subject" supporting-text="user:alice"></lit-material-text-field>
+            <lit-material-text-field id="authz-relation" variant="outlined" label="Relation" supporting-text="viewer"></lit-material-text-field>
+            <lit-material-text-field id="authz-object" variant="outlined" label="Object" supporting-text="doc:42"></lit-material-text-field>
+            <lit-material-button type="submit" variant="tonal">Check</lit-material-button>
+          </form>
+          ${check
+            ? html`<p class="result" id="authz-result">
+                ${check.allowed ? status("ok", "Allowed") : status("error", "Denied")}
+                <span>${check.subject} ${check.relation} ${check.object}${check.allowed ? html`, through <code>${check.path.join(" → ")}</code>` : nothing}</span></p>`
+            : nothing}
+        </div>
       </section>
     `;
   }
 
+  // ── rendering: Config, Audit, Logs ────────────────────────────────────
   renderConfig() {
     const config = this.data.config;
-    if (!config) return html`<h1>Config</h1>${this.skeleton(2)}`;
+    if (!config) return html`${this.head("Config")}${this.skeleton(2)}`;
     const needle = this.filter.toLowerCase();
-    const rows = Object.entries(config)
-      .filter(([k, v]) => !needle || k.toLowerCase().includes(needle) || v.toLowerCase().includes(needle))
-      .map(([setting, value]) => ({ setting, value }));
-    const columns = [
-      { key: "setting", label: "Setting", mono: true },
-      { key: "value", label: "Value", mono: true, render: (r) => (r.value === "" ? status("neutral", "empty") : html`<lit-material-truncate position="middle" style="max-width: min(60ch, 50vw)" .value=${r.value}></lit-material-truncate>`) },
-    ];
+    const all = Object.entries(config);
+    const rows = all.filter(([k, v]) => !needle || k.toLowerCase().includes(needle) || v.toLowerCase().includes(needle));
     return html`
-      <h1>Config</h1>
-      <p class="lede">Every setting in effect. Secrets read (hidden). Change them in rws.config.toml or the environment, then reload from Controls.</p>
-      <lit-material-text-field class="filter" variant="outlined" label="Filter settings" .value=${this.filter} @input=${(e) => (this.filter = e.target.value)}></lit-material-text-field>
-      ${rows.length === 0
-        ? html`<lit-material-empty-state size="compact" headline="No setting matches “${this.filter}”">Clear the filter to see all ${Object.keys(config).length}.</lit-material-empty-state>`
-        : html`<div class="table-wrap"><lit-material-table caption="Settings in effect" caption-hidden density="compact" .columns=${columns} .rows=${rows}></lit-material-table></div>`}
+      ${this.head("Config", html`Every setting in effect. Secrets read (hidden). Change them in <code>rws.config.toml</code> or the environment, then reload from Controls.`)}
+      <section class="card" aria-labelledby="config-title">
+        <div class="card-head"><h2 id="config-title">Settings in effect</h2><span class="count">${needle ? `${rows.length} of ${all.length}` : all.length}</span></div>
+        <div class="card-body">
+          <lit-material-text-field class="filter" variant="outlined" label="Filter settings" .value=${this.filter} @input=${(e) => (this.filter = e.target.value)}></lit-material-text-field>
+        </div>
+        ${rows.length === 0
+          ? html`<lit-material-empty-state size="compact" headline="No setting matches “${this.filter}”">Clear the filter to see all ${all.length}.</lit-material-empty-state>`
+          : html`<div class="table-wrap"><table class="tbl">
+              <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+              <tbody>${rows.map(([setting, value]) => html`<tr><td class="mono">${setting}</td>
+                <td class="mono">${value === "" ? status("neutral", "empty") : html`<lit-material-truncate position="middle" style="max-width: min(60ch, 50vw)" .value=${value}></lit-material-truncate>`}</td></tr>`)}</tbody>
+            </table></div>`}
+      </section>
     `;
   }
 
   renderAudit() {
     const entries = this.data.audit;
-    if (!entries) return html`<h1>Audit</h1>${this.skeleton(2)}`;
-    const columns = [
-      { key: "time", label: "When", render: (e) => new Date(e.at * 1000).toLocaleString() },
-      { key: "user", label: "Who", render: (e) => html`${e.user} <span class="meta">${e.role}${e.via === "oidc" ? " · SSO" : e.via === "mcp" ? " · MCP" : ""}</span>` },
-      { key: "change", label: "Change", mono: true, render: (e) => `${e.method === "TOOL" ? "tool" : e.method} ${e.path.replace("/admin/api/v1", "")}` },
-      { key: "detail", label: "Details", mono: true, render: (e) => (e.detail ? html`<lit-material-truncate style="max-width: min(40ch, 30vw)" .value=${e.detail}></lit-material-truncate>` : nothing) },
-      { key: "status", label: "Result", render: (e) => (e.status < 300 ? status("ok", "Done") : e.status === 401 || e.status === 403 ? status("error", "Refused") : status("warning", String(e.status))) },
-      { key: "address", label: "From", mono: true },
-    ];
+    if (!entries) return html`${this.head("Audit")}${this.skeleton(2)}`;
+    const result = (e) => (e.status < 300 ? status("ok", "Done") : e.status === 401 || e.status === 403 ? status("error", "Refused") : status("warning", String(e.status)));
     return html`
-      <h1>Audit</h1>
-      <p class="lede">Every change made through the admin API, the UI or MCP tools, and every refused attempt, newest first. Kept in memory (the last 1000); <code>[admin] audit_log</code> also writes them to a file.</p>
-      ${entries.length === 0
-        ? html`<lit-material-empty-state size="compact" headline="No changes yet">Changes appear here as people reload, drain, block or purge.</lit-material-empty-state>`
-        : html`<div class="table-wrap"><lit-material-table caption="Recent changes" caption-hidden density="compact" .columns=${columns} .rows=${entries}></lit-material-table></div>`}
+      ${this.head("Audit", html`Every change made through the admin API, this console or MCP tools, and every refused attempt, newest first. Kept in memory (the last 1000); <code>[admin] audit_log</code> also writes them to a file.`)}
+      <section class="card" aria-labelledby="audit-title">
+        <div class="card-head"><h2 id="audit-title">Changes</h2>${entries.length ? html`<span class="count">${entries.length}</span>` : nothing}</div>
+        ${entries.length === 0
+          ? html`<lit-material-empty-state size="compact" headline="No changes yet">Changes appear here as people reload, drain, block or purge.</lit-material-empty-state>`
+          : html`<div class="table-wrap"><table class="tbl">
+              <thead><tr><th>When</th><th>Who</th><th>Change</th><th>Details</th><th>Result</th><th>From</th></tr></thead>
+              <tbody>${entries.map((e) => html`<tr>
+                <td class="dim" style="white-space: nowrap">${new Date(e.at * 1000).toLocaleString()}</td>
+                <td>${e.user} <span class="meta">${e.role}${e.via === "oidc" ? " · SSO" : e.via === "mcp" ? " · MCP" : ""}</span></td>
+                <td class="mono">${e.method === "TOOL" ? "tool" : e.method} ${e.path.replace("/admin/api/v1", "")}</td>
+                <td class="mono">${e.detail ? html`<lit-material-truncate style="max-width: min(40ch, 30vw)" .value=${e.detail}></lit-material-truncate>` : nothing}</td>
+                <td>${result(e)}</td>
+                <td class="mono dim">${e.address}</td>
+              </tr>`)}</tbody>
+            </table></div>`}
+      </section>
     `;
   }
 
   renderLogs() {
-    const f = this.logFilter ?? { text: "", status: "all" };
+    const f = this.logFilter;
     const chips = [["all", "All"], ["2xx", "2xx"], ["3xx", "3xx"], ["4xx", "4xx"], ["5xx", "5xx"]];
+    const kept = this.paused ? this.logFrozen : this.logAll;
+    const filtered = f.text || f.status !== "all";
+    const shown = filtered ? kept.filter((r) => this.logShown(r)) : kept;
+    const drawn = shown.slice(-LOG_DRAWN).reverse();
+    const waiting = this.paused ? this.logAll.length - this.logFrozen.length : 0;
     return html`
-      <h1>Logs</h1>
-      <p class="lede">The access log as it's written, newest at the bottom; scroll up to read, and it follows again at the bottom. The admin listener's own requests aren't in it.</p>
+      ${this.head("Logs", "One request per row, newest first. This console's own requests aren't logged.")}
       <div class="row log-tools">
-        <lit-material-text-field class="log-filter" variant="outlined" label="Filter" .value=${f.text} @input=${(e) => this.setLogFilter({ text: e.target.value })}></lit-material-text-field>
+        <lit-material-text-field class="log-filter" variant="outlined" label="Filter by path, host, address…" .value=${f.text} @input=${(e) => this.setLogFilter({ text: e.target.value })}></lit-material-text-field>
         <div class="seg" role="group" aria-label="Status">
           ${chips.map(([id, label]) => html`<button aria-pressed=${f.status === id} @click=${() => this.setLogFilter({ status: id })}>${label}</button>`)}
         </div>
         <span class="spacer"></span>
-        <lit-material-button variant="outlined" @click=${() => (this.paused = !this.paused)}>
-          <span slot="icon" class="icon">${icon(this.paused ? "play" : "pause")}</span>${this.paused ? "Resume" : "Pause"}</lit-material-button>
+        <button class="btn" aria-pressed=${!this.paused} @click=${() => this.setPaused(!this.paused)}>
+          <span class="live" data-on=${!this.paused}><span class="dot" aria-hidden="true"></span>${this.paused ? "Paused" : "Following"}</span></button>
+        <button class="btn" ?disabled=${shown.length === 0} @click=${() => this.downloadLog()}><span class="icon">${icon("download-simple")}</span>Download</button>
       </div>
-      <lit-material-log-viewer label="Access log" max-lines="1000" wrap ?paused=${this.paused}></lit-material-log-viewer>
+      <section class="card" aria-label="Access log">
+        <div class="reqs" role="table" aria-label="Access log">
+          ${requestHead}
+          ${drawn.length === 0
+            ? html`<div class="req-none">${filtered && kept.length ? "No request matches the filter." : "No requests yet. They appear here as they arrive."}</div>`
+            : drawn.map(requestRow)}
+        </div>
+        <div class="card-foot">${this.paused
+          ? html`Paused${waiting > 0 ? html`: ${plural(waiting, "new request", "new requests")} waiting.` : "."} Follow again to see new requests.`
+          : html`Showing ${drawn.length.toLocaleString()}${shown.length > drawn.length ? html` of ${shown.length.toLocaleString()}` : nothing}${filtered ? " that match" : ""}. The last ${LOG_KEPT.toLocaleString()} are kept here; Download saves them.`}</div>
+      </section>
     `;
   }
 }

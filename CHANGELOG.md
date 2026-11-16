@@ -5,6 +5,31 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- **Admin UI: a new look and layout.** Dark graphite with one orange
+  accent. The sections are grouped in the sidebar as Observe (Overview,
+  Traffic, Logs), Route (Upstreams, Certificates) and Operate (Controls,
+  Config, Audit).
+- **Admin UI: a command palette.** `Ctrl K` (`⌘ K` on a Mac) or `/` opens
+  it: go to a section, drain or put back a backend, purge a cache, turn
+  maintenance on or off, reload, unblock an address, find a setting, open
+  the guides. `G` then a letter goes to a section (`G U` is Upstreams; the
+  letters are shown in the sidebar).
+- **Admin UI: Overview shows what needs you.** Requests per second with
+  the errors, open connections and queue beside it, a chart with the
+  value under the pointer, a "Needs attention" list (failing or drained
+  backends, an open circuit breaker, certificates about to expire, a full
+  disk) with the action next to each, and the newest requests.
+- **Admin UI: maintenance mode asks for the word.** Turning it on lists
+  what visitors get and wants `maintenance` typed before the button works.
+- **Admin UI: Upstreams** shows each backend's share of traffic and the
+  recent drains from the audit log; **Logs** can be downloaded as a file.
+- **Admin UI on a phone**: rows of the upstream and cache tables stack, so
+  Drain and Purge stay on screen.
+
 ## 18.37.0 — 2026-11-16
 
 ### Changed

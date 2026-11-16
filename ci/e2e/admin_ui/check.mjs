@@ -34,24 +34,27 @@ await page.getByText("Requests served").waitFor({ timeout: 5000 }).catch(() => f
 console.log("ok: signed in, overview shown");
 
 await page.goto(`${admin}/admin/#/upstreams`);
-const first = page.locator("lit-material-switch").first();
-await first.waitFor({ timeout: 5000 });
-await first.click();
+const drain = page.getByRole("button", { name: /^Drain / }).first();
+await drain.waitFor({ timeout: 5000 });
+await drain.click();
 await page.getByText("Drained").first().waitFor({ timeout: 5000 }).catch(() => fail("the UI didn't show the backend drained"));
 const [web] = await api("/upstreams");
 if (!web.backends[0].drained) fail(`the drain didn't reach the server: ${JSON.stringify(web)}`);
-await first.click();
+await page.getByRole("button", { name: /^Put back / }).first().click();
 await page.waitForTimeout(500);
 if ((await api("/upstreams"))[0].backends[0].drained) fail("undrain didn't reach the server");
 console.log("ok: drain and undrain a backend from the UI");
 
 await page.goto(`${admin}/admin/#/controls`);
-const maintenance = page.locator('lit-material-switch[aria-label="Maintenance mode"]');
+const maintenance = page.locator("#maintenance-toggle");
 await maintenance.waitFor({ timeout: 5000 });
 await maintenance.click();
-// Turning it on asks first (18.37.0).
+// Turning it on asks first, and wants the word typed (the redesign).
 await page.locator("dialog#confirm[open]").waitFor({ timeout: 5000 }).catch(() => fail("no confirmation before maintenance mode"));
-await page.locator("dialog#confirm").getByText("Turn on", { exact: true }).click();
+const go = page.locator("dialog#confirm").getByRole("button", { name: "Turn on maintenance" });
+if (await go.isEnabled()) fail("maintenance can be confirmed without typing the word");
+await page.locator("#confirm-type input").fill("maintenance");
+await go.click();
 await page.getByText("On: 503 for visitors").waitFor({ timeout: 5000 }).catch(() => fail("maintenance didn't switch on in the UI"));
 await page.getByText("Maintenance mode is on").waitFor({ timeout: 5000 }).catch(() => fail("no maintenance banner"));
 const browser503 = await fetch(publicUrl, { headers: { Accept: "text/html" } });

@@ -22,6 +22,8 @@ import lock_key from "../node_modules/@phosphor-icons/core/assets/regular/lock-k
 import clipboard_text from "../node_modules/@phosphor-icons/core/assets/regular/clipboard-text.svg?raw";
 import dots_three from "../node_modules/@phosphor-icons/core/assets/regular/dots-three.svg?raw";
 import user_circle from "../node_modules/@phosphor-icons/core/assets/regular/user-circle.svg?raw";
+import magnifying_glass from "../node_modules/@phosphor-icons/core/assets/regular/magnifying-glass.svg?raw";
+import download_simple from "../node_modules/@phosphor-icons/core/assets/regular/download-simple.svg?raw";
 
 registerIcons({
   "gauge": gauge,
@@ -44,6 +46,8 @@ registerIcons({
   "clipboard-text": clipboard_text,
   "user-circle": user_circle,
   "dots-three": dots_three,
+  "magnifying-glass": magnifying_glass,
+  "download-simple": download_simple,
 });
 
 /** The icon `name` as a template value (a `lit-material-icon`). */
