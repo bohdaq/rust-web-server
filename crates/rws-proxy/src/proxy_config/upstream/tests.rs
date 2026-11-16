@@ -132,6 +132,24 @@ fn metrics_name_the_upstream_and_backend() {
 }
 
 #[test]
+fn totals_add_an_upstreams_backends_up() {
+    let of = |name: &str| totals().into_iter().find(|t| t.name == name);
+    register(vec![policy(&[], false, None, None)]);
+    let before = of("api").expect("the configured upstream is listed before it gets a request");
+    observe("api", "http://a:1", Some(200), Instant::now());
+    observe("api", "http://b:1", Some(502), Instant::now());
+    observe("api", "http://b:1", None, Instant::now());
+    observe("totals-of-an-earlier-config", "http://a:1", Some(200), Instant::now());
+    let after = of("api").unwrap();
+    // Other tests send to "api" too: at least these three.
+    assert!(after.requests >= before.requests + 3, "{before:?} then {after:?}");
+    assert!(after.errors >= before.errors + 2, "a 5xx and no response are errors: {before:?} then {after:?}");
+    assert!(after.buckets[0] >= before.buckets[0] + 3, "all three took under 5 ms");
+    assert_eq!(after.buckets[10] - after.buckets[0], before.buckets[10] - before.buckets[0], "buckets are cumulative");
+    assert_eq!(of("totals-of-an-earlier-config"), None, "only the current configuration's upstreams");
+}
+
+#[test]
 fn open_requests_are_counted_until_dropped() {
     let (upstream, backend) = ("open-count-test", "http://a:1");
     assert_eq!(open_requests(upstream, backend), 0);

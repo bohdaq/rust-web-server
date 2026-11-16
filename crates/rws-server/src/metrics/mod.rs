@@ -43,6 +43,8 @@ use crate::response::Response;
 use crate::server::ConnectionInfo;
 
 pub mod exposition;
+#[doc(hidden)]
+pub mod hosts;
 pub mod http;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod llm;

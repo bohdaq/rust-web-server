@@ -3,6 +3,7 @@ import { api, ApiError, followLogs, setToken, token } from "./api.js";
 import { formatBytes as bytes, formatDuration } from "@lit-material/format";
 import "@lit-material/truncate";
 import { icon } from "./icons.js";
+import { between, latency, quantile, under } from "./breakdown.js";
 
 // Sections, grouped as the sidebar shows them. `key`: press G, then the key.
 const VIEWS = [
@@ -23,6 +24,14 @@ const PRIMARY = ["overview", "traffic", "upstreams", "logs"];
 // Requests-per-second samples kept for the Overview chart (one every 2 s).
 const SAMPLES = 150;
 // Access-log lines kept in the Logs page, and how many of them are drawn.
+// Response times and "where requests go" cover the last five minutes: an
+// earlier /breakdown answer is kept every ten seconds to subtract from the newest.
+const WINDOW_MS = 5 * 60 * 1000;
+const BASE_EVERY_MS = 10 * 1000;
+// A window shorter than this says too little: the numbers since start are shown.
+const WINDOW_MIN_MS = 30 * 1000;
+// Hosts named in "Where requests go"; the rest are added up.
+const HOSTS_SHOWN = 5;
 const LOG_KEPT = 1000;
 const LOG_DRAWN = 300;
 
@@ -253,6 +262,7 @@ export class RwsAdmin extends LitElement {
     this.filter = "";
     this.busy = "";
     this.lastTotal = null;
+    this.bases = [];
     this.me = null;
     this.sso = false;
     this.moreOpen = false;
@@ -382,6 +392,7 @@ export class RwsAdmin extends LitElement {
     this.me = null;
     this.samples = [];
     this.lastTotal = null;
+    this.bases = [];
     this.recent = null;
     clearInterval(this.pulse);
     if (viaSso) location.assign("/admin/auth/logout");
@@ -588,8 +599,17 @@ export class RwsAdmin extends LitElement {
     // Extras a page is fine without (a role may not read them).
     const quiet = (path) => api(path).catch(() => null);
     if (view === "overview") {
-      const [, , lines] = await Promise.all([get("status", "/status"), get("metrics", "/metrics"), quiet("/logs?n=8")]);
+      const [, , lines, breakdown] = await Promise.all([get("status", "/status"), get("metrics", "/metrics"), quiet("/logs?n=8"), quiet("/breakdown")]);
       if (Array.isArray(lines)) this.recent = lines.map(parseLog).reverse();
+      if (breakdown?.duration) {
+        const at = Date.now();
+        // Fewer requests than before: the server restarted, earlier answers don't apply.
+        if (this.bases.length && breakdown.duration.count < this.bases.at(-1).b.duration.count) this.bases = [];
+        if (!this.bases.length || at - this.bases.at(-1).at >= BASE_EVERY_MS) {
+          this.bases = [...this.bases, { at, b: breakdown }].filter((e) => at - e.at <= WINDOW_MS);
+        }
+        this.data = { ...this.data, breakdown: { ...breakdown, at } };
+      }
       const m = this.data.metrics;
       if (typeof m?.requests_total === "number") {
         const now = Date.now();
@@ -1139,9 +1159,9 @@ export class RwsAdmin extends LitElement {
         </div>
         ${this.renderChart()}
       </section>
-      <div class="cols">
+      <div class="cols ov">
         <div class="stack">
-          <section class="card" aria-labelledby="attn-title">
+          <section class="card ov-attn" aria-labelledby="attn-title">
             <div class="card-head"><h2 id="attn-title">Needs attention</h2>${needs.length ? html`<span class="count">${needs.length}</span>` : nothing}</div>
             ${needs.length === 0
               ? html`<div class="all-clear"><span class="sq" data-tone="ok"></span>Nothing needs you: backends, certificates and disk are fine.</div>`
@@ -1151,7 +1171,7 @@ export class RwsAdmin extends LitElement {
                   ${n.action ? html`<button class="btn" ?disabled=${Boolean(n.action.busy) && this.busy === n.action.busy} @click=${n.action.run}>${n.action.label}</button>` : nothing}
                 </div>`)}
           </section>
-          <section class="card" aria-labelledby="live-title">
+          <section class="card ov-live" aria-labelledby="live-title">
             <div class="card-head"><h2 id="live-title">Live requests</h2>
               <span class="meta">The newest eight. This console's own aren't logged.</span><span class="spacer"></span>
               <a class="link" href="#/logs">Open Logs</a></div>
@@ -1162,20 +1182,90 @@ export class RwsAdmin extends LitElement {
                 : this.recent.map(requestRow)}
             </div>
           </section>
+          <section class="card ov-server" aria-labelledby="server-title">
+            <div class="card-head"><h2 id="server-title">Server</h2></div>
+            <dl class="facts">
+              <dt>Main listener</dt><dd>${s.listeners.main.address} <span class="plain">${s.listeners.main.tls ? "HTTPS, HTTP/2, HTTP/3" : "plain HTTP"}</span></dd>
+              <dt>HTTP redirect</dt><dd>${s.listeners.redirect ?? html`<span class="plain">off</span>`}</dd>
+              <dt>Admin</dt><dd>${s.listeners.admin}</dd>
+              <dt>Uptime</dt><dd>${duration(s.uptime_secs)}</dd>
+              <dt>Process</dt><dd>${s.pid}</dd>
+              <dt>Version</dt><dd>${s.version}</dd>
+              <dt>Built with</dt><dd><span class="plain">${s.features.join(", ")}</span></dd>
+            </dl>
+          </section>
         </div>
-        <section class="card" aria-labelledby="server-title">
-          <div class="card-head"><h2 id="server-title">Server</h2></div>
-          <dl class="facts">
-            <dt>Main listener</dt><dd>${s.listeners.main.address} <span class="plain">${s.listeners.main.tls ? "HTTPS, HTTP/2, HTTP/3" : "plain HTTP"}</span></dd>
-            <dt>HTTP redirect</dt><dd>${s.listeners.redirect ?? html`<span class="plain">off</span>`}</dd>
-            <dt>Admin</dt><dd>${s.listeners.admin}</dd>
-            <dt>Uptime</dt><dd>${duration(s.uptime_secs)}</dd>
-            <dt>Process</dt><dd>${s.pid}</dd>
-            <dt>Version</dt><dd>${s.version}</dd>
-            <dt>Built with</dt><dd><span class="plain">${s.features.join(", ")}</span></dd>
-          </dl>
-        </section>
+        <div class="stack">${this.renderBreakdown()}</div>
       </div>
+    `;
+  }
+
+  /**
+   * The last five minutes of /breakdown (since start until this page has
+   * been open for a while, or when nothing arrived in that time).
+   */
+  breakdownWindow() {
+    const latest = this.data.breakdown;
+    if (!latest) return null;
+    const base = this.bases[0];
+    const span = base ? latest.at - base.at : 0;
+    const recent = span >= WINDOW_MIN_MS ? between(latest, base.b) : null;
+    if (recent?.count) {
+      const secs = span / 1000;
+      return { ...recent, bounds: latest.upstream_bounds, over: `over the last ${secs >= 90 ? `${Math.round(secs / 60)} min` : `${Math.round(secs)} s`}` };
+    }
+    return { ...between(latest, null), bounds: latest.upstream_bounds, over: "since start" };
+  }
+
+  /** Response time (p50, p95, p99) and where requests go: by host and by upstream. */
+  renderBreakdown() {
+    const w = this.breakdownWindow();
+    if (!w) return nothing; // a server before 18.38, or a role that can't read it
+    const p = (q) => { const v = quantile(w, q); return v === null ? "–" : latency(v); };
+    const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
+    const row = ({ name, mono = true, requests, of, note }) => html`<li>
+      <span class="where-name ${mono ? "mono" : ""}" title=${name}>${name}</span>
+      <span class="where-pct">${pct(requests, of)}%</span>
+      <span class="share-track"><span class="share-fill" style="width: ${Math.min(100, (requests / (of || 1)) * 100)}%"></span></span>
+      <span class="where-note">${plural(requests, "request", "requests")}${note ?? nothing}</span>
+    </li>`;
+    const failed = (n) => (n ? html` · <span class="bad">${plural(n, "error", "errors")}</span>` : nothing);
+
+    const named = w.hosts.slice(0, HOSTS_SHOWN), rest = w.hosts.slice(HOSTS_SHOWN);
+    const other = rest.reduce((sum, h) => ({ requests: sum.requests + h.requests, errors: sum.errors + h.errors }), { ...w.otherHosts });
+    const byHost = named.reduce((n, h) => n + h.requests, 0) + other.requests;
+    // An upstream counts each try, so retries can push the sum past the requests.
+    const proxied = w.upstreams.reduce((n, u) => n + u.requests, 0);
+    const all = Math.max(w.count, proxied);
+    return html`
+      <section class="card ov-rt" aria-labelledby="rt-title">
+        <div class="card-head"><h2 id="rt-title">Response time</h2>
+          <span class="meta">${w.count ? html`${plural(w.count, "request", "requests")} ${w.over}` : "No requests yet"}</span></div>
+        <dl class="vitals vitals-3">
+          <div class="vital"><dt>p50</dt><dd>${p(0.5)}</dd><span class="note">half are faster</span></div>
+          <div class="vital"><dt>p95</dt><dd>${p(0.95)}</dd><span class="note">1 in 20 is slower</span></div>
+          <div class="vital"><dt>p99</dt><dd>${p(0.99)}</dd><span class="note">1 in 100 is slower</span></div>
+        </dl>
+      </section>
+      <section class="card ov-where" aria-labelledby="where-title">
+        <div class="card-head"><h2 id="where-title">Where requests go</h2><span class="meta">${w.count ? w.over : nothing}</span></div>
+        ${!w.count ? html`<div class="all-clear">No requests yet. Hosts and upstreams appear here as requests arrive.</div>` : html`
+          <h3 class="where-head" id="where-hosts">By host</h3>
+          <ul class="where" aria-labelledby="where-hosts">
+            ${named.map((h) => row({ name: h.host || "No host named", mono: Boolean(h.host), requests: h.requests, of: byHost, note: failed(h.errors) }))}
+            ${other.requests ? row({ name: rest.length ? plural(rest.length, "other host", "other hosts") : "Other hosts", mono: false, requests: other.requests, of: byHost, note: failed(other.errors) }) : nothing}
+          </ul>
+          ${w.upstreams.length ? html`
+            <h3 class="where-head" id="where-upstreams">By upstream</h3>
+            <ul class="where" aria-labelledby="where-upstreams">
+              ${w.upstreams.map((u) => {
+                const slow = under(u, w.bounds, 0.95);
+                const speed = slow === undefined ? nothing : slow === null ? ` · 1 in 20 took over ${latency(w.bounds.at(-1))}` : ` · 95% under ${latency(slow)}`;
+                return row({ name: u.name, requests: u.requests, of: all, note: html`${speed}${failed(u.errors)}` });
+              })}
+              ${all > proxied ? row({ name: "rws itself", mono: false, requests: all - proxied, of: all, note: " · files, cached and configured responses" }) : nothing}
+            </ul>` : nothing}`}
+      </section>
     `;
   }
 

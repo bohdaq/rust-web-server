@@ -325,6 +325,31 @@ lit-material-alert { display: block; }
 .attn-text { flex: 1; min-width: 0; display: grid; }
 .attn-title { font-weight: 500; overflow-wrap: anywhere; }
 .attn-detail { color: var(--muted); }
+/* Response time and "Where requests go" on Overview. */
+.vitals.vitals-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: 16px 4px; }
+.vitals-3 .vital:first-child { border-left: 0; }
+.where-head { margin: 0; padding: 14px 20px 2px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.where { list-style: none; margin: 0; padding: 0 0 6px; container-type: inline-size; }
+.where li { display: grid; grid-template: "name pct" "track track" "note note" / minmax(0, 1fr) auto; align-items: baseline; gap: 5px 12px; padding: 7px 20px; }
+.where-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.where-name.mono { font-size: 12px; }
+.where-pct { grid-area: pct; min-width: 3em; text-align: right; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.where .share-track { grid-area: track; flex: none; }
+.where-note { grid-area: note; font-size: 12px; color: var(--faint); }
+/* Room for it: the numbers move up beside the name. */
+@container (min-width: 400px) {
+  .where li { grid-template: "name note pct" "track track track" / minmax(0, 1fr) auto auto; }
+}
+/* One column: what the server is doing before the request list and the facts. */
+@media (max-width: 1099.98px) {
+  .cols.ov > .stack { display: contents; }
+  .ov-attn { order: 1; }
+  .ov-rt { order: 2; }
+  .ov-where { order: 3; }
+  .ov-live { order: 4; }
+  .ov-server { order: 5; }
+}
+.where-note .bad { color: var(--bad); }
 .all-clear { display: flex; align-items: center; gap: 12px; padding: 18px 20px; color: var(--muted); }
 .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0; margin: 0; }
 .facts dt, .facts dd { margin: 0; padding: 9px 20px; border-top: 1px solid var(--line-soft); }
@@ -462,7 +487,8 @@ lit-material-command-palette::part(option) { min-height: 44px; }
   .chart, .chart-empty { height: 120px; }
   .chart-x { padding: 6px 16px 12px; }
   .chart-y { left: 16px; }
-  .attn, .all-clear, .change { padding-left: 16px; padding-right: 16px; }
+  .attn, .all-clear, .change, .where li, .where-head { padding-left: 16px; padding-right: 16px; }
+  .vitals.vitals-3 { padding: 14px 0; }
   .facts dt, .facts dd { padding-left: 16px; padding-right: 16px; }
   .tbl th:first-child, .tbl td:first-child { padding-left: 16px; }
   .tbl th:last-child, .tbl td:last-child { padding-right: 16px; }

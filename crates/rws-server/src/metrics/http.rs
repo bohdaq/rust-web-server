@@ -150,6 +150,33 @@ impl Histogram {
         }
     }
 
+    /// The duration `q` (0 to 1) of the observations are at or under, from
+    /// the native buckets (so within about 9%); `None` without observations.
+    #[doc(hidden)]
+    pub fn quantile(&self, q: f64) -> Option<f64> {
+        if self.count == 0 {
+            return None;
+        }
+        let rank = ((q.clamp(0.0, 1.0) * self.count as f64).ceil() as u64).max(1);
+        let mut seen = self.zero_count;
+        if seen >= rank {
+            return Some(0.0);
+        }
+        for (i, n) in self.native.iter().enumerate() {
+            if *n == 0 {
+                continue;
+            }
+            if seen + n >= rank {
+                let index = self.native_offset + i as i32;
+                let lower = 2f64.powf((index - 1) as f64 / 8.0);
+                let upper = 2f64.powf(index as f64 / 8.0);
+                return Some(lower + (upper - lower) * ((rank - seen) as f64 / *n as f64));
+            }
+            seen += n;
+        }
+        None
+    }
+
     /// The native buckets as Prometheus spans (offset, length) and count deltas:
     /// runs of empty buckets longer than two start a new span.
     #[doc(hidden)]
@@ -286,6 +313,19 @@ pub fn snapshot() -> Vec<(Series, Histogram)> {
     }
     let mut all: Vec<_> = merged.into_iter().collect();
     all.sort_by_key(|(s, _)| *s);
+    all
+}
+
+/// Every request so far in one histogram (all methods, statuses and protocols).
+#[doc(hidden)]
+pub fn total() -> Histogram {
+    let mut all = Histogram::default();
+    for shard in shards() {
+        let map = shard.lock().unwrap_or_else(|e| e.into_inner());
+        for histogram in map.values() {
+            all.merge(histogram);
+        }
+    }
     all
 }
 

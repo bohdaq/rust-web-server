@@ -183,12 +183,14 @@ where
                 Ok(r) => r,
                 Err(message) => {
                     crate::metrics::http::observe(&request.method, 400, is_tls, &request.http_version, started);
+                    crate::metrics::hosts::observe_request(&request, 400);
                     write_and_flush(&mut stream, &Server::bad_request_response(message.clone())).await;
                     return Err(message);
                 }
             };
             crate::metrics::record_request();
             crate::metrics::http::observe(&request.method, response.status_code, is_tls, &request.http_version, started);
+            crate::metrics::hosts::observe_request(&request, response.status_code);
             crate::compression::apply_compression(&request, &mut response);
             response.drop_content_for_status();
             if is_tls {
@@ -312,6 +314,7 @@ where
             Ok(r) => r,
             Err(message) => {
                 crate::metrics::http::observe(&request.method, 400, is_tls, &request.http_version, started);
+                crate::metrics::hosts::observe_request(&request, 400);
                 write_and_flush(&mut stream, &Server::bad_request_response(message.clone())).await;
                 return Err(message);
             }
@@ -319,6 +322,7 @@ where
 
         crate::metrics::record_request();
         crate::metrics::http::observe(&request.method, response.status_code, is_tls, &request.http_version, started);
+        crate::metrics::hosts::observe_request(&request, response.status_code);
         // A WebSocket upgrade: send the 101, then the connection is the
         // handler's (`WebSocket::upgrade`).
         if let Some(upgrade) = crate::websocket::take_upgrade(&mut response) {

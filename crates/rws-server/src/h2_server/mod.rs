@@ -1430,16 +1430,19 @@ fn finish(request: Request, result: Result<Result<Response, String>, String>, pe
         Ok(Err(message)) => {
             eprintln!("App error on H2 stream: {}", message);
             crate::metrics::http::observe(&request.method, 500, https, "HTTP/2", started);
+            crate::metrics::hosts::observe_request(&request, 500);
             return None;
         }
         Err(e) => {
             eprintln!("Handler panicked on H2 stream: {}", e);
             crate::metrics::http::observe(&request.method, 500, https, "HTTP/2", started);
+            crate::metrics::hosts::observe_request(&request, 500);
             return None;
         }
     };
     crate::metrics::record_request();
     crate::metrics::http::observe(&request.method, response.status_code, https, "HTTP/2", started);
+    crate::metrics::hosts::observe_request(&request, response.status_code);
     crate::compression::apply_compression(&request, &mut response);
     // 1xx/204/304: no DATA frame, no content-length (#54).
     response.drop_content_for_status();

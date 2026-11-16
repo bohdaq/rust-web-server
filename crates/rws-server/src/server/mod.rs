@@ -502,6 +502,7 @@ impl Server {
                 Ok(r) => r,
                 Err(message) => {
                     crate::metrics::http::observe(&request.method, 400, false, &request.http_version, started);
+                    crate::metrics::hosts::observe_request(&request, 400);
                     let raw_response = Server::bad_request_response(message.clone());
                     let boxed_stream = stream.write(raw_response.borrow());
                     if boxed_stream.is_ok() { stream.flush().unwrap(); }
@@ -511,6 +512,7 @@ impl Server {
 
             crate::metrics::record_request();
             crate::metrics::http::observe(&request.method, response.status_code, false, &request.http_version, started);
+            crate::metrics::hosts::observe_request(&request, response.status_code);
             // A WebSocket upgrade: send the 101, then the connection is the
             // handler's, on a thread of its own.
             if let Some(upgrade) = crate::websocket::take_upgrade(&mut response) {

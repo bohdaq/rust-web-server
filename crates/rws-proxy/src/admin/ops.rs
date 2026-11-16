@@ -51,6 +51,62 @@ pub fn metrics_json() -> String {
     )
 }
 
+/// Seconds as JSON, to the microsecond.
+pub(crate) fn secs(value: f64) -> String {
+    let text = format!("{value:.6}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+fn list<T: ToString>(values: &[T]) -> String {
+    values.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",")
+}
+
+/// Response times and where requests went, all since the server started:
+/// the request duration histogram with p50, p95 and p99, requests per
+/// host, and requests per upstream. The numbers only grow, so a client
+/// takes the difference of two reads for "the last five minutes".
+pub fn breakdown_json() -> String {
+    use crate::metrics;
+    let all = metrics::http::total();
+    let quantile = |q: f64| all.quantile(q).map_or("null".to_string(), secs);
+    let duration = format!(
+        r#"{{"count":{},"sum":{},"p50":{},"p95":{},"p99":{},"zero":{},"offset":{},"buckets":[{}]}}"#,
+        all.count,
+        secs(all.sum),
+        quantile(0.5),
+        quantile(0.95),
+        quantile(0.99),
+        all.zero_count,
+        all.native_offset,
+        list(&all.native)
+    );
+    let (hosts, other) = metrics::hosts::snapshot();
+    let hosts: Vec<String> =
+        hosts.iter().map(|(host, n)| format!(r#"{{"host":{},"requests":{},"errors":{}}}"#, quoted(host), n.requests, n.errors)).collect();
+    let upstreams: Vec<String> = crate::proxy_config::upstream::totals()
+        .iter()
+        .map(|u| {
+            format!(
+                r#"{{"name":{},"requests":{},"errors":{},"duration":{{"sum":{},"buckets":[{}]}}}}"#,
+                quoted(&u.name),
+                u.requests,
+                u.errors,
+                secs(u.sum),
+                list(&u.buckets)
+            )
+        })
+        .collect();
+    let bounds: Vec<String> = crate::proxy_config::upstream::BUCKETS.iter().map(|b| secs(*b)).collect();
+    format!(
+        r#"{{"duration":{duration},"hosts":[{}],"hosts_other":{{"requests":{},"errors":{}}},"upstream_bounds":[{}],"upstreams":[{}]}}"#,
+        hosts.join(","),
+        other.requests,
+        other.errors,
+        bounds.join(","),
+        upstreams.join(",")
+    )
+}
+
 pub fn rate_limit_json() -> String {
     let cfg = crate::config_reload::current();
     format!(

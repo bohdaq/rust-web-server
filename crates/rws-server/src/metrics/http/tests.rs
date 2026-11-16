@@ -76,3 +76,43 @@ fn observations_from_many_threads_merge() {
     assert!(text.contains(&format!("http_server_request_duration_seconds_count{{{labels}}} 8")), "{text}");
     assert!(text.contains("# TYPE http_server_request_duration_seconds histogram"));
 }
+
+#[test]
+fn quantiles_come_from_the_native_buckets() {
+    let mut h = Histogram::default();
+    assert_eq!(h.quantile(0.5), None, "no observations, no quantile");
+    for _ in 0..90 {
+        h.observe(0.010);
+    }
+    for _ in 0..9 {
+        h.observe(0.200);
+    }
+    h.observe(3.0);
+    let within = |got: Option<f64>, want: f64| {
+        let got = got.unwrap();
+        assert!((got / want - 1.0).abs() < 0.1, "{got} isn't within 10% of {want}");
+    };
+    within(h.quantile(0.5), 0.010);
+    within(h.quantile(0.95), 0.200);
+    within(h.quantile(0.99), 0.200);
+    within(h.quantile(1.0), 3.0);
+    // Never above the bucket the slowest request fell in.
+    assert!(h.quantile(1.0).unwrap() <= 3.0 * 2f64.powf(1.0 / 8.0));
+}
+
+#[test]
+fn a_histogram_of_zeros_has_zero_quantiles() {
+    let mut h = Histogram::default();
+    h.observe(0.0);
+    h.observe(0.0);
+    assert_eq!(h.quantile(0.99), Some(0.0));
+}
+
+#[test]
+fn total_adds_every_series_up() {
+    let before = total().count;
+    let started = std::time::Instant::now();
+    observe("GET", 200, false, "HTTP/1.1", started);
+    observe("POST", 503, true, "HTTP/2", started);
+    assert!(total().count >= before + 2);
+}

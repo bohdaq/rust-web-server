@@ -169,6 +169,33 @@ assert all(b["healthy"] and not b["drained"] and b["weight"] == 1 for b in web["
 PY
 pass "upstreams: backends, health, weights"
 
+# ── breakdown: response times, requests per host and per upstream ───────────
+before=$(api GET /breakdown)
+for _ in 1 2 3; do curl -s -o /dev/null -H "Host: Shop.Example" http://127.0.0.1:18451/; done
+curl -s -o /dev/null -H "Host: shop.example" "http://127.0.0.1:18451/slow/job?ms=300"
+after=$(api GET /breakdown)
+python3 - "$before" "$after" <<'PY' || fail "breakdown: $before then $after"
+import json, sys
+before, after = (json.loads(a) for a in sys.argv[1:3])
+# The admin API's own requests aren't counted: exactly the four above.
+assert after["duration"]["count"] - before["duration"]["count"] == 4, "requests"
+assert after["duration"]["sum"] - before["duration"]["sum"] >= 0.3, "the slow one took 300 ms"
+assert sum(after["duration"]["buckets"]) + after["duration"]["zero"] == after["duration"]["count"], "buckets add up"
+assert 0 < after["duration"]["p50"] <= after["duration"]["p95"] <= after["duration"]["p99"], after["duration"]
+host = lambda b: next((h for h in b["hosts"] if h["host"] == "shop.example"), {"requests": 0, "errors": 0})
+assert host(after)["requests"] - host(before)["requests"] == 4, "the host, whatever its case"
+assert host(after)["errors"] == 0, "no 5xx"
+assert after["upstream_bounds"][5:7] == [0.25, 0.5], after["upstream_bounds"]
+ups = lambda b: {u["name"]: u for u in b["upstreams"]}
+assert sorted(ups(after)) == ["jobs", "web"], "upstreams by name"
+grew = lambda name, key: key(ups(after)[name]) - key(ups(before)[name])
+assert grew("web", lambda u: u["requests"]) == 3 and grew("jobs", lambda u: u["requests"]) == 1, "requests per upstream"
+assert grew("jobs", lambda u: u["duration"]["buckets"][5]) == 0 and grew("jobs", lambda u: u["duration"]["buckets"][6]) == 1, "300 ms is over 250 ms, under 500 ms"
+assert grew("jobs", lambda u: u["errors"]) == 0
+PY
+[ "$(code -X POST -H "Authorization: Bearer $E2E_ADMIN_TOKEN" http://127.0.0.1:18452/admin/api/v1/breakdown)" = 405 ] || fail "POST /breakdown should be 405"
+pass "breakdown: response times, requests per host and per upstream"
+
 api PUT /upstreams/web/drain '{"backend":"http://127.0.0.1:18461","drained":true}' >/dev/null
 for _ in $(seq 1 10); do
   [ "$(curl -s http://127.0.0.1:18451/)" = "backend-18462" ] || fail "a drained backend got a request"

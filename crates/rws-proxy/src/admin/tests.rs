@@ -243,6 +243,33 @@ fn reads_rate_limits_cors_metrics_requests_and_routes() {
 }
 
 #[test]
+fn breakdown_reports_response_times_hosts_and_upstreams() {
+    let _g = crate::test_env::lock();
+    let api = AdminApi::new("t");
+    let started = std::time::Instant::now();
+    crate::metrics::http::observe("GET", 200, false, "HTTP/1.1", started);
+    crate::metrics::hosts::record(Some("Breakdown.Example"), 200);
+    crate::metrics::hosts::record(Some("breakdown.example"), 503);
+    let (status, text) = call(&api, "GET", "/admin/api/v1/breakdown", "");
+    assert_eq!(status, 200, "{text}");
+    assert!(text.starts_with(r#"{"duration":{"count":"#), "{text}");
+    for key in [r#""p50":0"#, r#""p95":0"#, r#""p99":0"#, r#""zero":"#, r#""offset":"#, r#""buckets":["#, r#""hosts_other":{"requests":"#, r#""upstreams":["#] {
+        assert!(text.contains(key), "{key} in {text}");
+    }
+    assert!(text.contains(r#"{"host":"breakdown.example","requests":2,"errors":1}"#), "{text}");
+    assert!(text.contains(r#""upstream_bounds":[0.005,0.01,0.025,0.05,0.1,0.25,0.5,1,2.5,5,10]"#), "{text}");
+    assert_eq!(call(&api, "POST", "/admin/api/v1/breakdown", "").0, 405);
+}
+
+#[test]
+fn seconds_are_written_without_trailing_zeros() {
+    assert_eq!(ops::secs(0.0), "0");
+    assert_eq!(ops::secs(10.0), "10");
+    assert_eq!(ops::secs(0.0025), "0.0025");
+    assert_eq!(ops::secs(1.23456789), "1.234568");
+}
+
+#[test]
 fn the_cache_and_routes_come_from_whoever_registered_them() {
     let _g = crate::test_env::lock();
     let api = AdminApi::new("t");

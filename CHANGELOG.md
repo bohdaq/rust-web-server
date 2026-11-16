@@ -33,6 +33,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `GET /upstreams` backends have `open_requests` and `drained_since`;
   Prometheus has `rws_upstream_backend_open_requests` and
   `rws_upstream_backend_drained`. The count is per rws process.
+- **Response time and where requests go.** The admin UI's Overview shows
+  the p50, p95 and p99 response time, and a "Where requests go" card: the
+  busiest hosts and every upstream with its share of requests, its errors
+  and the time 95% of its requests stayed under, plus what rws answered
+  itself. Both cover the last five minutes the page has been open (since
+  start before that). They come from the new `GET /breakdown` of the
+  admin API: the response-time histogram with its percentiles, requests
+  and `5xx` answers per `Host` (up to 200 names, the rest added up), and
+  requests, errors and response times per upstream. Host names are
+  counted for the admin API only; they are not Prometheus labels.
+  Library: `admin::ops::breakdown_json()`.
 - **Admin API:** `GET`/`PUT /maintenance` answer
   `{"active":…,"since":…,"until":…,"retry_after_secs":…}` (was
   `{"active":…}`); `PUT /maintenance {"add_secs":N}` extends a timed

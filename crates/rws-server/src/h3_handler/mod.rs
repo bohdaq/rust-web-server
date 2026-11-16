@@ -178,6 +178,7 @@ async fn handle_stream(
         Err(message) => {
             eprintln!("App error on H3 stream: {}", message);
             crate::metrics::http::observe(&method, 500, true, "HTTP/3", started);
+            crate::metrics::hosts::observe_request(&rws_request, 500);
             send_error_response(stream, StatusCode::INTERNAL_SERVER_ERROR).await;
             return;
         }
@@ -186,6 +187,7 @@ async fn handle_stream(
     let mut rws_response = rws_response;
     crate::metrics::record_request();
     crate::metrics::http::observe(&rws_request.method, rws_response.status_code, true, "HTTP/3", started);
+    crate::metrics::hosts::observe_request(&rws_request, rws_response.status_code);
     crate::compression::apply_compression(&rws_request, &mut rws_response);
     rws_response.drop_content_for_status();
     rws_response.headers.push(Header::get_hsts_header());

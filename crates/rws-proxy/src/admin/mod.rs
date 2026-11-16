@@ -649,6 +649,8 @@ impl AdminApi {
             (_, "/reload") => wrong_method("POST"),
             ("GET", "/metrics") => ok(ops::metrics_json()),
             (_, "/metrics") => wrong_method("GET"),
+            ("GET", "/breakdown") => ok(ops::breakdown_json()),
+            (_, "/breakdown") => wrong_method("GET"),
             ("GET", "/build") => ok(ops::build_features_json()),
             (_, "/build") => wrong_method("GET"),
             ("GET", "/rate-limit") => ok(ops::rate_limit_json()),

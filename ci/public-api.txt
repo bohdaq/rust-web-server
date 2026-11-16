@@ -8145,6 +8145,7 @@ pub fn rust_web_server::admin::ops::authz_tuples_json(core::option::Option<&str>
 pub fn rust_web_server::admin::ops::authz_write(&str) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::block(&str) -> alloc::string::String
 pub fn rust_web_server::admin::ops::blocklist_json() -> alloc::string::String
+pub fn rust_web_server::admin::ops::breakdown_json() -> alloc::string::String
 pub fn rust_web_server::admin::ops::build_features_json() -> alloc::string::String
 pub fn rust_web_server::admin::ops::cache_stats_json(&rust_web_server::cache::CacheLayer) -> alloc::string::String
 pub fn rust_web_server::admin::ops::caches_json() -> alloc::string::String

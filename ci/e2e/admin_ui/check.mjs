@@ -33,6 +33,17 @@ await signIn(token);
 await page.getByText("Requests served").waitFor({ timeout: 5000 }).catch(() => fail("no overview after signing in"));
 console.log("ok: signed in, overview shown");
 
+// Response time and "Where requests go": a few requests, then their host and upstream are named.
+for (let i = 0; i < 5; i++) await fetch(publicUrl);
+const where = page.locator(".ov-where");
+await where.getByText(new URL(publicUrl).host, { exact: true }).waitFor({ timeout: 8000 }).catch(() => fail("Where requests go doesn't name the host"));
+await where.locator("li", { hasText: "web" }).getByText(/\d requests? · 95% under \d/).waitFor({ timeout: 8000 }).catch(() => fail("Where requests go doesn't show the upstream"));
+const p95 = (await page.locator(".ov-rt .vital", { hasText: "p95" }).locator("dd").textContent()).trim();
+if (!/^(under )?[\d.]+ (ms|s)$/.test(p95)) fail(`no p95 response time: ${p95}`);
+const breakdown = await api("/breakdown");
+if (!(breakdown.duration.count >= 5 && breakdown.duration.p95 > 0)) fail(`/breakdown: ${JSON.stringify(breakdown.duration)}`);
+console.log("ok: response time and where requests go");
+
 const upstream = async (name) => (await api("/upstreams")).find((u) => u.name === name);
 const first = "http://127.0.0.1:18481";
 await page.goto(`${admin}/admin/#/upstreams`);

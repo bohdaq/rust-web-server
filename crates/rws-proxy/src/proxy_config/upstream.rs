@@ -202,7 +202,8 @@ pub fn replayable(request: &crate::request::Request) -> bool {
 
 // ── metrics ───────────────────────────────────────────────────────────────────
 
-const BUCKETS: [f64; 11] = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+/// Upper bounds (seconds) of the request duration buckets kept per backend.
+pub(crate) const BUCKETS: [f64; 11] = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
 #[derive(Default)]
 struct BackendStats {
@@ -418,6 +419,52 @@ pub fn snapshot() -> Vec<(String, Vec<BackendView>)> {
     // By name: the same order after every reload.
     upstreams.sort_by(|a, b| a.0.cmp(&b.0));
     upstreams
+}
+
+/// What one upstream got since the server started, over all its backends.
+#[doc(hidden)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UpstreamTotals {
+    #[doc(hidden)]
+    pub name: String,
+    /// Requests sent to its backends (a retried request counts once per try).
+    #[doc(hidden)]
+    pub requests: u64,
+    /// Those that got no response, or a 5xx one.
+    #[doc(hidden)]
+    pub errors: u64,
+    /// Requests that took up to each of the duration bounds (cumulative).
+    #[doc(hidden)]
+    pub buckets: [u64; 11],
+    /// Seconds all of them took together.
+    #[doc(hidden)]
+    pub sum: f64,
+}
+
+/// The current configuration's upstreams with what each got, by name.
+#[doc(hidden)]
+pub fn totals() -> Vec<UpstreamTotals> {
+    let stats = stats().lock().unwrap_or_else(|e| e.into_inner());
+    let mut totals: Vec<UpstreamTotals> = stats.policies.iter().map(|p| UpstreamTotals { name: p.name.clone(), ..Default::default() }).collect();
+    totals.sort_by(|a, b| a.name.cmp(&b.name));
+    totals.dedup_by(|a, b| a.name == b.name);
+    for ((upstream, _), backend) in stats.backends.iter() {
+        let Ok(at) = totals.binary_search_by(|t| t.name.as_str().cmp(upstream)) else {
+            continue; // an upstream of an earlier configuration
+        };
+        let total = &mut totals[at];
+        total.requests += backend.count;
+        total.sum += backend.sum;
+        for (code, n) in backend.requests.iter() {
+            if code == "error" || code.starts_with('5') {
+                total.errors += n;
+            }
+        }
+        for (sum, n) in total.buckets.iter_mut().zip(backend.buckets) {
+            *sum += n;
+        }
+    }
+    totals
 }
 
 /// One request to `backend` of `upstream`: its status (`None`: no
