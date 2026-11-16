@@ -3,7 +3,7 @@
 # against the rws binary: sign-in, drain from the upstreams page, maintenance
 # mode, purging a response cache (from the page and with HTTP PURGE),
 # authorization tuples and a check, the Traffic page (apps, the owner link,
-# the visit feed), the live log, and no
+# the visit feed), the live log, editing the configuration file, and no
 # CSP violations.
 #
 #   ci/e2e/admin_ui.sh <path-to-rws>
@@ -45,6 +45,7 @@ port = 18480
 [admin]
 listen = "127.0.0.1:18489"
 token_env = "UI_E2E_ADMIN_TOKEN"
+edit_config = true
 
 [traffic]
 script = true

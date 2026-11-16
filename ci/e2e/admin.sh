@@ -85,6 +85,13 @@ grep -q '"RWS_CONFIG_ADMIN_TOKEN_ENV":"(hidden)"' <<<"$cfg" && grep -q '"RWS_CON
 ! grep -q "$E2E_ADMIN_TOKEN" <<<"$cfg" || fail "the token appears in /config"
 pass "effective config, secrets hidden"
 
+# The configuration file itself is served and written only with [admin] edit_config.
+off=$(api GET /config/file)
+grep -q '"enabled":false' <<<"$off" && grep -q '"content":null' <<<"$off" || fail "config file without edit_config: $off"
+[ "$(code -X PUT -H "Authorization: Bearer $E2E_ADMIN_TOKEN" -d '{"content":"port = 1\n","sha256":"0"}' http://127.0.0.1:18452/admin/api/v1/config/file)" = 403 ] || fail "the config file was writable without edit_config"
+grep -q "^port = 18451" rws.config.toml || fail "the config file changed"
+pass "config file: not served or written unless [admin] edit_config = true"
+
 api PUT /maintenance '{"active":true}' >/dev/null
 [ "$(code http://127.0.0.1:18451/)" = 503 ] || fail "maintenance mode didn't reach the public port"
 api PUT /maintenance '{"active":false}' >/dev/null
@@ -128,6 +135,7 @@ port = 18451
 [admin]
 listen = "127.0.0.1:18452"
 token_env = "E2E_ADMIN_TOKEN"
+edit_config = true
 
 [[upstream]]
 name = "web"
@@ -291,5 +299,92 @@ set -e
 [ "$(curl -s http://127.0.0.1:18451/)" != "" ] || fail "the old config should keep serving"
 cp proxy.good proxy.toml
 pass "rws ctl reload: applied, and a bad config refused with its errors (exit 1)"
+
+# ── config file: read it, check a candidate, write it and reload ────────────
+rm -f proxy.toml.bak
+python3 -I - <<'PY' || fail "config file through the admin API"
+import hashlib, json, os, urllib.error, urllib.request
+
+TOKEN = os.environ["E2E_ADMIN_TOKEN"]
+
+def api(method, path, body=None):
+    data = None if body is None else json.dumps(body).encode()
+    request = urllib.request.Request("http://127.0.0.1:18452/admin/api/v1" + path, data=data, method=method,
+                                     headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+def public(path):
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:18451" + path, timeout=10) as response:
+            return response.status, response.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+def on_disk(name="proxy.toml"):
+    with open(name, encoding="utf-8", newline="") as f:
+        return f.read()
+
+sha = lambda text: hashlib.sha256(text.encode()).hexdigest()
+original = on_disk()
+
+status, got = api("GET", "/config/file")
+assert status == 200 and got["enabled"] and got["editable"] and got["reason"] is None, got
+assert got["path"].endswith("/proxy.toml") and got["content"] == original and got["sha256"] == sha(original), got
+
+# A candidate is checked like `rws --check`, and nothing is written.
+broken = original + '\n[[route]]\n[route.action]\ntype = "proxy"\nupstream = "missing"\n'
+status, check = api("POST", "/config/file/check", {"content": broken})
+assert status == 200 and check["ok"] is False and any("missing" in e for e in check["errors"]), check
+status, check = api("POST", "/config/file/check", {"content": original.replace("port = 18451", "port = 18459")})
+assert status == 200 and check["ok"] is True and check["errors"] == [] and check["restart"] == ["port"], check
+
+# A broken file is refused with its errors; a stale one isn't overwritten.
+status, refused = api("PUT", "/config/file", {"content": broken, "sha256": sha(original)})
+assert status == 422 and any("missing" in e for e in refused["errors"]) and "nothing was written" in refused["error"], (status, refused)
+hello = ('# żółw 🐢 "quoted" back\\slash\ttab e2e-config-marker\n[[route]]\n[route.match]\npath = "/hello-from-admin"\n'
+         '[route.action]\ntype = "respond"\n[route.action.respond]\nstatus = 200\nbody = "edited in the admin UI"\n\n')
+edited = original.replace("[[route]]", hello + "[[route]]", 1)
+status, stale = api("PUT", "/config/file", {"content": edited, "sha256": sha("something else")})
+assert status == 409 and "changed on disk" in stale["error"], (status, stale)
+assert on_disk() == original and not os.path.exists("proxy.toml.bak")
+assert "edited in the admin UI" not in public("/hello-from-admin")[1]
+
+# A valid one is written, the previous file kept, and the reload applies it.
+status, done = api("PUT", "/config/file", {"content": edited, "sha256": sha(original)})
+assert status == 200 and done["applied"] and done["changed"] and done["restart"] == [], (status, done)
+assert done["sha256"] == sha(edited) and done["backup"].endswith("/proxy.toml.bak"), done
+assert on_disk() == edited and on_disk("proxy.toml.bak") == original
+assert public("/hello-from-admin") == (200, "edited in the admin UI"), public("/hello-from-admin")
+assert not os.path.exists("proxy.toml.rws-admin.tmp")
+assert os.stat("proxy.toml").st_mode & 0o777 == os.stat("proxy.toml.bak").st_mode & 0o777
+
+# The edit was based on the file before this one: refused now.
+status, stale = api("PUT", "/config/file", {"content": original, "sha256": sha(original)})
+assert status == 409, (status, stale)
+status, got = api("GET", "/config/file")
+assert got["content"] == edited and got["sha256"] == sha(edited), got
+
+# The audit log has who and which file — never the text.
+status, audit = api("GET", "/audit?n=200")
+writes = [e for e in audit if e["path"] == "/admin/api/v1/config/file"]
+assert sorted(e["status"] for e in writes) == [200, 409, 409, 422], writes
+assert all(json.loads(e["detail"]).keys() == {"based_on", "sha256", "bytes"} for e in writes), writes
+assert "e2e-config-marker" not in json.dumps(audit), "the file's text is in the audit log"
+assert not [e for e in audit if e["path"].endswith("/config/file/check")], "a check was audited"
+
+# And back, the same way.
+status, done = api("PUT", "/config/file", {"content": original, "sha256": sha(edited)})
+assert status == 200 and done["changed"], (status, done)
+assert on_disk() == original and on_disk("proxy.toml.bak") == edited
+assert "edited in the admin UI" not in public("/hello-from-admin")[1]
+status, same = api("PUT", "/config/file", {"content": original, "sha256": sha(original)})
+assert status == 200 and same["changed"] is False and same["backup"] is None, same
+PY
+kill -0 "${PIDS[-1]}" || fail "the server died writing its config"
+pass "config file: read, check, refuse a broken or stale one, write + backup + reload"
 
 echo "all admin end-to-end checks passed"

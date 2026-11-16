@@ -1,9 +1,11 @@
 import { LitElement, html, svg, nothing } from "lit";
+import { live } from "lit/directives/live.js";
 import { api, ApiError, followLogs, setToken, token } from "./api.js";
 import { formatBytes as bytes, formatDuration } from "@lit-material/format";
 import "@lit-material/truncate";
 import { icon } from "./icons.js";
 import { between, latency, quantile, under } from "./breakdown.js";
+import { counts, diffLines, hunks } from "./diff.js";
 
 // Sections, grouped as the sidebar shows them. `key`: press G, then the key.
 const VIEWS = [
@@ -34,6 +36,8 @@ const WINDOW_MIN_MS = 30 * 1000;
 const HOSTS_SHOWN = 5;
 const LOG_KEPT = 1000;
 const LOG_DRAWN = 300;
+// Lines of "What will change" drawn on the Config page.
+const DIFF_DRAWN = 400;
 
 const DOCS = [
   ["Admin console guide", "https://rws8.tech/docs/deployment/admin/"],
@@ -244,6 +248,12 @@ export class RwsAdmin extends LitElement {
     picked: { state: true },
     query: { state: true },
     fieldError: { state: true },
+    file: { state: true },
+    draft: { state: true },
+    fileCheck: { state: true },
+    fileNewer: { state: true },
+    fileError: { state: true },
+    applied: { state: true },
   };
 
   constructor() {
@@ -274,6 +284,15 @@ export class RwsAdmin extends LitElement {
     this.picked = {};
     this.query = "";
     this.fieldError = {};
+    // The configuration file as read (file), the edited text (draft; null = no
+    // edits) and what the server says about it. Kept in memory only: it may
+    // hold secrets.
+    this.file = null;
+    this.draft = null;
+    this.fileCheck = null;
+    this.fileNewer = null;
+    this.fileError = "";
+    this.applied = null;
   }
 
   createRenderRoot() {
@@ -286,6 +305,13 @@ export class RwsAdmin extends LitElement {
     addEventListener("hashchange", this.onHash);
     this.onKey = (e) => this.key(e);
     document.addEventListener("keydown", this.onKey);
+    // Edits to the configuration file live in this page only: ask before leaving them.
+    this.onLeave = (e) => {
+      if (this.draft === null) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    addEventListener("beforeunload", this.onLeave);
     // A token in this tab, or an OIDC sign-in cookie: try either.
     this.check({ quiet: !token() });
     api("/auth").then((m) => (this.sso = Boolean(m?.oidc))).catch(() => {});
@@ -295,8 +321,10 @@ export class RwsAdmin extends LitElement {
     super.disconnectedCallback();
     removeEventListener("hashchange", this.onHash);
     document.removeEventListener("keydown", this.onKey);
+    removeEventListener("beforeunload", this.onLeave);
     this.stop();
     clearInterval(this.pulse);
+    clearTimeout(this.checkTimer);
   }
 
   // ── session ───────────────────────────────────────────────────────────
@@ -394,6 +422,14 @@ export class RwsAdmin extends LitElement {
     this.lastTotal = null;
     this.bases = [];
     this.recent = null;
+    this.file = null;
+    this.draft = null;
+    this.fileCheck = null;
+    this.fileNewer = null;
+    this.fileError = "";
+    this.applied = null;
+    this.diffOf = null;
+    clearTimeout(this.checkTimer);
     clearInterval(this.pulse);
     if (viaSso) location.assign("/admin/auth/logout");
   }
@@ -629,7 +665,7 @@ export class RwsAdmin extends LitElement {
     } else if (view === "controls") {
       await Promise.all([get("maintenance", "/maintenance"), get("blocklist", "/blocklist"), get("flags", "/flags"), get("rateLimit", "/rate-limit"), get("caches", "/caches"), this.loadAuthz()]);
     } else if (view === "config") {
-      await get("config", "/config");
+      await Promise.all([get("config", "/config"), this.loadFile()]);
     } else if (view === "audit") {
       await get("audit", "/audit?n=200");
     }
@@ -690,6 +726,114 @@ export class RwsAdmin extends LitElement {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     this.toast(`${plural(lines.length, "line", "lines")} saved`);
+  }
+
+  // ── the configuration file: edit, see what changes, apply ─────────────
+  /** Admins only (the server refuses the rest): the file as it is on disk. */
+  async loadFile() {
+    if (this.me?.role !== "admin") return;
+    const fresh = await api("/config/file").catch(() => null);
+    if (!fresh) return;
+    if (this.draft !== null && this.file?.editable && fresh.sha256 !== this.file.sha256) {
+      // Somebody else wrote it while there are edits here: say so, keep both.
+      this.fileNewer = fresh;
+      return;
+    }
+    this.file = fresh;
+    this.fileNewer = null;
+  }
+
+  /** What applying the edits would change: `{ lines, added, removed }`. */
+  get fileDiff() {
+    const before = this.file?.content ?? "";
+    const after = this.draft ?? before;
+    if (this.diffOf?.before !== before || this.diffOf?.after !== after) {
+      const lines = diffLines(before, after);
+      this.diffOf = { before, after, lines, ...counts(lines) };
+    }
+    return this.diffOf;
+  }
+
+  editFile(text) {
+    this.draft = text === this.file?.content ? null : text;
+    this.fileError = "";
+    this.applied = null;
+    clearTimeout(this.checkTimer);
+    if (this.draft === null) {
+      this.fileCheck = null;
+      return;
+    }
+    this.fileCheck = { state: "checking", of: text };
+    this.checkTimer = setTimeout(() => this.checkFile(text), 500);
+  }
+
+  /** Ask the server what `rws --check` says about `text`, and what needs a restart. */
+  async checkFile(text) {
+    try {
+      const result = await api("/config/file/check", { method: "POST", body: { content: text } });
+      if (this.draft === text) this.fileCheck = { state: "done", of: text, ...result };
+    } catch (e) {
+      if (this.draft === text) this.fileCheck = { state: "failed", of: text, message: e.message };
+    }
+  }
+
+  discardFile() {
+    const draft = this.draft;
+    if (draft === null) return;
+    this.editFile(this.file.content);
+    this.toast("Edits discarded", () => this.editFile(draft));
+  }
+
+  /** The file changed on disk under the edits: compare with the new one, keep the edits. */
+  useNewerFile() {
+    if (!this.fileNewer) return;
+    this.file = this.fileNewer;
+    this.fileNewer = null;
+    this.editFile(this.draft ?? this.file.content);
+  }
+
+  async applyFile() {
+    if (this.draft === null || this.busy === "config-file" || this.ask) return;
+    const text = this.draft;
+    const { added, removed } = this.fileDiff;
+    const check = this.fileCheck?.state === "done" && this.fileCheck.of === text ? this.fileCheck : null;
+    if (check && !check.ok) return;
+    const name = this.file.path.split("/").pop();
+    const ok = await this.confirm({
+      title: `Apply your edits to ${name}?`,
+      body: `rws checks the new text, keeps the file as it is now in ${name}.bak, writes the new one and reloads. Open connections are kept.`,
+      action: "Apply",
+      tone: "warn",
+      effects: [
+        ["info", `${plural(added, "line", "lines")} added, ${removed.toLocaleString()} removed`],
+        ...(check?.restart ?? []).map((what) => ["warn", `${what}: needs a restart to take effect`]),
+        ...(check?.warnings ?? []).map((w) => ["warn", w]),
+      ],
+    });
+    if (!ok || this.draft !== text) return;
+    this.busy = "config-file";
+    this.fileError = "";
+    try {
+      const done = await api("/config/file", { method: "PUT", body: { content: text, sha256: this.file.sha256 } });
+      this.draft = null;
+      this.fileCheck = null;
+      this.fileNewer = null;
+      this.applied = { ...done, at: Date.now() };
+      this.toast(done.changed ? `Applied and reloaded. The previous file is ${done.backup ?? "kept beside it"}` : "Nothing to apply: the file already says this");
+      await this.load("config");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && this.file?.editable) {
+        const fresh = await api("/config/file").catch(() => null);
+        if (fresh?.editable && fresh.sha256 !== this.file.sha256) this.fileNewer = fresh;
+        else this.fileError = e.message;
+      } else if (e instanceof ApiError && e.status === 422 && Array.isArray(e.data?.errors)) {
+        this.fileCheck = { state: "done", of: text, ok: false, errors: e.data.errors, warnings: e.data.warnings ?? [], restart: [] };
+      } else {
+        this.fileError = e.message;
+      }
+    } finally {
+      this.busy = "";
+    }
   }
 
   // ── actions ───────────────────────────────────────────────────────────
@@ -977,7 +1121,7 @@ export class RwsAdmin extends LitElement {
         ${GROUPS.map((group) => html`<div class="nav-group" role="group" aria-label=${group}>
           <div class="nav-label" aria-hidden="true">${group}</div>
           ${VIEWS.filter((v) => v.group === group).map((v) => html`<a class="nav-link" href="#/${v.id}" aria-current=${this.view === v.id ? "page" : nothing} aria-keyshortcuts="G ${v.key.toUpperCase()}">
-            <span class="icon">${icon(v.icon)}</span>${v.label}<kbd aria-hidden="true">G ${v.key.toUpperCase()}</kbd></a>`)}
+            <span class="icon">${icon(v.icon)}</span>${v.label}${v.id === "config" && this.draft !== null ? html`<span class="nav-dot" title="Edits not applied"><span class="sr">, edits not applied</span></span>` : nothing}<kbd aria-hidden="true">G ${v.key.toUpperCase()}</kbd></a>`)}
         </div>`)}
       </nav>
       ${this.me ? html`<div class="side-foot">
@@ -1010,7 +1154,7 @@ export class RwsAdmin extends LitElement {
         ? html`<div class="more-scrim" @click=${() => (this.moreOpen = false)}></div>
           <nav id="more-sheet" class="more-sheet" aria-label="More sections">
             ${VIEWS.filter((v) => !PRIMARY.includes(v.id)).map((v) => html`<a href="#/${v.id}" aria-current=${this.view === v.id ? "page" : nothing}
-              @click=${() => (this.moreOpen = false)}><span class="icon">${icon(v.icon)}</span>${v.label}</a>`)}
+              @click=${() => (this.moreOpen = false)}><span class="icon">${icon(v.icon)}</span>${v.label}${v.id === "config" && this.draft !== null ? html`<span class="nav-dot" title="Edits not applied"><span class="sr">, edits not applied</span></span>` : nothing}</a>`)}
             ${this.me ? html`<div class="more-foot"><span class="who">${this.me.user} · ${this.me.role}</span>
               <button class="btn btn-quiet" @click=${() => this.logout()}><span class="icon">${icon("sign-out")}</span>Sign out</button></div>` : nothing}
           </nav>`
@@ -1551,7 +1695,10 @@ export class RwsAdmin extends LitElement {
     const all = Object.entries(config);
     const rows = all.filter(([k, v]) => !needle || k.toLowerCase().includes(needle) || v.toLowerCase().includes(needle));
     return html`
-      ${this.head("Config", html`Every setting in effect. Secrets read (hidden). Change them in <code>rws.config.toml</code> or the environment, then reload from Controls.`)}
+      ${this.head("Config", this.file?.editable
+        ? html`Edit the file, see what changes, then apply: rws checks it, keeps the previous version and reloads. Below it, every setting in effect.`
+        : html`Every setting in effect. Secrets read (hidden). Change them in <code>rws.config.toml</code> or the environment, then reload from Controls.`)}
+      ${this.renderFile()}
       <section class="card" aria-labelledby="config-title">
         <div class="card-head"><h2 id="config-title">Settings in effect</h2><span class="count">${needle ? `${rows.length} of ${all.length}` : all.length}</span></div>
         <div class="card-body">
@@ -1566,6 +1713,99 @@ export class RwsAdmin extends LitElement {
             </table></div>`}
       </section>
     `;
+  }
+
+  /** The Config page's file card: for admins, an editor when `[admin] edit_config` is on. */
+  renderFile() {
+    const file = this.file;
+    if (!file || this.me?.role !== "admin") return nothing;
+    if (!file.enabled) {
+      return html`<section class="card cfg" aria-labelledby="file-title">
+        <div class="card-head"><h2 id="file-title">Config file</h2>${file.path ? html`<span class="cfg-path">${file.path}</span>` : nothing}</div>
+        <div class="card-body"><p>Editing it from here is off. Add <code>edit_config = true</code> under <code>[admin]</code> and reload: then you can edit the file on this page,
+          see what changes and apply it. Whoever holds an admin token can then change every setting, so it is yours to turn on.</p></div>
+      </section>`;
+    }
+    if (!file.editable) {
+      return html`<section class="card cfg" aria-labelledby="file-title">
+        <div class="card-head"><h2 id="file-title">Config file</h2>${file.path ? html`<span class="cfg-path">${file.path}</span>` : nothing}</div>
+        <div class="card-body"><p>It can't be edited from here: ${file.reason}.</p></div>
+      </section>`;
+    }
+    const text = this.draft ?? file.content;
+    const staged = this.draft !== null;
+    const diff = staged ? this.fileDiff : null;
+    const check = this.fileCheck;
+    const checked = check?.state === "done" ? check : null;
+    const applying = this.busy === "config-file";
+    const count = text.split("\n").length;
+    const parts = diff ? hunks(diff.lines, 3) : [];
+    let drawn = 0;
+    return html`<section class="card cfg" aria-labelledby="file-title">
+      <div class="card-head"><h2 id="file-title">Config file</h2><span class="cfg-path">${file.path}</span><span class="spacer"></span>
+        <span class="meta">${staged ? "Edited, not applied" : file.modified ? `Saved ${ago(file.modified * 1000)}` : "As on disk"}</span></div>
+      ${this.fileNewer
+        ? html`<div class="banner" role="alert">
+            <span class="banner-title">The file changed on disk</span>
+            <span class="banner-text">Somebody wrote it after you started. Compare your edits with the new file before applying: what it gained will show as removed lines.</span>
+            <button class="btn btn-warn" @click=${() => this.useNewerFile()}>Compare with the new file</button>
+          </div>`
+        : nothing}
+      ${this.applied?.restart?.length && !staged
+        ? html`<div class="banner" role="status">
+            <span class="banner-title">Applied. Restart rws for the rest</span>
+            <span class="banner-text">A reload doesn't apply ${this.applied.restart.join(", ")}: ${this.applied.restart.length === 1 ? "it takes" : "they take"} effect when rws starts again.</span>
+          </div>`
+        : nothing}
+      <div class="editor">
+        <pre class="editor-gutter" aria-hidden="true">${Array.from({ length: count }, (_, i) => i + 1).join("\n")}</pre>
+        <textarea id="file-text" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
+          aria-label="Contents of ${file.path}" aria-describedby="file-check" ?readonly=${applying}
+          .value=${live(text)}
+          @input=${(e) => this.editFile(e.target.value)}
+          @scroll=${(e) => { const gutter = e.target.previousElementSibling; if (gutter) gutter.scrollTop = e.target.scrollTop; }}
+          @keydown=${(e) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") { e.preventDefault(); this.applyFile(); } }}></textarea>
+      </div>
+      ${diff
+        ? html`<div class="diff" role="region" aria-labelledby="diff-title">
+            <div class="diff-head"><h3 id="diff-title">What will change</h3>
+              <span class="mono">${plural(diff.added, "line", "lines")} added, ${diff.removed.toLocaleString()} removed</span></div>
+            <div class="diff-body" tabindex="0" aria-label="Changed lines">
+              ${diff.added + diff.removed === 0
+                ? html`<div class="diff-gap">Only the newline that ends the file differs.</div>`
+                : parts.map((part, at) => {
+                    if (drawn >= DIFF_DRAWN) return nothing;
+                    const shown = part.slice(0, DIFF_DRAWN - drawn);
+                    drawn += shown.length;
+                    return html`${at ? html`<div class="diff-gap" aria-hidden="true">⋯</div>` : nothing}${shown.map((l) => html`<div class="diff-line" data-op=${l.op}>
+                      <span class="n">${l.a || ""}</span><span class="n n-new">${l.b || ""}</span><span class="sign">${l.op === " " ? "" : l.op === "+" ? "+" : "−"}</span><span class="sr">${l.op === "+" ? "added: " : l.op === "-" ? "removed: " : ""}</span><span class="t">${l.text}</span></div>`)}`;
+                  })}
+              ${drawn >= DIFF_DRAWN ? html`<div class="diff-gap">The first ${DIFF_DRAWN} lines are shown; the rest is applied too.</div>` : nothing}
+            </div>
+          </div>`
+        : nothing}
+      <div class="cfg-check" id="file-check" role="status">
+        ${!staged ? nothing
+          : check?.state === "checking" ? html`<p class="result"><span class="sq"></span>Checking…</p>`
+          : check?.state === "failed" ? html`<p class="result"><span class="sq" data-tone="warn"></span><span>Couldn't check it (${check.message}). rws checks again when you apply.</span></p>`
+          : checked?.ok === false ? html`<p class="result"><span class="sq" data-tone="bad"></span><span>This doesn't pass <code>rws --check</code>, so it can't be applied:</span></p>
+              <ul>${checked.errors.map((e) => html`<li>${e}</li>`)}</ul>`
+          : checked ? html`<p class="result"><span class="sq" data-tone=${checked.restart.length ? "warn" : "ok"}></span>${checked.restart.length
+                ? html`<span>Passes <code>rws --check</code>. The rest applies with a reload, but these need a restart: <span class="mono">${checked.restart.join(", ")}</span></span>`
+                : html`<span>Passes <code>rws --check</code>. Applies with a reload; open connections are kept.</span>`}</p>
+              ${checked.warnings.length ? html`<ul>${checked.warnings.map((w) => html`<li>${w}</li>`)}</ul>` : nothing}`
+          : nothing}
+        ${this.fileError ? html`<p class="result" role="alert"><span class="sq" data-tone="bad"></span><span>Not applied: ${this.fileError}</span></p>` : nothing}
+      </div>
+      ${staged
+        ? html`<div class="banner cfg-staged">
+            <span class="banner-title">Edits staged</span>
+            <span class="banner-text">Nothing is applied yet: rws still runs the file as it is on disk.</span>
+            <button class="btn btn-quiet" ?disabled=${applying} @click=${() => this.discardFile()}>Discard</button>
+            <button class="btn btn-warn-fill" ?disabled=${applying || checked?.ok === false || !!this.fileNewer} @click=${() => this.applyFile()}>${applying ? "Applying…" : "Apply"}</button>
+          </div>`
+        : nothing}
+    </section>`;
   }
 
   renderAudit() {

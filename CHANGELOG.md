@@ -44,6 +44,19 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   requests, errors and response times per upstream. Host names are
   counted for the admin API only; they are not Prometheus labels.
   Library: `admin::ops::breakdown_json()`.
+- **Edit the configuration file from the admin UI.** With
+  `[admin] edit_config = true` (off by default) the Config page shows
+  `rws.config.toml` in an editor. Edits are staged: the page shows the
+  lines that will change, checks the text as `rws --check` does (a file
+  that doesn't pass can't be applied) and names the settings a reload
+  won't apply. **Apply** keeps the previous file as `rws.config.toml.bak`,
+  writes the new one and reloads; if the reload refuses it, the previous
+  file is put back. A write based on a file that changed on disk since is
+  refused, and the page offers to compare. It is role `admin`'s only,
+  reading included, and the audit log records the file's SHA-256 before
+  and after, not its text. Admin API: `GET`/`PUT /config/file` and
+  `POST /config/file/check`. Not offered when `[fleet]` owns the file or
+  rws runs without one.
 - **Admin API:** `GET`/`PUT /maintenance` answer
   `{"active":…,"since":…,"until":…,"retry_after_secs":…}` (was
   `{"active":…}`); `PUT /maintenance {"add_secs":N}` extends a timed

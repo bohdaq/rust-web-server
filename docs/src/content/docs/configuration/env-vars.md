@@ -184,6 +184,7 @@ don't use them.
 | `RWS_CONFIG_CLUSTER_NODE` | host name | string | This replica's name in `status`, heartbeats and audit entries (`[cluster] node`; since 18.22.0). |
 | `RWS_CONFIG_ADMIN_AUDIT_LOG` | (memory only) | path | Append every admin change to this file as JSON lines. |
 | `RWS_CONFIG_ADMIN_COUNT_OWN_REQUESTS` | `false` | bool | `true` counts requests on the admin listener in the metrics and the access log, as before 18.37.0; by default the admin UI's own polling isn't the site's traffic. |
+| `RWS_CONFIG_ADMIN_EDIT_CONFIG` | `false` | bool | `true` lets role `admin` read and write the configuration file through the admin UI's Config page and `/config/file` (`[admin] edit_config`; since 18.38.0). See [Editing the configuration file](/deployment/admin/#editing-the-configuration-file). |
 | `RWS_CONFIG_ADMIN_OIDC_ISSUER` | (off) | URL | OIDC provider for signing in to the admin UI (discovery at `<issuer>/.well-known/openid-configuration`). |
 | `RWS_CONFIG_ADMIN_OIDC_PROVIDER` | (off) | `google`, `microsoft`, `github` | A provider preset instead of an issuer. |
 | `RWS_CONFIG_ADMIN_OIDC_TENANT` | `common` | string | Azure AD tenant for `microsoft`. |

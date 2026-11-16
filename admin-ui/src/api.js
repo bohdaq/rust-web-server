@@ -23,9 +23,11 @@ export function setToken(value) {
 }
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  /** `data`: the JSON the server answered with, when it did. */
+  constructor(status, message, data = null) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -51,7 +53,7 @@ export async function api(path, { method = "GET", body } = {}) {
   } catch {
     data = null;
   }
-  if (!response.ok) throw new ApiError(response.status, data?.error ?? `${response.status} ${response.statusText}`);
+  if (!response.ok) throw new ApiError(response.status, data?.error ?? `${response.status} ${response.statusText}`, data);
   return data;
 }
 

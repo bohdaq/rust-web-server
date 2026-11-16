@@ -21,6 +21,7 @@
 //! saturated server can still be administered.
 
 pub mod access;
+mod config_file;
 pub mod ops;
 mod ui;
 
@@ -240,9 +241,21 @@ impl AdminApi {
     /// Request a reload and wait for it: the reload count moving, then the
     /// errors it reported.
     fn reload(&self) -> Response {
+        match self.run_reload() {
+            Reloaded::NotReady => error(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, NOT_READY),
+            Reloaded::Done { count, errors } => {
+                let applied = errors.is_empty();
+                let errors: Vec<String> = errors.iter().map(|e| format!("\"{}\"", json_escape(e))).collect();
+                json(STATUS_CODE_REASON_PHRASE.n200_ok, format!(r#"{{"reloaded":true,"applied":{applied},"reloads":{count},"errors":[{}]}}"#, errors.join(",")))
+            }
+            Reloaded::TimedOut => error(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout, RELOAD_TIMED_OUT),
+        }
+    }
+
+    fn run_reload(&self) -> Reloaded {
         if !crate::metrics::SERVER_READY.load(Ordering::SeqCst) {
             // Before the servers run, SIGHUP has no handler yet.
-            return error(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "the server is starting or stopping");
+            return Reloaded::NotReady;
         }
         let (before, _) = crate::config_reload::last_reload();
         (self.inner.reloader)();
@@ -250,14 +263,39 @@ impl AdminApi {
         loop {
             let (count, errors) = crate::config_reload::last_reload();
             if count > before {
-                let errors: Vec<String> = errors.iter().map(|e| format!("\"{}\"", json_escape(e))).collect();
-                let applied = errors.is_empty();
-                return json(STATUS_CODE_REASON_PHRASE.n200_ok, format!(r#"{{"reloaded":true,"applied":{applied},"reloads":{count},"errors":[{}]}}"#, errors.join(",")));
+                return Reloaded::Done { count, errors };
             }
             if Instant::now() >= deadline {
-                return error(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout, "the reload didn't finish in time; check the server log");
+                return Reloaded::TimedOut;
             }
             std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// `PUT …/config/file`: `{"content":…,"sha256":…}` becomes the
+    /// configuration file, and rws reloads.
+    fn write_config(&self, request: &Request) -> Response {
+        let content = match config_file::body_text(&request.body, "content") {
+            Ok(content) => content,
+            Err(message) => return bad_request(&message),
+        };
+        let based_on = match config_file::body_text(&request.body, "sha256") {
+            Ok(sha256) => sha256,
+            Err(message) => return bad_request(&message),
+        };
+        if config_file::enabled() && !crate::metrics::SERVER_READY.load(Ordering::SeqCst) {
+            // Nothing is written that couldn't be reloaded.
+            return error(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, NOT_READY);
+        }
+        let reload = || match self.run_reload() {
+            Reloaded::Done { errors, .. } if errors.is_empty() => config_file::Reload::Done,
+            Reloaded::Done { errors, .. } => config_file::Reload::Refused(errors.join("; ")),
+            Reloaded::NotReady => config_file::Reload::Unknown(NOT_READY.to_string()),
+            Reloaded::TimedOut => config_file::Reload::Unknown(RELOAD_TIMED_OUT.to_string()),
+        };
+        match config_file::write(&content, &based_on, &reload) {
+            Ok(written) => ok(written.to_json()),
+            Err(refusal) => refused(&refusal),
         }
     }
 
@@ -353,13 +391,13 @@ impl Application for AdminApi {
             Authenticated::NoRole(name) => {
                 let response = error(STATUS_CODE_REASON_PHRASE.n403_forbidden, &format!("{name} is signed in but has no admin role (see [admin] oidc_roles)"));
                 if !is_read(&request.method) {
-                    access::record_change(&access::Principal { user: name, role: access::Role::Viewer, via: "oidc" }, &address, &request.method, path, &request.body, 403);
+                    audit(&access::Principal { user: name, role: access::Role::Viewer, via: "oidc" }, &address, request, path, 403);
                 }
                 return Ok(response);
             }
             Authenticated::No => {
                 if !is_read(&request.method) && request.header("Authorization").is_some() {
-                    access::record_change(&access::Principal { user: "(bad token)".to_string(), role: access::Role::Viewer, via: "token" }, &address, &request.method, path, &request.body, 401);
+                    audit(&access::Principal { user: "(bad token)".to_string(), role: access::Role::Viewer, via: "token" }, &address, request, path, 401);
                 }
                 let mut response = error(STATUS_CODE_REASON_PHRASE.n401_unauthorized, "missing or wrong bearer token");
                 response.headers.push(Header::new("WWW-Authenticate", r#"Bearer realm="rws admin""#));
@@ -372,12 +410,12 @@ impl Application for AdminApi {
         // A browser signed in with a cookie: changes need the header only
         // this origin's script can set (CSRF), besides the Origin check.
         if principal.via == "oidc" && !is_read(&request.method) && request.header("X-Rws-Admin").is_none() {
-            access::record_change(&principal, &address, &request.method, path, &request.body, 403);
+            audit(&principal, &address, request, path, 403);
             return Ok(error(STATUS_CODE_REASON_PHRASE.n403_forbidden, "missing X-Rws-Admin header"));
         }
         let needed = access::required_role(&request.method, route);
         if principal.role < needed {
-            access::record_change(&principal, &address, &request.method, path, &request.body, 403);
+            audit(&principal, &address, request, path, 403);
             return Ok(error(STATUS_CODE_REASON_PHRASE.n403_forbidden, &format!("{} has role {}; this needs {}", principal.user, principal.role.as_str(), needed.as_str())));
         }
         let response = match (request.method.as_str(), route) {
@@ -393,11 +431,50 @@ impl Application for AdminApi {
             (_, "/whoami" | "/audit" | "/audit/verify") => wrong_method("GET"),
             _ => self.route(request, connection, route),
         };
-        if !is_read(&request.method) && !(request.method == "POST" && route == "/authz/check") {
-            access::record_change(&principal, &address, &request.method, path, &request.body, response.status_code as u16);
+        // A check changes nothing; it's a POST only to carry what it checks.
+        let check = request.method == "POST" && (route == "/authz/check" || route == "/config/file/check");
+        if !is_read(&request.method) && !check {
+            audit(&principal, &address, request, path, response.status_code as u16);
         }
         Ok(response)
     }
+}
+
+/// How [`AdminApi::run_reload`] went.
+enum Reloaded {
+    NotReady,
+    /// It ran; `errors` is what it reported (none: the new configuration
+    /// is the running one).
+    Done { count: u64, errors: Vec<String> },
+    TimedOut,
+}
+
+const NOT_READY: &str = "the server is starting or stopping";
+const RELOAD_TIMED_OUT: &str = "the reload didn't finish in time; check the server log";
+
+/// Record a change (or a refused attempt). The configuration file's text
+/// never goes to the log: its hash and size do.
+fn audit(principal: &access::Principal, address: &str, request: &Request, path: &str, status: u16) {
+    let route = path.strip_prefix(API_PREFIX).map_or("", |r| r.trim_end_matches('/'));
+    if route == "/config/file" || route.starts_with("/config/file/") {
+        access::record_change_detail(principal, address, &request.method, path, config_file::audit_detail(&request.body), status);
+    } else {
+        access::record_change(principal, address, &request.method, path, &request.body, status);
+    }
+}
+
+/// A [`config_file::Refusal`] as a response.
+fn refused(refusal: &config_file::Refusal) -> Response {
+    let (status, body) = refusal.answer();
+    let status = match status {
+        403 => STATUS_CODE_REASON_PHRASE.n403_forbidden,
+        409 => STATUS_CODE_REASON_PHRASE.n409_conflict,
+        413 => STATUS_CODE_REASON_PHRASE.n413_payload_too_large,
+        422 => STATUS_CODE_REASON_PHRASE.n422_unprocessable_entity,
+        504 => STATUS_CODE_REASON_PHRASE.n504_gateway_timeout,
+        _ => STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+    };
+    json(status, body)
 }
 
 /// The outcome of [`AdminApi::authenticate`].
@@ -645,6 +722,14 @@ impl AdminApi {
             (_, "/status") => wrong_method("GET"),
             ("GET", "/config") => ok(ops::config_json()),
             (_, "/config") => wrong_method("GET"),
+            ("GET", "/config/file") => ok(config_file::read_json()),
+            ("PUT", "/config/file") => self.write_config(request),
+            (_, "/config/file") => wrong_method("GET, PUT"),
+            ("POST", "/config/file/check") => match config_file::body_text(&request.body, "content") {
+                Ok(content) => config_file::check_json(&content).map_or_else(|refusal| refused(&refusal), ok),
+                Err(message) => bad_request(&message),
+            },
+            (_, "/config/file/check") => wrong_method("POST"),
             ("POST", "/reload") => self.reload(),
             (_, "/reload") => wrong_method("POST"),
             ("GET", "/metrics") => ok(ops::metrics_json()),

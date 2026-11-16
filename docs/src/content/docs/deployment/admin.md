@@ -79,7 +79,7 @@ Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) an
 - **Upstreams**: every backend's share of traffic, health and circuit breaker, the requests open on it, a button to drain it or put it back, and the recent drains. A drained backend gets a card on top: how many requests are still running on it, then "safe to deploy" when none is left (since 18.38.0).
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
 - **Controls**: maintenance mode, reload, the response caches (purge a path or a prefix, or everything), authorization tuples (add, remove, check), the IP blocklist and feature flags.
-- **Config**: every setting in effect, filterable, secrets hidden.
+- **Config**: every setting in effect, filterable, secrets hidden. With `[admin] edit_config = true`, an admin also [edits the configuration file](#editing-the-configuration-file) there (18.38.0).
 - **Logs**: the access log as it's written, as columns, with a filter, status chips, pause and download.
 - **Audit**: every change made through the API, this UI or the MCP tools, and every refused attempt.
 
@@ -90,6 +90,64 @@ Turning maintenance mode on also asks two things (18.38.0): what clients are tol
 `Ctrl K` (`⌘ K` on a Mac) or `/` opens a command palette: go to a section, drain a backend, purge a cache, find a setting. `G` then a letter goes to a section; the letters are shown in the sidebar.
 
 The token stays in the browser tab (`sessionStorage`), and the page talks only to the API below with it. The UI's own files (`/admin/`, `/admin/admin.js`, `/admin/admin.css`) are served without the token: they hold no data. They are built into the binary, so there is nothing to deploy, and they're served with a strict `Content-Security-Policy` (scripts and connections to the listener itself only, no framing).
+
+### Editing the configuration file
+
+Since 18.38.0 the **Config** page can change `rws.config.toml` itself. It is
+off until you ask for it:
+
+```toml
+[admin]
+edit_config = true
+```
+
+A reload turns it on. To turn it off, set it to `false` and reload (a line
+that is removed keeps its value until a restart).
+
+Then the page shows the file in an editor. As you type, the edits are
+*staged*: nothing is written, the server keeps running the file on disk, and
+the page shows
+
+- **what will change**: the lines added and removed, against the file as it
+  is on disk;
+- **whether it is valid**: the same checks as `rws --check`, with the line and
+  column of a mistake. A file that doesn't pass can't be applied;
+- **what a reload won't apply**: settings read when the process starts
+  (`port`, `ip`, `thread_count`, the certificate paths, the `[admin]`,
+  `[fleet]` and `[cluster]` tables, TCP, UDP and WebSocket proxies) and
+  settings taken out of the file are named, so you know a restart is still
+  needed for them.
+
+**Apply** asks once, then rws checks the text again, keeps the file as it was
+in `rws.config.toml.bak` (same directory, same permissions), writes the new
+one and reloads. Open connections are kept. If the reload refuses the new
+file, the previous one is put back and reloaded, and the page says why.
+**Discard** drops the edits (with Undo).
+
+What to know before turning it on:
+
+- **It is the admin role's**, reading included: the file can hold secrets, and
+  whoever writes it can add a route that serves any directory the rws user
+  reads. `viewer` and `operator` get `403`. Don't turn it on for an admin
+  listener that people you wouldn't give a shell reach.
+- **The edits live in the page**: not in the browser's storage, not on the
+  server. Leaving the page with edits asks first; the sidebar marks Config
+  while there are some.
+- **Nobody's change is overwritten silently.** A write names the version it
+  was based on. If the file changed on disk meanwhile (another admin, your
+  deploy tool), the write is refused and the page offers to compare your
+  edits with the new file.
+- **The audit log has the change, not the text**: who, when, the SHA-256 of
+  the file before and after, and its size.
+- It isn't offered when rws runs without a configuration file, when
+  [`[fleet]`](/deployment/fleet/) replaces the file from its source, when the
+  rws user can't write the file, or for a file over 1 MB.
+- rws must be able to create files next to the configuration file (the
+  backup, and a temporary file that replaces the old one in one step). Where
+  it can't, the file is rewritten in place.
+
+With several replicas, each one edits its own file: use `[fleet]` to give
+them one configuration.
 
 ## Users, roles and the audit log
 
@@ -109,7 +167,7 @@ audit_log = "/var/log/rws/audit.log"             # also keep the audit log in a 
 |---|---|
 | `viewer` | read everything: status, config (secrets hidden), metrics, logs, traffic, upstreams, certificates, the audit log |
 | `operator` | also reload, drain backends, switch maintenance mode, block IPs, flip feature flags, purge caches, renew certificates |
-| `admin` | also add and remove authorization tuples |
+| `admin` | also add and remove authorization tuples, and read and write the configuration file when [`edit_config`](#editing-the-configuration-file) is on |
 
 A refused request is `403` saying which role it needs. Tokens must be at
 least 16 characters; `rws --check` names an entry that isn't
@@ -193,6 +251,7 @@ another site can't make them. Tokens keep working for scripts and
 - A browser request whose `Origin` is neither the listener's own nor in `allowed_origins` gets `403`, so a page on another site can't use a token the browser holds.
 - Admin requests are served on threads of their own (at most 32 connections at once), apart from the server's workers, so an overloaded server can still be inspected.
 - Responses carry `Cache-Control: no-store`.
+- The API can't change the configuration file unless `[admin] edit_config = true`, and then only as role `admin` (18.38.0). Without it an admin token switches what the configuration already allows; with it, it changes the configuration.
 
 ## Endpoints
 
@@ -206,6 +265,9 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /audit/verify` | Check the `audit_log` file's [hash chain](#a-tamper-evident-audit-log) (18.33.0): `{"file":…,"ok":true,"entries":12,"chained":10,"unchained":2,"continues_from":null,"broken":null}`; when broken, `"broken":{"line":7,"reason":"…"}`. `404` without an `audit_log` file |
 | `GET /auth` | Without credentials: how to sign in, `{"token":true,"oidc":false}` (the UI's login page) |
 | `GET /config` | Every `RWS_CONFIG_*` setting in effect; values of names with `SECRET`, `PASSWORD` or `TOKEN` read `(hidden)` |
+| `GET /config/file` | The configuration file, for role `admin` (18.38.0): `{"enabled":true,"path":"/etc/rws/rws.config.toml","editable":true,"reason":null,"content":"…","sha256":"…","modified":1763290000}`. Without `[admin] edit_config = true`, or when the file can't be edited, `content` is `null` and `reason` says why |
+| `POST /config/file/check` | `{"content":"…"}`: what `rws --check` says about that text, and what a reload wouldn't apply: `{"ok":true,"errors":[],"warnings":[],"restart":["port"]}`. Nothing is written, nothing is recorded |
+| `PUT /config/file` | `{"content":"…","sha256":"<of the file it was based on>"}`: check, keep the previous file as `<file>.bak`, write, reload: `{"applied":true,"changed":true,"path":…,"sha256":…,"backup":…,"restart":[],"warnings":[]}`. `403` when editing is off, `409` when the file changed on disk since (or can't be edited), `413` over 1 MB, `422` with `errors` when it doesn't pass the check (nothing written), `500` when the write failed or the reload refused it (the previous file is back) |
 | `POST /reload` | Reload the configuration and certificates, as `SIGHUP` does, and wait for it (up to 10 s): `{"reloaded":true,"applied":true,"reloads":3,"errors":[]}`. With errors (a config file that doesn't validate) `applied` is `false`, `errors` lists them and the running configuration stays. `503` while the server starts or stops, `504` when it didn't finish |
 | `GET /metrics` | Request, error and connection counters, thread-pool queue, readiness (`/metrics` on the main port has the full Prometheus set) |
 | `GET /breakdown` | Response times and where requests went, since start: `duration` (`count`, `sum` in seconds, `p50`, `p95`, `p99` in seconds or `null` before the first request, and the histogram itself: `buckets` from index `offset`, where bucket *i* holds requests that took up to 2^(*i*/8) seconds, plus `zero`), `hosts` (`host`, `requests`, `errors` — `5xx` answers — for up to 200 `Host` names, busiest first; the rest are added up in `hosts_other`; an empty name is requests without a `Host`) and `upstreams` (`name`, `requests`, `errors` — `5xx` or no answer —, and `duration.buckets`: how many took up to each of `upstream_bounds` seconds). An upstream counts every try, so a retried request is there twice. The admin listener's own requests aren't counted. Take two answers and subtract for a time window |

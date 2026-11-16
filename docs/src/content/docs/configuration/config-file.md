@@ -228,6 +228,7 @@ allowed_origins = ["https://ops.example.com"] # browser origins besides the list
 # oidc_roles    = ["rws-admins=admin", "sre=operator", "*=viewer"]  # group (or email, or *) = role
 # oidc_role_claim = "groups"
 # count_own_requests = true   # count the admin listener's requests in the metrics and access log (off since 18.37.0)
+# edit_config   = true        # let role admin edit this file from the admin UI and API (off by default; since 18.38.0)
 ```
 
 ## `[maintenance]`

@@ -1,7 +1,8 @@
 // The admin UI in headless Chromium against a running rws (ci/e2e/admin_ui.sh):
 // no CSP violations or script errors, a wrong token refused, then drain a
 // backend (and watch its open requests finish), switch maintenance mode and purge a cache through the UI and see
-// the API agree, PURGE over HTTP, and a request appear in the live log.
+// the API agree, PURGE over HTTP, a request appear in the live log, and the
+// configuration file edited on the Config page.
 import { chromium } from "playwright";
 
 const [admin, token, publicUrl, purgeToken, externalUrl] = process.argv.slice(2);
@@ -285,6 +286,38 @@ await page.getByText("admin · admin").first().waitFor({ timeout: 5000 }).catch(
 await page.goto(`${admin}/admin/#/audit`);
 await page.getByText("PUT /maintenance").first().waitFor({ timeout: 5000 }).catch(() => fail("the Audit page doesn't list the maintenance change"));
 console.log("ok: signed-in user shown; Audit page lists the changes made");
+
+// The configuration file on the Config page: a broken edit can't be applied,
+// a good one shows what changes, is applied, and rws serves it (18.38.0).
+await page.goto(`${admin}/admin/#/config`);
+const editor = page.locator("#file-text");
+await editor.waitFor({ timeout: 5000 }).catch(() => fail("no configuration file editor on the Config page"));
+const original = await editor.inputValue();
+if (!original.includes('listen = "127.0.0.1:18489"')) fail("the editor doesn't hold the configuration file");
+const apply = page.locator(".cfg-staged").getByRole("button", { name: "Apply" });
+await editor.fill(`${original}\n[[route]\n`);
+await page.getByText("Edits staged").waitFor({ timeout: 5000 }).catch(() => fail("an edit isn't shown as staged"));
+await page.locator(".cfg-check", { hasText: "This doesn't pass" }).waitFor({ timeout: 5000 }).catch(() => fail("a broken configuration isn't named"));
+if (!(await apply.isDisabled())) fail("a configuration that doesn't pass the check can be applied");
+if (!(await page.locator(".nav-link", { hasText: "Config" }).locator(".nav-dot").count())) fail("the sidebar doesn't mark the edits");
+await page.getByRole("button", { name: "Discard" }).click();
+if ((await editor.inputValue()) !== original) fail("Discard didn't put the file's text back");
+if (await page.getByText("Edits staged").count()) fail("still staged after Discard");
+const route = '[[route]]\nname = "from-the-ui"\n[route.match]\npath = "/from-the-ui"\n[route.action]\ntype = "respond"\n[route.action.respond]\nstatus = 200\nbody = "edited in the admin UI"\n';
+await editor.fill(original.replace("[[route]]", `${route}[[route]]`));
+await page.locator('.diff-line[data-op="+"]', { hasText: 'path = "/from-the-ui"' }).waitFor({ timeout: 5000 }).catch(() => fail("the diff doesn't show the added route"));
+await page.locator(".diff-head", { hasText: "9 lines added, 0 removed" }).waitFor({ timeout: 5000 }).catch(() => fail("the diff doesn't count the lines"));
+await page.locator(".cfg-check", { hasText: "Applies with a reload" }).waitFor({ timeout: 5000 }).catch(() => fail("no word that the edit passes the check"));
+if ((await fetch(`${publicUrl}from-the-ui`).then((r) => r.text())) === "edited in the admin UI") fail("the edit was applied before Apply");
+await apply.click();
+await page.locator("dialog#confirm").getByRole("button", { name: "Apply" }).click();
+await page.getByText("Applied and reloaded").waitFor({ timeout: 10000 }).catch(() => fail("no word that the edit was applied"));
+const served = await fetch(`${publicUrl}from-the-ui`).then((r) => r.text());
+if (served !== "edited in the admin UI") fail(`the applied route isn't served: ${served}`);
+const onDisk = await api("/config/file");
+if (!onDisk.content.includes('path = "/from-the-ui"') || (await editor.inputValue()) !== onDisk.content) fail("the file or the editor doesn't hold the applied text");
+if (await page.getByText("Edits staged").count()) fail("still staged after Apply");
+console.log("ok: Config page edits the file: broken refused, diff shown, applied and served");
 
 await browser.close();
 if (problems.length) fail(problems.join("\n"));

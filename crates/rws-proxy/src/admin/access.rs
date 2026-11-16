@@ -8,7 +8,7 @@
 //! - **Roles**: `viewer` reads everything (every `GET`); `operator` also
 //!   reloads, drains, switches maintenance, blocks IPs, flips flags, purges
 //!   caches and renews certificates; `admin` also changes authorization
-//!   tuples. [`required_role`] is the one table.
+//!   tuples, and reads and writes the configuration file (`/config/file`). [`required_role`] is the one table.
 //! - **Audit log**: every change (and every refused attempt) as a JSON line
 //!   — time, user, role, how they signed in, source address, method, path,
 //!   the body with secrets redacted, the status — kept in memory (the last
@@ -111,6 +111,11 @@ pub fn role_for(map: &[(String, Role)], email: Option<&str>, groups: &[String]) 
 /// The role a request needs: reads are `viewer`, authorization tuples
 /// `admin`, any other change `operator`.
 pub fn required_role(method: &str, route: &str) -> Role {
+    // The configuration file: its text can hold secrets, and writing it
+    // can publish any directory rws reads — reading it is an admin's too.
+    if route == "/config/file" || route.starts_with("/config/file/") {
+        return Role::Admin;
+    }
     match method {
         "GET" | "HEAD" | "OPTIONS" => Role::Viewer,
         _ if route == "/authz/tuples" || route.starts_with("/authz/tuples/") => Role::Admin,
@@ -391,6 +396,12 @@ pub fn record(entry: AuditEntry) {
 
 /// Record a change made by `principal` from `address`.
 pub fn record_change(principal: &Principal, address: &str, method: &str, path: &str, body: &[u8], status: u16) {
+    record_change_detail(principal, address, method, path, redact(body), status);
+}
+
+/// [`record_change`] with the detail given, for a body that mustn't be
+/// logged as it came.
+pub(crate) fn record_change_detail(principal: &Principal, address: &str, method: &str, path: &str, detail: String, status: u16) {
     record(AuditEntry {
         at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
         user: principal.user.clone(),
@@ -399,7 +410,7 @@ pub fn record_change(principal: &Principal, address: &str, method: &str, path: &
         address: address.to_string(),
         method: method.to_string(),
         path: path.to_string(),
-        detail: redact(body),
+        detail,
         status,
         node: node_name(),
     });

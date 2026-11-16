@@ -851,3 +851,82 @@ fn mcp_tool_changes_are_audited() {
     assert!(entry.contains(r#""user":"mcp""#) && entry.contains(r#""path":"block_ip""#) && entry.contains("(redacted)"), "{entry}");
     assert!(!audit.contains(r#""path":"server_metrics""#));
 }
+
+// ── 18.38.0: the configuration file ───────────────────────────────────────
+
+#[test]
+fn the_configuration_file_is_the_admins_and_off_unless_asked_for() {
+    let _g = crate::test_env::lock();
+    let setting = config_file::RWS_CONFIG_ADMIN_EDIT_CONFIG;
+    let before = std::env::var(setting).ok();
+    std::env::remove_var(setting);
+    let api = team();
+    let file = "/admin/api/v1/config/file";
+    let check = "/admin/api/v1/config/file/check";
+    let marker = format!("s3cr3t-{}", std::process::id());
+    let body = format!(r#"{{"content":"[upstream.auth]\npassword = \"{marker}\"\n","sha256":"0123"}}"#);
+
+    // Reading it takes the admin role too: the text can hold secrets.
+    for token in ["viewer-token-0123456789", "operator-token-0123456789"] {
+        let (status, text) = call_as(&api, token, "GET", file, "");
+        assert_eq!(status, 403, "{text}");
+        assert!(text.contains("this needs admin"), "{text}");
+        assert_eq!(call_as(&api, token, "PUT", file, &body).0, 403);
+        assert_eq!(call_as(&api, token, "POST", check, &body).0, 403);
+    }
+    // Off: the admin is told how to turn it on, and gets no text.
+    let (status, text) = call_as(&api, "admin-token", "GET", file, "");
+    assert_eq!(status, 200);
+    assert!(text.starts_with(r#"{"enabled":false,"#) && text.contains(r#""editable":false"#) && text.contains(r#""content":null"#), "{text}");
+    assert!(text.contains("[admin] edit_config = true"), "{text}");
+    let (status, text) = call_as(&api, "admin-token", "PUT", file, &body);
+    assert_eq!(status, 403, "{text}");
+    assert!(text.contains("[admin] edit_config = true"), "{text}");
+    assert_eq!(call_as(&api, "admin-token", "POST", check, &body).0, 403);
+    assert_eq!(call_as(&api, "admin-token", "DELETE", file, "").0, 405);
+    assert_eq!(call_as(&api, "admin-token", "GET", check, "").0, 405);
+
+    // On, in a process that loaded no file: nothing to edit.
+    std::env::set_var(setting, "true");
+    let (status, text) = call_as(&api, "admin-token", "GET", file, "");
+    assert_eq!(status, 200);
+    assert!(text.starts_with(r#"{"enabled":true,"#) && text.contains(r#""editable":false"#) && text.contains("without a configuration file"), "{text}");
+    // Nothing is written while a reload couldn't follow.
+    let ready = crate::metrics::SERVER_READY.swap(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(call_as(&api, "admin-token", "PUT", file, &body).0, 503);
+    crate::metrics::SERVER_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    let (status, text) = call_as(&api, "admin-token", "PUT", file, &body);
+    assert_eq!(status, 409, "{text}");
+    assert_eq!(call_as(&api, "admin-token", "POST", check, &body).0, 409);
+    assert_eq!(call_as(&api, "admin-token", "PUT", file, r#"{"content":7,"sha256":"0123"}"#).0, 400);
+    assert_eq!(call_as(&api, "admin-token", "PUT", file, r#"{"content":"port = 1\n"}"#).0, 400);
+    call_as(&api, "wrong-token-zzzzzzzzzz", "PUT", file, &body);
+    crate::metrics::SERVER_READY.store(ready, std::sync::atomic::Ordering::SeqCst);
+
+    // Every attempt is in the audit log — without the text.
+    let audit = access::recent_json(1000);
+    assert!(!audit.contains(&marker), "the configuration's text reached the audit log");
+    let entries: Vec<&str> = audit.split("},{").filter(|e| e.contains(r#""path":"/admin/api/v1/config/file""#)).collect();
+    assert!(entries.iter().any(|e| e.contains(r#""user":"deploy-bot""#) && e.contains(r#""status":403"#) && e.contains(r#"\"based_on\":\"0123\""#)), "{entries:?}");
+    assert!(entries.iter().any(|e| e.contains(r#""user":"admin""#) && e.contains(r#""status":409"#) && e.contains(r#"\"bytes\":"#)), "{entries:?}");
+    assert!(entries.iter().any(|e| e.contains(r#""user":"(bad token)""#) && e.contains(r#""status":401"#)), "{entries:?}");
+    // A check changes nothing: only its refusals are logged.
+    assert!(!audit.split("},{").any(|e| e.contains(r#""path":"/admin/api/v1/config/file/check""#) && e.contains(r#""user":"admin""#)), "{audit}");
+
+    match before {
+        Some(value) => std::env::set_var(setting, value),
+        None => std::env::remove_var(setting),
+    }
+}
+
+#[test]
+fn only_an_admin_reaches_the_configuration_file() {
+    use access::{required_role, Role};
+    for method in ["GET", "HEAD", "PUT", "POST", "DELETE"] {
+        assert_eq!(required_role(method, "/config/file"), Role::Admin, "{method}");
+        assert_eq!(required_role(method, "/config/file/check"), Role::Admin, "{method}");
+    }
+    // The settings in effect (secrets already redacted there) stay everyone's.
+    assert_eq!(required_role("GET", "/config"), Role::Viewer);
+    assert_eq!(required_role("POST", "/reload"), Role::Operator);
+}
