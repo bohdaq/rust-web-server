@@ -4,6 +4,7 @@
 //! rws ctl status                         # version, uptime, listeners, disks
 //! rws ctl reload                         # waits; prints the errors and exits 1 on a bad config
 //! rws ctl drain <upstream> <backend> [--undo]
+//! rws ctl drain <upstream> <backend> --wait 60s      # until its requests finished; exit 1 if not in time (18.38.0)
 //! rws ctl maintenance [on|off]
 //! rws ctl maintenance on --for 1h --retry-after 5m   # turns off by itself (18.38.0)
 //! rws ctl maintenance extend 1h          # keep a timed maintenance on longer (18.38.0)
@@ -51,6 +52,8 @@ Commands:
   status                               version, uptime, listeners, disks
   reload                               reload the configuration and wait for it
   drain <upstream> <backend> [--undo]  stop sending new requests to a backend
+  drain <upstream> <backend> --wait T  and wait up to T (90, 5m) for the requests
+                                       it has open to finish; exit 1 if they don't
   maintenance [on|off]                 show or switch maintenance mode
   maintenance on [--for T] [--retry-after T]  on, off by itself after T (90, 5m, 1h, 2d);
                                        --retry-after is what visitors are told to wait
@@ -134,6 +137,7 @@ struct Command {
     host: Option<String>,
     for_secs: Option<u64>,
     retry_after_secs: Option<u64>,
+    wait_secs: Option<u64>,
 }
 
 /// `90`, `90s`, `5m`, `1h` or `2d` as seconds.
@@ -147,6 +151,28 @@ fn span(text: &str) -> Option<u64> {
         _ => (text, 1),
     };
     number.parse::<u64>().ok()?.checked_mul(unit)
+}
+
+/// Poll until `backend` of `upstream` has no open requests or `wait`
+/// seconds passed; the count it had last. A server older than 18.38.0
+/// doesn't report the count: that is an error, not "nothing open".
+fn wait_for_drain(api: &Api, upstream: &str, backend: &str, wait: u64) -> Result<u64, Failure> {
+    let started = std::time::Instant::now();
+    loop {
+        let r = api.call("GET", "/upstreams", None)?;
+        let open = elements(&r.body)
+            .into_iter()
+            .filter(|u| field(u, "name") == upstream)
+            .flat_map(|u| elements(&member(&u, "backends")))
+            .find(|b| field(b, "url") == backend)
+            .map(|b| field(&b, "open_requests"))
+            .unwrap_or_default();
+        let open: u64 = open.parse().map_err(|_| failed("this server doesn't report open requests (it is older than 18.38.0): --wait can't tell when the backend is idle"))?;
+        if open == 0 || started.elapsed().as_secs() >= wait {
+            return Ok(open);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
 }
 
 /// `maintenance on`, with when it turns off by itself if a time was set.
@@ -188,6 +214,7 @@ fn parse(args: &[String]) -> Result<Command, Failure> {
             "--host" => cmd.host = Some(value("--host")?),
             "--for" => cmd.for_secs = Some(span(&value("--for")?).ok_or_else(|| usage("--for takes a time: 90, 5m, 1h, 2d"))?),
             "--retry-after" => cmd.retry_after_secs = Some(span(&value("--retry-after")?).ok_or_else(|| usage("--retry-after takes a time: 90, 5m, 1h"))?),
+            "--wait" => cmd.wait_secs = Some(span(&value("--wait")?).ok_or_else(|| usage("--wait takes a time: 90, 5m, 1h"))?),
             "--token" => return Err(usage("the token is read from --token-file or RWS_ADMIN_TOKEN, never the command line (it would show in ps)")),
             "-h" | "--help" | "help" if cmd.words.is_empty() => cmd.words.push("help".to_string()),
             f if f.starts_with('-') && f.len() > 1 && f.parse::<f64>().is_err() => return Err(usage(format!("unknown option {f}"))),
@@ -510,7 +537,24 @@ fn execute(cmd: &Command, out: &mut dyn Write) -> Result<(), Failure> {
         }
         ["drain", upstream, backend] => {
             let body = format!(r#"{{"backend":{},"drained":{}}}"#, quoted(backend), !cmd.undo);
+            if cmd.undo && cmd.wait_secs.is_some() {
+                return Err(usage("--wait goes with draining, not with --undo"));
+            }
             let r = api.call("PUT", &format!("/upstreams/{}/drain", percent_encode(upstream)), Some(&body))?;
+            if let Some(wait) = cmd.wait_secs {
+                let open = wait_for_drain(&api, upstream, backend, wait)?;
+                if open > 0 {
+                    return Err(failed(format!(
+                        "{backend} of {upstream} is drained but still has {open} open {} after {}",
+                        if open == 1 { "request" } else { "requests" },
+                        duration(wait)
+                    )));
+                }
+                if cmd.json {
+                    return json_out(out, &r);
+                }
+                return writeln!(out, "drained {backend} of {upstream}: no open requests, safe to stop").map_err(io);
+            }
             if cmd.json {
                 return json_out(out, &r);
             }
@@ -619,13 +663,17 @@ fn execute(cmd: &Command, out: &mut dyn Write) -> Result<(), Failure> {
                         if field(&b, "healthy") == "true" { "yes" } else { "no" }.to_string(),
                         if breaker == "null" { "-".to_string() } else { breaker },
                         if field(&b, "drained") == "true" { "yes" } else { "no" }.to_string(),
+                        match field(&b, "open_requests") {
+                            open if open.is_empty() => "-".to_string(),
+                            open => open,
+                        },
                     ]);
                 }
             }
             if rows.is_empty() {
                 return writeln!(out, "no upstreams").map_err(io);
             }
-            table(out, &["UPSTREAM", "BACKEND", "WEIGHT", "HEALTHY", "BREAKER", "DRAINED"], &rows).map_err(io)
+            table(out, &["UPSTREAM", "BACKEND", "WEIGHT", "HEALTHY", "BREAKER", "DRAINED", "OPEN"], &rows).map_err(io)
         }
         ["certs"] => {
             let r = api.call("GET", "/certificates", None)?;

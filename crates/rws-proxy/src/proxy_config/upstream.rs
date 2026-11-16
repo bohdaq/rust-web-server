@@ -8,6 +8,7 @@
 //! that proxies to it, rebuilt on reload.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
 
@@ -249,8 +250,9 @@ pub fn register(policies: Vec<Arc<UpstreamPolicy>>) {
 /// Any backend drained: the per-request check is one load when none is.
 static ANY_DRAINED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-fn drained_set() -> &'static RwLock<std::collections::HashSet<(String, String)>> {
-    static SET: OnceLock<RwLock<std::collections::HashSet<(String, String)>>> = OnceLock::new();
+/// `(upstream, backend)` → when it was drained (Unix seconds).
+fn drained_set() -> &'static RwLock<HashMap<(String, String), u64>> {
+    static SET: OnceLock<RwLock<HashMap<(String, String), u64>>> = OnceLock::new();
     SET.get_or_init(RwLock::default)
 }
 
@@ -262,11 +264,93 @@ pub fn set_drained(upstream: &str, backend: &str, drained: bool) {
     let mut set = drained_set().write().unwrap_or_else(|e| e.into_inner());
     let key = (upstream.to_string(), backend.to_string());
     if drained {
-        set.insert(key);
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        set.entry(key).or_insert(now);
     } else {
         set.remove(&key);
     }
     ANY_DRAINED.store(!set.is_empty(), std::sync::atomic::Ordering::SeqCst);
+}
+
+/// When `backend` of `upstream` was drained (Unix seconds); `None` when it
+/// is in rotation.
+#[doc(hidden)]
+pub fn drained_since(upstream: &str, backend: &str) -> Option<u64> {
+    if !ANY_DRAINED.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    let set = drained_set().read().unwrap_or_else(|e| e.into_inner());
+    set.iter().find(|((u, b), _)| u == upstream && b == backend).map(|(_, since)| *since)
+}
+
+// ── requests in flight ────────────────────────────────────────────────────────
+
+type OpenCounts = HashMap<String, HashMap<String, Arc<AtomicU64>>>;
+
+/// upstream → backend → requests on it right now. Kept across reloads (by
+/// name), so a request that started before a reload still counts.
+fn open_counts() -> &'static RwLock<OpenCounts> {
+    static COUNTS: OnceLock<RwLock<OpenCounts>> = OnceLock::new();
+    COUNTS.get_or_init(RwLock::default)
+}
+
+fn open_counter(upstream: &str, backend: &str) -> Arc<AtomicU64> {
+    if let Some(counter) = open_counts().read().unwrap_or_else(|e| e.into_inner()).get(upstream).and_then(|b| b.get(backend)) {
+        return Arc::clone(counter);
+    }
+    let mut counts = open_counts().write().unwrap_or_else(|e| e.into_inner());
+    Arc::clone(counts.entry(upstream.to_string()).or_default().entry(backend.to_string()).or_default())
+}
+
+/// One request on a backend, from picking the backend until the request is
+/// over: the response read, a streamed body sent to its end, an upgraded
+/// connection (WebSocket) closed. Dropping it takes the request off the
+/// backend's count.
+#[doc(hidden)]
+pub struct OpenRequest(Arc<AtomicU64>);
+
+impl Drop for OpenRequest {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Count a request on `backend` of `upstream` until the returned value is
+/// dropped.
+#[doc(hidden)]
+pub fn open_request(upstream: &str, backend: &str) -> OpenRequest {
+    let counter = open_counter(upstream, backend);
+    counter.fetch_add(1, Ordering::Relaxed);
+    OpenRequest(counter)
+}
+
+/// Requests on `backend` of `upstream` right now — what a drained backend
+/// still has to finish before it can be stopped.
+#[doc(hidden)]
+pub fn open_requests(upstream: &str, backend: &str) -> u64 {
+    open_counts().read().unwrap_or_else(|e| e.into_inner()).get(upstream).and_then(|b| b.get(backend)).map_or(0, |c| c.load(Ordering::Relaxed))
+}
+
+/// A streamed body that keeps its request counted until it has been read
+/// to the end (or dropped).
+struct Counted {
+    body: Box<dyn std::io::Read + Send>,
+    _open: OpenRequest,
+}
+
+impl std::io::Read for Counted {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.body.read(buf)
+    }
+}
+
+/// `response` is the answer to `open`: a body still streaming from the
+/// backend keeps the request counted until it ends; any other is over now.
+#[doc(hidden)]
+pub fn finish(response: &mut crate::response::Response, open: Option<OpenRequest>) {
+    if let (Some(body), Some(open)) = (response.stream_pipe.take(), open) {
+        response.stream_pipe = Some(Box::new(Counted { body, _open: open }));
+    }
 }
 
 #[doc(hidden)]
@@ -275,7 +359,7 @@ pub fn is_drained(upstream: &str, backend: &str) -> bool {
         return false;
     }
     let set = drained_set().read().unwrap_or_else(|e| e.into_inner());
-    set.iter().any(|(u, b)| u == upstream && b == backend)
+    set.keys().any(|(u, b)| u == upstream && b == backend)
 }
 
 /// One backend of an upstream as the admin API shows it.
@@ -294,13 +378,19 @@ pub struct BackendView {
     pub breaker: Option<&'static str>,
     #[doc(hidden)]
     pub drained: bool,
+    /// When it was drained (Unix seconds).
+    #[doc(hidden)]
+    pub drained_since: Option<u64>,
+    /// Requests on it right now.
+    #[doc(hidden)]
+    pub open_requests: u64,
 }
 
 /// The current configuration's upstreams and their backends, in order.
 #[doc(hidden)]
 pub fn snapshot() -> Vec<(String, Vec<BackendView>)> {
     let policies = stats().lock().unwrap_or_else(|e| e.into_inner()).policies.clone();
-    policies
+    let mut upstreams: Vec<(String, Vec<BackendView>)> = policies
         .iter()
         .map(|p| {
             let live = p.live.read().unwrap_or_else(|e| e.into_inner()).clone();
@@ -318,11 +408,16 @@ pub fn snapshot() -> Vec<(String, Vec<BackendView>)> {
                         BreakerState::HalfOpen => "half_open",
                     }),
                     drained: is_drained(&p.name, b),
+                    drained_since: drained_since(&p.name, b),
+                    open_requests: open_requests(&p.name, b),
                 })
                 .collect();
             (p.name.clone(), views)
         })
-        .collect()
+        .collect();
+    // By name: the same order after every reload.
+    upstreams.sort_by(|a, b| a.0.cmp(&b.0));
+    upstreams
 }
 
 /// One request to `backend` of `upstream`: its status (`None`: no
@@ -415,6 +510,30 @@ pub fn prometheus_text() -> String {
                     };
                     breaker_lines.push_str(&format!("rws_upstream_circuit_breaker_state{{{labels}}} {value}\n"));
                 }
+            }
+        }
+        out.push_str("# HELP rws_upstream_backend_open_requests Requests on a backend right now, streamed responses and upgraded connections included\n");
+        out.push_str("# TYPE rws_upstream_backend_open_requests gauge\n");
+        for policy in &stats.policies {
+            let mut backends: Vec<&String> = policy.weights.keys().collect();
+            backends.sort();
+            for backend in backends {
+                out.push_str(&format!(
+                    "rws_upstream_backend_open_requests{{upstream=\"{}\",backend=\"{}\"}} {}\n",
+                    label(&policy.name), label(backend), open_requests(&policy.name, backend)
+                ));
+            }
+        }
+        out.push_str("# HELP rws_upstream_backend_drained Whether a backend is drained: taken out of rotation from the admin API (1) or not (0)\n");
+        out.push_str("# TYPE rws_upstream_backend_drained gauge\n");
+        for policy in &stats.policies {
+            let mut backends: Vec<&String> = policy.weights.keys().collect();
+            backends.sort();
+            for backend in backends {
+                out.push_str(&format!(
+                    "rws_upstream_backend_drained{{upstream=\"{}\",backend=\"{}\"}} {}\n",
+                    label(&policy.name), label(backend), u8::from(is_drained(&policy.name, backend))
+                ));
             }
         }
         if !breaker_lines.is_empty() {

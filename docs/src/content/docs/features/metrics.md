@@ -207,6 +207,8 @@ Every `[[upstream]]` of a [config-file proxy](/proxy/config-driven/) is measured
 | `rws_upstream_retries_total` | Counter | `upstream` | Requests sent again to another backend (`[upstream.retry]`) |
 | `rws_upstream_backend_up` | Gauge | `upstream`, `backend` | `1` while in rotation (passing health checks, breaker not open), else `0` |
 | `rws_upstream_circuit_breaker_state` | Gauge | `upstream`, `backend` | `0`=closed, `1`=half_open, `2`=open; only for upstreams with `[upstream.circuit_breaker]` |
+| `rws_upstream_backend_open_requests` | Gauge | `upstream`, `backend` | Requests running on the backend right now; a streamed response or a WebSocket counts until it ends (since 18.38.0) |
+| `rws_upstream_backend_drained` | Gauge | `upstream`, `backend` | `1` while the backend is [drained](/deployment/admin/), else `0` (since 18.38.0) |
 
 ```promql
 # Backend error ratio
@@ -215,6 +217,10 @@ sum by (upstream, backend) (rate(rws_upstream_requests_total{code=~"5..|error"}[
 
 # Backends out of rotation
 rws_upstream_backend_up == 0
+
+# Drained backends that are safe to stop: nothing running on them on any replica
+sum by (upstream, backend) (rws_upstream_backend_open_requests) == 0
+  and on (upstream, backend) max by (upstream, backend) (rws_upstream_backend_drained) == 1
 ```
 
 ## `SERVER_READY` and `/readyz`

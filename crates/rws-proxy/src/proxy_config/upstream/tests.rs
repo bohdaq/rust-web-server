@@ -127,6 +127,21 @@ fn metrics_name_the_upstream_and_backend() {
     assert!(text.contains(r#"rws_upstream_backend_up{upstream="api",backend="http://b:1"} 0"#), "{text}");
     assert!(text.contains(r#"rws_upstream_backend_up{upstream="api",backend="http://a:1"} 1"#), "{text}");
     assert!(text.contains(r#"rws_upstream_circuit_breaker_state{upstream="api",backend="http://b:1"} 2"#), "{text}");
+    assert!(text.contains(r#"rws_upstream_backend_open_requests{upstream="api",backend="http://a:1"} "#), "{text}");
+    assert!(text.contains(r#"rws_upstream_backend_drained{upstream="api",backend="http://b:1"} 0"#), "{text}");
+}
+
+#[test]
+fn open_requests_are_counted_until_dropped() {
+    let (upstream, backend) = ("open-count-test", "http://a:1");
+    assert_eq!(open_requests(upstream, backend), 0);
+    let (first, second) = (open_request(upstream, backend), open_request(upstream, backend));
+    assert_eq!(open_requests(upstream, backend), 2);
+    assert_eq!(open_requests(upstream, "http://b:1"), 0);
+    drop(first);
+    assert_eq!(open_requests(upstream, backend), 1);
+    drop(second);
+    assert_eq!(open_requests(upstream, backend), 0);
 }
 
 #[test]

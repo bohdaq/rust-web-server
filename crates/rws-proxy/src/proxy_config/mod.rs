@@ -1973,6 +1973,9 @@ struct Prepared<'a> {
     port: u16,
     request: std::borrow::Cow<'a, Request>,
     _guard: Option<ConnectionGuard>,
+    /// The request on the backend's count of open requests, until it is
+    /// over (see [`upstream::finish`]).
+    open: Option<upstream::OpenRequest>,
 }
 
 /// How one attempt went.
@@ -1998,7 +2001,9 @@ impl DynamicProxy {
         }
         let default_host = if prepared.port == 80 { prepared.host.clone() } else { format!("{}:{}", prepared.host, prepared.port) };
         let host_header = self.host_override(request).map(str::to_string).unwrap_or(default_host);
-        match crate::proxy::upgrade::forward(&prepared.request, crate::proxy::Peer::of(conn), &prepared.host, prepared.port, &host_header, self.read_timeout) {
+        // The upgraded connection stays on the backend's count until it closes.
+        let open = prepared.open.map(|open| Box::new(open) as Box<dyn std::any::Any + Send>);
+        match crate::proxy::upgrade::forward_holding(&prepared.request, crate::proxy::Peer::of(conn), &prepared.host, prepared.port, &host_header, self.read_timeout, open) {
             Ok(response) => response,
             Err(e) => {
                 eprintln!("[proxy] upgrade to {}: {e}", prepared.backend);
@@ -2054,7 +2059,8 @@ impl DynamicProxy {
             std::borrow::Cow::Borrowed(request)
         };
 
-        Ok(Prepared { backend, host, port, request, _guard: guard })
+        let open = Some(upstream::open_request(&self.upstream, &backend));
+        Ok(Prepared { backend, host, port, request, _guard: guard, open })
     }
 
     /// Record an attempt's outcome (breaker, metrics) and classify it.
@@ -2150,6 +2156,7 @@ impl DynamicProxy {
                         match self.settle(&prepared.backend, result.map_err(|e| e.to_string()), started, &mut failure) {
                             Attempt::Done(mut response) => {
                                 self.stick(request, &prepared.backend, &mut response);
+                                upstream::finish(&mut response, prepared.open);
                                 return Ok(response);
                             }
                             Attempt::Failed(response) => last = response,
@@ -2173,6 +2180,7 @@ impl DynamicProxy {
             match self.settle(&prepared.backend, result, started, &mut failure) {
                 Attempt::Done(mut response) => {
                     self.stick(request, &prepared.backend, &mut response);
+                    upstream::finish(&mut response, prepared.open);
                     return Ok(response);
                 }
                 Attempt::Failed(response) => last = response,
@@ -2239,6 +2247,7 @@ impl Application for DynamicProxy {
                         match self.settle(&prepared.backend, result.map_err(|e| e.to_string()), started, &mut failure) {
                             Attempt::Done(mut response) => {
                                 self.stick(request, &prepared.backend, &mut response);
+                                upstream::finish(&mut response, prepared.open);
                                 return Ok(response);
                             }
                             Attempt::Failed(response) => last = response,
@@ -2263,6 +2272,7 @@ impl Application for DynamicProxy {
             match self.settle(&prepared.backend, result, started, &mut failure) {
                 Attempt::Done(mut response) => {
                     self.stick(request, &prepared.backend, &mut response);
+                    upstream::finish(&mut response, prepared.open);
                     return Ok(response);
                 }
                 Attempt::Failed(response) => last = response,

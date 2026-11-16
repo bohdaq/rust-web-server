@@ -30,6 +30,16 @@ for port in 18481 18482; do
   echo "body{}" > "b$port/site.css"
   (cd "b$port" && exec python3 -I -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1) & PIDS+=($!)
 done
+# A backend that answers after ?ms= milliseconds.
+python3 -I -c '
+import http.server, time, urllib.parse
+class Slow(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        ms = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("ms", ["0"])[0]
+        time.sleep(int(ms) / 1000)
+        self.send_response(200); self.send_header("Content-Length", "4"); self.end_headers(); self.wfile.write(b"slow")
+    def log_message(self, *args): pass
+http.server.ThreadingHTTPServer(("127.0.0.1", 18483), Slow).serve_forever()' & PIDS+=($!)
 cat > rws.config.toml <<'TOML'
 port = 18480
 [admin]
@@ -63,6 +73,17 @@ type = "respond"
 body = "cached page"
 [route.middleware.cache]
 purge_token_env = "UI_E2E_PURGE_TOKEN"
+
+[[upstream]]
+name = "jobs"
+backends = ["http://127.0.0.1:18483"]
+
+[[route]]
+[route.match]
+path = "/slow/*"
+[route.action]
+type = "proxy"
+upstream = "jobs"
 
 [[route]]
 [route.match]

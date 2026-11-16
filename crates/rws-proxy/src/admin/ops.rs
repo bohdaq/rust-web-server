@@ -298,7 +298,8 @@ pub fn registered_routes_json() -> String {
 }
 
 /// The config file's upstreams: each backend's weight, health, breaker
-/// state and whether it is drained.
+/// state, whether it is drained (and since when), and the requests on it
+/// right now (`open_requests`: what a drained backend still has to finish).
 pub fn upstreams_json() -> String {
     let upstreams: Vec<String> = crate::proxy_config::upstream::snapshot()
         .iter()
@@ -307,12 +308,14 @@ pub fn upstreams_json() -> String {
                 .iter()
                 .map(|b| {
                     format!(
-                        r#"{{"url":{},"weight":{},"healthy":{},"breaker":{},"drained":{}}}"#,
+                        r#"{{"url":{},"weight":{},"healthy":{},"breaker":{},"drained":{},"drained_since":{},"open_requests":{}}}"#,
                         quoted(&b.url),
                         b.weight,
                         b.healthy,
                         b.breaker.map_or("null".to_string(), quoted),
-                        b.drained
+                        b.drained,
+                        b.drained_since.map_or("null".to_string(), |s| s.to_string()),
+                        b.open_requests
                     )
                 })
                 .collect();

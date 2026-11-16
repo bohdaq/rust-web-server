@@ -64,6 +64,22 @@ pub fn request_head(request: &Request, client: crate::proxy::Peer<'_>, host: &st
 
 /// Forward an upgrade request to `ip:port`.
 pub fn forward(request: &Request, client: crate::proxy::Peer<'_>, ip: &str, port: u16, host: &str, timeout: Duration) -> Result<Response, String> {
+    forward_holding(request, client, ip, port, host, timeout, None)
+}
+
+/// [`forward`], dropping `hold` when the exchange is over: with the
+/// response when the backend doesn't switch protocols, else when the
+/// upgraded connection closes.
+#[doc(hidden)]
+pub fn forward_holding(
+    request: &Request,
+    client: crate::proxy::Peer<'_>,
+    ip: &str,
+    port: u16,
+    host: &str,
+    timeout: Duration,
+    hold: Option<Box<dyn std::any::Any + Send>>,
+) -> Result<Response, String> {
     let address = (ip, port).to_socket_addrs().map_err(|e| e.to_string())?.next().ok_or("no address")?;
     let mut backend = TcpStream::connect_timeout(&address, timeout.min(Duration::from_secs(10))).map_err(|e| e.to_string())?;
     backend.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
@@ -114,7 +130,10 @@ pub fn forward(request: &Request, client: crate::proxy::Peer<'_>, ip: &str, port
     let leftover = received[head_end..].to_vec();
     backend.set_read_timeout(None).map_err(|e| e.to_string())?;
     let to_backend = backend.try_clone().map_err(|e| e.to_string())?;
-    Ok(WebSocket::upgrade_raw(response, move |client_reader, client_writer| relay(client_reader, client_writer, backend, to_backend, leftover)))
+    Ok(WebSocket::upgrade_raw(response, move |client_reader, client_writer| {
+        relay(client_reader, client_writer, backend, to_backend, leftover);
+        drop(hold);
+    }))
 }
 
 /// Copy bytes both ways: backend → client here until the backend closes;

@@ -47,9 +47,9 @@ preserve_host = true                               # the app sees shop.example.c
 WebSockets (Socket.IO, GraphQL subscriptions, Next.js / Vite hot reload in
 development) go through the same route: rws relays the upgrade to the
 backend that accepted it. During a deploy, drain a process first so no new
-requests reach it:
+requests reach it, and wait for the ones it has (`--wait`, since 18.38.0):
 
 ```sh
-rws ctl drain web http://127.0.0.1:3000      # restart it, then:
+rws ctl drain web http://127.0.0.1:3000 --wait 1m   # returns when its last request ended; restart it, then:
 rws ctl drain web http://127.0.0.1:3000 --undo
 ```

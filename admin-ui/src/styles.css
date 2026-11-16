@@ -217,6 +217,9 @@ h2 { font-size: 14px; line-height: 20px; }
 .stack { display: grid; gap: 20px; min-width: 0; }
 .trio { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
 @media (max-width: 1099.98px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+/* A wide table beside a narrow side card. */
+.cols.cols-side { grid-template-columns: minmax(0, 1fr) 340px; }
+@media (max-width: 1359.98px) { .cols.cols-side { grid-template-columns: minmax(0, 1fr); } }
 
 .card { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); --lit-material-text-field-notch-color: var(--panel); --md-sys-color-surface: var(--panel); }
 .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 30px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
@@ -260,6 +263,9 @@ lit-material-button.danger { --md-sys-color-primary: var(--bad); }
 .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 18px; border: 1px solid var(--warn-line); border-radius: 14px; background: var(--warn-bg); }
 .banner-title { font-weight: 600; font-size: 14px; color: var(--warn); }
 .banner-text { flex: 1 1 240px; color: var(--muted); }
+.banner[data-tone="ok"] { border-color: var(--ok-line); background: var(--ok-bg); }
+.banner[data-tone="ok"] .banner-title { color: var(--ok); }
+.banner-title .mono { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; }
 lit-material-alert { display: block; }
 
 /* ── tables ────────────────────────────────────────────────────────────── */
@@ -272,13 +278,14 @@ lit-material-alert { display: block; }
 .tbl td { padding: 8px 12px; border-top: 1px solid var(--line-soft); vertical-align: middle; height: 28px; }
 .tbl th:first-child, .tbl td:first-child { padding-left: 20px; }
 .tbl th:last-child, .tbl td:last-child { padding-right: 20px; }
+.tbl th.two-line { white-space: normal; line-height: 1.3; padding-top: 6px; padding-bottom: 6px; }
 .tbl .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .tbl .mono { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
 .tbl .act { text-align: right; white-space: nowrap; }
 .tbl .nowrap { white-space: nowrap; overflow-wrap: normal; }
 .tbl tr.is-warn td { background: var(--warn-bg); }
 .tbl .dim { color: var(--muted); }
-.share { display: flex; align-items: center; gap: 10px; min-width: 150px; }
+.share { display: flex; align-items: center; gap: 10px; min-width: 110px; }
 .share-track { flex: 1; height: 6px; border-radius: 3px; background: var(--sel); overflow: hidden; }
 .share-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 .share-fill[data-tone="ok"] { background: var(--ok); }
@@ -461,6 +468,10 @@ lit-material-command-palette::part(option) { min-height: 44px; }
   .tbl th:last-child, .tbl td:last-child { padding-right: 16px; }
   .req { grid-template-columns: 60px 56px minmax(0, 1fr) 50px; gap: 0 8px; padding: 0 16px; }
   .req .c-size, .req .c-from { display: none; }
+  .confirm-actions lit-material-button { --lit-material-button-height: 44px; flex: 1 1 auto; }
+  .choice span { min-height: 44px; }
+}
+@media (max-width: 999.98px) {
   /* Tables with an action per row: each row becomes a small block, so the
      button stays on screen. Line 1: name and button; then the bar; then the rest. */
   .tbl.tbl-stack, .tbl.tbl-stack tbody { display: block; }
@@ -472,8 +483,6 @@ lit-material-command-palette::part(option) { min-height: 44px; }
   .tbl.tbl-stack td.act { order: -1; flex: none; }
   .tbl.tbl-stack td.wide { order: 0; flex: 1 1 100%; }
   .tbl.tbl-stack td[data-label]::before { content: attr(data-label) " "; font-family: var(--font-sans); font-size: 12px; color: var(--faint); }
-  .confirm-actions lit-material-button { --lit-material-button-height: 44px; flex: 1 1 auto; }
-  .choice span { min-height: 44px; }
 }
 
 /* ── traffic (src/traffic.js) ──────────────────────────────────────────── */

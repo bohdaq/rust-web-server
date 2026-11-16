@@ -1,6 +1,6 @@
 // The admin UI in headless Chromium against a running rws (ci/e2e/admin_ui.sh):
 // no CSP violations or script errors, a wrong token refused, then drain a
-// backend, switch maintenance mode and purge a cache through the UI and see
+// backend (and watch its open requests finish), switch maintenance mode and purge a cache through the UI and see
 // the API agree, PURGE over HTTP, and a request appear in the live log.
 import { chromium } from "playwright";
 
@@ -33,17 +33,37 @@ await signIn(token);
 await page.getByText("Requests served").waitFor({ timeout: 5000 }).catch(() => fail("no overview after signing in"));
 console.log("ok: signed in, overview shown");
 
+const upstream = async (name) => (await api("/upstreams")).find((u) => u.name === name);
+const first = "http://127.0.0.1:18481";
 await page.goto(`${admin}/admin/#/upstreams`);
-const drain = page.getByRole("button", { name: /^Drain / }).first();
+const drain = page.getByRole("button", { name: `Drain ${first}` });
 await drain.waitFor({ timeout: 5000 });
 await drain.click();
 await page.getByText("Drained").first().waitFor({ timeout: 5000 }).catch(() => fail("the UI didn't show the backend drained"));
-const [web] = await api("/upstreams");
-if (!web.backends[0].drained) fail(`the drain didn't reach the server: ${JSON.stringify(web)}`);
-await page.getByRole("button", { name: /^Put back / }).first().click();
+const web = await upstream("web");
+if (!web.backends[0].drained || typeof web.backends[0].drained_since !== "number") fail(`the drain didn't reach the server: ${JSON.stringify(web)}`);
+await page.getByText("is idle: safe to deploy").waitFor({ timeout: 5000 }).catch(() => fail("no word that an idle drained backend is safe to deploy"));
+await page.getByRole("button", { name: `Put back ${first}` }).click();
 await page.waitForTimeout(500);
-if ((await api("/upstreams"))[0].backends[0].drained) fail("undrain didn't reach the server");
+if ((await upstream("web")).backends[0].drained) fail("undrain didn't reach the server");
 console.log("ok: drain and undrain a backend from the UI");
+
+// Drain progress: a request that is still running shows as open until it ends.
+const job = "http://127.0.0.1:18483";
+const running = fetch(`${publicUrl}slow/job?ms=6000`).then((r) => r.text());
+for (let i = 0; i < 50 && (await upstream("jobs")).backends[0].open_requests !== 1; i++) await page.waitForTimeout(100);
+if ((await upstream("jobs")).backends[0].open_requests !== 1) fail(`a running request isn't counted: ${JSON.stringify(await upstream("jobs"))}`);
+await page.getByRole("button", { name: `Drain ${job}` }).click();
+await page.locator("dialog#confirm").getByRole("button", { name: "Drain anyway" }).click();
+await page.getByText("is draining").waitFor({ timeout: 5000 }).catch(() => fail("no word that the backend is draining"));
+await page.getByText("1 request is still running on it").waitFor({ timeout: 5000 }).catch(() => fail("the draining card doesn't count the open request"));
+if ((await running) !== "slow") fail("the request on the draining backend didn't finish");
+await page.getByText("is idle: safe to deploy").waitFor({ timeout: 8000 }).catch(() => fail("no word that the drained backend finished"));
+if ((await upstream("jobs")).backends[0].open_requests !== 0) fail(`the finished request is still counted: ${JSON.stringify(await upstream("jobs"))}`);
+await page.getByRole("button", { name: "Put back", exact: true }).click();
+await page.getByText("is idle: safe to deploy").waitFor({ state: "detached", timeout: 5000 }).catch(() => fail("the card stayed after Put back"));
+if ((await upstream("jobs")).backends[0].drained) fail("Put back on the card didn't reach the server");
+console.log("ok: a draining backend shows its open requests, then that it is safe to deploy");
 
 await page.goto(`${admin}/admin/#/controls`);
 const maintenance = page.locator("#maintenance-toggle");

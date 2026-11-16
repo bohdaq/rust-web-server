@@ -34,6 +34,7 @@ the same.
 rws ctl status                         # version, uptime, listeners, disks
 rws ctl reload                         # waits; prints the errors and exits 1 on a bad config
 rws ctl drain <upstream> <backend> [--undo]
+rws ctl drain <upstream> <backend> --wait 2m       # returns when its last request ended (18.38.0)
 rws ctl maintenance [on|off]
 rws ctl maintenance on --for 1h --retry-after 5m   # off by itself after an hour (18.38.0)
 rws ctl maintenance extend 1h          # keep a timed maintenance on longer (18.38.0)
@@ -75,7 +76,7 @@ Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) an
 
 - **Overview**: requests per second with a live chart, errors, open connections and the queue (the admin listener's own requests aren't counted; `[admin] count_own_requests = true` counts them), what needs attention (failing or drained backends, an open circuit breaker, certificates about to expire, a full disk), the newest requests, the listeners and the build.
 - **Traffic**: who visited, people, AI agents and bots, over a day, week or 30 days (18.15.0; see [Traffic insights](/deployment/traffic/)).
-- **Upstreams**: every backend's share of traffic, health and circuit breaker, a button to drain it or put it back, and the recent drains.
+- **Upstreams**: every backend's share of traffic, health and circuit breaker, the requests open on it, a button to drain it or put it back, and the recent drains. A drained backend gets a card on top: how many requests are still running on it, then "safe to deploy" when none is left (since 18.38.0).
 - **Certificates**: what the server presents and when it expires, and ACME's renew button.
 - **Controls**: maintenance mode, reload, the response caches (purge a path or a prefix, or everything), authorization tuples (add, remove, check), the IP blocklist and feature flags.
 - **Config**: every setting in effect, filterable, secrets hidden.
@@ -229,7 +230,7 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /traffic/live?host=` | People on the site in the last 5 minutes, page views per minute for 30 minutes, current pages and countries (18.31.0). `404` when counting is off |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
-| `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |
+| `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker), `drained`, `drained_since` (Unix seconds, `null` when not drained) and `open_requests` (requests this process has running on the backend right now, with streamed responses and WebSockets counted until they end; both since 18.38.0). Upstreams are listed by name |
 | `PUT /upstreams/<name>/drain` `{"backend":"http://10.0.0.5:8080","drained":true}` | Take a backend out of rotation, or put it back (`false`). New requests skip it, requests already on it finish, its health checks go on. With every backend drained the route answers `503`. Kept across reloads, not restarts. `404` for an unknown upstream or backend |
 | `GET /certificates` | Every certificate served (`default` for the main one, virtual hosts and on-demand names by name): `not_after`, `expires`, `days_left`, `source`; and `acme`: whether its renewal loop runs and its last check (`renewed`, `current`, or the error) |
 | `GET /logs?n=100` | The last access-log lines (up to 500 kept), oldest first, each as a string: in the `json` log format each is a JSON document |
@@ -246,7 +247,14 @@ Lines are kept only while the admin API runs, and come from the access log (`log
 
 To reload certificates from files (after replacing them yourself), use `POST /reload`: it reloads them as `SIGHUP` does.
 
-A typical backend rollout: drain it, wait for its in-flight requests (`rws_upstream_requests_total` stops moving), deploy, check `GET /upstreams` shows it `healthy`, undrain.
+A typical backend rollout: drain it, wait until its `open_requests` is `0`, deploy, check `GET /upstreams` shows it `healthy`, undrain. `rws ctl drain <upstream> <backend> --wait 2m` does the first two steps: it drains, then returns `0` when no request is left on the backend, or `1` when some still run after the time given (the backend stays drained).
+
+```sh
+rws ctl drain web http://10.0.0.5:8080 --wait 2m && deploy-backend 10.0.0.5
+rws ctl drain web http://10.0.0.5:8080 --undo
+```
+
+`open_requests` counts what this rws process sent: with [several replicas](/deployment/cluster/) the drain is shared, the count isn't, so wait on each replica (or watch `sum(rws_upstream_backend_open_requests)` in Prometheus).
 
 Maintenance mode applies in proxy mode too (the binary puts the maintenance check in front of config-file routes since 18.10.0; while it's off, proxy routes keep their non-blocking forwarder).
 

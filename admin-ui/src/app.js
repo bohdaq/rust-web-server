@@ -409,6 +409,19 @@ export class RwsAdmin extends LitElement {
   }
 
   /** A message at the bottom of the screen; `undo` adds an Undo button. */
+  willUpdate(changed) {
+    // A drained backend finished its last request since the last look.
+    const before = changed.get("data")?.upstreams;
+    const now = this.data?.upstreams;
+    if (!before || !now || before === now) return;
+    for (const u of now) {
+      for (const b of u.backends) {
+        const was = before.find((x) => x.name === u.name)?.backends.find((x) => x.url === b.url);
+        if (was?.drained && b.drained && was.open_requests > 0 && b.open_requests === 0) this.toast(`${b.url} finished its requests: safe to deploy`);
+      }
+    }
+  }
+
   toast(message, undo = null) {
     clearTimeout(this.noticeTimer);
     this.notice = { message, undo };
@@ -696,7 +709,7 @@ export class RwsAdmin extends LitElement {
       () => this.drain(upstream, backend, !drained));
     if (done) {
       // Every page shows backends (the header, Needs attention): don't wait for the next poll.
-      this.data = { ...this.data, upstreams: (this.data.upstreams ?? []).map((u) => (u.name !== upstream ? u : { ...u, backends: u.backends.map((b) => (b.url === backend ? { ...b, drained } : b)) })) };
+      this.data = { ...this.data, upstreams: (this.data.upstreams ?? []).map((u) => (u.name !== upstream ? u : { ...u, backends: u.backends.map((b) => (b.url === backend ? { ...b, drained, drained_since: drained ? b.drained_since ?? Math.floor(Date.now() / 1000) : null } : b)) })) };
     }
     return done;
   }
@@ -909,7 +922,10 @@ export class RwsAdmin extends LitElement {
         else if (b.breaker === "half_open") list.push({ tone: "warn", title: `${b.url}: circuit breaker probing`, detail: `Upstream ${u.name}: a few requests are let through to see if it recovered.`, action: open });
         if (b.drained) {
           list.push({
-            tone: "warn", title: `${b.url} is drained`, detail: `Upstream ${u.name}: out of rotation until you put it back.`,
+            tone: "warn", title: b.open_requests > 0 ? `${b.url} is draining` : `${b.url} is drained`,
+            detail: b.open_requests > 0
+              ? `Upstream ${u.name}: ${plural(b.open_requests, "request is", "requests are")} still running on it.`
+              : `Upstream ${u.name}: no open requests, safe to deploy. Out of rotation until you put it back.`,
             action: { label: "Put back", busy: `drain:${b.url}`, run: () => this.drain(u.name, b.url, false) },
           });
         }
@@ -1210,11 +1226,12 @@ export class RwsAdmin extends LitElement {
     if (!ups) return html`${this.head("Upstreams")}${this.skeleton(2)}`;
     const backends = ups.reduce((n, u) => n + u.backends.length, 0);
     const changes = (this.data.audit ?? []).filter((e) => e.path.includes("/upstreams/") && e.status < 300).slice(0, 6);
+    const drained = ups.flatMap((u) => u.backends.filter((b) => b.drained).map((b) => [u, b]));
     return html`
-      ${this.head("Upstreams", ups.length ? html`${plural(ups.length, "upstream", "upstreams")}, ${plural(backends, "backend", "backends")}. Drain a backend before deploying it: new requests go elsewhere, requests already on it finish.` : nothing)}
+      ${this.head("Upstreams", ups.length ? html`${plural(ups.length, "upstream", "upstreams")}, ${plural(backends, "backend", "backends")}. Drain a backend before deploying it: new requests go elsewhere, requests already on it finish, and this page says when none is left.` : nothing)}
       ${ups.length === 0
         ? html`<div class="card"><lit-material-empty-state size="compact" headline="No upstreams configured">Upstreams come from <code>[[upstream]]</code> sections in <code>rws.config.toml</code>. Add one, then reload from Controls.</lit-material-empty-state></div>`
-        : html`<div class="cols">
+        : html`${drained.map(([u, b]) => this.renderDrain(u, b))}<div class="cols cols-side">
           <div class="stack">${ups.map((u) => this.renderUpstream(u))}</div>
           <section class="card" aria-labelledby="changes-title">
             <div class="card-head"><h2 id="changes-title">Recent changes</h2><span class="spacer"></span><a class="link" href="#/audit">Open Audit</a></div>
@@ -1227,6 +1244,19 @@ export class RwsAdmin extends LitElement {
     `;
   }
 
+  /** A drained backend: what it still has to finish, or that it is safe to stop. */
+  renderDrain(u, b) {
+    const open = b.open_requests ?? 0;
+    const since = b.drained_since ? ` Drained ${ago(b.drained_since * 1000)}.` : "";
+    return html`<div class="banner" data-tone=${open ? "warn" : "ok"} role="status">
+      <span class="banner-title"><span class="mono">${b.url}</span> ${open ? "is draining" : "is idle: safe to deploy"}</span>
+      <span class="banner-text">${open
+        ? `${plural(open, "request is", "requests are")} still running on it. New requests to ${u.name} go to its other backends.`
+        : `No requests are open on it. Put it back when it is ready to serve ${u.name} again.`}${since}</span>
+      <button class="btn" ?disabled=${this.busy === `drain:${b.url}`} @click=${() => this.drain(u.name, b.url, false)}>Put back</button>
+    </div>`;
+  }
+
   renderUpstream(u) {
     const serving = u.backends.filter((b) => b.healthy && !b.drained);
     const weight = serving.reduce((n, b) => n + b.weight, 0);
@@ -1234,18 +1264,19 @@ export class RwsAdmin extends LitElement {
       <div class="card-head"><h2 id="up-${u.name}" class="mono">${u.name}</h2>
         <span class="meta">${serving.length} of ${u.backends.length} serving</span></div>
       <div class="table-wrap"><table class="tbl tbl-stack" role="table">
-        <thead role="rowgroup"><tr role="row"><th role="columnheader">Backend</th><th role="columnheader">Share of traffic</th><th role="columnheader">Health</th><th role="columnheader">Breaker</th><th role="columnheader"><span class="sr">Rotation</span></th></tr></thead>
+        <thead role="rowgroup"><tr role="row"><th role="columnheader">Backend</th><th role="columnheader">Share of traffic</th><th role="columnheader">Health</th><th role="columnheader">Breaker</th><th role="columnheader" class="num two-line">Open<br>requests</th><th role="columnheader"><span class="sr">Rotation</span></th></tr></thead>
         <tbody role="rowgroup">${u.backends.map((b) => {
           const share = b.healthy && !b.drained && weight ? Math.round((b.weight / weight) * 100) : 0;
           return html`<tr role="row" class=${b.drained ? "is-warn" : ""}>
             <td role="cell" class="mono nowrap">${b.url}</td>
             <td role="cell" class="wide"><div class="share"><span class="share-track"><span class="share-fill" style="width: ${share}%"></span></span>
-              <span class="share-text">${share}%</span>${b.drained ? status("warning", "Drained") : html`<span class="share-note">weight ${b.weight}</span>`}</div></td>
+              <span class="share-text">${share}%</span>${b.drained ? status("warning", b.open_requests > 0 ? "Draining" : "Drained") : html`<span class="share-note">weight ${b.weight}</span>`}</div></td>
             <td role="cell">${b.healthy ? status("ok", "Healthy") : status("error", "Failing checks")}</td>
             <td role="cell" data-label="Breaker">${b.breaker === null ? status("neutral", "None")
               : b.breaker === "closed" ? status("ok", "Closed")
               : b.breaker === "half_open" ? status("warning", "Probing")
               : status("error", "Open")}</td>
+            <td role="cell" class="num" data-label="Open requests">${(b.open_requests ?? 0).toLocaleString()}</td>
             <td role="cell" class="act"><button class="btn" aria-label="${b.drained ? "Put back" : "Drain"} ${b.url}" ?disabled=${this.busy === `drain:${b.url}`}
                 @click=${() => this.drain(u.name, b.url, !b.drained)}>${b.drained ? "Put back" : "Drain"}</button></td>
           </tr>`;

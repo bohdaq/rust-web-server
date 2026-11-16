@@ -320,6 +320,99 @@ fn a_drained_backend_gets_no_new_requests_and_draining_all_gives_503() {
     assert!(!crate::proxy_config::upstream::is_drained(&upstream, &a));
 }
 
+/// A backend that reads a request, says so on `arrived`, and answers when
+/// `release` gets a message.
+fn held_backend() -> (String, std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (arrived_tx, arrived) = std::sync::mpsc::channel();
+    let (release, release_rx) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            let _ = arrived_tx.send(());
+            let _ = release_rx.recv_timeout(Duration::from_secs(10));
+            let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone");
+        }
+    });
+    (format!("http://{addr}"), arrived, release)
+}
+
+#[test]
+fn a_draining_backend_shows_the_requests_it_still_has_open() {
+    use crate::proxy_config::upstream;
+    let (backend, arrived, release) = held_backend();
+    let name = format!("drain-progress-{}", std::process::id());
+    let toml = format!(
+        "[[upstream]]\nname = \"{name}\"\nbackends = [\"{backend}\"]\n\n[[route]]\n[route.match]\npath = \"/\"\n[route.action]\ntype = \"proxy\"\nupstream = \"{name}\"\n"
+    );
+    let (app, _handles) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(&toml));
+    assert_eq!(upstream::open_requests(&name, &backend), 0);
+    // This upstream as GET /upstreams lists it. Each build makes its
+    // upstreams the listed ones, and other tests build too: build again
+    // until the listing is this test's.
+    let api = AdminApi::new("t");
+    let listed = || {
+        for _ in 0..50 {
+            let (_, text) = call(&api, "GET", "/admin/api/v1/upstreams", "");
+            if let Some(at) = text.find(&name) {
+                return text[at..].to_string();
+            }
+            let _ = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(&toml));
+        }
+        panic!("the upstream never showed in GET /upstreams");
+    };
+
+    let request = std::thread::spawn(move || {
+        let raw = "GET / HTTP/1.1\r\nHost: x\r\n\r\n";
+        app.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap().status_code
+    });
+    arrived.recv_timeout(Duration::from_secs(5)).expect("the request reached the backend");
+    assert_eq!(upstream::open_requests(&name, &backend), 1, "one request is on the backend");
+
+    // Drained with a request still running: the API says so, and since when.
+    upstream::set_drained(&name, &backend, true);
+    let since = upstream::drained_since(&name, &backend).expect("drained");
+    let mine = listed();
+    assert!(mine.contains(&format!(r#""drained":true,"drained_since":{since},"open_requests":1}}"#)), "{mine}");
+    // Draining it again doesn't restart the clock.
+    upstream::set_drained(&name, &backend, true);
+    assert_eq!(upstream::drained_since(&name, &backend), Some(since));
+
+    // It finishes: nothing is open, the backend can be stopped.
+    release.send(()).unwrap();
+    assert_eq!(request.join().unwrap(), 200);
+    assert_eq!(upstream::open_requests(&name, &backend), 0);
+    assert!(listed().contains(r#""open_requests":0}"#));
+
+    upstream::set_drained(&name, &backend, false);
+    assert_eq!(upstream::drained_since(&name, &backend), None);
+    assert!(listed().contains(r#""drained":false,"drained_since":null,"open_requests":0}"#));
+}
+
+#[test]
+fn a_streamed_response_stays_open_until_its_body_ends() {
+    use crate::proxy_config::upstream;
+    use crate::core::New;
+    let (name, backend) = (format!("stream-open-{}", std::process::id()), "http://127.0.0.1:1");
+    // A buffered response is over as soon as it is in hand.
+    let mut buffered = Response::new();
+    upstream::finish(&mut buffered, Some(upstream::open_request(&name, backend)));
+    assert_eq!(upstream::open_requests(&name, backend), 0);
+    // A streamed one counts until the body has been sent (the reader dropped).
+    let mut streamed = Response::new();
+    streamed.stream_pipe = Some(Box::new(std::io::Cursor::new(b"chunk".to_vec())));
+    upstream::finish(&mut streamed, Some(upstream::open_request(&name, backend)));
+    assert_eq!(upstream::open_requests(&name, backend), 1);
+    let mut sent = Vec::new();
+    streamed.stream_pipe.as_mut().unwrap().read_to_end(&mut sent).unwrap();
+    assert_eq!(sent, b"chunk");
+    drop(streamed);
+    assert_eq!(upstream::open_requests(&name, backend), 0);
+}
+
 #[test]
 fn upstreams_and_certificates_endpoints() {
     // Writes audit entries: not while another test has its own audit file.

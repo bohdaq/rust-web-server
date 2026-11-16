@@ -137,6 +137,15 @@ fn refusals_exit_1_with_the_servers_reason() {
     let (code, _, err) = ctl(&["drain", "no-such-upstream", "http://10.0.0.5:8080"]);
     assert_eq!(code, EXIT_FAILED);
     assert!(err.contains(r#"no upstream "no-such-upstream""#), "{err}");
+    let (code, _, err) = ctl(&["drain", "no-such-upstream", "http://10.0.0.5:8080", "--wait", "5s"]);
+    assert_eq!(code, EXIT_FAILED, "refused before any waiting");
+    assert!(err.contains(r#"no upstream "no-such-upstream""#), "{err}");
+    let (code, _, err) = ctl(&["drain", "u", "http://10.0.0.5:8080", "--wait", "soon"]);
+    assert_eq!(code, EXIT_UNUSABLE);
+    assert!(err.contains("--wait takes a time"), "{err}");
+    let (code, _, err) = ctl(&["drain", "u", "http://10.0.0.5:8080", "--undo", "--wait", "5"]);
+    assert_eq!(code, EXIT_UNUSABLE);
+    assert!(err.contains("not with --undo"), "{err}");
 }
 
 #[test]

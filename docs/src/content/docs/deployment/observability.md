@@ -53,7 +53,7 @@ Wire `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` t
 
 ### Upstreams
 
-Config-file proxies export `rws_upstream_requests_total`, `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`, `rws_upstream_backend_up` and `rws_upstream_circuit_breaker_state` per `upstream` and `backend` — see [Upstream metrics](/features/metrics/#upstream-metrics).
+Config-file proxies export `rws_upstream_requests_total`, `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`, `rws_upstream_backend_up`, `rws_upstream_circuit_breaker_state`, `rws_upstream_backend_open_requests` and `rws_upstream_backend_drained` per `upstream` and `backend` — see [Upstream metrics](/features/metrics/#upstream-metrics).
 
 ### OTLP metrics export
 

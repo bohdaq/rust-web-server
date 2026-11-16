@@ -113,6 +113,16 @@ for port in 18461 18462; do
   mkdir -p "b$port" && echo "backend-$port" > "b$port/index.html"
   (cd "b$port" && exec python3 -I -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1) & PIDS+=($!)
 done
+# A backend that answers after ?ms= milliseconds.
+python3 -I -c '
+import http.server, time, urllib.parse
+class Slow(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        ms = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("ms", ["0"])[0]
+        time.sleep(int(ms) / 1000)
+        self.send_response(200); self.send_header("Content-Length", "4"); self.end_headers(); self.wfile.write(b"slow")
+    def log_message(self, *args): pass
+http.server.ThreadingHTTPServer(("127.0.0.1", 18463), Slow).serve_forever()' & PIDS+=($!)
 cat > proxy.toml <<'TOML'
 port = 18451
 [admin]
@@ -125,6 +135,17 @@ backends = ["http://127.0.0.1:18461", "http://127.0.0.1:18462"]
 [upstream.health_check]
 path = "/"
 interval_secs = 1
+
+[[upstream]]
+name = "jobs"
+backends = ["http://127.0.0.1:18463"]
+
+[[route]]
+[route.match]
+path = "/slow/*"
+[route.action]
+type = "proxy"
+upstream = "jobs"
 
 [[route]]
 [route.match]
@@ -140,8 +161,9 @@ for _ in $(seq 1 50); do curl -s http://127.0.0.1:18451/ | grep -q backend && br
 ups=$(api GET /upstreams)
 python3 - "$ups" <<'PY' || fail "upstreams: $ups"
 import json, sys
-[web] = json.loads(sys.argv[1])
-assert web["name"] == "web", web
+[jobs, web] = json.loads(sys.argv[1])  # listed by name
+assert jobs["name"] == "jobs" and web["name"] == "web", (jobs, web)
+assert all(b["drained_since"] is None and b["open_requests"] == 0 for b in web["backends"]), web
 assert [b["url"] for b in web["backends"]] == ["http://127.0.0.1:18461", "http://127.0.0.1:18462"], web
 assert all(b["healthy"] and not b["drained"] and b["weight"] == 1 for b in web["backends"]), web
 PY
@@ -195,6 +217,23 @@ for _ in $(seq 1 6); do [ "$(curl -s http://127.0.0.1:18451/)" = "backend-18462"
 ./rwsctl unblock 127.0.0.1 >/dev/null && [ "$(code http://127.0.0.1:18451/)" = 200 ] || fail "rwsctl unblock (proxy mode)"
 ./rwsctl blocklist | grep -qx "no blocked IPs" || fail "rwsctl blocklist after unblock"
 pass "rwsctl drain, maintenance, block/unblock change the server"
+
+# Drain progress: a request that is still running keeps its backend "open".
+curl -s "http://127.0.0.1:18451/slow/job?ms=3000" > slow.txt & SLOW=$!
+for _ in $(seq 1 50); do grep -q '"url":"http://127.0.0.1:18463".*"open_requests":1' <<<"$(api GET /upstreams)" && break; sleep 0.1; done
+grep -q '"url":"http://127.0.0.1:18463".*"drained_since":null,"open_requests":1' <<<"$(api GET /upstreams)" || fail "a running request isn't counted: $(api GET /upstreams)"
+./rwsctl upstreams > ups.txt
+grep -q "OPEN" ups.txt && grep -Eq "^jobs +http://127.0.0.1:18463 .* 1$" ups.txt || fail "rwsctl upstreams has no open count: $(cat ups.txt)"
+set +e
+./rwsctl drain jobs http://127.0.0.1:18463 --wait 1 2>err.txt; rc=$?
+set -e
+[ $rc = 1 ] && grep -q "still has 1 open request" err.txt || fail "drain --wait that runs out: exit $rc, $(cat err.txt)"
+./rwsctl drain jobs http://127.0.0.1:18463 --wait 20 > drain.txt || fail "rwsctl drain --wait: $(cat drain.txt)"
+grep -q "no open requests, safe to stop" drain.txt || fail "drain --wait said: $(cat drain.txt)"
+wait $SLOW; [ "$(cat slow.txt)" = slow ] || fail "the running request didn't finish: $(cat slow.txt)"
+grep -Eq '"url":"http://127.0.0.1:18463".*"drained":true,"drained_since":[0-9]+,"open_requests":0' <<<"$(api GET /upstreams)" || fail "drained backend: $(api GET /upstreams)"
+./rwsctl drain jobs http://127.0.0.1:18463 --undo >/dev/null || fail "rwsctl drain --undo (jobs)"
+pass "drain progress: open requests counted, rwsctl drain --wait"
 
 set +e
 ./rwsctl drain web http://nope:1 2>err.txt; rc=$?

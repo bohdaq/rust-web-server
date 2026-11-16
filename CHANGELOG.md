@@ -22,6 +22,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   time maintenance ends, and the automatic turn-off is in the audit log
   as user `timer`. Without a time, maintenance stays on until someone
   turns it off, as before.
+- **Drain progress.** rws counts the requests running on each upstream
+  backend (a streamed response or a WebSocket until it ends), so a drain
+  says when the backend is safe to stop. The admin UI's Upstreams page has
+  an "Open requests" column, and a drained backend gets a card: how many
+  requests are still running on it, then "safe to deploy" with **Put
+  back**. From a shell, `rws ctl drain <upstream> <backend> --wait 2m`
+  drains and returns when no request is left (exit 1 when some still run
+  after that time), and `rws ctl upstreams` has an `OPEN` column.
+  `GET /upstreams` backends have `open_requests` and `drained_since`;
+  Prometheus has `rws_upstream_backend_open_requests` and
+  `rws_upstream_backend_drained`. The count is per rws process.
 - **Admin API:** `GET`/`PUT /maintenance` answer
   `{"active":…,"since":…,"until":…,"retry_after_secs":…}` (was
   `{"active":…}`); `PUT /maintenance {"add_secs":N}` extends a timed
@@ -52,6 +63,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   recent drains from the audit log; **Logs** can be downloaded as a file.
 - **Admin UI on a phone**: rows of the upstream and cache tables stack, so
   Drain and Purge stay on screen.
+- **Admin API: `GET /upstreams` lists upstreams by name** (the order used
+  to differ from one start or reload to the next).
 
 ## 18.37.0 — 2026-11-16
 
