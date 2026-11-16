@@ -83,14 +83,113 @@ pub fn cors_json() -> String {
     )
 }
 
+/// Maintenance mode: on or off, since and until when (Unix seconds or
+/// `null`), and the `Retry-After` visitors get (`since`, `until` and
+/// `retry_after_secs` since 18.38.0).
 pub fn maintenance_json() -> String {
-    format!(r#"{{"active":{}}}"#, crate::maintenance::MAINTENANCE_MODE.load(Ordering::Relaxed))
+    let status = crate::maintenance::status();
+    let time = |t: Option<u64>| t.map(|t| t.to_string()).unwrap_or_else(|| "null".to_string());
+    format!(
+        r#"{{"active":{},"since":{},"until":{},"retry_after_secs":{}}}"#,
+        status.active,
+        time(status.since),
+        time(status.until),
+        status.retry_after_secs
+    )
 }
 
 pub fn set_maintenance(active: bool) -> String {
-    crate::maintenance::MAINTENANCE_MODE.store(active, Ordering::SeqCst);
+    set_maintenance_for(active, None, None)
+}
+
+/// Each change of maintenance mode made here; a timer that finds a newer
+/// one leaves it alone.
+static MAINTENANCE_CHANGE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The change whose timer thread is still running; 0 = none.
+static MAINTENANCE_TIMER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Forget the timer: maintenance mode was switched somewhere else (another
+/// replica, through the shared state).
+pub(crate) fn maintenance_changed_elsewhere() {
+    MAINTENANCE_CHANGE.fetch_add(1, Ordering::SeqCst);
+}
+
+/// This replica's timer has run out and is about to tell the others: the
+/// shared state still saying "on" is old news, not someone turning it on.
+pub(crate) fn maintenance_timer_ending() -> bool {
+    let timer = MAINTENANCE_TIMER.load(Ordering::SeqCst);
+    timer != 0 && timer == MAINTENANCE_CHANGE.load(Ordering::SeqCst) && !crate::maintenance::active()
+}
+
+/// Switch maintenance mode (18.38.0). On, `for_secs` turns it off by
+/// itself after that long (`None` or 0: until turned off) and
+/// `retry_after_secs` replaces `[maintenance] retry_after_secs` while it
+/// lasts. The replica asked keeps the timer and tells the others when it
+/// runs out; the audit log gets an entry by `timer` then.
+pub fn set_maintenance_for(active: bool, for_secs: Option<u64>, retry_after_secs: Option<u64>) -> String {
+    let change = MAINTENANCE_CHANGE.fetch_add(1, Ordering::SeqCst) + 1;
+    if active {
+        crate::maintenance::turn_on(for_secs, retry_after_secs);
+    } else {
+        crate::maintenance::turn_off();
+    }
     crate::cluster::publish(crate::cluster::Op::Maintenance(active));
+    start_maintenance_timer(change);
     maintenance_json()
+}
+
+/// Keep maintenance mode on `add_secs` longer (18.38.0). `None` when it is
+/// off or was turned on without a time to turn off.
+pub fn extend_maintenance(add_secs: u64) -> Option<String> {
+    if !crate::maintenance::extend(add_secs) {
+        return None;
+    }
+    start_maintenance_timer(MAINTENANCE_CHANGE.fetch_add(1, Ordering::SeqCst) + 1);
+    Some(maintenance_json())
+}
+
+/// A thread that turns maintenance mode off when its time is up, if there
+/// is one.
+fn start_maintenance_timer(change: u64) {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(until) = crate::maintenance::status().until {
+        MAINTENANCE_TIMER.store(change, Ordering::SeqCst);
+        let spawned = std::thread::Builder::new().name("rws-maintenance-timer".into()).spawn(move || {
+            maintenance_timer(change, until);
+            let _ = MAINTENANCE_TIMER.compare_exchange(change, 0, Ordering::SeqCst, Ordering::SeqCst);
+        });
+        if let Err(e) = spawned {
+            MAINTENANCE_TIMER.store(0, Ordering::SeqCst);
+            eprintln!("[maintenance] no timer thread ({e}): it turns off with the first request after the time");
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = change;
+}
+
+/// Waits for `until` (Unix seconds), then turns maintenance mode off here
+/// and for the cluster — unless it was switched again in the meantime.
+#[cfg(not(target_arch = "wasm32"))]
+fn maintenance_timer(change: u64, until: u64) {
+    loop {
+        if MAINTENANCE_CHANGE.load(Ordering::SeqCst) != change {
+            return;
+        }
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        if now >= until {
+            break;
+        }
+        // Short naps: a newer change ends this thread soon, and a clock
+        // set forward is noticed.
+        std::thread::sleep(std::time::Duration::from_secs((until - now).min(5)));
+    }
+    crate::maintenance::active(); // ends it, if a request hasn't already
+    if MAINTENANCE_CHANGE.load(Ordering::SeqCst) != change || crate::maintenance::MAINTENANCE_MODE.load(Ordering::SeqCst) {
+        return;
+    }
+    crate::cluster::publish(crate::cluster::Op::Maintenance(false));
+    super::access::record_system("timer", "PUT", "/admin/api/v1/maintenance", r#"{"active":false,"reason":"the time set when it was turned on ran out"}"#);
 }
 
 pub fn blocklist_json() -> String {

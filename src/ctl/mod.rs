@@ -5,6 +5,8 @@
 //! rws ctl reload                         # waits; prints the errors and exits 1 on a bad config
 //! rws ctl drain <upstream> <backend> [--undo]
 //! rws ctl maintenance [on|off]
+//! rws ctl maintenance on --for 1h --retry-after 5m   # turns off by itself (18.38.0)
+//! rws ctl maintenance extend 1h          # keep a timed maintenance on longer (18.38.0)
 //! rws ctl block <ip> | unblock <ip> | blocklist
 //! rws ctl purge <cache> [--path /p | --prefix /p/]
 //! rws ctl caches | upstreams
@@ -50,6 +52,9 @@ Commands:
   reload                               reload the configuration and wait for it
   drain <upstream> <backend> [--undo]  stop sending new requests to a backend
   maintenance [on|off]                 show or switch maintenance mode
+  maintenance on [--for T] [--retry-after T]  on, off by itself after T (90, 5m, 1h, 2d);
+                                       --retry-after is what visitors are told to wait
+  maintenance extend T                 keep a timed maintenance on T longer
   block <ip> | unblock <ip>            change the IP blocklist
   blocklist                            list blocked IPs
   purge <cache> [--path P | --prefix P]  purge a cache (all of it by default)
@@ -127,6 +132,35 @@ struct Command {
     prefix: Option<String>,
     hours: Option<u64>,
     host: Option<String>,
+    for_secs: Option<u64>,
+    retry_after_secs: Option<u64>,
+}
+
+/// `90`, `90s`, `5m`, `1h` or `2d` as seconds.
+fn span(text: &str) -> Option<u64> {
+    let text = text.trim();
+    let (number, unit) = match text.char_indices().last()? {
+        (at, 's') => (&text[..at], 1),
+        (at, 'm') => (&text[..at], 60),
+        (at, 'h') => (&text[..at], 3600),
+        (at, 'd') => (&text[..at], 86_400),
+        _ => (text, 1),
+    };
+    number.parse::<u64>().ok()?.checked_mul(unit)
+}
+
+/// `maintenance on`, with when it turns off by itself if a time was set.
+fn maintenance_line(body: &str) -> String {
+    if member(body, "active") != "true" {
+        return "maintenance off".to_string();
+    }
+    match member(body, "until").parse::<u64>() {
+        Ok(until) => {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            format!("maintenance on, turns off by itself in {} ({})", duration(until.saturating_sub(now)), crate::http::date::format(until))
+        }
+        Err(_) => "maintenance on".to_string(),
+    }
 }
 
 fn parse(args: &[String]) -> Result<Command, Failure> {
@@ -152,6 +186,8 @@ fn parse(args: &[String]) -> Result<Command, Failure> {
             "--week" => cmd.hours = Some(24 * 7),
             "--month" => cmd.hours = Some(24 * 30),
             "--host" => cmd.host = Some(value("--host")?),
+            "--for" => cmd.for_secs = Some(span(&value("--for")?).ok_or_else(|| usage("--for takes a time: 90, 5m, 1h, 2d"))?),
+            "--retry-after" => cmd.retry_after_secs = Some(span(&value("--retry-after")?).ok_or_else(|| usage("--retry-after takes a time: 90, 5m, 1h"))?),
             "--token" => return Err(usage("the token is read from --token-file or RWS_ADMIN_TOKEN, never the command line (it would show in ps)")),
             "-h" | "--help" | "help" if cmd.words.is_empty() => cmd.words.push("help".to_string()),
             f if f.starts_with('-') && f.len() > 1 && f.parse::<f64>().is_err() => return Err(usage(format!("unknown option {f}"))),
@@ -485,14 +521,32 @@ fn execute(cmd: &Command, out: &mut dyn Write) -> Result<(), Failure> {
             if cmd.json {
                 return json_out(out, &r);
             }
-            writeln!(out, "maintenance {}", if member(&r.body, "active") == "true" { "on" } else { "off" }).map_err(io)
+            writeln!(out, "{}", maintenance_line(&r.body)).map_err(io)
         }
         ["maintenance", state @ ("on" | "off")] => {
-            let r = api.call("PUT", "/maintenance", Some(&format!(r#"{{"active":{}}}"#, *state == "on")))?;
+            let mut body = format!(r#"{{"active":{}"#, *state == "on");
+            if *state == "on" {
+                if let Some(secs) = cmd.for_secs {
+                    body.push_str(&format!(r#","for_secs":{secs}"#));
+                }
+                if let Some(secs) = cmd.retry_after_secs {
+                    body.push_str(&format!(r#","retry_after_secs":{secs}"#));
+                }
+            }
+            body.push('}');
+            let r = api.call("PUT", "/maintenance", Some(&body))?;
             if cmd.json {
                 return json_out(out, &r);
             }
-            writeln!(out, "maintenance {}", if member(&r.body, "active") == "true" { "on" } else { "off" }).map_err(io)
+            writeln!(out, "{}", maintenance_line(&r.body)).map_err(io)
+        }
+        ["maintenance", "extend", time] => {
+            let secs = span(time).filter(|s| *s > 0).ok_or_else(|| usage("maintenance extend takes a time: 30m, 1h"))?;
+            let r = api.call("PUT", "/maintenance", Some(&format!(r#"{{"add_secs":{secs}}}"#)))?;
+            if cmd.json {
+                return json_out(out, &r);
+            }
+            writeln!(out, "{}", maintenance_line(&r.body)).map_err(io)
         }
         ["block", ip] => {
             let r = api.call("POST", "/blocklist", Some(&format!(r#"{{"ip":{}}}"#, quoted(ip))))?;

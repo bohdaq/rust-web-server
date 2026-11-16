@@ -7,6 +7,29 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- **Maintenance mode can turn itself off.** Turning it on takes a time to
+  end (`for_secs`) and the `Retry-After` to send meanwhile
+  (`retry_after_secs`, instead of `[maintenance] retry_after_secs`). The
+  admin UI asks for both in the confirmation (retry after the configured
+  value, 5 minutes, 15 minutes or 1 hour; off by itself after 1 hour,
+  4 hours or never), and while a time is set the banner shows when it
+  ends with **Add 1 hour** and **Turn off now**. From a shell:
+  `rws ctl maintenance on --for 1h --retry-after 5m` and
+  `rws ctl maintenance extend 1h`; the MCP tool `set_maintenance` takes
+  `for_secs` and `retry_after_secs`. `Retry-After` never points past the
+  time maintenance ends, and the automatic turn-off is in the audit log
+  as user `timer`. Without a time, maintenance stays on until someone
+  turns it off, as before.
+- **Admin API:** `GET`/`PUT /maintenance` answer
+  `{"active":…,"since":…,"until":…,"retry_after_secs":…}` (was
+  `{"active":…}`); `PUT /maintenance {"add_secs":N}` extends a timed
+  maintenance; `GET /status` has `maintenance_until`.
+- **Library:** `maintenance::turn_on(for_secs, retry_after_secs)`,
+  `turn_off()`, `extend(add_secs)`, `active()` and `status()`. The
+  `MAINTENANCE_MODE` flag works as before.
+
 ### Changed
 
 - **Admin UI: a new look and layout.** Dark graphite with one orange

@@ -142,13 +142,74 @@ fn config_hides_secrets() {
     assert!(crate::mcp::json_rpc::object_members(&text).is_some());
 }
 
+fn member_u64(json: &str, key: &str) -> u64 {
+    let members = crate::mcp::json_rpc::object_members(json).unwrap_or_default();
+    members.iter().find(|(k, _)| k == key).and_then(|(_, v)| v.trim().parse().ok()).unwrap_or_else(|| panic!("no number {key} in {json}"))
+}
+
+#[test]
+fn maintenance_takes_a_time_to_turn_off_and_a_retry_after() {
+    let _g = crate::test_env::lock();
+    let api = AdminApi::new("t");
+    let path = "/admin/api/v1/maintenance";
+
+    let (status, on) = call(&api, "PUT", path, r#"{"active":true,"for_secs":3600,"retry_after_secs":300}"#);
+    assert_eq!(status, 200, "{on}");
+    let (since, until) = (member_u64(&on, "since"), member_u64(&on, "until"));
+    assert_eq!((until, member_u64(&on, "retry_after_secs")), (since + 3600, 300), "{on}");
+    assert_eq!(call(&api, "GET", path, "").1, on);
+    let overview = call(&api, "GET", "/admin/api/v1/status", "").1;
+    assert!(overview.contains(&format!(r#""maintenance":true,"maintenance_until":{until},"#)), "{overview}");
+
+    // "Add 1 hour" counts from the time it would have ended.
+    let (status, longer) = call(&api, "PUT", path, r#"{"add_secs":3600}"#);
+    assert_eq!((status, member_u64(&longer, "until")), (200, until + 3600), "{longer}");
+
+    for bad in [r#"{"active":true,"for_secs":-1}"#, r#"{"active":true,"for_secs":"1h"}"#, r#"{"active":true,"retry_after_secs":86401}"#, r#"{"add_secs":0.5}"#] {
+        assert_eq!(call(&api, "PUT", path, bad).0, 400, "{bad}");
+    }
+
+    // Without a time it stays on, and there is nothing to add an hour to.
+    let (_, on) = call(&api, "PUT", path, r#"{"active":true}"#);
+    assert!(on.contains(r#""until":null"#), "{on}");
+    assert_eq!(call(&api, "PUT", path, r#"{"add_secs":3600}"#).0, 409);
+
+    let (_, off) = call(&api, "PUT", path, r#"{"active":false}"#);
+    assert!(off.starts_with(r#"{"active":false,"since":null,"until":null,"#), "{off}");
+    assert_eq!(call(&api, "PUT", path, r#"{"add_secs":3600}"#).0, 409);
+    assert!(call(&api, "GET", "/admin/api/v1/status", "").1.contains(r#""maintenance":false,"maintenance_until":null,"#));
+}
+
+#[test]
+fn maintenance_turns_itself_off_and_the_audit_log_says_so() {
+    let _g = crate::test_env::lock();
+    let on = ops::set_maintenance_for(true, Some(1), None);
+    assert!(on.starts_with(r#"{"active":true"#), "{on}");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let timer_entry = || access::recent_json(20).contains(r#""user":"timer""#);
+    while !timer_entry() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(!crate::maintenance::MAINTENANCE_MODE.load(Ordering::SeqCst));
+    assert!(timer_entry(), "{}", access::recent_json(20));
+
+    // A timer that was replaced leaves the newer choice alone.
+    ops::set_maintenance_for(true, Some(1), None);
+    ops::set_maintenance_for(true, None, None);
+    std::thread::sleep(std::time::Duration::from_millis(2300));
+    assert!(crate::maintenance::MAINTENANCE_MODE.load(Ordering::SeqCst));
+    ops::set_maintenance(false);
+}
+
 #[test]
 fn maintenance_blocklist_and_flags_change_the_running_server() {
     let _g = crate::test_env::lock();
     let api = AdminApi::new("t");
-    assert_eq!(call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":true}"#), (200, r#"{"active":true}"#.to_string()));
+    let (status, on) = call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":true}"#);
+    assert!(status == 200 && on.starts_with(r#"{"active":true,"since":1"#) && on.contains(r#""until":null,"retry_after_secs":"#), "{on}");
     assert!(crate::maintenance::MAINTENANCE_MODE.load(Ordering::SeqCst));
-    assert_eq!(call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#).1, r#"{"active":false}"#);
+    let off = call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#).1;
+    assert!(off.starts_with(r#"{"active":false,"since":null,"until":null,"#), "{off}");
     assert_eq!(call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":"yes"}"#).0, 400);
 
     assert_eq!(call(&api, "POST", "/admin/api/v1/blocklist", r#"{"ip":"203.0.113.77"}"#).0, 200);

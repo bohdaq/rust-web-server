@@ -72,6 +72,34 @@ function ago(ms, now = Date.now()) {
   return new Date(ms).toLocaleDateString();
 }
 
+/** "15:02" today, "Tue 15:02" on another day. */
+function hourMinute(ms) {
+  const at = new Date(ms);
+  const clock = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return at.toDateString() === new Date().toDateString() ? clock : `${at.toLocaleDateString([], { weekday: "short" })} ${clock}`;
+}
+
+/** "in 40 s", "in 12 min", "in 2 h 5 min". */
+function left(ms, now = Date.now()) {
+  const s = Math.max(0, Math.round((ms - now) / 1000));
+  if (s < 60) return `in ${s} s`;
+  const minutes = Math.round(s / 60);
+  if (minutes < 60) return `in ${minutes} min`;
+  const h = Math.floor(minutes / 60), m = minutes % 60;
+  return m ? `in ${h} h ${m} min` : `in ${h} h`;
+}
+
+/** Seconds for a choice: "5 minutes", "1 hour", "90 seconds". */
+function span(secs) {
+  if (secs % 3600 === 0) return plural(secs / 3600, "hour", "hours");
+  if (secs % 60 === 0) return plural(secs / 60, "minute", "minutes");
+  return plural(secs, "second", "seconds");
+}
+
+// What the maintenance dialog offers (seconds).
+const RETRY_AFTER = [300, 900, 3600];
+const TURN_OFF_AFTER = [3600, 14400];
+
 /** The next round number at or above `v`, for the chart's top line. */
 function niceMax(v) {
   if (v <= 1) return 1;
@@ -157,6 +185,30 @@ class RwsAgo extends LitElement {
 }
 customElements.define("rws-ago", RwsAgo);
 
+/** "in 12 min" until `at`, ticking by itself. */
+class RwsLeft extends LitElement {
+  static properties = { at: { type: Number }, now: { state: true } };
+
+  createRenderRoot() {
+    return this;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.tick = setInterval(() => (this.now = Date.now()), 1000);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this.tick);
+  }
+
+  render() {
+    return this.at ? left(this.at) : nothing;
+  }
+}
+customElements.define("rws-left", RwsLeft);
+
 /** The whole app, rendered into the light DOM so the theme's classes apply. */
 export class RwsAdmin extends LitElement {
   static properties = {
@@ -180,6 +232,7 @@ export class RwsAdmin extends LitElement {
     notice: { state: true },
     ask: { state: true },
     typed: { state: true },
+    picked: { state: true },
     query: { state: true },
     fieldError: { state: true },
   };
@@ -208,6 +261,7 @@ export class RwsAdmin extends LitElement {
     this.notice = null;
     this.ask = null;
     this.typed = "";
+    this.picked = {};
     this.query = "";
     this.fieldError = {};
   }
@@ -278,7 +332,17 @@ export class RwsAdmin extends LitElement {
       if (!this.authed) return;
       try {
         const [info, ups] = await Promise.all([api("/status"), api("/upstreams").catch(() => this.data.upstreams ?? [])]);
+        const before = this.data.status;
+        // Its time ran out since the last look (nobody here turned it off).
+        if (before?.maintenance && before.maintenance_until && !info.maintenance && before.maintenance_until * 1000 <= Date.now() + 1000) {
+          this.toast("Maintenance mode turned itself off: visitors reach your sites again");
+        }
         this.data = { ...this.data, status: info, upstreams: ups };
+        // Controls shows /maintenance: keep it in step when it changed elsewhere.
+        const shown = this.data.maintenance;
+        if (shown && (shown.active !== info.maintenance || (shown.until ?? null) !== (info.maintenance_until ?? null))) {
+          api("/maintenance").then((maintenance) => (this.data = { ...this.data, maintenance })).catch(() => {});
+        }
         this.conn = { lost: false, at: Date.now() };
         if (beats++ % 12 === 0) {
           const certificates = await api("/certificates").catch(() => null);
@@ -353,13 +417,15 @@ export class RwsAdmin extends LitElement {
 
   /**
    * A confirmation dialog; resolves true when confirmed. `effects` lists
-   * what will happen ([tone, text] pairs); `type` is a word the person has
-   * to type before the action button works.
+   * what will happen ([tone, text] pairs, or a function of the picks);
+   * `type` is a word the person has to type before the action button works.
    */
-  confirm({ title, body, action, tone = "danger", effects = null, type = "" }) {
+  confirm({ title, body, action, tone = "danger", effects = null, type = "", choices = [] }) {
     return new Promise((resolve) => {
       this.typed = "";
-      this.ask = { title, body, action, tone, effects, type, resolve };
+      // `choices`: [{ id, label, options: [[value, label]], value }]; the picks are in this.picked.
+      this.picked = Object.fromEntries(choices.map((c) => [c.id, c.value]));
+      this.ask = { title, body, action, tone, effects, type, choices, resolve };
       this.updateComplete.then(() => {
         this.querySelector("#confirm")?.showModal();
         (this.querySelector("#confirm-type") ?? this.querySelector("#confirm .cancel"))?.focus();
@@ -438,6 +504,7 @@ export class RwsAdmin extends LitElement {
     }
     add("Actions", "Reload configuration", () => this.reload(), { hint: "re-reads rws.config.toml", keywords: ["config", "restart", "apply"] });
     if (d.status?.maintenance) add("Actions", "Turn off maintenance mode", () => this.setMaintenance(false), { keywords: ["503"] });
+    if (d.status?.maintenance && d.status.maintenance_until) add("Actions", "Keep maintenance on 1 hour longer", () => this.extendMaintenance(), { keywords: ["503", "extend", "add"] });
     else add("Actions", "Turn on maintenance mode", () => this.setMaintenance(true), { ...asks, keywords: ["503", "down"] });
     if (d.certificates?.acme?.running) add("Actions", "Renew certificates now", () => this.renew(), { keywords: ["acme", "tls", "https"] });
     for (const u of d.upstreams ?? []) {
@@ -634,25 +701,53 @@ export class RwsAdmin extends LitElement {
     return done;
   }
 
+  /** What /maintenance answered, shown at once on every page. */
+  maintenanceIs(m) {
+    this.data = { ...this.data, status: { ...this.data.status, maintenance: m.active, maintenance_until: m.until ?? null }, maintenance: m };
+  }
+
   async setMaintenance(active) {
+    const body = { active };
     if (active) {
+      // What clients are told to wait when nothing is picked: the config's value.
+      const configured = (await api("/maintenance").catch(() => null))?.retry_after_secs;
       const ok = await this.confirm({
         title: "Turn on maintenance mode?",
-        body: "Visitors stop reaching your sites until you turn it off.",
-        effects: [
+        body: "Visitors stop reaching your sites until it is off again.",
+        effects: (picked) => [
           ["warn", "Every visitor gets 503 Service Unavailable; browsers see a maintenance page."],
           ["ok", "Health checks keep passing."],
           ["ok", "This console and the admin API keep working."],
-          ["info", "It stays on until someone turns it off or the server restarts."],
+          ["info", picked.off
+            ? `It turns off by itself at ${hourMinute(Date.now() + picked.off * 1000)}, or when the server restarts.`
+            : "It stays on until someone turns it off or the server restarts."],
+        ],
+        choices: [
+          { id: "retry", label: "Tell clients to retry after", value: "",
+            options: [["", typeof configured === "number" ? (configured ? `${span(configured)} (config)` : "No hint (config)") : "As configured"], ...RETRY_AFTER.map((s) => [s, span(s)])] },
+          { id: "off", label: "Turn off by itself after", value: 0, options: [...TURN_OFF_AFTER.map((s) => [s, span(s)]), [0, "Never"]] },
         ],
         type: "maintenance",
         action: "Turn on maintenance",
         tone: "warn",
       });
       if (!ok) return;
+      if (this.picked.off) body.for_secs = this.picked.off;
+      if (this.picked.retry !== "") body.retry_after_secs = this.picked.retry;
     }
-    const done = await this.act("maintenance", "/maintenance", { method: "PUT", body: { active } }, (r) => (r.active ? "Maintenance on: visitors get 503" : "Maintenance off"));
-    if (done) this.data = { ...this.data, status: { ...this.data.status, maintenance: active }, maintenance: { ...this.data.maintenance, active } };
+    await this.act("maintenance", "/maintenance", { method: "PUT", body }, (r) => {
+      this.maintenanceIs(r);
+      if (!r.active) return "Maintenance off";
+      return r.until ? `Maintenance on until ${hourMinute(r.until * 1000)}: visitors get 503` : "Maintenance on: visitors get 503";
+    });
+  }
+
+  /** "Add 1 hour": a timed maintenance stays on that much longer. */
+  extendMaintenance(secs = 3600) {
+    return this.act("maintenance-extend", "/maintenance", { method: "PUT", body: { add_secs: secs } }, (r) => {
+      this.maintenanceIs(r);
+      return `Maintenance stays on until ${hourMinute(r.until * 1000)}`;
+    });
   }
 
   reload() {
@@ -904,8 +999,12 @@ export class RwsAdmin extends LitElement {
             ${info?.maintenance
               ? html`<div class="banner" role="status">
                   <span class="banner-title">Maintenance mode is on</span>
-                  <span class="banner-text">Visitors get 503 Service Unavailable until you turn it off.</span>
-                  <button class="btn btn-warn-fill" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(false)}>Turn off</button>
+                  ${info.maintenance_until
+                    ? html`<span class="banner-text">Visitors get 503 Service Unavailable. It turns off by itself at ${hourMinute(info.maintenance_until * 1000)}, <rws-left .at=${info.maintenance_until * 1000}></rws-left>.</span>
+                        <button class="btn btn-warn" ?disabled=${this.busy === "maintenance-extend"} @click=${() => this.extendMaintenance()}>Add 1 hour</button>
+                        <button class="btn btn-warn-fill" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(false)}>Turn off now</button>`
+                    : html`<span class="banner-text">Visitors get 503 Service Unavailable until you turn it off.</span>
+                        <button class="btn btn-warn-fill" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(false)}>Turn off</button>`}
                 </div>`
               : nothing}
             ${this.error ? html`<lit-material-alert variant="error"><span slot="title">Couldn't load this page</span>${this.error}
@@ -933,7 +1032,11 @@ export class RwsAdmin extends LitElement {
           ? html`<form novalidate @submit=${(e) => { e.preventDefault(); if (this.confirmReady()) this.answer(true); }}>
             <h2 id="confirm-title">${ask.title}</h2>
             <p id="confirm-body">${ask.body}</p>
-            ${ask.effects ? html`<ul class="effects">${ask.effects.map(([tone, text]) => html`<li><span class="sq" data-tone=${tone}></span><span>${text}</span></li>`)}</ul>` : nothing}
+            ${ask.choices.map((c) => html`<fieldset class="choice"><legend>${c.label}</legend>
+              <div class="choice-options">${c.options.map(([value, label]) => html`<label><input type="radio" name="confirm-${c.id}" .checked=${this.picked[c.id] === value}
+                @change=${() => (this.picked = { ...this.picked, [c.id]: value })}><span>${label}</span></label>`)}</div>
+            </fieldset>`)}
+            ${ask.effects ? html`<ul class="effects">${(typeof ask.effects === "function" ? ask.effects(this.picked) : ask.effects).map(([tone, text]) => html`<li><span class="sq" data-tone=${tone}></span><span>${text}</span></li>`)}</ul>` : nothing}
             ${ask.type
               ? html`<lit-material-text-field id="confirm-type" variant="outlined" label="Type ${ask.type} to confirm" autocomplete="off" autocapitalize="none" spellcheck="false"
                   @input=${(e) => (this.typed = e.target.value ?? "")}></lit-material-text-field>`
@@ -1194,7 +1297,12 @@ export class RwsAdmin extends LitElement {
           <div class="card-head"><h2 id="maint-title">Maintenance mode</h2></div>
           <div class="card-body">
             <p>${on ? status("warning", "On: 503 for visitors") : "Off. Visitors reach every host as usual."}</p>
-            <div class="row"><button id="maintenance-toggle" class="btn ${on ? "" : "btn-warn"}" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(!on)}>${on ? "Turn off" : "Turn on"}</button></div>
+            ${on ? html`<p class="hint">${d.maintenance.until
+                ? html`Turns off by itself at ${hourMinute(d.maintenance.until * 1000)}, <rws-left .at=${d.maintenance.until * 1000}></rws-left>.`
+                : "Stays on until someone turns it off."}
+              ${d.maintenance.retry_after_secs ? ` Clients are told to retry after ${span(d.maintenance.retry_after_secs)}.` : " Clients get no hint when to retry."}</p>` : nothing}
+            <div class="row"><button id="maintenance-toggle" class="btn ${on ? "" : "btn-warn"}" ?disabled=${this.busy === "maintenance"} @click=${() => this.setMaintenance(!on)}>${on ? "Turn off" : "Turn on"}</button>
+              ${on && d.maintenance.until ? html`<button class="btn" ?disabled=${this.busy === "maintenance-extend"} @click=${() => this.extendMaintenance()}>Add 1 hour</button>` : nothing}</div>
           </div>
         </section>
         <section class="card" aria-labelledby="reload-title">

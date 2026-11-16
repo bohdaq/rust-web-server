@@ -65,6 +65,30 @@ await page.waitForTimeout(500);
 if ((await api("/maintenance")).active) fail("maintenance didn't switch off");
 console.log("ok: maintenance mode from the UI");
 
+// With a time to turn off by itself and a Retry-After picked in the dialog.
+await maintenance.click();
+await page.locator("dialog#confirm[open]").waitFor({ timeout: 5000 });
+await page.getByRole("radio", { name: "15 minutes" }).check();
+await page.getByRole("radio", { name: "1 hour" }).last().check();
+await page.locator("#confirm-type input").fill("maintenance");
+await go.click();
+await page.getByRole("button", { name: "Turn off now" }).waitFor({ timeout: 5000 }).catch(() => fail("no banner with the time maintenance ends"));
+const timed = await api("/maintenance");
+if (!timed.active || timed.until - timed.since !== 3600 || timed.retry_after_secs !== 900) fail(`the dialog's choices didn't reach the server: ${JSON.stringify(timed)}`);
+if ((await fetch(publicUrl)).headers.get("retry-after") !== "900") fail("visitors don't get the Retry-After picked in the dialog");
+await page.getByRole("button", { name: "Add 1 hour" }).first().click();
+await page.waitForTimeout(500);
+if ((await api("/maintenance")).until !== timed.until + 3600) fail("Add 1 hour didn't move the time maintenance ends");
+await page.getByRole("button", { name: "Turn off now" }).click();
+await page.waitForTimeout(500);
+if ((await api("/maintenance")).active) fail("Turn off now didn't switch maintenance off");
+// A timer that runs out turns it off without anyone asking.
+await fetch(`${admin}/admin/api/v1/maintenance`, { method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ active: true, for_secs: 1 }) });
+await page.waitForTimeout(2500);
+if ((await api("/maintenance")).active || (await fetch(publicUrl)).status === 503) fail("maintenance didn't turn itself off when its time ran out");
+if (!(await api("/audit?n=5")).some((e) => e.user === "timer")) fail("the automatic turn-off isn't in the audit log");
+console.log("ok: maintenance with a time to end, Add 1 hour, and turning off by itself");
+
 const entries = async () => (await api("/caches")).find((c) => c.name === "route:pages")?.entries;
 for (const path of ["cached/a", "cached/b", "cached/c/1"]) await fetch(`${publicUrl}${path}`);
 if ((await entries()) !== 3) fail(`expected 3 cached pages, got ${await entries()}`);

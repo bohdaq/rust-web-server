@@ -161,9 +161,16 @@ pub(super) fn install(mcp: McpServer, routes: Vec<(String, String)>, cache: Opti
         )
         .tool(
             "set_maintenance",
-            "Enable or disable maintenance mode (returns 503 for all non-health paths when active)",
-            r#"{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]}"#,
-            |args| Ok(McpContent::json(crate::admin::ops::set_maintenance(extract_arg(args, "enabled").is_some_and(|v| v == "true")))),
+            "Enable or disable maintenance mode (returns 503 for all non-health paths when active). for_secs turns it off by itself after that many seconds; retry_after_secs is the Retry-After visitors get meanwhile",
+            r#"{"type":"object","properties":{"enabled":{"type":"boolean"},"for_secs":{"type":"integer","minimum":0},"retry_after_secs":{"type":"integer","minimum":0}},"required":["enabled"]}"#,
+            |args| {
+                let secs = |name: &str, max: u64| extract_arg(args, name).and_then(|v| v.trim().parse::<u64>().ok()).filter(|s| *s <= max);
+                Ok(McpContent::json(crate::admin::ops::set_maintenance_for(
+                    extract_arg(args, "enabled").is_some_and(|v| v == "true"),
+                    secs("for_secs", 30 * 86_400),
+                    secs("retry_after_secs", 86_400),
+                )))
+            },
         )
         .tool(
             "block_ip",

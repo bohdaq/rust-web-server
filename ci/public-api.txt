@@ -368,6 +368,7 @@ impl core::clone::Clone for rust_web_server::llm::LlmProxy
 impl core::clone::Clone for rust_web_server::llm::Provider
 impl core::clone::Clone for rust_web_server::llm::usage::Usage
 impl core::clone::Clone for rust_web_server::log::syslog::Target
+impl core::clone::Clone for rust_web_server::maintenance::Status
 impl core::clone::Clone for rust_web_server::mcp::InputRequired
 impl core::clone::Clone for rust_web_server::mcp::LogLevel
 impl core::clone::Clone for rust_web_server::mcp::McpContent
@@ -595,6 +596,7 @@ impl core::cmp::Eq for rust_web_server::k8s::manifests::Rule
 impl core::cmp::Eq for rust_web_server::llm::Api
 impl core::cmp::Eq for rust_web_server::llm::usage::Usage
 impl core::cmp::Eq for rust_web_server::log::syslog::Target
+impl core::cmp::Eq for rust_web_server::maintenance::Status
 impl core::cmp::Eq for rust_web_server::mcp::LogLevel
 impl core::cmp::Eq for rust_web_server::mcp::McpIcon
 impl core::cmp::Eq for rust_web_server::mcp::TaskError
@@ -832,6 +834,7 @@ impl core::cmp::PartialEq for rust_web_server::k8s::manifests::Rule
 impl core::cmp::PartialEq for rust_web_server::llm::Api
 impl core::cmp::PartialEq for rust_web_server::llm::usage::Usage
 impl core::cmp::PartialEq for rust_web_server::log::syslog::Target
+impl core::cmp::PartialEq for rust_web_server::maintenance::Status
 impl core::cmp::PartialEq for rust_web_server::mcp::LogLevel
 impl core::cmp::PartialEq for rust_web_server::mcp::McpIcon
 impl core::cmp::PartialEq for rust_web_server::mcp::TaskError
@@ -1351,6 +1354,7 @@ impl core::fmt::Debug for rust_web_server::llm::Provider
 impl core::fmt::Debug for rust_web_server::llm::usage::Usage
 impl core::fmt::Debug for rust_web_server::llm::usage::UsageParser
 impl core::fmt::Debug for rust_web_server::log::syslog::Target
+impl core::fmt::Debug for rust_web_server::maintenance::Status
 impl core::fmt::Debug for rust_web_server::mcp::InputRequired
 impl core::fmt::Debug for rust_web_server::mcp::LogLevel
 impl core::fmt::Debug for rust_web_server::mcp::McpContent
@@ -1558,6 +1562,7 @@ impl core::marker::Copy for rust_web_server::health::Probe
 impl core::marker::Copy for rust_web_server::ingress::PathType
 impl core::marker::Copy for rust_web_server::llm::Api
 impl core::marker::Copy for rust_web_server::llm::usage::Usage
+impl core::marker::Copy for rust_web_server::maintenance::Status
 impl core::marker::Copy for rust_web_server::mcp::LogLevel
 impl core::marker::Copy for rust_web_server::mcp::ToolAnnotations
 impl core::marker::Copy for rust_web_server::mcp::ToolCallOutcome
@@ -1887,6 +1892,7 @@ impl core::marker::Freeze for rust_web_server::llm::usage::UsageParser
 impl core::marker::Freeze for rust_web_server::log::Log
 impl core::marker::Freeze for rust_web_server::log::syslog::Target
 impl core::marker::Freeze for rust_web_server::maintenance::MaintenanceLayer
+impl core::marker::Freeze for rust_web_server::maintenance::Status
 impl core::marker::Freeze for rust_web_server::mcp::InputRequired
 impl core::marker::Freeze for rust_web_server::mcp::LogLevel
 impl core::marker::Freeze for rust_web_server::mcp::McpContent
@@ -2422,6 +2428,7 @@ impl core::marker::Send for rust_web_server::log::Log
 impl core::marker::Send for rust_web_server::log::syslog::Sender
 impl core::marker::Send for rust_web_server::log::syslog::Target
 impl core::marker::Send for rust_web_server::maintenance::MaintenanceLayer
+impl core::marker::Send for rust_web_server::maintenance::Status
 impl core::marker::Send for rust_web_server::mcp::InputRequired
 impl core::marker::Send for rust_web_server::mcp::LogLevel
 impl core::marker::Send for rust_web_server::mcp::McpContent
@@ -2831,6 +2838,7 @@ impl core::marker::StructuralPartialEq for rust_web_server::k8s::manifests::Rule
 impl core::marker::StructuralPartialEq for rust_web_server::llm::Api
 impl core::marker::StructuralPartialEq for rust_web_server::llm::usage::Usage
 impl core::marker::StructuralPartialEq for rust_web_server::log::syslog::Target
+impl core::marker::StructuralPartialEq for rust_web_server::maintenance::Status
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::LogLevel
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::McpIcon
 impl core::marker::StructuralPartialEq for rust_web_server::mcp::TaskError
@@ -3226,6 +3234,7 @@ impl core::marker::Sync for rust_web_server::log::Log
 impl core::marker::Sync for rust_web_server::log::syslog::Sender
 impl core::marker::Sync for rust_web_server::log::syslog::Target
 impl core::marker::Sync for rust_web_server::maintenance::MaintenanceLayer
+impl core::marker::Sync for rust_web_server::maintenance::Status
 impl core::marker::Sync for rust_web_server::mcp::InputRequired
 impl core::marker::Sync for rust_web_server::mcp::LogLevel
 impl core::marker::Sync for rust_web_server::mcp::McpContent
@@ -3771,6 +3780,7 @@ impl core::marker::Unpin for rust_web_server::log::Log
 impl core::marker::Unpin for rust_web_server::log::syslog::Sender
 impl core::marker::Unpin for rust_web_server::log::syslog::Target
 impl core::marker::Unpin for rust_web_server::maintenance::MaintenanceLayer
+impl core::marker::Unpin for rust_web_server::maintenance::Status
 impl core::marker::Unpin for rust_web_server::mcp::InputRequired
 impl core::marker::Unpin for rust_web_server::mcp::LogLevel
 impl core::marker::Unpin for rust_web_server::mcp::McpContent
@@ -4322,6 +4332,7 @@ impl core::marker::UnsafeUnpin for rust_web_server::log::Log
 impl core::marker::UnsafeUnpin for rust_web_server::log::syslog::Sender
 impl core::marker::UnsafeUnpin for rust_web_server::log::syslog::Target
 impl core::marker::UnsafeUnpin for rust_web_server::maintenance::MaintenanceLayer
+impl core::marker::UnsafeUnpin for rust_web_server::maintenance::Status
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::InputRequired
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::LogLevel
 impl core::marker::UnsafeUnpin for rust_web_server::mcp::McpContent
@@ -4850,6 +4861,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::log::Log
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::log::syslog::Sender
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::log::syslog::Target
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::maintenance::MaintenanceLayer
+impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::maintenance::Status
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::InputRequired
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::LogLevel
 impl core::panic::unwind_safe::RefUnwindSafe for rust_web_server::mcp::McpContent
@@ -5348,6 +5360,7 @@ impl core::panic::unwind_safe::UnwindSafe for rust_web_server::log::Log
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::log::syslog::Sender
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::log::syslog::Target
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::maintenance::MaintenanceLayer
+impl core::panic::unwind_safe::UnwindSafe for rust_web_server::maintenance::Status
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::InputRequired
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::LogLevel
 impl core::panic::unwind_safe::UnwindSafe for rust_web_server::mcp::McpContent
@@ -8116,6 +8129,7 @@ pub fn rust_web_server::admin::access::parse_users(&str, &dyn core::ops::functio
 pub fn rust_web_server::admin::access::recent_json(usize) -> alloc::string::String
 pub fn rust_web_server::admin::access::record(rust_web_server::admin::access::AuditEntry)
 pub fn rust_web_server::admin::access::record_change(&rust_web_server::admin::access::Principal, &str, &str, &str, &[u8], u16)
+pub fn rust_web_server::admin::access::record_system(&str, &str, &str, &str)
 pub fn rust_web_server::admin::access::redact(&[u8]) -> alloc::string::String
 pub fn rust_web_server::admin::access::required_role(&str, &str) -> rust_web_server::admin::access::Role
 pub fn rust_web_server::admin::access::role_for(&[(alloc::string::String, rust_web_server::admin::access::Role)], core::option::Option<&str>, &[alloc::string::String]) -> core::option::Option<rust_web_server::admin::access::Role>
@@ -8139,6 +8153,7 @@ pub fn rust_web_server::admin::ops::check_rate_limit_json(&str) -> alloc::string
 pub fn rust_web_server::admin::ops::clear_registered_cache() -> bool
 pub fn rust_web_server::admin::ops::config_json() -> alloc::string::String
 pub fn rust_web_server::admin::ops::cors_json() -> alloc::string::String
+pub fn rust_web_server::admin::ops::extend_maintenance(u64) -> core::option::Option<alloc::string::String>
 pub fn rust_web_server::admin::ops::flags_json() -> alloc::string::String
 pub fn rust_web_server::admin::ops::logs_json(usize) -> alloc::string::String
 pub fn rust_web_server::admin::ops::maintenance_json() -> alloc::string::String
@@ -8156,6 +8171,7 @@ pub fn rust_web_server::admin::ops::routes_json(&[(alloc::string::String, alloc:
 pub fn rust_web_server::admin::ops::set_drained(&str, &str, bool) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::set_flag(&str, bool) -> alloc::string::String
 pub fn rust_web_server::admin::ops::set_maintenance(bool) -> alloc::string::String
+pub fn rust_web_server::admin::ops::set_maintenance_for(bool, core::option::Option<u64>, core::option::Option<u64>) -> alloc::string::String
 pub fn rust_web_server::admin::ops::traffic_json(u64, core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_live_json(core::option::Option<&str>) -> core::result::Result<alloc::string::String, alloc::string::String>
 pub fn rust_web_server::admin::ops::traffic_owner_json() -> core::result::Result<alloc::string::String, alloc::string::String>
@@ -9945,6 +9961,14 @@ pub fn rust_web_server::log::syslog::sender() -> core::option::Option<&'static r
 pub fn rust_web_server::log::tail::enable()
 pub fn rust_web_server::log::tail::follow(rust_web_server::sse::SseSender) -> bool
 pub fn rust_web_server::log::tail::recent(usize) -> alloc::vec::Vec<alloc::string::String>
+pub fn rust_web_server::maintenance::Status::clone(&self) -> Self
+pub fn rust_web_server::maintenance::Status::eq(&self, &Self) -> bool
+pub fn rust_web_server::maintenance::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn rust_web_server::maintenance::active() -> bool
+pub fn rust_web_server::maintenance::extend(u64) -> bool
+pub fn rust_web_server::maintenance::status() -> rust_web_server::maintenance::Status
+pub fn rust_web_server::maintenance::turn_off()
+pub fn rust_web_server::maintenance::turn_on(core::option::Option<u64>, core::option::Option<u64>)
 pub fn rust_web_server::mcp::InputRequired::clone(&self) -> Self
 pub fn rust_web_server::mcp::InputRequired::default() -> Self
 pub fn rust_web_server::mcp::InputRequired::elicit(self, &str, &str, &str) -> Self
@@ -12580,6 +12604,10 @@ pub rust_web_server::llm::usage::Usage::output_tokens: u64
 pub rust_web_server::log::syslog::Target::Tcp(alloc::string::String)
 pub rust_web_server::log::syslog::Target::Udp(alloc::string::String)
 pub rust_web_server::log::syslog::Target::Unix(std::path::PathBuf)
+pub rust_web_server::maintenance::Status::active: bool
+pub rust_web_server::maintenance::Status::retry_after_secs: u64
+pub rust_web_server::maintenance::Status::since: core::option::Option<u64>
+pub rust_web_server::maintenance::Status::until: core::option::Option<u64>
 pub rust_web_server::mcp::LogLevel::Alert
 pub rust_web_server::mcp::LogLevel::Critical
 pub rust_web_server::mcp::LogLevel::Debug
@@ -13787,6 +13815,7 @@ pub struct rust_web_server::llm::usage::UsageParser
 pub struct rust_web_server::log::Log
 pub struct rust_web_server::log::syslog::Sender
 pub struct rust_web_server::maintenance::MaintenanceLayer
+pub struct rust_web_server::maintenance::Status
 pub struct rust_web_server::mcp::InputRequired
 pub struct rust_web_server::mcp::McpContent
 pub struct rust_web_server::mcp::McpContext

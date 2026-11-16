@@ -405,6 +405,23 @@ pub fn record_change(principal: &Principal, address: &str, method: &str, path: &
     });
 }
 
+/// Record a change rws made by itself (a timer running out): user and
+/// `via` are `what`, the role is `system`.
+pub fn record_system(what: &str, method: &str, path: &str, detail: &str) {
+    record(AuditEntry {
+        at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+        user: what.to_string(),
+        role: "system".to_string(),
+        via: what.to_string(),
+        address: String::new(),
+        method: method.to_string(),
+        path: path.to_string(),
+        detail: detail.to_string(),
+        status: 200,
+        node: node_name(),
+    });
+}
+
 /// The `n` newest entries, newest first, as a JSON array.
 pub fn recent_json(n: usize) -> String {
     let audit = audit().lock().unwrap_or_else(|e| e.into_inner());

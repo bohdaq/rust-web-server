@@ -444,6 +444,19 @@ fn body_bool(request: &Request, key: &str) -> Option<bool> {
     }
 }
 
+/// The JSON body's top-level `key` as whole seconds: `Ok(None)` when it's
+/// absent or `null`, `Err` when it isn't a whole number up to `max`.
+fn body_secs(request: &Request, key: &str, max: u64) -> Result<Option<u64>, ()> {
+    let Some(body) = std::str::from_utf8(&request.body).ok() else { return Ok(None) };
+    let Some(value) = crate::mcp::json_rpc::object_members(body).and_then(|m| m.into_iter().find(|(k, _)| k == key)).map(|(_, v)| v) else {
+        return Ok(None);
+    };
+    if value.trim() == "null" {
+        return Ok(None);
+    }
+    value.trim().parse::<u64>().ok().filter(|secs| *secs <= max).map(Some).ok_or(())
+}
+
 /// The JSON body's top-level string `key`.
 fn body_str(request: &Request, key: &str) -> Option<String> {
     let body = std::str::from_utf8(&request.body).ok()?;
@@ -648,10 +661,28 @@ impl AdminApi {
             ("GET", "/cors") => ok(ops::cors_json()),
             (_, "/cors") => wrong_method("GET"),
             ("GET", "/maintenance") => ok(ops::maintenance_json()),
-            ("PUT", "/maintenance") => match body_bool(request, "active") {
-                Some(active) => ok(ops::set_maintenance(active)),
-                None => bad_request(r#"expected {"active":true|false}"#),
-            },
+            ("PUT", "/maintenance") => {
+                // 18.38.0: {"add_secs":N} keeps a timed maintenance on that much longer.
+                match body_secs(request, "add_secs", 30 * 86_400) {
+                    Ok(Some(add)) if add > 0 => {
+                        return match ops::extend_maintenance(add) {
+                            Some(body) => ok(body),
+                            None => error(STATUS_CODE_REASON_PHRASE.n409_conflict, "maintenance mode is off or has no time set to turn off; turn it on with for_secs"),
+                        };
+                    }
+                    Ok(None) => {}
+                    _ => return bad_request("add_secs is whole seconds, 1 to 30 days"),
+                }
+                let Some(active) = body_bool(request, "active") else {
+                    return bad_request(r#"expected {"active":true|false}"#);
+                };
+                // 18.38.0: turn off by itself after for_secs, and the Retry-After to send meanwhile.
+                let (for_secs, retry_after) = match (body_secs(request, "for_secs", 30 * 86_400), body_secs(request, "retry_after_secs", 86_400)) {
+                    (Ok(for_secs), Ok(retry_after)) => (for_secs, retry_after),
+                    _ => return bad_request(r#"for_secs is whole seconds up to 30 days, retry_after_secs up to one day"#),
+                };
+                ok(ops::set_maintenance_for(active, for_secs, retry_after))
+            }
             (_, "/maintenance") => wrong_method("GET, PUT"),
             ("GET", "/blocklist") => ok(ops::blocklist_json()),
             ("POST", "/blocklist") => match body_str(request, "ip").as_deref().and_then(parse_ip) {
@@ -710,14 +741,17 @@ fn status_json(connection: &ConnectionInfo) -> String {
         .into_iter()
         .map(|(dir, free, total, low)| format!(r#"{{"dir":"{}","free_bytes":{free},"total_bytes":{total},"low":{low}}}"#, json_escape(&dir)))
         .collect();
+    let maintenance = crate::maintenance::status();
     format!(
-        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"maintenance":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}},"disk":[{}],"cluster":{},"fleet":{}}}"#,
+        r#"{{"version":"{}","pid":{},"uptime_secs":{},"ready":{},"maintenance":{},"maintenance_until":{},"features":[{}],"listeners":{{"main":{{"address":"{}:{}","tls":{tls}}},"redirect":{},"admin":"{}:{}"}},"disk":[{}],"cluster":{},"fleet":{}}}"#,
         env!("CARGO_PKG_VERSION"),
         std::process::id(),
         started().elapsed().as_secs(),
         crate::metrics::SERVER_READY.load(Ordering::SeqCst),
-        // Since 18.37.0: the admin UI's header shows it on every page.
-        crate::maintenance::MAINTENANCE_MODE.load(Ordering::Relaxed),
+        // Since 18.37.0: the admin UI's header shows it on every page;
+        // 18.38.0 adds when it turns off by itself (Unix seconds or null).
+        maintenance.active,
+        maintenance.until.map(|t| t.to_string()).unwrap_or_else(|| "null".to_string()),
         features.join(","),
         json_escape(&env(Config::RWS_CONFIG_IP)),
         json_escape(&env(Config::RWS_CONFIG_PORT)),

@@ -107,6 +107,18 @@ fn maintenance_and_blocklist_change_the_server() {
     assert_eq!(ctl(&["maintenance", "off"]).1, "maintenance off\n");
     assert_eq!(ctl(&["maintenance", "maybe"]).0, EXIT_UNUSABLE);
 
+    // 18.38.0: a time to turn off by itself, and what visitors are told to wait.
+    let on = ctl(&["maintenance", "on", "--for", "1h", "--retry-after=5m"]).1;
+    assert!(on.starts_with("maintenance on, turns off by itself in ") && on.contains(" GMT)"), "{on}");
+    let status = crate::maintenance::status();
+    assert_eq!((status.until.zip(status.since).map(|(u, s)| u - s), status.retry_after_secs), (Some(3600), 300));
+    assert!(ctl(&["maintenance", "extend", "30m"]).1.starts_with("maintenance on, turns off by itself in "));
+    assert_eq!(crate::maintenance::status().until.zip(status.until).map(|(new, old)| new - old), Some(1800));
+    assert_eq!(ctl(&["maintenance", "on", "--for", "soon"]).0, EXIT_UNUSABLE);
+    assert_eq!(ctl(&["maintenance", "extend", "0"]).0, EXIT_UNUSABLE);
+    assert_eq!(ctl(&["maintenance", "off"]).1, "maintenance off\n");
+    assert_eq!(ctl(&["maintenance", "extend", "1h"]).0, EXIT_FAILED);
+
     assert_eq!(ctl(&["block", "203.0.113.77"]).1, "blocked 203.0.113.77\n");
     assert!(ctl(&["blocklist"]).1.lines().any(|l| l == "203.0.113.77"));
     assert_eq!(ctl(&["unblock", "203.0.113.77"]).1, "unblocked 203.0.113.77\n");

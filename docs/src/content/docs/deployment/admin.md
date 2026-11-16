@@ -35,6 +35,8 @@ rws ctl status                         # version, uptime, listeners, disks
 rws ctl reload                         # waits; prints the errors and exits 1 on a bad config
 rws ctl drain <upstream> <backend> [--undo]
 rws ctl maintenance [on|off]
+rws ctl maintenance on --for 1h --retry-after 5m   # off by itself after an hour (18.38.0)
+rws ctl maintenance extend 1h          # keep a timed maintenance on longer (18.38.0)
 rws ctl block <ip> | unblock <ip> | blocklist
 rws ctl purge <cache> [--path /p | --prefix /p/]
 rws ctl caches | upstreams
@@ -81,6 +83,8 @@ Open `http://127.0.0.1:9901/admin/` (through the SSH tunnel on a remote host) an
 - **Audit**: every change made through the API, this UI or the MCP tools, and every refused attempt.
 
 The header shows one state on every page: Ready, Not ready, Degraded (healthy backends out of all), Maintenance (with a banner and a Turn off button) or Disconnected (the admin API stopped answering; the time of the last answer, retried every 5 seconds). Changes that take a site down ask first: turning maintenance mode on (type `maintenance` to confirm), purging a whole cache, draining the last healthy backend of an upstream. Draining, blocking and unblocking can be undone from the message that confirms them.
+
+Turning maintenance mode on also asks two things (18.38.0): what clients are told to wait (`Retry-After`: the configured value, 5 minutes, 15 minutes or 1 hour) and whether it turns off by itself (after 1 hour, 4 hours, or never). With a time set, the banner shows when it ends, with **Add 1 hour** and **Turn off now**; when the time runs out the audit log gets an entry by `timer`. `Retry-After` never points past the time maintenance ends. With `[cluster]`, the replica that was asked keeps the timer and tells the others when it runs out; if that replica restarts first, turn maintenance off by hand.
 
 `Ctrl K` (`⌘ K` on a Mac) or `/` opens a command palette: go to a section, drain a backend, purge a cache, find a setting. `G` then a letter goes to a section; the letters are shown in the sidebar.
 
@@ -195,7 +199,7 @@ All under `/admin/api/v1/`, JSON in and out.
 
 | Method and path | What it does |
 |---|---|
-| `GET /status` | Version, process id, uptime, readiness, compile-time features, the main, redirect and admin listeners, and `disk`: each directory rws writes to with `free_bytes`, `total_bytes` and `low` (under `min_free_disk`, 18.15.0) |
+| `GET /status` | Version, process id, uptime, readiness, `maintenance` and `maintenance_until` (when it turns off by itself, Unix seconds or `null`; 18.38.0), compile-time features, the main, redirect and admin listeners, and `disk`: each directory rws writes to with `free_bytes`, `total_bytes` and `low` (under `min_free_disk`, 18.15.0) |
 | `GET /whoami` | The caller: `{"user":"deploy-bot","role":"operator","via":"token"}` (`via`: `token` or `oidc`; 18.22.0) |
 | `GET /audit?n=100` | The newest changes and refused attempts, newest first (at most 1000): `at`, `time`, `user`, `role`, `via`, `address`, `method`, `path`, `detail` (body, secrets redacted), `status`, `node` |
 | `GET /audit/verify` | Check the `audit_log` file's [hash chain](#a-tamper-evident-audit-log) (18.33.0): `{"file":…,"ok":true,"entries":12,"chained":10,"unchained":2,"continues_from":null,"broken":null}`; when broken, `"broken":{"line":7,"reason":"…"}`. `404` without an `audit_log` file |
@@ -207,7 +211,8 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /rate-limit` | The global limit: `configured`, `max_requests`, `window_secs` |
 | `GET /rate-limit/check?ip=…` | That address's remaining quota (counts as one request) |
 | `GET /cors` | The CORS settings in effect |
-| `GET /maintenance`, `PUT /maintenance` `{"active":true}` | Maintenance mode: `503` for everything but health checks |
+| `GET /maintenance`, `PUT /maintenance` `{"active":true}` | Maintenance mode: `503` for everything but health checks. Answers `{"active":true,"since":1794822000,"until":null,"retry_after_secs":120}` (`since`, `until` and `retry_after_secs` since 18.38.0; times are Unix seconds). With `"for_secs":3600` it turns off by itself after that long (up to 30 days) and `until` says when; `"retry_after_secs":300` is the `Retry-After` to send meanwhile instead of `[maintenance] retry_after_secs` (up to a day, `0` for none) |
+| `PUT /maintenance` `{"add_secs":3600}` | Keep a timed maintenance on that much longer (18.38.0). `409` when it is off or has no time set |
 | `GET /blocklist`, `POST /blocklist` `{"ip":"…"}`, `DELETE /blocklist/<ip>` | The runtime IP blocklist (`403`), for static files and config-file proxy routes alike (proxy routes since 18.20.1). Addresses are checked; the admin listener isn't behind the blocklist |
 | `GET /flags`, `PUT /flags/<name>` `{"enabled":true}` | Runtime feature flags |
 | `GET /cache`, `DELETE /cache` | Response-cache hits, misses and size; clear it. `404` when the server has no cache |

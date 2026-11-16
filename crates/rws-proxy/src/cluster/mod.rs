@@ -343,7 +343,7 @@ pub struct ProcessState;
 impl Local for ProcessState {
     fn snapshot(&self) -> State {
         let mut state = State {
-            maintenance: crate::maintenance::MAINTENANCE_MODE.load(std::sync::atomic::Ordering::SeqCst),
+            maintenance: crate::maintenance::active(),
             blocked: crate::blocklist::global().list().into_iter().collect(),
             flags: crate::feature::global().list().into_iter().collect(),
             ..State::default()
@@ -358,7 +358,16 @@ impl Local for ProcessState {
     }
 
     fn apply(&self, state: &State, purges_after: u64) {
-        crate::maintenance::MAINTENANCE_MODE.store(state.maintenance, std::sync::atomic::Ordering::SeqCst);
+        // Only a change: this replica's own timer and Retry-After choice
+        // stay when the shared state repeats what it already does.
+        if state.maintenance != crate::maintenance::active() && !crate::admin::ops::maintenance_timer_ending() {
+            crate::admin::ops::maintenance_changed_elsewhere();
+            if state.maintenance {
+                crate::maintenance::turn_on(None, None);
+            } else {
+                crate::maintenance::turn_off();
+            }
+        }
         let blocklist = crate::blocklist::global();
         let current: BTreeSet<String> = blocklist.list().into_iter().collect();
         for ip in state.blocked.difference(&current) {

@@ -66,7 +66,7 @@ client that asks before acting asks for those.
 | Look | Change |
 |---|---|
 | `server_config` — every active `RWS_CONFIG_*` value, secrets hidden | `reload_config` — re-read config and certificates |
-| `server_metrics` — request, error, connection counters | `set_maintenance` `{"enabled": true}` — `503` for everything but health checks |
+| `server_metrics` — request, error, connection counters | `set_maintenance` `{"enabled": true}` — `503` for everything but health checks; `"for_secs": 3600` turns it off by itself, `"retry_after_secs": 300` sets the `Retry-After` (18.38.0) |
 | `recent_requests` `{"n": 50}` — last requests (max 100) | `block_ip` / `unblock_ip` `{"ip": "…"}` — runtime blocklist (`403`) |
 | `recent_errors` `{"n": 50}` — last 4xx/5xx | `cache_clear` — empty the response cache, or `{"path": "/p"}` / `{"prefix": "/p/"}` to purge part of it |
 | `list_blocked_ips`, `maintenance_status` | `feature_set` `{"name": "…", "enabled": false}` |

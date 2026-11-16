@@ -394,6 +394,16 @@ lit-material-text-field::part(container) { padding-inline: 0; }
 .effects li { display: flex; align-items: baseline; gap: 10px; }
 .effects .sq { position: relative; top: -1px; }
 .confirm lit-material-text-field { display: block; margin-bottom: 20px; }
+.choice { margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
+.choice legend { padding: 0; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+.choice-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice label { position: relative; display: inline-flex; cursor: pointer; }
+.choice input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.choice span { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.choice label:hover span { color: var(--text); }
+.choice input:checked + span { border-color: var(--warn); background: var(--warn-bg); color: var(--text); }
+.choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { margin: 0; font-size: 13px; color: var(--muted); }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .confirm-actions lit-material-button { --lit-material-button-height: 40px; }
 .confirm[data-tone="danger"] .go { --md-sys-color-primary: var(--bad); }
@@ -463,6 +473,7 @@ lit-material-command-palette::part(option) { min-height: 44px; }
   .tbl.tbl-stack td.wide { order: 0; flex: 1 1 100%; }
   .tbl.tbl-stack td[data-label]::before { content: attr(data-label) " "; font-family: var(--font-sans); font-size: 12px; color: var(--faint); }
   .confirm-actions lit-material-button { --lit-material-button-height: 44px; flex: 1 1 auto; }
+  .choice span { min-height: 44px; }
 }
 
 /* ── traffic (src/traffic.js) ──────────────────────────────────────────── */

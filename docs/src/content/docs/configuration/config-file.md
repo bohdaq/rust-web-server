@@ -240,6 +240,8 @@ message          = "We're upgrading the database. Back by 14:00 UTC."
 retry_after_secs = 600   # Retry-After on maintenance responses (default 120; 0 = none)
 ```
 
+Since 18.38.0 whoever turns maintenance on can pick another `Retry-After` for that time and a time for it to turn off by itself (the admin UI asks; `rws ctl maintenance on --for 1h --retry-after 5m`). The setting above is what applies when they don't.
+
 
 ## `[traffic]`
 

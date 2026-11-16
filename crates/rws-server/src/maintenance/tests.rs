@@ -67,3 +67,47 @@ fn passes_through_only_while_off() {
     assert!(!MaintenanceLayer.is_passthrough(&request, &connection));
     MAINTENANCE_MODE.store(false, Ordering::SeqCst);
 }
+
+#[test]
+fn a_timer_turns_it_off_and_caps_retry_after() {
+    let _g = lock();
+    turn_on(Some(3600), Some(300));
+    let on = status();
+    assert!(on.active);
+    assert_eq!(on.until, on.since.map(|s| s + 3600));
+    assert_eq!(on.retry_after_secs, 300);
+    let res = TestClient::new(App::new().wrap(MaintenanceLayer)).get("/api/users").send();
+    assert_eq!(503, res.status());
+    assert_eq!(res.header("Retry-After"), Some("300"));
+
+    // Ten seconds left: clients aren't told to wait longer than that.
+    turn_on(Some(10), Some(300));
+    assert!((1..=10).contains(&status().retry_after_secs), "{:?}", status());
+
+    // An hour more, counted from the time it would have ended.
+    let before = status().until.unwrap();
+    assert!(extend(3600));
+    assert_eq!(status().until, Some(before + 3600));
+
+    // The timer ran out: off for whoever asks, timer and choice forgotten.
+    UNTIL.store(1, Ordering::SeqCst);
+    assert!(!active());
+    assert!(!MAINTENANCE_MODE.load(Ordering::SeqCst));
+    assert_eq!(status(), Status { active: false, since: None, until: None, retry_after_secs: crate::error::page::maintenance_retry_after() });
+    let res = TestClient::new(App::new().wrap(MaintenanceLayer)).get("/healthz").send();
+    assert_eq!(200, res.status());
+}
+
+#[test]
+fn on_without_a_timer_stays_on_and_zero_sends_no_retry_after() {
+    let _g = lock();
+    turn_on(None, Some(0));
+    assert_eq!(status().until, None);
+    let res = TestClient::new(App::new().wrap(MaintenanceLayer)).get("/api/users").send();
+    assert_eq!(503, res.status());
+    assert_eq!(res.header("Retry-After"), None);
+    assert!(!extend(60), "nothing to extend without a timer");
+    turn_off();
+    assert!(!status().active);
+    assert!(!extend(60));
+}
