@@ -69,7 +69,7 @@ Tags:
 ReleaseNotesUrl: https://github.com/bohdaq/rust-web-server/releases/tag/$version
 Documentations:
   - DocumentLabel: Windows
-    DocumentUrl: https://rws8.tech/deployment/windows/
+    DocumentUrl: https://rws8.tech/docs/deployment/windows/
 ManifestType: defaultLocale
 ManifestVersion: $schema
 YAML

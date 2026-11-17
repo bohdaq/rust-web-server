@@ -38,7 +38,7 @@ controllers):
 
 ## rws's operator framework, in brief
 
-Docs: https://rws8.tech/deployment/kubernetes-operators/, all docs in one
+Docs: https://rws8.tech/docs/deployment/kubernetes-operators/, all docs in one
 file: https://rws8.tech/llms-full.txt.
 
 - `Controller::new(api).owns(child_api).reconcile(f).finalizer(name, cleanup)`;
