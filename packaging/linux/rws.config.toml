@@ -1,4 +1,4 @@
-# rws settings: https://rws8.tech/configuration/config-file/
+# rws settings: https://rws8.tech/docs/configuration/config-file/
 # The service serves the files in /var/www/rws. Apply a change with
 #   sudo rws --check /etc/rws/rws.config.toml && sudo systemctl reload rws
 
@@ -8,7 +8,7 @@ port = 7878
 # port = 80
 
 # HTTPS (HTTP/2 and HTTP/3 follow): a certificate the rws user can read,
-# or automatic certificates from Let's Encrypt (https://rws8.tech/features/acme/).
+# or automatic certificates from Let's Encrypt (https://rws8.tech/docs/features/acme/).
 # tls_cert_file = '/etc/rws/cert.pem'
 # tls_key_file  = '/etc/rws/key.pem'
 

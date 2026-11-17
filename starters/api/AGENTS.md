@@ -34,7 +34,7 @@ title:String`, `rws gen test posts`, `rws gen model Post title:String`
 (adds the `model-sqlite` feature), `rws gen migration <name>`. It writes
 against this release's API, registers the routes in `app()`, and never
 overwrites a file; `--dry-run` shows the plan. Add the new routes to
-`openapi()` by hand. https://rws8.tech/building-apps/generators/
+`openapi()` by hand. https://rws8.tech/docs/building-apps/generators/
 
 ## rws, in brief
 
@@ -56,4 +56,4 @@ https://rws8.tech/llms-full.txt.
   `Operation` and `#[derive(JsonSchema)]` types, using the handler's
   `METHOD`/`PATTERN` — the document follows serde's renames.
 - Middleware: `app.wrap(layer)`; built-ins (auth, rate limits, CORS, request
-  ids, …): https://rws8.tech/building-apps/middleware/.
+  ids, …): https://rws8.tech/docs/building-apps/middleware/.

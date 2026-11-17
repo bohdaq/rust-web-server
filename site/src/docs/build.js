@@ -8,10 +8,11 @@ import { docsIndex, docsPage } from "./layout.js";
 import { renderMarkdown } from "./markdown.js";
 
 // Older versions are noindex, with the canonical on the latest copy of the
-// same page when it still exists.
+// same page when it still exists, and nofollow: crawlers that reach one old
+// page shouldn't walk its sidebar into the rest of that version.
 function versionMeta(version, rel) {
   if (version.latest) return {};
-  return { noindex: true, canonical: version.latestPages.has(rel) ? `/docs${rel}` : undefined };
+  return { noindex: true, nofollow: true, canonical: version.latestPages.has(rel) ? `/docs${rel}` : undefined };
 }
 
 // When a page last changed: its file's last commit (the latest version only;
@@ -43,13 +44,14 @@ function pageJsonLd(page, base, url, modified) {
   const crumbs = [
     { name: "rws", url: "https://rws8.tech/" },
     { name: "Docs", url: `https://rws8.tech${base}/` },
-    { name: page.group },
+    // Google needs an item on every crumb but the last: the group links to its first page.
+    { name: page.group, url: `https://rws8.tech${page.groupPath}` },
     { name: page.title, url },
   ];
   const breadcrumb = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    itemListElement: crumbs.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, ...(c.url ? { item: c.url } : {}) })),
+    itemListElement: crumbs.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, item: c.url })),
   };
   return [article, breadcrumb];
 }
@@ -63,7 +65,7 @@ export async function buildDocs({ contentRoot, sidebar, base = "/docs", version 
       if (!file) throw new Error(`sidebar entry ${item.link} has no page in ${contentRoot}`);
       const rendered = await renderMarkdown(readFileSync(join(contentRoot, file), "utf8"), { base });
       const modified = version.latest ? lastModified(contentRoot, file) : null;
-      pages.set(base + item.link, { ...rendered, title: rendered.title || item.label, path: base + item.link, file, label: item.label, group: group.label, modified, source: join(contentRoot, file) });
+      pages.set(base + item.link, { ...rendered, title: rendered.title || item.label, path: base + item.link, file, label: item.label, group: group.label, groupPath: base + group.items[0].link, modified, source: join(contentRoot, file) });
     }
   }
 

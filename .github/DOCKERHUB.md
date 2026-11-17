@@ -41,7 +41,7 @@ docker run -d --name rws -p 80:80 -p 443:443 -p 443:443/udp \
 HTTP/2 and HTTP/3 (UDP 443), redirects HTTP to HTTPS, and renews in the
 background. Certificates and the ACME account key are kept in the `/data`
 volume, so restarts reuse them. Try the Let's Encrypt staging CA first with
-`staging = true` under `[acme]`. → [Automatic HTTPS](https://rws8.tech/features/acme/)
+`staging = true` under `[acme]`. → [Automatic HTTPS](https://rws8.tech/docs/features/acme/)
 
 ## Reverse proxy
 
@@ -66,7 +66,7 @@ backends = ["app1:8080", "app2:8080"]
 
 Load balancing, health checks, bearer / JWT / basic auth, rate limits,
 caching, rewrites, and TCP, UDP, WebSocket and gRPC proxying.
-→ [Config-driven proxy](https://rws8.tech/proxy/config-driven/)
+→ [Config-driven proxy](https://rws8.tech/docs/proxy/config-driven/)
 
 ## Configuration
 
@@ -86,7 +86,7 @@ docker run --rm bohdaq/rws --help     # every option
 ```
 
 Health and metrics: `GET /healthz`, `GET /readyz`, `GET /metrics` (Prometheus).
-→ [All settings](https://rws8.tech/configuration/config-file/)
+→ [All settings](https://rws8.tech/docs/configuration/config-file/)
 
 The image is also published as `ghcr.io/bohdaq/rws`. Report security issues
 privately: [SECURITY.md](https://github.com/bohdaq/rust-web-server/blob/main/SECURITY.md).

@@ -6,7 +6,7 @@ crate itself? Read `CLAUDE.md` and `CONTRIBUTING.md` instead.)
 Full docs: https://rws8.tech — all of it in one file:
 [`llms-full.txt`](llms-full.txt). API: https://docs.rs/rust-web-server.
 Working apps to copy from: [`examples/`](examples/), listed on
-https://rws8.tech/getting-started/examples/; standalone starter projects in
+https://rws8.tech/docs/getting-started/examples/; standalone starter projects in
 [`starters/`](starters/) (`cargo generate --git https://github.com/bohdaq/rust-web-server starters/api`);
 the same guidance as a skill / Cursor rule / Copilot instructions in
 [`agents/`](agents/).
@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 Opt-in features you're likely to need: `serde` (JSON in and out),
 `macros` (`#[derive(Model)]`, `#[derive(JsonSchema)]`), `auth` (JWT/Basic
 middleware), `sso` (OIDC, MCP OAuth), `model-sqlite` / `model-postgres` /
-`model-mysql` (ORM). The full list: https://rws8.tech/getting-started/features/.
+`model-mysql` (ORM). The full list: https://rws8.tech/docs/getting-started/features/.
 
 ## Start from this shape
 
@@ -41,7 +41,7 @@ Build the app in a function, serve it from `main`, test the function. See
 - Anything not routed falls through to the built-ins: static files from the
   working directory, `/healthz`, `/readyz`, `/metrics`.
 - Middleware: `app.wrap(layer)` (first wrapped = outermost). Built-in layers
-  are listed at https://rws8.tech/building-apps/middleware/.
+  are listed at https://rws8.tech/docs/building-apps/middleware/.
 - An MCP server for agents: `app.mcp(name, version)` (docs: mcp/overview,
   example `mcp_inventory`).
 
@@ -76,7 +76,7 @@ let client = rust_web_server::test_client::TestClient::new(app());
 assert_eq!(200, client.get("/healthz").send().status());
 ```
 
-Docs: https://rws8.tech/testing/test-client/. `TestClient` doesn't drive
+Docs: https://rws8.tech/docs/testing/test-client/. `TestClient` doesn't drive
 `stream_pipe`; read the reader in the test (see `examples/sse_ticker.rs`).
 
 ## Where to look

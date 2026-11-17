@@ -39,7 +39,7 @@ domains = ["example.com", "www.example.com"]
 email   = "you@example.com"
 ```
 
-`rws` gets certificates from Let's Encrypt on first start, serves HTTPS with HTTP/2 and HTTP/3, redirects HTTP to HTTPS, and renews in the background with zero-downtime reloads. Retries until DNS is ready, IPv4 and IPv6, private ACME CAs supported. → [Automatic HTTPS](https://rws8.tech/features/acme/)
+`rws` gets certificates from Let's Encrypt on first start, serves HTTPS with HTTP/2 and HTTP/3, redirects HTTP to HTTPS, and renews in the background with zero-downtime reloads. Retries until DNS is ready, IPv4 and IPv6, private ACME CAs supported. → [Automatic HTTPS](https://rws8.tech/docs/features/acme/)
 
 ## Reverse proxy
 
@@ -66,13 +66,13 @@ strategy = "least_connections"
   auth       = { type = "bearer", token_env = "API_TOKEN" }
 ```
 
-Load balancing (round-robin, least-connections, random, IP hash), active health checks, bearer / JWT / basic auth, rate limits, caching, IP allow/deny lists, header and URL rewrites, per-route timeouts and body limits — plus TCP, UDP, WebSocket, and gRPC proxying. Misconfigured auth fails closed. Weighted splits, sticky sessions, retries and circuit breakers are in the config file too; forward auth and service discovery are available from the library. Combine with `[acme]` for HTTPS in front of your apps. → [Config-driven proxy](https://rws8.tech/proxy/config-driven/) · [full config reference](https://rws8.tech/configuration/config-file/)
+Load balancing (round-robin, least-connections, random, IP hash), active health checks, bearer / JWT / basic auth, rate limits, caching, IP allow/deny lists, header and URL rewrites, per-route timeouts and body limits — plus TCP, UDP, WebSocket, and gRPC proxying. Misconfigured auth fails closed. Weighted splits, sticky sessions, retries and circuit breakers are in the config file too; forward auth and service discovery are available from the library. Combine with `[acme]` for HTTPS in front of your apps. → [Config-driven proxy](https://rws8.tech/docs/proxy/config-driven/) · [full config reference](https://rws8.tech/docs/configuration/config-file/)
 
 ---
 
 ## Kubernetes Gateway API
 
-Built with the `gateway-api` feature, rws is a [Gateway API](https://gateway-api.sigs.k8s.io) controller and data plane in one binary: HTTPRoute, GRPCRoute, TLSRoute, TCPRoute and UDPRoute, passing the Gateway API v1.7.0 conformance suite in CI (listed upstream at v1.6.3; all five Gateway profiles, every standard-channel extended feature), installed with the Helm chart (`gatewayAPI.enabled=true`). See [Kubernetes Gateway API](https://rws8.tech/deployment/kubernetes-gateway-api/).
+Built with the `gateway-api` feature, rws is a [Gateway API](https://gateway-api.sigs.k8s.io) controller and data plane in one binary: HTTPRoute, GRPCRoute, TLSRoute, TCPRoute and UDPRoute, passing the Gateway API v1.7.0 conformance suite in CI (listed upstream at v1.6.3; all five Gateway profiles, every standard-channel extended feature), installed with the Helm chart (`gatewayAPI.enabled=true`). See [Kubernetes Gateway API](https://rws8.tech/docs/deployment/kubernetes-gateway-api/).
 
 ## Need custom logic? It's also a Rust library
 
@@ -107,7 +107,7 @@ async fn main() {
 }
 ```
 
-Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login — [all features](https://rws8.tech/getting-started/features/), [building apps](https://rws8.tech/building-apps/overview/).
+Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login — [all features](https://rws8.tech/docs/getting-started/features/), [building apps](https://rws8.tech/docs/building-apps/overview/).
 
 ## Why rws
 
@@ -145,7 +145,7 @@ keeps a few percent on plain-HTTP throughput, which the opt-in
 `RWS_CONFIG_RUNTIME=per-core` narrows. Release builds use the mimalloc
 allocator: less CPU, but more memory than nginx (build without the
 `mimalloc` feature for ~9 MiB) — see the
-[benchmarks page](https://rws8.tech/reference/benchmarks/). Shared CI runners are noisy, so
+[benchmarks page](https://rws8.tech/docs/reference/benchmarks/). Shared CI runners are noisy, so
 compare servers within a run, not across runs. Reproduce it with
 [`bench/run.sh`](bench/run.sh) or the manual
 [Benchmark workflow](.github/workflows/bench.yml).
@@ -154,11 +154,11 @@ compare servers within a run, not across runs. Reproduce it with
 
 Everything is on **[rws8.tech](https://rws8.tech/)** (source: [`docs/`](docs/src/content/docs/)):
 
-- [Quick start](https://rws8.tech/getting-started/quick-start/) · [Installation and feature flags](https://rws8.tech/getting-started/installation/) · [All features](https://rws8.tech/getting-started/features/)
-- [Configuration](https://rws8.tech/configuration/overview/) — environment variables, `rws.config.toml`, CLI flags
-- [Building apps](https://rws8.tech/building-apps/overview/) — routing, state, extractors, middleware, templates, the ORM
-- [Proxy](https://rws8.tech/proxy/overview/) · [MCP server](https://rws8.tech/mcp/overview/) · [Deployment](https://rws8.tech/deployment/docker/)
-- [Architecture](https://rws8.tech/reference/architecture/) · [Troubleshooting](https://rws8.tech/reference/troubleshooting/) · [Migrating to 18.0](https://rws8.tech/reference/migrating-18/)
+- [Quick start](https://rws8.tech/docs/getting-started/quick-start/) · [Installation and feature flags](https://rws8.tech/docs/getting-started/installation/) · [All features](https://rws8.tech/docs/getting-started/features/)
+- [Configuration](https://rws8.tech/docs/configuration/overview/) — environment variables, `rws.config.toml`, CLI flags
+- [Building apps](https://rws8.tech/docs/building-apps/overview/) — routing, state, extractors, middleware, templates, the ORM
+- [Proxy](https://rws8.tech/docs/proxy/overview/) · [MCP server](https://rws8.tech/docs/mcp/overview/) · [Deployment](https://rws8.tech/docs/deployment/docker/)
+- [Architecture](https://rws8.tech/docs/reference/architecture/) · [Troubleshooting](https://rws8.tech/docs/reference/troubleshooting/) · [Migrating to 18.0](https://rws8.tech/docs/reference/migrating-18/)
 - API reference: [docs.rs/rust-web-server](https://docs.rs/rust-web-server) · Changes: [CHANGELOG.md](CHANGELOG.md)
 
 ## Building apps with AI
@@ -180,7 +180,7 @@ JWT auth on POST (auth), and per-IP rate limiting on every route.
 ```
 
 To make your app a tool that Claude, Cursor and other MCP clients can call,
-see the [MCP server](https://rws8.tech/mcp/overview/).
+see the [MCP server](https://rws8.tech/docs/mcp/overview/).
 
 ## Build from source
 

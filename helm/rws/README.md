@@ -2,7 +2,7 @@
 
 Deploys [`rust-web-server`](https://github.com/bohdaq/rust-web-server) (`rws`) — an HTTP/1.1, HTTP/2, and HTTP/3 web server, reverse proxy, and application framework — on Kubernetes.
 
-This chart renders the manifests documented at [docs/deployment/kubernetes.md](https://rws8.tech/deployment/kubernetes/) (health probes, graceful shutdown, `RWS_CONFIG_*` env vars, Prometheus scraping, autoscaling): a `Deployment`, a `Service`, and optionally a `PodDisruptionBudget`, `HorizontalPodAutoscaler`, `Ingress` and prometheus-operator `ServiceMonitor`. See that page for the semantics behind each field; this README documents the chart's `values.yaml` knobs.
+This chart renders the manifests documented at [docs/deployment/kubernetes.md](https://rws8.tech/docs/deployment/kubernetes/) (health probes, graceful shutdown, `RWS_CONFIG_*` env vars, Prometheus scraping, autoscaling): a `Deployment`, a `Service`, and optionally a `PodDisruptionBudget`, `HorizontalPodAutoscaler`, `Ingress` and prometheus-operator `ServiceMonitor`. See that page for the semantics behind each field; this README documents the chart's `values.yaml` knobs.
 
 ## Installing
 
@@ -93,5 +93,5 @@ CI (`.github/workflows/helm.yml`) runs both for several value sets and installs 
 
 ## What this chart deliberately does not do
 
-- **Does not create the TLS Secret.** Certificate provisioning (cert-manager, manual, etc.) is out of scope — see [docs/deployment/https-tls.md](https://rws8.tech/features/https-tls/) and [docs/deployment/acme.md](https://rws8.tech/features/acme/).
+- **Does not create the TLS Secret.** Certificate provisioning (cert-manager, manual, etc.) is out of scope — see [docs/deployment/https-tls.md](https://rws8.tech/docs/features/https-tls/) and [docs/deployment/acme.md](https://rws8.tech/docs/features/acme/).
 - **Does not install the Prometheus Adapter** needed for `autoscaling.customMetric` — it's cluster-level infrastructure; [`../prometheus-adapter-values.yaml`](../prometheus-adapter-values.yaml) has the values for the `prometheus-community/prometheus-adapter` chart.

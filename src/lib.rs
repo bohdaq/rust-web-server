@@ -37,7 +37,7 @@
 //!
 //! On docs.rs every item is shown, labelled with the features it needs. The
 //! presets `web`, `api`, `proxy` and `full` turn on common sets; see
-//! [Feature flags](https://rws8.tech/getting-started/installation/#feature-flags).
+//! [Feature flags](https://rws8.tech/docs/getting-started/installation/#feature-flags).
 // docs.rs sets `--cfg docsrs` ([package.metadata.docs.rs]): nightly rustdoc
 // then labels each item with the `cfg` it is compiled under.
 #![cfg_attr(docsrs, feature(doc_cfg))]

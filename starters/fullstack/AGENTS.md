@@ -34,7 +34,7 @@ endpoint's `layout` tool reads it). Put new code where it says:
   PostgreSQL migration, from the `model-postgres` feature), `rws gen route
   posts --prefix /api`, `rws gen test posts`, `rws gen migration <name>`.
   It writes against this release's API and never overwrites a file;
-  `--dry-run` shows the plan. https://rws8.tech/building-apps/generators/
+  `--dry-run` shows the plan. https://rws8.tech/docs/building-apps/generators/
 - `frontend/`: lit 3 + `@lit-material` components, built by Vite into
   `frontend/dist`, which rws serves as static files.
 - `Dockerfile`: frontend → API → distroless image on port 7878.

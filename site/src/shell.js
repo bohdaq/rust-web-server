@@ -96,7 +96,7 @@ export const SITE = "https://rws8.tech";
 
 const attr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-export function documentHtml({ title, description, path, body, assets, noindex = false, canonical = path, jsonLd = [], ogType = "website", markdown = null, modified = null }) {
+export function documentHtml({ title, description, path, body, assets, noindex = false, nofollow = false, canonical = path, jsonLd = [], ogType = "website", markdown = null, modified = null }) {
   const css = assets.css.map((href) => `<link rel="stylesheet" href="${href}">`).join("");
   return `<!doctype html>
 <html lang="en">
@@ -105,7 +105,7 @@ export function documentHtml({ title, description, path, body, assets, noindex =
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <meta name="description" content="${description}">
-${noindex ? '<meta name="robots" content="noindex">' : ""}
+${noindex ? `<meta name="robots" content="${nofollow ? "noindex, nofollow" : "noindex"}">` : ""}
 ${canonical ? `<link rel="canonical" href="${SITE}${canonical}">` : ""}
 ${markdown ? `<link rel="alternate" type="text/markdown" href="${markdown}" title="This page as Markdown">` : ""}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">

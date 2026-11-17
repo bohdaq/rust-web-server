@@ -27,11 +27,11 @@ are its MCP tools, so the manifest says `routes = "src/tools"`:
 `rws gen model` and `rws gen migration` (the `rws` binary of the same
 release) write `#[derive(Model)]` types and migrations here too; `rws gen
 route`/`test` are for HTTP apps with an `app()` and refuse this one — write
-tools by hand. https://rws8.tech/building-apps/generators/
+tools by hand. https://rws8.tech/docs/building-apps/generators/
 
 ## rws's MCP server, in brief
 
-Docs for this version: https://rws8.tech/mcp/overview/, all docs in one
+Docs for this version: https://rws8.tech/docs/mcp/overview/, all docs in one
 file: https://rws8.tech/llms-full.txt.
 
 - `McpServer::new(name, version)`; add tools with

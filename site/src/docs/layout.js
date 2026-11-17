@@ -9,11 +9,13 @@ const REPO = "https://github.com/bohdaq/rust-web-server";
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 // Links to this page in every version that has it, else to that version's index.
+// Older versions get rel=nofollow so crawlers spend their budget on the latest
+// docs (the older copies are noindex anyway).
 // A menu over the sidebar (not pushing it down): the five newest versions,
 // the rest under "Older versions". Closes on Esc, an outside click or a choice.
 function versionSwitch(version, current, base) {
   const rel = current.slice(base.length);
-  const item = (v) => html`<li><a href=${v.pages.has(rel) ? v.base + rel : `${v.base}/`} aria-current=${v.key === version.key ? "page" : "false"}>${v.key}${v.latest ? " (latest)" : ""}</a></li>`;
+  const item = (v) => html`<li><a href=${v.pages.has(rel) ? v.base + rel : `${v.base}/`} rel=${v.latest ? nothing : "nofollow"} aria-current=${v.key === version.key ? "page" : "false"}>${v.key}${v.latest ? " (latest)" : ""}</a></li>`;
   const recent = version.all.slice(0, 5);
   const older = version.all.slice(5);
   const currentIsOld = older.some((v) => v.key === version.key);

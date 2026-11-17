@@ -40,7 +40,7 @@ critical bug fixes for twelve months on a `<minor>.x` branch (for example
 `18.20.x` → `18.20.1`, `18.20.2`). Other releases are supported until the
 next minor: releases are additive within a major version, so upgrading to
 the newest 18.x is the supported path. The policy in full:
-[Support policy](https://rws8.tech/reference/support-policy/).
+[Support policy](https://rws8.tech/docs/reference/support-policy/).
 
 ## Verifying a release
 
