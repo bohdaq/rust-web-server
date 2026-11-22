@@ -210,6 +210,31 @@ faster protocol is available:
 
 Browsers that support HTTP/3 will upgrade automatically on subsequent requests.
 
+## TLS tunnels: other services behind 443
+
+One name on the HTTPS listener can lead to a TCP service on the same
+machine instead of the web site: rws completes the TLS handshake as
+usual (its certificate, SNI, ACME) and then copies the decrypted bytes
+both ways to a local address. Every other name is served as HTTP, as
+before. This puts a service that must be reachable on networks that
+allow only port 443 (a TURN relay for calls, an IMAP server) beside your
+sites, without a second IP address. Since 18.39.0.
+
+```toml
+domains     = ["example.com", "turn.example.com"]   # the name needs a certificate
+tls_tunnels = ["turn.example.com=127.0.0.1:3478"]   # name=address, one per tunnel
+```
+
+- The name decides, not ALPN: a client that offers `h2` to a tunnel name
+  is still tunnelled. A TLS-ALPN-01 validation for the name is answered
+  as usual.
+- Targets must be on this machine (`127.0.0.1` or `::1`): `rws --check`
+  refuses anything else, so a tunnel never opens a route to another host.
+- The target sees connections from `127.0.0.1`; the service itself must
+  authenticate its clients (a TURN relay's credentials, IMAP's login).
+- Tunnelled connections have no HTTP timeouts and are not counted as
+  requests. The list is read at startup; a change needs a restart.
+
 ## Configuration reference
 
 | Variable | Config key | Description |

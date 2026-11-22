@@ -62,6 +62,7 @@ pub mod per_core;
 #[doc(hidden)]
 pub mod framing;
 pub mod proxy_protocol;
+pub mod tls_tunnel;
 
 // The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
 // `std::net::TcpListener` and OS threads, neither available on `wasm32-wasip2`.
@@ -1051,6 +1052,15 @@ pub async fn serve_tls_connection(
             crate::metrics::tls::record_rustls(server_conn);
             let sni = server_conn.server_name().map(|s| s.to_string());
             let protocol = server_conn.alpn_protocol().map(|p| p.to_vec());
+
+            // A name configured as a TLS tunnel (`tls_tunnels`) is not HTTP:
+            // its bytes go to the tunnel's local target, whatever ALPN said
+            // (a TLS-ALPN-01 validation excepted).
+            if protocol.as_deref() != Some(crate::tls::ACME_TLS_ALPN) {
+                if let Some(target) = tls_tunnel::target(sni.as_deref()) {
+                    return tls_tunnel::run(tls_stream, target, peer_addr).await;
+                }
+            }
 
             match protocol.as_deref() {
                 // A TLS-ALPN-01 validation: the handshake was the answer.

@@ -439,3 +439,17 @@ fn offline_check_still_reports_mistakes_in_the_text() {
     assert!(has(&report.errors, "unknown strategy"), "{:?}", report.errors);
 }
 
+
+#[test]
+fn tls_tunnels_go_to_this_machine_only() {
+    let ok = check_str(r#"
+tls_tunnels = ["turn.example.com=127.0.0.1:3478", "imap.example.com=[::1]:143"]
+"#);
+    assert!(!has(&ok.errors, "tls_tunnels"), "{:?}", ok.errors);
+    let bad = check_str(r#"
+tls_tunnels = ["turn.example.com=10.0.0.5:3478", "nameonly", "x=localhost"]
+"#);
+    assert!(has(&bad.errors, "this machine only"), "{:?}", bad.errors);
+    assert!(has(&bad.errors, "name=address"), "{:?}", bad.errors);
+    assert!(has(&bad.errors, "not an address"), "{:?}", bad.errors);
+}

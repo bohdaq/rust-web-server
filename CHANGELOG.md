@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- **TLS tunnels: other services behind port 443.** `tls_tunnels =
+  ["turn.example.com=127.0.0.1:3478"]` (`RWS_CONFIG_TLS_TUNNELS`) sends
+  TLS connections for that name, after rws's own handshake, to a local
+  TCP service instead of serving them as HTTP; every other name is the
+  web site as before. For services that must work on networks that allow
+  only 443 (a TURN relay, IMAP) without a second IP address. Targets are
+  loopback only (`rws --check` refuses others); the name decides, not
+  ALPN. See [TLS tunnels](https://rws8.tech/features/https-tls/#tls-tunnels-other-services-behind-443).
+
 ## 18.38.0 — 2026-11-16
 
 ### Added

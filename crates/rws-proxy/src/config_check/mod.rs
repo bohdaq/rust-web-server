@@ -264,6 +264,13 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: expected true or false"));
                 }
             }
+            "RWS_CONFIG_TLS_TUNNELS" => {
+                for entry in value.split(',').filter(|e| !e.trim().is_empty()) {
+                    if let Some(problem) = crate::server::tls_tunnel::problem(entry) {
+                        report.error(format!("tls_tunnels: {problem}"));
+                    }
+                }
+            }
             "RWS_CONFIG_GATEWAY_API_MODE" => {
                 if !matches!(value.to_ascii_lowercase().as_str(), "shared" | "provisioned") {
                     report.error(format!("{key} = {value:?}: expected shared or provisioned"));

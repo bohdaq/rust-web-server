@@ -6884,6 +6884,7 @@ pub async fn rust_web_server::server::Server::run_redirect()
 pub async fn rust_web_server::server::Server::run_tls(std::net::tcp::TcpListener, rust_web_server::thread_pool::ThreadPool, impl rust_web_server::application::Application + core::marker::Send + 'static + core::clone::Clone)
 pub async fn rust_web_server::server::drain_requests() -> i64
 pub async fn rust_web_server::server::proxy_protocol::read_async<S: tokio::io::async_read::AsyncRead + core::marker::Unpin>(&mut S) -> core::io::error::Result<core::option::Option<core::net::socket_addr::SocketAddr>>
+pub async fn rust_web_server::server::tls_tunnel::run<S>(S, core::net::socket_addr::SocketAddr, core::net::socket_addr::SocketAddr) where S: tokio::io::async_read::AsyncRead + tokio::io::async_write::AsyncWrite + core::marker::Unpin
 pub async fn rust_web_server::session::DbSessionStore::create(&self) -> core::result::Result<rust_web_server::session::Session, rust_web_server::model::DbError>
 pub async fn rust_web_server::session::DbSessionStore::create_with_id(&self, alloc::string::String) -> core::result::Result<rust_web_server::session::Session, rust_web_server::model::DbError>
 pub async fn rust_web_server::session::DbSessionStore::destroy(&self, &str) -> core::result::Result<(), rust_web_server::model::DbError>
@@ -7785,6 +7786,7 @@ pub const rust_web_server::server::per_core::RWS_CONFIG_RUNTIME: &str
 pub const rust_web_server::server::proxy_protocol::V1_MAX: usize
 pub const rust_web_server::server::proxy_protocol::V2_MAX: usize
 pub const rust_web_server::server::proxy_protocol::V2_SIGNATURE: [u8; 12]
+pub const rust_web_server::server::tls_tunnel::CONNECT_TIMEOUT: core::time::Duration
 pub const rust_web_server::server_config::log_privacy::ALWAYS_REDACTED_HEADERS: [&str; 4]
 pub const rust_web_server::server_config::log_privacy::REDACTED: &str
 pub const rust_web_server::server_config::log_privacy::RWS_CONFIG_ACCESS_LOG_ANONYMIZE_IP: &str
@@ -10921,6 +10923,9 @@ pub fn rust_web_server::server::proxy_protocol::parse(&[u8]) -> rust_web_server:
 pub fn rust_web_server::server::proxy_protocol::read_blocking<S: alloc::io::read::Read>(&mut S) -> core::io::error::Result<core::option::Option<core::net::socket_addr::SocketAddr>>
 pub fn rust_web_server::server::request_shutdown()
 pub fn rust_web_server::server::startup_summary(&str, &str, i32) -> alloc::string::String
+pub fn rust_web_server::server::tls_tunnel::parse(&str) -> std::collections::hash::map::HashMap<alloc::string::String, core::net::socket_addr::SocketAddr>
+pub fn rust_web_server::server::tls_tunnel::problem(&str) -> core::option::Option<alloc::string::String>
+pub fn rust_web_server::server::tls_tunnel::target(core::option::Option<&str>) -> core::option::Option<core::net::socket_addr::SocketAddr>
 pub fn rust_web_server::server_config::ServerConfig::clone(&self) -> Self
 pub fn rust_web_server::server_config::ServerConfig::current() -> alloc::rcs::arc::Arc<rust_web_server::server_config::ServerConfig>
 pub fn rust_web_server::server_config::ServerConfig::default() -> Self
@@ -11689,6 +11694,7 @@ pub mod rust_web_server::schema
 pub mod rust_web_server::server
 pub mod rust_web_server::server::per_core
 pub mod rust_web_server::server::proxy_protocol
+pub mod rust_web_server::server::tls_tunnel
 pub mod rust_web_server::server_config
 pub mod rust_web_server::server_config::log_privacy
 pub mod rust_web_server::service_discovery

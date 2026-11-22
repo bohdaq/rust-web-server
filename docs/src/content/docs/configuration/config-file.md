@@ -273,6 +273,7 @@ retention_days   = 30                        # 1–90
 log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) | "combined" | "off"
 watch                   = true       # RWS_CONFIG_WATCH: reload when this file or a certificate changes (default false)
 proxy_protocol          = true       # RWS_CONFIG_PROXY_PROTOCOL: connections start with a PROXY protocol header (default false)
+tls_tunnels             = ["turn.example.com=127.0.0.1:3478"]  # RWS_CONFIG_TLS_TUNNELS: these names on 443 go to a local TCP service (see HTTPS/TLS)
 access_log              = "/var/log/rws/access.log"  # RWS_CONFIG_ACCESS_LOG: write the access log here instead of stdout
 access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size (default 100M since 18.15.0); 0 = never (use logrotate + SIGUSR1)
 access_log_keep         = 5          # RWS_CONFIG_ACCESS_LOG_KEEP: rotated files kept (access.log.1 … .5)
