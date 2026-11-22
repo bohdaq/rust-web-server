@@ -17,6 +17,12 @@ ignore = [
     # sqlx-sqlite (`model-sqlite`), and neither sqlx 0.8.6 nor 0.9.0 accepts
     # the fixed libsqlite3-sys 0.39. Drop when sqlx allows it.
     { id = "RUSTSEC-2026-0459", reason = "local-only, crafted db+wal files; no sqlx release takes libsqlite3-sys 0.39" },
+    # chrono, chrono-tz and chrono-tz-build marked unmaintained (no
+    # vulnerability): only through tera's date filters (`templates`), which
+    # no tera release replaces yet. Drop when tera moves off chrono.
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained, no vulnerability; only via tera (templates)" },
+    { id = "RUSTSEC-2026-0555", reason = "unmaintained, no vulnerability; only via tera (templates)" },
+    { id = "RUSTSEC-2026-0559", reason = "unmaintained, no vulnerability; only via tera (templates)" },
 ]
 
 [licenses]

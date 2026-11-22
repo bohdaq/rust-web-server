@@ -7,6 +7,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Security
+
+- **wasmtime 49.0.7 and url 2.5.9** (RUSTSEC-2026-0566 to -0573: a Wasm
+  guest could exhaust host memory or abort the process; RUSTSEC-2026-0592:
+  a stack overflow in `Url::origin()` on nested `blob:` URLs). wasmtime is
+  used only by the `wasm-plugin` feature.
+
 ### Added
 
 - **TLS tunnels: other services behind port 443.** `tls_tunnels =
