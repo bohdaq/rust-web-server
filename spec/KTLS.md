@@ -25,10 +25,10 @@ Branch `ktls` (worktree `~/git/rws-ktls`), pushed, not merged, not released.
 | 0 | Baseline benchmark: static files HTTPS vs HTTP | done |
 | 1 | Server H1: secret extraction, `KtlsStream`, sendfile over TLS, setting `tls_ktls` | done |
 | 2 | Control records (alert/close), KeyUpdate, startup probe, fallback, metrics | done |
-| 3 | Tests (loopback rustls client), CI, docs, re-benchmark | done (CI: branch push) |
+| 3 | Tests (loopback rustls client), CI, docs, re-benchmark | done locally: CI-equivalent suites green with kTLS off and on (rws-server 1838+142, facade, proxy 631, gateway 131, http1 1188), public API unchanged, e2e with kTLS on: h2spec 146/146, mTLS CRL, WebSocket/SSE (TLS, both runtimes), ACME Pebble incl. TLS-ALPN-01, TLS tunnel. Not run: PROXY protocol (no haproxy here), on-demand ACME (needs BIND), fips. GitHub CI doesn't run on branches |
 | 4a | H2 connections on kTLS | done; h2spec 146/146 with kTLS off and on (151/151 connections on kTLS) |
-| 4b | rws-proxy: splice upstream → kTLS client socket | not done — see Log |
-| 4c | rws HTTP client: kTLS after client handshake | done for the proxy's async upstream pool (`AsyncTlsStream` enum; blocking reader for streamed bodies). Sync `http_client`/sync proxy pool not done (blocking rustls `StreamOwned`; no measurable reason) |
+| 4b | rws-proxy: splice upstream → kTLS client socket | skipped by choice — see Log |
+| 4c | rws HTTP client: kTLS after client handshake | done for the proxy's async upstream pool (`AsyncTlsStream` enum; blocking reader for streamed bodies). Skipped by choice: `http_client::AsyncClient` (outbound calls from handlers — OIDC, webhooks, exporters; small bodies, where kTLS measured slower), sync `http_client` and the sync proxy pool (blocking rustls `StreamOwned`) |
 | 5 | Upstream issues + HITOP note | drafts in `spec/KTLS_UPSTREAM.md`; nothing filed |
 
 ## Design notes
