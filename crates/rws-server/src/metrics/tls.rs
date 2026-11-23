@@ -121,6 +121,8 @@ pub fn prometheus_text() -> String {
             ));
         }
     }
+    #[cfg(all(feature = "http2", target_os = "linux"))]
+    out.push_str(&crate::server::ktls::prometheus_text());
     out
 }
 

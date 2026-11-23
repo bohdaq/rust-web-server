@@ -235,12 +235,46 @@ tls_tunnels = ["turn.example.com=127.0.0.1:3478"]   # name=address, one per tunn
 - Tunnelled connections have no HTTP timeouts and are not counted as
   requests. The list is read at startup; a change needs a restart.
 
+## Kernel TLS (kTLS)
+
+On Linux, rws can hand a connection to the kernel's TLS layer once the
+handshake is done: rustls negotiates as usual, then the session keys go
+to the kernel, which encrypts and decrypts the records. Static files then
+go out with `sendfile` over HTTPS as over plain HTTP, without passing
+through rws. Off by default; since 18.40.0.
+
+```toml
+tls_ktls = true   # RWS_CONFIG_TLS_KTLS
+```
+
+- **Measure before you turn it on.** The kernel encrypts instead of
+  rws's AES-GCM (aws-lc), so the saving depends on which is faster on your
+  machine. On Linux 6.8 with an Intel Core i7-7700 (AES-NI, no VAES) it
+  saved nothing: the kernel's AES-GCM cost what the avoided copies did,
+  and small responses got about 15% slower. `bench/ktls.sh` in the
+  repository compares plain HTTP, rustls and kTLS on your machine. Newer
+  kernels (6.11 rewrote x86 AES-GCM) and network cards that encrypt TLS
+  themselves are where it pays.
+- It needs the kernel's `tls` module. rws tries each cipher once at
+  startup; without the module it logs that and serves TLS as before.
+- HTTP/1.1 and HTTP/2 over TLS 1.2 and 1.3 with AES-128-GCM,
+  AES-256-GCM or ChaCha20-Poly1305 are handed over; a connection that
+  can't be stays on rustls. HTTP/3 (QUIC) is unaffected.
+- A TLS 1.3 key update from the client ends the connection (the client
+  reconnects): rustls can't yet hand over the secrets needed to follow
+  it. Browsers and curl don't send one on ordinary connections.
+- Ignored in [FIPS builds](#fips-140-3): the kernel's AES-GCM isn't the
+  validated module.
+- `rws_tls_ktls_connections_total{result}` on [`/metrics`](/features/metrics/)
+  counts connections handed over and why others weren't.
+
 ## Configuration reference
 
 | Variable | Config key | Description |
 |---|---|---|
 | `RWS_CONFIG_TLS_CERT_FILE` | `tls_cert_file` | Path to the PEM certificate chain |
 | `RWS_CONFIG_TLS_KEY_FILE` | `tls_key_file` | Path to the PEM private key |
+| `RWS_CONFIG_TLS_KTLS` | `tls_ktls` | `true`: hand connections to kernel TLS after the handshake (Linux; [Kernel TLS](#kernel-tls-ktls)) |
 | `RWS_CONFIG_HTTP_REDIRECT_PORT` | `http_redirect_port` | Plain HTTP port that issues 301 → HTTPS |
 
 :::note[Hot reload]

@@ -29,6 +29,18 @@ impl SendfileSocket for tokio_rustls::server::TlsStream<tokio::net::TcpStream> {
 
 impl SendfileSocket for tokio::io::DuplexStream {}
 
+/// A TLS stream still on rustls after the kTLS handshake wrapper.
+#[cfg(target_os = "linux")]
+impl SendfileSocket for tokio_rustls::server::TlsStream<crate::server::ktls::Corked<tokio::net::TcpStream>> {}
+
+/// kTLS: the kernel encrypts what `sendfile` puts on the socket.
+#[cfg(target_os = "linux")]
+impl SendfileSocket for crate::server::ktls::KtlsStream {
+    fn sendfile_socket(&self) -> Option<&tokio::net::TcpStream> {
+        Some(self.tcp())
+    }
+}
+
 /// `true` where [`send_file`] is implemented.
 #[doc(hidden)]
 pub const SUPPORTED: bool = cfg!(any(target_os = "linux", target_os = "macos"));

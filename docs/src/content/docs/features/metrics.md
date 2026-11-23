@@ -172,6 +172,8 @@ With a certificate configured, the TLS listener reports what each handshake nego
 | `rws_tls_handshakes_total` | Counter | `tls_protocol_version`, `tls_cipher`, `tls_group` | Completed handshakes (HTTP/1.1 and HTTP/2 over TLS). `tls_group` is the key exchange: `X25519MLKEM768` (post-quantum hybrid, preferred when the client offers it), `X25519`, `secp256r1`, … |
 | `rws_tls_handshake_failures_total` | Counter | — | Handshakes that failed (not counting clients that never finished) |
 | `rws_tls_certificate_expiry_timestamp_seconds` | Gauge | `name` | The leaf certificate's notAfter, Unix seconds: `default`, each `[[virtual_host]]` domain, each [on-demand](/features/acme/) name; updated when certificates are reloaded (SIGHUP, ACME renewal) |
+| `rws_tls_ktls_connections_total` | Counter | `result` | With [`tls_ktls`](/features/https-tls/#kernel-tls-ktls) on: connections handed to kernel TLS (`enabled`), kept on rustls (`fallback_cipher`: a cipher the kernel lacks; `fallback_buffered`: rustls still had records to send; `fallback_ulp`: the kernel refused the `tls` layer), or closed because the hand-over failed (`failed`) |
+| `rws_tls_ktls_key_update_closes_total` | Counter | — | kTLS connections closed because the client sent a TLS 1.3 KeyUpdate |
 
 HTTP/3 handshakes aren't counted: the QUIC library doesn't expose what its TLS session negotiated.
 

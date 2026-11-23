@@ -141,6 +141,11 @@ pub fn create_tls_acceptor_from_vhosts(
     if acme_hooks().is_some_and(|acme| (acme.tls_alpn_enabled)()) {
         config.alpn_protocols.push(ACME_TLS_ALPN.to_vec());
     }
+    // kTLS hands the traffic secrets to the kernel after the handshake.
+    #[cfg(target_os = "linux")]
+    {
+        config.enable_secret_extraction = crate::server::ktls::enabled();
+    }
 
     require_fips(config.fips())?;
     Ok(TlsAcceptor::from(Arc::new(config)))

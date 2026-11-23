@@ -7,6 +7,18 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased
 
+### Added
+
+- **Kernel TLS (Linux), opt-in.** `tls_ktls = true`
+  (`RWS_CONFIG_TLS_KTLS`): after the rustls handshake the connection's
+  keys go to the kernel, which encrypts and decrypts the records, and
+  static files go out with `sendfile` over HTTPS. HTTP/1.1 and HTTP/2,
+  TLS 1.2 and 1.3, AES-GCM and ChaCha20-Poly1305; anything else stays on
+  rustls. Measure first (`bench/ktls.sh`): on Linux 6.8 with an AES-NI/AVX2
+  CPU the kernel's AES-GCM made it no cheaper than rustls. New metrics
+  `rws_tls_ktls_connections_total{result}` and
+  `rws_tls_ktls_key_update_closes_total`. Ignored in FIPS builds.
+
 ### Fixed
 
 - **HTTP/2 and HTTP/3: static files over 256 KiB.** Since 18.17.0 a

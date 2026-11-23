@@ -62,6 +62,8 @@ pub mod per_core;
 #[doc(hidden)]
 pub mod framing;
 pub mod proxy_protocol;
+#[cfg(all(feature = "http2", target_os = "linux"))]
+pub mod ktls;
 pub mod tls_tunnel;
 
 // The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
@@ -1012,7 +1014,9 @@ impl Address {
 }
 
 /// One accepted TLS connection: handshake (bounded by
-/// `TLS_HANDSHAKE_TIMEOUT`), then HTTP/2 or HTTP/1.1 by ALPN.
+/// `TLS_HANDSHAKE_TIMEOUT`), then HTTP/2 or HTTP/1.1 by ALPN. With kTLS on
+/// (`tls_ktls`, Linux) the handshake runs over [`ktls::Corked`] and the
+/// connection is then handed to the kernel when it can be.
 #[cfg(feature = "http2")]
 #[doc(hidden)]
 pub async fn serve_tls_connection(
@@ -1023,13 +1027,40 @@ pub async fn serve_tls_connection(
 ) {
     let _ = tcp_stream.set_nodelay(true);
     let Some(peer_addr) = client_address(&mut tcp_stream, peer_addr).await else { return };
+    #[cfg(target_os = "linux")]
+    if ktls::enabled() {
+        let Some(tls_stream) = tls_handshake(ktls::Corked::new(tcp_stream), &acceptor).await else { return };
+        let (sni, protocol) = negotiated(tls_stream.get_ref().1);
+        if protocol.as_deref() == Some(crate::tls::ACME_TLS_ALPN) {
+            return; // a TLS-ALPN-01 validation: the handshake was the answer
+        }
+        match ktls::upgrade(tls_stream) {
+            ktls::Upgraded::Ktls(stream) => serve_tls_stream(stream, sni, protocol, peer_addr, app).await,
+            ktls::Upgraded::Kept(stream) => serve_tls_stream(stream, sni, protocol, peer_addr, app).await,
+            ktls::Upgraded::Failed(e) => eprintln!("{e}"),
+        }
+        return;
+    }
+    let Some(tls_stream) = tls_handshake(tcp_stream, &acceptor).await else { return };
+    let (sni, protocol) = negotiated(tls_stream.get_ref().1);
+    serve_tls_stream(tls_stream, sni, protocol, peer_addr, app).await
+}
+
+/// The server side of a TLS handshake over `io`, on-demand certificates
+/// included. `None` (failure counted and logged, timeouts silent) when it
+/// doesn't complete.
+#[cfg(feature = "http2")]
+async fn tls_handshake<IO>(io: IO, acceptor: &tokio_rustls::TlsAcceptor) -> Option<tokio_rustls::server::TlsStream<IO>>
+where
+    IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
     let timed_out = || std::io::Error::from(std::io::ErrorKind::TimedOut);
     let handshake = async {
         if let Some(acme) = crate::tls::acme_hooks().filter(|acme| (acme.on_demand_enabled)()) {
             // On-demand TLS: read the ClientHello, get a certificate for
             // its name if it should have one (bounded by
             // `on_demand::HANDSHAKE_WAIT`), then finish the handshake.
-            let lazy = tokio_rustls::LazyConfigAcceptor::new(rustls::server::Acceptor::default(), tcp_stream);
+            let lazy = tokio_rustls::LazyConfigAcceptor::new(rustls::server::Acceptor::default(), io);
             let start = tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, lazy).await.map_err(|_| timed_out())??;
             let hello = start.client_hello();
             let name = hello.server_name().filter(|_| !(acme.is_challenge)(&hello)).map(str::to_string);
@@ -1039,46 +1070,61 @@ pub async fn serve_tls_connection(
             let finish = start.into_stream(acceptor.config().clone());
             return tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, finish).await.map_err(|_| timed_out())?;
         }
-        tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, acceptor.accept(tcp_stream)).await.map_err(|_| timed_out())?
+        tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, acceptor.accept(io)).await.map_err(|_| timed_out())?
     };
     match handshake.await {
-        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {} // client never finished the handshake
+        Ok(tls_stream) => Some(tls_stream),
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => None, // client never finished the handshake
         Err(e) => {
             crate::metrics::tls::record_handshake_failure();
-            eprintln!("TLS handshake failed: {}", e)
+            eprintln!("TLS handshake failed: {}", e);
+            None
         }
-        Ok(tls_stream) => {
-            let server_conn = tls_stream.get_ref().1;
-            crate::metrics::tls::record_rustls(server_conn);
-            let sni = server_conn.server_name().map(|s| s.to_string());
-            let protocol = server_conn.alpn_protocol().map(|p| p.to_vec());
+    }
+}
 
-            // A name configured as a TLS tunnel (`tls_tunnels`) is not HTTP:
-            // its bytes go to the tunnel's local target, whatever ALPN said
-            // (a TLS-ALPN-01 validation excepted).
-            if protocol.as_deref() != Some(crate::tls::ACME_TLS_ALPN) {
-                if let Some(target) = tls_tunnel::target(sni.as_deref()) {
-                    return tls_tunnel::run(tls_stream, target, peer_addr).await;
-                }
+/// Count what a finished handshake negotiated; its SNI name and ALPN protocol.
+#[cfg(feature = "http2")]
+fn negotiated(server_conn: &rustls::ServerConnection) -> (Option<String>, Option<Vec<u8>>) {
+    crate::metrics::tls::record_rustls(server_conn);
+    (server_conn.server_name().map(|s| s.to_string()), server_conn.alpn_protocol().map(|p| p.to_vec()))
+}
+
+/// Serve a decrypted TLS connection: a TLS tunnel, HTTP/2 or HTTP/1.1.
+#[cfg(feature = "http2")]
+async fn serve_tls_stream<S>(
+    tls_stream: S,
+    sni: Option<String>,
+    protocol: Option<Vec<u8>>,
+    peer_addr: std::net::SocketAddr,
+    app: impl Application + Send + 'static + Clone,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + sendfile::SendfileSocket + 'static,
+{
+    // A name configured as a TLS tunnel (`tls_tunnels`) is not HTTP:
+    // its bytes go to the tunnel's local target, whatever ALPN said
+    // (a TLS-ALPN-01 validation excepted).
+    if protocol.as_deref() != Some(crate::tls::ACME_TLS_ALPN) {
+        if let Some(target) = tls_tunnel::target(sni.as_deref()) {
+            return tls_tunnel::run(tls_stream, target, peer_addr).await;
+        }
+    }
+
+    match protocol.as_deref() {
+        // A TLS-ALPN-01 validation: the handshake was the answer.
+        Some(crate::tls::ACME_TLS_ALPN) => {}
+        Some(b"h2") => {
+            if let Err(e) = crate::h2_server::handle_connection(tls_stream, peer_addr, sni, app).await {
+                eprintln!("H2 connection error: {}", e);
             }
-
-            match protocol.as_deref() {
-                // A TLS-ALPN-01 validation: the handshake was the answer.
-                Some(crate::tls::ACME_TLS_ALPN) => {}
-                Some(b"h2") => {
-                    if let Err(e) = crate::h2_server::handle_connection(tls_stream, peer_addr, sni, app).await {
-                        eprintln!("H2 connection error: {}", e);
-                    }
-                }
-                _ => {
-                    crate::metrics::connection_open();
-                    let result = http1_async::serve(tls_stream, peer_addr, sni, true, app).await;
-                    crate::metrics::connection_close();
-                    if let Err(e) = result {
-                        crate::metrics::record_error();
-                        eprintln!("H1 TLS error: {}", e);
-                    }
-                }
+        }
+        _ => {
+            crate::metrics::connection_open();
+            let result = http1_async::serve(tls_stream, peer_addr, sni, true, app).await;
+            crate::metrics::connection_close();
+            if let Err(e) = result {
+                crate::metrics::record_error();
+                eprintln!("H1 TLS error: {}", e);
             }
         }
     }
