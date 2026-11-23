@@ -653,6 +653,9 @@ async fn write_file_zero_copy<S: AsyncWrite + Unpin + SendfileSocket>(
     };
 
     let (head, _) = Server::stream_file_head(std::mem::replace(response, Response::new()));
+    if !stream.reserve_send(head.len() as u64 + len) {
+        return Err("kTLS: the cipher's record limit is reached; closing the connection".to_string());
+    }
     let socket = stream.sendfile_socket().expect("checked above");
     sendfile::send_file(socket, &head, file.file(), len).await.map_err(|e| e.to_string())?;
     Ok(true)

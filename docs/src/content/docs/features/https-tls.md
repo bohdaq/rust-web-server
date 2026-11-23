@@ -250,19 +250,21 @@ tls_ktls = true   # RWS_CONFIG_TLS_KTLS
 - **Measure before you turn it on.** The kernel encrypts instead of
   rws's AES-GCM (aws-lc), so the saving depends on which is faster on your
   machine. On Linux 6.8 with an Intel Core i7-7700 (AES-NI, no VAES) it
-  saved nothing: the kernel's AES-GCM cost what the avoided copies did,
-  and small responses got about 15% slower. `bench/ktls.sh` in the
-  repository compares plain HTTP, rustls and kTLS on your machine. Newer
-  kernels (6.11 rewrote x86 AES-GCM) and network cards that encrypt TLS
-  themselves are where it pays.
+  saved nothing: 1 MiB and larger files cost the same CPU per byte as
+  with rustls, 1 KiB responses about 12% more and 64 KiB ones 35–40% more.
+  `bench/ktls.sh` in the repository compares plain HTTP, rustls and kTLS
+  on your machine; re-run it after a kernel or CPU change.
 - It needs the kernel's `tls` module. rws tries each cipher once at
   startup; without the module it logs that and serves TLS as before.
 - HTTP/1.1 and HTTP/2 over TLS 1.2 and 1.3 with AES-128-GCM,
   AES-256-GCM or ChaCha20-Poly1305 are handed over; a connection that
   can't be stays on rustls. HTTP/3 (QUIC) is unaffected.
 - A TLS 1.3 key update from the client ends the connection (the client
-  reconnects): rustls can't yet hand over the secrets needed to follow
-  it. Browsers and curl don't send one on ordinary connections.
+  has to reconnect): rustls can't yet hand over the secrets needed to
+  follow it. Counted in `rws_tls_ktls_key_update_closes_total`.
+- AES-GCM allows a limited number of records per key and a kTLS
+  connection can't change keys, so a connection that reaches the limit
+  (about 2^24 records, some hundreds of GB) is closed.
 - Ignored in [FIPS builds](#fips-140-3): the kernel's AES-GCM isn't the
   validated module.
 - `rws_tls_ktls_connections_total{result}` on [`/metrics`](/features/metrics/)

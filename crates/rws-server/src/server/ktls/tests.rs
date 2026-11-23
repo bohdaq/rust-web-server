@@ -131,6 +131,92 @@ fn client_config(pki: &Pki, version: &'static rustls::SupportedProtocolVersion, 
     Arc::new(config)
 }
 
+/// Records the bytes a client reads (the server's records, as sent).
+struct Recording {
+    tcp: TcpStream,
+    seen: Arc<std::sync::Mutex<Vec<u8>>>,
+}
+
+impl tokio::io::AsyncRead for Recording {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        let start = buf.filled().len();
+        ready!(Pin::new(&mut this.tcp).poll_read(cx, buf))?;
+        this.seen.lock().unwrap().extend_from_slice(&buf.filled()[start..]);
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl tokio::io::AsyncWrite for Recording {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.get_mut().tcp).poll_write(cx, buf)
+    }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().tcp).poll_flush(cx)
+    }
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().tcp).poll_shutdown(cx)
+    }
+}
+
+/// TLS 1.2 AES-GCM sends an explicit 8-byte nonce in every encrypted record.
+/// rustls derives it as base XOR sequence number; the kernel increments
+/// from the value it's given. Every record the server sends under the one
+/// key — rustls' Finished, then the kernel's — must carry a different nonce.
+#[tokio::test]
+async fn tls12_gcm_explicit_nonces_never_repeat_across_the_hand_over() {
+    if !kernel_has_ktls() {
+        return;
+    }
+    use rustls::CipherSuite as S;
+    for suite in [S::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, S::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384] {
+        if !supported_ciphers().contains(&cipher_of(suite).unwrap()) {
+            continue;
+        }
+        let pki = pki();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let acceptor = tokio_rustls::TlsAcceptor::from(server_config(&pki, &rustls::version::TLS12));
+        let connector = tokio_rustls::TlsConnector::from(client_config(&pki, &rustls::version::TLS12, Some(suite)));
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let tls = acceptor.accept(Corked::new(tcp)).await.unwrap();
+            upgrade(tls)
+        });
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let tcp = TcpStream::connect(addr).await.unwrap();
+        let name = rustls::pki_types::ServerName::try_from("localhost").unwrap();
+        let mut client = connector.connect(name, Recording { tcp, seen: seen.clone() }).await.unwrap();
+        let mut server = ktls(server.await.unwrap());
+        for i in 0..20u8 {
+            server.write_all(&[i; 100]).await.unwrap();
+            let mut buf = [0u8; 100];
+            client.read_exact(&mut buf).await.unwrap();
+            assert_eq!([i; 100], buf);
+        }
+        // Walk the server's records: after ChangeCipherSpec everything is
+        // encrypted and starts with the explicit nonce.
+        let wire = seen.lock().unwrap().clone();
+        let (mut at, mut encrypted, mut nonces) = (0, false, Vec::new());
+        while at + 5 <= wire.len() {
+            let (kind, len) = (wire[at], u16::from_be_bytes([wire[at + 3], wire[at + 4]]) as usize);
+            let body = &wire[at + 5..at + 5 + len];
+            if encrypted {
+                nonces.push(body[..8].to_vec());
+            }
+            if kind == 20 {
+                encrypted = true;
+            }
+            at += 5 + len;
+        }
+        assert_eq!(21, nonces.len(), "Finished + 20 records ({suite:?})");
+        let mut unique = nonces.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(nonces.len(), unique.len(), "{suite:?}: an explicit nonce repeats: {nonces:02x?}");
+    }
+}
+
 /// A connected pair: the server side upgraded to kTLS, the client on rustls.
 /// `early` is written by the client as soon as its handshake completes.
 async fn pair(
@@ -381,6 +467,84 @@ async fn a_key_update_closes_the_connection() {
     let err = server.read(&mut buf).await.unwrap_err();
     assert_eq!(io::ErrorKind::ConnectionAborted, err.kind(), "{err}");
     assert!(key_update_closes() > before);
+}
+
+/// AES-GCM has a record limit and a kTLS connection can't rekey: writes
+/// past it fail instead of going out.
+#[tokio::test]
+async fn writes_stop_at_the_record_limit() {
+    if !kernel_has_ktls() {
+        return;
+    }
+    let (server, mut client) = pair(&rustls::version::TLS13, None, b"").await;
+    let mut server = ktls(server);
+    server.records_left.store(3, Ordering::Relaxed);
+    server.write_all(&[7u8; 20_000]).await.unwrap(); // two records
+    let mut got = vec![0u8; 20_000];
+    client.read_exact(&mut got).await.unwrap();
+    let err = server.write_all(&[7u8; 20_000]).await.unwrap_err();
+    assert!(err.to_string().contains("record limit"), "{err}");
+    assert!(server.reserve_records(1), "one record still fits");
+    assert!(!server.reserve_records(1));
+}
+
+#[test]
+fn records_are_counted_per_16k() {
+    assert_eq!(1, records_for(0));
+    assert_eq!(1, records_for(1));
+    assert_eq!(1, records_for(16_384));
+    assert_eq!(2, records_for(16_385));
+    assert_eq!(64, records_for(1 << 20));
+}
+
+/// The client side: rws connecting to a TLS server (an upstream). A TLS 1.3
+/// server sends session tickets after the handshake; the kTLS client skips
+/// them and reads the data behind them.
+#[tokio::test]
+async fn a_client_connection_runs_on_ktls_and_skips_session_tickets() {
+    if !kernel_has_ktls() {
+        return;
+    }
+    for version in [&rustls::version::TLS13, &rustls::version::TLS12] {
+        let pki = pki();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut server_config = (*server_config(&pki, version)).clone();
+        server_config.enable_secret_extraction = false;
+        server_config.send_tls13_tickets = 2;
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut tls = acceptor.accept(tcp).await.unwrap();
+            let mut buf = [0u8; 7];
+            tls.read_exact(&mut buf).await.unwrap();
+            assert_eq!(b"request", &buf);
+            tls.write_all(b"response").await.unwrap();
+            tls.flush().await.unwrap();
+            tls.get_mut().1.send_close_notify();
+            tls.flush().await.unwrap();
+        });
+        let mut config = (*client_config(&pki, version, None)).clone();
+        config.enable_secret_extraction = true;
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+        let tcp = TcpStream::connect(addr).await.unwrap();
+        let name = rustls::pki_types::ServerName::try_from("localhost").unwrap();
+        let tls = connector.connect(name, Corked::new(tcp)).await.unwrap();
+        let mut client = match upgrade(tls) {
+            Upgraded::Ktls(s) => s,
+            Upgraded::Kept(_) => panic!("kept on rustls"),
+            Upgraded::Failed(e) => panic!("failed: {e}"),
+        };
+        client.write_all(b"request").await.unwrap();
+        // One byte at a time: tickets and the close_notify arrive in pieces.
+        let mut got = Vec::new();
+        let mut byte = [0u8; 1];
+        while client.read(&mut byte).await.unwrap() == 1 {
+            got.push(byte[0]);
+        }
+        assert_eq!(b"response", &got[..], "{version:?}");
+        server.await.unwrap();
+    }
 }
 
 #[tokio::test]

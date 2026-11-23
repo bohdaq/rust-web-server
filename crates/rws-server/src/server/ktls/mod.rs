@@ -6,11 +6,10 @@
 //!
 //! Opt-in with `tls_ktls = true` (`RWS_CONFIG_TLS_KTLS`); off by default and
 //! never in `fips` builds (the kernel's AEAD isn't the validated module).
-//! Whether it saves CPU depends on the kernel's AES-GCM against aws-lc's: on
-//! Linux 6.8 with an AES-NI/AVX2 CPU (no VAES) it doesn't — the kernel's
-//! encryption costs what the saved copies do (`bench/ktls.sh`,
-//! `spec/KTLS.md`). NIC TLS offload, where the kernel hands records to the
-//! card, is what kTLS makes possible beyond that.
+//! Whether it saves CPU depends on the kernel and CPU: on Linux 6.8 with an
+//! AES-NI/AVX2 CPU (no VAES) it doesn't (`bench/ktls.sh`, `spec/KTLS.md`).
+//! NIC TLS offload, where the kernel hands records to the card, is what
+//! kTLS makes possible beyond that.
 //!
 //! How a connection gets there:
 //!
@@ -319,10 +318,46 @@ impl KtlsSocket for Corked<TcpStream> {
     }
 }
 
-/// Hand a finished server handshake to the kernel, or keep it on rustls.
-pub fn upgrade(mut tls: tokio_rustls::server::TlsStream<Corked<TcpStream>>) -> Upgraded<tokio_rustls::server::TlsStream<Corked<TcpStream>>> {
-    tls.get_mut().0.uncork();
-    let (corked, conn) = tls.get_mut();
+/// A finished tokio-rustls handshake over [`Corked`]: server or client.
+pub trait Handshaken: Sized {
+    type Data;
+    type Conn: std::ops::DerefMut<Target = rustls::ConnectionCommon<Self::Data>> + ExtractSecrets;
+    /// The client side (it receives TLS 1.3 session tickets after the
+    /// handshake).
+    const CLIENT: bool;
+    fn parts(&mut self) -> (&mut Corked<TcpStream>, &mut Self::Conn);
+    fn into_parts(self) -> (Corked<TcpStream>, Self::Conn);
+}
+
+impl Handshaken for tokio_rustls::server::TlsStream<Corked<TcpStream>> {
+    type Data = rustls::server::ServerConnectionData;
+    type Conn = rustls::ServerConnection;
+    const CLIENT: bool = false;
+    fn parts(&mut self) -> (&mut Corked<TcpStream>, &mut Self::Conn) {
+        self.get_mut()
+    }
+    fn into_parts(self) -> (Corked<TcpStream>, Self::Conn) {
+        self.into_inner()
+    }
+}
+
+impl Handshaken for tokio_rustls::client::TlsStream<Corked<TcpStream>> {
+    type Data = rustls::client::ClientConnectionData;
+    type Conn = rustls::ClientConnection;
+    const CLIENT: bool = true;
+    fn parts(&mut self) -> (&mut Corked<TcpStream>, &mut Self::Conn) {
+        self.get_mut()
+    }
+    fn into_parts(self) -> (Corked<TcpStream>, Self::Conn) {
+        self.into_inner()
+    }
+}
+
+/// Hand a finished handshake (server or client) to the kernel, or keep it
+/// on rustls.
+pub fn upgrade<T: Handshaken>(mut tls: T) -> Upgraded<T> {
+    tls.parts().0.uncork();
+    let (corked, conn) = tls.parts();
     let (version, cipher) = match (conn.protocol_version(), conn.negotiated_cipher_suite()) {
         (Some(rustls::ProtocolVersion::TLSv1_3), Some(s)) => (sys::TLS_1_3_VERSION, cipher_of(s.suite())),
         (Some(rustls::ProtocolVersion::TLSv1_2), Some(s)) => (sys::TLS_1_2_VERSION, cipher_of(s.suite())),
@@ -332,6 +367,11 @@ pub fn upgrade(mut tls: tokio_rustls::server::TlsStream<Corked<TcpStream>>) -> U
         record(Outcome::Cipher);
         return Upgraded::Kept(tls);
     };
+    let record_limit = match conn.negotiated_cipher_suite() {
+        Some(rustls::SupportedCipherSuite::Tls13(s)) => s.common.confidentiality_limit,
+        Some(rustls::SupportedCipherSuite::Tls12(s)) => s.common.confidentiality_limit,
+        None => 0,
+    };
     // Nothing may be left half-done in rustls: records still to send
     // (session tickets) or part of a record read. `Corked` keeps reads on
     // record boundaries; whole records rustls already read are processed
@@ -340,6 +380,12 @@ pub fn upgrade(mut tls: tokio_rustls::server::TlsStream<Corked<TcpStream>>) -> U
         record(Outcome::Buffered);
         return Upgraded::Kept(tls);
     }
+    if sys::set_ulp(corked.tcp().as_raw_fd()).is_err() {
+        record(Outcome::Ulp);
+        return Upgraded::Kept(tls);
+    }
+    // From here the socket has the `tls` layer but no keys yet, so it still
+    // passes bytes through: a fallback below keeps working on rustls.
     // tokio-rustls keeps reading while rustls wants data, so a TLS 1.3
     // client's first request — sent with its Finished — may already be
     // decrypted. Its records are behind rustls' read sequence number, so
@@ -355,23 +401,22 @@ pub fn upgrade(mut tls: tokio_rustls::server::TlsStream<Corked<TcpStream>>) -> U
             }
             Ok(n) => prefix.extend_from_slice(&chunk[..n]),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
-            Err(_) => {
-                record(Outcome::Buffered);
-                return Upgraded::Kept(tls);
+            Err(e) => {
+                // Some plaintext may be gone already: don't carry on.
+                record(Outcome::Failed);
+                return Upgraded::Failed(e);
             }
         }
     }
-    if sys::set_ulp(corked.tcp().as_raw_fd()).is_err() {
-        record(Outcome::Ulp);
-        return Upgraded::Kept(tls);
-    }
     // Past this point rustls' state is consumed: failures close the connection.
-    let (corked, conn) = tls.into_inner();
+    let (corked, conn) = tls.into_parts();
     let tcp = corked.into_tcp();
     match install(&tcp, version, cipher, conn) {
-        Ok(()) => {
+        Ok(tx_seq) => {
             record(Outcome::Enabled);
             let mut stream = KtlsStream::new(tcp);
+            stream.client = T::CLIENT;
+            stream.records_left = AtomicU64::new(record_limit.saturating_sub(tx_seq).saturating_sub(RECORD_LIMIT_MARGIN));
             stream.prefix = prefix;
             stream.read_closed = peer_closed && stream.prefix.is_empty();
             stream.closed_after_prefix = peer_closed;
@@ -385,16 +430,19 @@ pub fn upgrade(mut tls: tokio_rustls::server::TlsStream<Corked<TcpStream>>) -> U
 }
 
 /// Extract the traffic secrets from `conn` and install them on `tcp`
-/// (which already has the `tls` ULP).
-fn install(tcp: &TcpStream, version: u16, cipher: Cipher, conn: impl ExtractSecrets) -> io::Result<()> {
+/// (which already has the `tls` ULP). Returns the send sequence number the
+/// kernel starts at.
+fn install(tcp: &TcpStream, version: u16, cipher: Cipher, conn: impl ExtractSecrets) -> io::Result<u64> {
     let secrets = conn.extract().map_err(|e| io::Error::other(format!("kTLS: secret extraction failed: {e}")))?;
+    let tx_seq = secrets.tx.0;
     let fd = tcp.as_raw_fd();
     for (direction, (seq, secret)) in [(sys::TLS_TX, secrets.tx), (sys::TLS_RX, secrets.rx)] {
-        let state = state_for(version, cipher, seq, &secret)
+        let tx_tls12_gcm = direction == sys::TLS_TX && version == sys::TLS_1_2_VERSION && cipher != Cipher::Chacha20Poly1305;
+        let state = state_for(version, cipher, seq, &secret, tx_tls12_gcm)
             .ok_or_else(|| io::Error::other("kTLS: negotiated cipher and extracted secret don't match"))?;
         sys::set_crypto(fd, direction, &state)?;
     }
-    Ok(())
+    Ok(tx_seq)
 }
 
 /// rustls connections whose secrets can be extracted (server and client).
@@ -414,7 +462,19 @@ impl ExtractSecrets for rustls::ClientConnection {
     }
 }
 
-fn state_for(version: u16, cipher: Cipher, seq: u64, secret: &rustls::ConnectionTrafficSecrets) -> Option<sys::CryptoState> {
+/// One direction's kernel state from rustls' extracted secret.
+///
+/// `tx_tls12_gcm`: TLS 1.2 AES-GCM sends an explicit 8-byte nonce per
+/// record, and the two sides derive it differently — rustls as the IV's
+/// last 8 bytes XOR the sequence number, the kernel by incrementing from the
+/// value it's given. Handing the kernel rustls' IV unchanged makes its first
+/// record reuse the nonce of rustls' Finished under the same key (AES-GCM
+/// nonce reuse). The explicit nonce only has to be unique — the receiver
+/// reads it off the wire — so the kernel starts half the 64-bit space away:
+/// rustls used `iv ^ seq` for a handful of small `seq`, all within 2^16 of
+/// `iv`, and the kernel's `iv + 2^63 + n` can't come back within 2^16 of
+/// `iv` before n ≈ 2^63, far past AES-GCM's record limit.
+fn state_for(version: u16, cipher: Cipher, seq: u64, secret: &rustls::ConnectionTrafficSecrets, tx_tls12_gcm: bool) -> Option<sys::CryptoState> {
     use rustls::ConnectionTrafficSecrets as T;
     let (key, iv) = match (cipher, secret) {
         (Cipher::AesGcm128, T::Aes128Gcm { key, iv })
@@ -422,15 +482,51 @@ fn state_for(version: u16, cipher: Cipher, seq: u64, secret: &rustls::Connection
         | (Cipher::Chacha20Poly1305, T::Chacha20Poly1305 { key, iv }) => (key, iv),
         _ => return None,
     };
-    sys::CryptoState::new(version, cipher, key.as_ref(), iv.as_ref(), seq)
+    let mut iv: [u8; 12] = iv.as_ref().try_into().ok()?;
+    if tx_tls12_gcm {
+        let start = tls12_explicit_nonce_start(&iv);
+        iv[4..].copy_from_slice(&start.to_be_bytes());
+    }
+    sys::CryptoState::new(version, cipher, key.as_ref(), &iv, seq)
+}
+
+/// Where the kernel's TLS 1.2 AES-GCM explicit nonces start: rustls' base
+/// plus 2^63 (see [`state_for`]).
+fn tls12_explicit_nonce_start(iv: &[u8; 12]) -> u64 {
+    u64::from_be_bytes(iv[4..].try_into().expect("8 bytes")).wrapping_add(1 << 63)
 }
 
 // ---------------------------------------------------------------- KtlsStream
+
+/// Largest TLS record plaintext: a write of `n` bytes is at most
+/// `ceil(n / MAX_RECORD)` records (the kernel may merge, never split finer).
+const MAX_RECORD: u64 = 16_384;
+
+/// Records kept in reserve below the cipher's confidentiality limit (rustls
+/// stops at the limit itself; this leaves room for the close_notify).
+const RECORD_LIMIT_MARGIN: u64 = 16;
+
+/// Records needed for `bytes` of plaintext, at most.
+fn records_for(bytes: u64) -> u64 {
+    bytes.div_ceil(MAX_RECORD).max(1)
+}
 
 /// A TCP stream whose TLS record layer runs in the kernel. Reads and writes
 /// are plaintext; [`crate::server::sendfile`] can use its socket directly.
 pub struct KtlsStream {
     tcp: TcpStream,
+    /// A control message (alert, post-handshake message) read in part.
+    control: Vec<u8>,
+    control_type: u8,
+    /// Client side: TLS 1.3 session tickets the server sends after the
+    /// handshake are skipped (rustls can't take them once the keys are out,
+    /// so the next connection does a full handshake).
+    client: bool,
+    /// Records we may still send under these keys: AES-GCM has a
+    /// confidentiality limit (about 2^24.5 records) and a kTLS connection
+    /// can't rekey, so it ends before the limit. Atomic because `sendfile`
+    /// reserves through `&self`.
+    records_left: AtomicU64,
     /// Plaintext rustls decrypted before the hand-over, read first.
     prefix: Vec<u8>,
     prefix_read: usize,
@@ -445,34 +541,80 @@ pub struct KtlsStream {
 
 impl KtlsStream {
     fn new(tcp: TcpStream) -> Self {
-        KtlsStream { tcp, prefix: Vec::new(), prefix_read: 0, closed_after_prefix: false, read_closed: false, close_notify_sent: false }
+        KtlsStream { tcp, control: Vec::new(), control_type: 0, client: false, records_left: AtomicU64::new(u64::MAX), prefix: Vec::new(), prefix_read: 0, closed_after_prefix: false, read_closed: false, close_notify_sent: false }
     }
 
     pub fn tcp(&self) -> &TcpStream {
         &self.tcp
     }
 
-    /// What to do with a non-data record (`record_type`, its plaintext).
-    fn control_record(&mut self, record_type: u8, body: &[u8]) -> io::Result<()> {
-        match record_type {
-            sys::RECORD_ALERT if body.len() >= 2 && body[1] == 0 => {
-                // close_notify: the peer's clean end of stream.
-                self.read_closed = true;
-                Ok(())
+    /// Whether `bytes` more plaintext stay within the cipher's limit.
+    fn has_room(&self, bytes: u64) -> bool {
+        records_for(bytes) <= self.records_left.load(Ordering::Relaxed)
+    }
+
+    /// Reserve the records `bytes` of plaintext take; `false` (nothing
+    /// reserved) when that would pass the cipher's limit — the connection
+    /// must end.
+    pub fn reserve_records(&self, bytes: u64) -> bool {
+        let need = records_for(bytes);
+        self.records_left.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| left.checked_sub(need)).is_ok()
+    }
+
+    fn limit_reached() -> io::Error {
+        io::Error::other("kTLS: the cipher's record limit is reached; closing the connection")
+    }
+
+    /// Bytes of a non-data record (`record_type`). The kernel returns a
+    /// control record in pieces when the reader's buffer is smaller, so they
+    /// collect in `control` and each complete message is acted on: alerts
+    /// are 2 bytes, handshake messages carry their own length.
+    fn control_record(&mut self, record_type: u8, bytes: &[u8]) -> io::Result<()> {
+        if !self.control.is_empty() && self.control_type != record_type {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "kTLS: TLS record types interleaved inside a message"));
+        }
+        self.control_type = record_type;
+        self.control.extend_from_slice(bytes);
+        loop {
+            let used = match record_type {
+                sys::RECORD_ALERT if self.control.len() >= 2 => {
+                    if self.control[1] != 0 {
+                        return Err(io::Error::new(io::ErrorKind::ConnectionAborted, format!("kTLS: peer sent TLS alert {}", self.control[1])));
+                    }
+                    // close_notify: the peer's clean end of stream.
+                    self.read_closed = true;
+                    2
+                }
+                sys::RECORD_HANDSHAKE if self.control.len() >= 4 => {
+                    let len = u32::from_be_bytes([0, self.control[1], self.control[2], self.control[3]]) as usize;
+                    if self.control.len() < 4 + len {
+                        return Ok(()); // the rest of the message is still to come
+                    }
+                    match self.control[0] {
+                        // TLS 1.3 NewSessionTicket to a client: skipped.
+                        4 if self.client => {}
+                        24 => {
+                            KEY_UPDATES.fetch_add(1, Ordering::Relaxed);
+                            return Err(io::Error::new(
+                                io::ErrorKind::ConnectionAborted,
+                                "kTLS: peer sent a TLS 1.3 KeyUpdate; closing the connection",
+                            ));
+                        }
+                        other => {
+                            return Err(io::Error::new(io::ErrorKind::InvalidData, format!("kTLS: unexpected post-handshake message type {other}")));
+                        }
+                    }
+                    4 + len
+                }
+                sys::RECORD_ALERT | sys::RECORD_HANDSHAKE => return Ok(()), // incomplete
+                other => {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, format!("kTLS: unexpected TLS record type {other}")));
+                }
+            };
+            self.control.drain(..used);
+            if self.control.is_empty() || self.read_closed {
+                return Ok(());
             }
-            sys::RECORD_ALERT if body.len() >= 2 => {
-                Err(io::Error::new(io::ErrorKind::ConnectionAborted, format!("kTLS: peer sent TLS alert {}", body[1])))
-            }
-            // A TLS 1.3 post-handshake message: 24 = KeyUpdate.
-            sys::RECORD_HANDSHAKE if body.first() == Some(&24) => {
-                KEY_UPDATES.fetch_add(1, Ordering::Relaxed);
-                Err(io::Error::new(io::ErrorKind::ConnectionAborted, "kTLS: peer sent a TLS 1.3 KeyUpdate; closing the connection"))
-            }
-            sys::RECORD_HANDSHAKE => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("kTLS: unexpected post-handshake message type {:?}", body.first()),
-            )),
-            other => Err(io::Error::new(io::ErrorKind::InvalidData, format!("kTLS: unexpected TLS record type {other}"))),
         }
     }
 }
@@ -502,6 +644,9 @@ impl AsyncRead for KtlsStream {
             let unfilled = unsafe { &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
             match this.tcp.try_io(Interest::READABLE, || sys::recv_record(fd, unfilled)) {
                 Ok((n, sys::RECORD_APPLICATION_DATA)) => {
+                    if !this.control.is_empty() {
+                        return Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, "kTLS: application data inside a TLS control message")));
+                    }
                     if n == 0 {
                         this.read_closed = true;
                     }
@@ -526,10 +671,22 @@ impl AsyncRead for KtlsStream {
 
 impl AsyncWrite for KtlsStream {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.get_mut().tcp).poll_write(cx, buf)
+        let this = self.get_mut();
+        if !this.has_room(buf.len() as u64) {
+            return Poll::Ready(Err(KtlsStream::limit_reached()));
+        }
+        let n = ready!(Pin::new(&mut this.tcp).poll_write(cx, buf))?;
+        this.reserve_records(n as u64);
+        Poll::Ready(Ok(n))
     }
     fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[io::IoSlice<'_>]) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.get_mut().tcp).poll_write_vectored(cx, bufs)
+        let this = self.get_mut();
+        if !this.has_room(bufs.iter().map(|b| b.len() as u64).sum()) {
+            return Poll::Ready(Err(KtlsStream::limit_reached()));
+        }
+        let n = ready!(Pin::new(&mut this.tcp).poll_write_vectored(cx, bufs))?;
+        this.reserve_records(n as u64);
+        Poll::Ready(Ok(n))
     }
     fn is_write_vectored(&self) -> bool {
         true

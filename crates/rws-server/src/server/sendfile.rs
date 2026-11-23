@@ -17,6 +17,12 @@ pub trait SendfileSocket {
     fn sendfile_socket(&self) -> Option<&tokio::net::TcpStream> {
         None
     }
+
+    /// Account for `bytes` about to go out with `sendfile`; `false` if the
+    /// connection may not send them (kTLS at its cipher's record limit).
+    fn reserve_send(&self, _bytes: u64) -> bool {
+        true
+    }
 }
 
 impl SendfileSocket for tokio::net::TcpStream {
@@ -38,6 +44,10 @@ impl SendfileSocket for tokio_rustls::server::TlsStream<crate::server::ktls::Cor
 impl SendfileSocket for crate::server::ktls::KtlsStream {
     fn sendfile_socket(&self) -> Option<&tokio::net::TcpStream> {
         Some(self.tcp())
+    }
+
+    fn reserve_send(&self, bytes: u64) -> bool {
+        self.reserve_records(bytes)
     }
 }
 

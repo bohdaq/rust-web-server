@@ -63,6 +63,7 @@ pub mod per_core;
 pub mod framing;
 pub mod proxy_protocol;
 #[cfg(all(feature = "http2", target_os = "linux"))]
+#[doc(hidden)]
 pub mod ktls;
 pub mod tls_tunnel;
 
@@ -1027,8 +1028,10 @@ pub async fn serve_tls_connection(
 ) {
     let _ = tcp_stream.set_nodelay(true);
     let Some(peer_addr) = client_address(&mut tcp_stream, peer_addr).await else { return };
+    // Acceptors built elsewhere (the Gateway API data plane, mesh injection)
+    // may not allow secret extraction: those connections stay on rustls.
     #[cfg(target_os = "linux")]
-    if ktls::enabled() {
+    if ktls::enabled() && acceptor.config().enable_secret_extraction {
         let Some(tls_stream) = tls_handshake(ktls::Corked::new(tcp_stream), &acceptor).await else { return };
         let (sni, protocol) = negotiated(tls_stream.get_ref().1);
         if protocol.as_deref() == Some(crate::tls::ACME_TLS_ALPN) {

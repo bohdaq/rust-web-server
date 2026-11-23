@@ -15,7 +15,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   static files go out with `sendfile` over HTTPS. HTTP/1.1 and HTTP/2,
   TLS 1.2 and 1.3, AES-GCM and ChaCha20-Poly1305; anything else stays on
   rustls. Measure first (`bench/ktls.sh`): on Linux 6.8 with an AES-NI/AVX2
-  CPU the kernel's AES-GCM made it no cheaper than rustls. New metrics
+  CPU it saved no CPU for large files and cost 12–40% more for small ones. New metrics
   `rws_tls_ktls_connections_total{result}` and
   `rws_tls_ktls_key_update_closes_total`. Ignored in FIPS builds.
 
