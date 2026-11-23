@@ -2,13 +2,11 @@
 
 Drafts from the kTLS work (`spec/KTLS.md`). Nothing here has been sent.
 Owner decides what to file; the user allowed public GitHub issues only for
-reproduced bugs, and a security bug is not filed publicly.
+reproduced bugs.
 
-## 1. A security report (kept out of this public repo)
+## 1. Owner's notes
 
-One finding is a security issue in a third-party crate. Its report draft
-lives outside the repository until it's disclosed through the project's
-private channel; see the owner's notes.
+One more item is kept in the owner's own notes.
 
 ## 2. Not filed — evaluated
 

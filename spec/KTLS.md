@@ -29,7 +29,7 @@ Branch `ktls` (worktree `~/git/rws-ktls`), pushed, not merged, not released.
 | 4a | H2 connections on kTLS | done; h2spec 146/146 with kTLS off and on (151/151 connections on kTLS) |
 | 4b | rws-proxy: splice upstream → kTLS client socket | not done — see Log |
 | 4c | rws HTTP client: kTLS after client handshake | done for the proxy's async upstream pool (`AsyncTlsStream` enum; blocking reader for streamed bodies). Sync `http_client`/sync proxy pool not done (blocking rustls `StreamOwned`; no measurable reason) |
-| 5 | Upstream issues + HITOP note | drafts in `spec/KTLS_UPSTREAM.md`; nothing filed (one finding is security-sensitive: private, outside this repo) |
+| 5 | Upstream issues + HITOP note | drafts in `spec/KTLS_UPSTREAM.md`; nothing filed |
 
 ## Design notes
 
@@ -82,11 +82,16 @@ utime+stime / 2xx responses. Numbers vary ±20% run to run (shared box).
 Profile (bpftrace, kernel frames, 1m over kTLS): 39% of samples in
 `key_256_enc_update4` (the kernel's AES-GCM, `generic-gcm-aesni`; clients
 prefer AES-256-GCM), the rws process itself ~5%. Over rustls: 49% user
-(aws-lc + copies), 12% `rep_movs_alternative`. So on this CPU/kernel the
-kernel's AES-GCM costs what the saved copies do; `TLS_TX_ZEROCOPY_RO` and
-`TLS_RX_EXPECT_NO_PAD` changed nothing measurable and were dropped. Linux
-6.11 rewrote x86 AES-GCM (Eric Biggers) — worth re-running there, and on
-a NIC with TLS offload. Small responses are ~15% slower with kTLS
+(aws-lc + copies), 12% `rep_movs_alternative`. **Hypothesis, not
+established:** on this CPU/kernel the kernel's AES-GCM costs what the saved
+copies do. Caveats: the profile's sample totals (21k vs 15k) don't
+reconcile with the `/proc` CPU numbers (loopback receive work for the
+client may be attributed to the server), and the client shares the 4C/8T
+box. To settle it: `openssl speed -evp aes-256-gcm` against the kernel's
+rate, `taskset` pinning, AES-128 clients, and a newer kernel (x86 AES-GCM
+was reportedly reworked after 6.8 — unverified here) or a TLS-offload NIC.
+`TLS_TX_ZEROCOPY_RO` and `TLS_RX_EXPECT_NO_PAD` changed nothing measurable
+and were dropped. Small responses are ~15% slower with kTLS
 (`recvmsg` + per-record kernel crypto setup).
 
 ### Proxy front, upstream rustls vs kTLS (`bench/ktls-proxy.sh`)

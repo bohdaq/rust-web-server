@@ -217,6 +217,70 @@ async fn tls12_gcm_explicit_nonces_never_repeat_across_the_hand_over() {
     }
 }
 
+/// The same for the client side (rws connecting to an upstream): the
+/// client's Finished (rustls) and its records after the hand-over (kernel).
+#[tokio::test]
+async fn tls12_gcm_client_nonces_never_repeat_across_the_hand_over() {
+    if !kernel_has_ktls() {
+        return;
+    }
+    use rustls::CipherSuite as S;
+    for suite in [S::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, S::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384] {
+        if !supported_ciphers().contains(&cipher_of(suite).unwrap()) {
+            continue;
+        }
+        let pki = pki();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut server_config = (*server_config(&pki, &rustls::version::TLS12)).clone();
+        server_config.enable_secret_extraction = false;
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let tap = seen.clone();
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut tls = acceptor.accept(Recording { tcp, seen: tap }).await.unwrap();
+            for i in 0..20u8 {
+                let mut buf = [0u8; 100];
+                tls.read_exact(&mut buf).await.unwrap();
+                assert_eq!([i; 100], buf);
+            }
+        });
+        let mut config = (*client_config(&pki, &rustls::version::TLS12, Some(suite))).clone();
+        config.enable_secret_extraction = true;
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+        let tcp = TcpStream::connect(addr).await.unwrap();
+        let name = rustls::pki_types::ServerName::try_from("localhost").unwrap();
+        let mut client = ktls(upgrade_any(connector.connect(name, Corked::new(tcp)).await.unwrap()));
+        for i in 0..20u8 {
+            client.write_all(&[i; 100]).await.unwrap();
+        }
+        server.await.unwrap();
+        let wire = seen.lock().unwrap().clone();
+        let (mut at, mut encrypted, mut nonces) = (0, false, Vec::new());
+        while at + 5 <= wire.len() {
+            let (kind, len) = (wire[at], u16::from_be_bytes([wire[at + 3], wire[at + 4]]) as usize);
+            let body = &wire[at + 5..at + 5 + len];
+            if encrypted {
+                nonces.push(body[..8].to_vec());
+            }
+            if kind == 20 {
+                encrypted = true;
+            }
+            at += 5 + len;
+        }
+        assert_eq!(21, nonces.len(), "Finished + 20 records ({suite:?})");
+        let mut unique = nonces.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(nonces.len(), unique.len(), "{suite:?}: an explicit nonce repeats: {nonces:02x?}");
+    }
+}
+
+fn upgrade_any<T: Handshaken>(tls: T) -> Upgraded<T> {
+    upgrade(tls)
+}
+
 /// A connected pair: the server side upgraded to kTLS, the client on rustls.
 /// `early` is written by the client as soon as its handshake completes.
 async fn pair(
@@ -244,7 +308,7 @@ async fn pair(
     (server.await.unwrap(), client)
 }
 
-fn ktls(upgraded: Upgraded<tokio_rustls::server::TlsStream<Corked<TcpStream>>>) -> KtlsStream {
+fn ktls<T>(upgraded: Upgraded<T>) -> KtlsStream {
     match upgraded {
         Upgraded::Ktls(s) => s,
         Upgraded::Kept(_) => panic!("kept on rustls"),
