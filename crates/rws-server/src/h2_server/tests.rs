@@ -48,6 +48,15 @@ impl Application for TestApp {
             let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
             r.content_range_list[0].body = big_body();
             r
+        } else if request.request_uri == "/file-over-prepared" {
+            // Like App::execute: a prepared (problem) body left beside the file.
+            let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n501_not_implemented, "no handler");
+            r.set_status(STATUS_CODE_REASON_PHRASE.n200_ok);
+            r.headers.push(Header::new("Content-Type", "application/octet-stream".to_string()));
+            let len = self.0.as_ref().and_then(|p| std::fs::metadata(p).ok()).map_or(0, |m| m.len());
+            r.headers.push(Header::new("Content-Length", len.to_string()));
+            r.stream_file = self.0.clone();
+            r
         } else if request.request_uri == "/file" {
             let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
             r.content_range_list.clear();
@@ -159,6 +168,33 @@ async fn streamed_files_are_sent_complete() {
     let (parts, body) = read(response).await;
     assert_eq!(200, parts.status.as_u16());
     assert!(body.is_empty());
+}
+
+/// A handler that sets `stream_file` on a prepared response (as
+/// `App::execute`'s static files do, over its 501 problem body) sends just
+/// the file: one `content-type`, one `content-length` (18.17.0–18.39.0 sent
+/// the problem's too, and clients refused the response).
+#[tokio::test]
+async fn a_streamed_file_replaces_a_prepared_body() {
+    let file = crate::test_env::TempPath::new("h2_server_stream_prepared.bin");
+    let content: Vec<u8> = (0..300_000u32).map(|i| (i % 239) as u8).collect();
+    std::fs::write(&*file, &content).unwrap();
+    let mut send = client(TestApp(Some(file.as_str().to_string()))).await;
+    for method in ["GET", "HEAD"] {
+        let request = http::Request::builder().method(method).uri("https://x/file-over-prepared").body(()).unwrap();
+        let (response, _) = send.clone().ready().await.unwrap().send_request(request, true).unwrap();
+        let (parts, body) = read(response).await;
+        assert_eq!(200, parts.status.as_u16(), "{method}");
+        assert_eq!(1, parts.headers.get_all("content-length").iter().count(), "{method}");
+        assert_eq!("300000", parts.headers["content-length"], "{method}");
+        let types: Vec<_> = parts.headers.get_all("content-type").iter().collect();
+        assert_eq!(vec!["application/octet-stream"], types, "{method}");
+        if method == "GET" {
+            assert!(body == content, "{} of {} bytes", body.len(), content.len());
+        } else {
+            assert!(body.is_empty());
+        }
+    }
 }
 
 #[tokio::test]

@@ -48,12 +48,26 @@ impl Read for ChannelReader {
 /// Bytes per chunk read from a file or upstream stream.
 const CHUNK: usize = 64 * 1024;
 
+/// A streamed body (`stream_file`/`stream_pipe`) is the response's body: drop
+/// any buffered `content_range_list` left beside it, as HTTP/1.1 ignores it.
+/// Handlers that start from a prepared response (`App::execute` starts from
+/// a 501 problem body) would otherwise have HTTP/2 and HTTP/3 send its
+/// `content-type` and `content-length` with the file's own — a malformed
+/// response (two content lengths) that clients reject.
+#[doc(hidden)]
+pub fn drop_shadowed_body(response: &mut Response) {
+    if response.stream_file.is_some() || response.stream_pipe.is_some() {
+        response.content_range_list.clear();
+    }
+}
+
 /// Take the response's streaming body, if any, and start producing it.
 /// Returns `None` for an ordinary (`content_range_list`) response.
 #[doc(hidden)]
 pub fn spawn_producer(
     response: &mut Response,
 ) -> Option<tokio::sync::mpsc::Receiver<Result<Vec<u8>, String>>> {
+    drop_shadowed_body(response);
     let reader: Box<dyn Read + Send> = if let Some(pipe) = response.stream_pipe.take() {
         let chunked = response.headers.iter().any(|h| {
             h.name.eq_ignore_ascii_case("transfer-encoding") && h.value.to_ascii_lowercase().contains("chunked")
