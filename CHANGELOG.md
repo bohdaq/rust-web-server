@@ -5,6 +5,18 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Fixed
+
+- **HTTP/2 and HTTP/3: static files over 256 KiB.** Since 18.17.0 a
+  streamed file (static files above 256 KiB, or any handler setting
+  `stream_file` on a prepared response) also carried the prepared
+  response's `501` problem body: HTTP/2 and HTTP/3 sent its
+  `content-type` and `content-length` beside the file's, and clients
+  (curl, browsers) rejected the response. A streamed body now replaces any
+  buffered one, as on HTTP/1.1.
+
 ## 18.39.0 — 2026-11-22
 
 ### Security

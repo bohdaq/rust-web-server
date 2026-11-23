@@ -222,6 +222,7 @@ async fn send_h3_response(
     is_head: bool,
 ) {
     // stream_file / stream_pipe bodies: produced in chunks, sent below.
+    crate::server::body_stream::drop_shadowed_body(&mut rws_response);
     let streamed_body = if is_head {
         None
     } else {

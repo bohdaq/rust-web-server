@@ -991,6 +991,7 @@ impl Conn {
         if !self.streams.contains_key(&stream) {
             return; // reset by the client meanwhile
         }
+        crate::server::body_stream::drop_shadowed_body(&mut response);
         let mut producer = crate::server::body_stream::spawn_producer(&mut response);
         if is_head {
             producer = None;

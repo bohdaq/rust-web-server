@@ -39,6 +39,15 @@ impl Application for H3App {
                 response.stream_file = Some(self.big_file.clone());
                 Ok(response)
             }
+            "/big-over-prepared" => {
+                // As App::execute's static files: a prepared problem body beside the file.
+                let mut response = Response::text(STATUS_CODE_REASON_PHRASE.n501_not_implemented, "no handler");
+                response.set_status(STATUS_CODE_REASON_PHRASE.n200_ok);
+                response.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: "application/octet-stream".into() });
+                response.headers.push(Header { name: Header::_CONTENT_LENGTH.into(), value: BIG_FILE_SIZE.to_string().into() });
+                response.stream_file = Some(self.big_file.clone());
+                Ok(response)
+            }
             _ => Ok(Response::text(STATUS_CODE_REASON_PHRASE.n404_not_found, "not found")),
         }
     }
@@ -155,6 +164,17 @@ async fn http3_round_trip_with_a_real_quic_client() {
     assert_eq!(status, 200);
     assert_eq!(headers.get("content-length").unwrap(), &BIG_FILE_SIZE.to_string());
     assert!(body.is_empty());
+
+    // A file over a prepared body: only the file's headers and bytes.
+    for method in ["GET", "HEAD"] {
+        let (status, headers, body) = fetch(&mut send_request, method, "/big-over-prepared", None).await;
+        assert_eq!(status, 200, "{method}");
+        assert_eq!(1, headers.get_all("content-length").iter().count(), "{method}");
+        assert_eq!(headers.get("content-length").unwrap(), &BIG_FILE_SIZE.to_string(), "{method}");
+        let types: Vec<_> = headers.get_all("content-type").iter().collect();
+        assert_eq!(vec!["application/octet-stream"], types, "{method}");
+        assert_eq!(method == "GET", body == content, "{method}");
+    }
 
     let (status, _, _) = fetch(&mut send_request, "GET", "/missing", None).await;
     assert_eq!(status, 404);
