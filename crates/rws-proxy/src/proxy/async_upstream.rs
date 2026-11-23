@@ -9,8 +9,9 @@
 //! connection retried once for idempotent methods only, and streamed
 //! responses (SSE, chunked, > 1 MB) handed to the existing streaming writer —
 //! a plain socket converted to a blocking one, a TLS stream through a small
-//! copying task and a bounded channel. TLS backends use pooled tokio-rustls
-//! connections, with the upstream's `tls_ca_file` roots when it has them.
+//! copying task and a bounded channel (a kTLS one, `tls_ktls`, is a socket
+//! again). TLS backends use pooled tokio-rustls connections, with the
+//! upstream's `tls_ca_file` roots when it has them.
 //!
 //! Used by config-driven proxy routes without middleware
 //! (`DynamicProxy::execute_async`); everything else keeps the blocking path.
@@ -30,9 +31,96 @@ use super::{
 use crate::request::Request;
 use crate::response::Response;
 
-/// A TLS connection to a backend.
+/// A TLS connection to a backend: on rustls, or — with `tls_ktls` on
+/// Linux — handed to kernel TLS after the handshake.
 #[doc(hidden)]
-pub type AsyncTlsStream = tokio_rustls::client::TlsStream<TcpStream>;
+pub enum AsyncTlsStream {
+    Rustls(tokio_rustls::client::TlsStream<TcpStream>),
+    /// Handshake run for kTLS, but kept on rustls (cipher not in the kernel, …).
+    #[cfg(target_os = "linux")]
+    Corked(tokio_rustls::client::TlsStream<crate::server::ktls::Corked<TcpStream>>),
+    #[cfg(target_os = "linux")]
+    Ktls(crate::server::ktls::KtlsStream),
+}
+
+macro_rules! each_tls_stream {
+    ($self:expr, $s:ident => $e:expr) => {
+        match $self {
+            AsyncTlsStream::Rustls($s) => $e,
+            #[cfg(target_os = "linux")]
+            AsyncTlsStream::Corked($s) => $e,
+            #[cfg(target_os = "linux")]
+            AsyncTlsStream::Ktls($s) => $e,
+        }
+    };
+}
+
+impl AsyncRead for AsyncTlsStream {
+    fn poll_read(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &mut tokio::io::ReadBuf<'_>) -> std::task::Poll<std::io::Result<()>> {
+        each_tls_stream!(self.get_mut(), s => std::pin::Pin::new(s).poll_read(cx, buf))
+    }
+}
+
+impl AsyncWrite for AsyncTlsStream {
+    fn poll_write(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &[u8]) -> std::task::Poll<std::io::Result<usize>> {
+        each_tls_stream!(self.get_mut(), s => std::pin::Pin::new(s).poll_write(cx, buf))
+    }
+    fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        each_tls_stream!(self.get_mut(), s => std::pin::Pin::new(s).poll_flush(cx))
+    }
+    fn poll_shutdown(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        each_tls_stream!(self.get_mut(), s => std::pin::Pin::new(s).poll_shutdown(cx))
+    }
+}
+
+/// The TLS handshake with a backend over `tcp`. With `tls_ktls` on (Linux)
+/// the connection is then handed to kernel TLS when it can be.
+async fn tls_handshake(
+    tcp: TcpStream,
+    name: rustls::pki_types::ServerName<'static>,
+    config: &Arc<rustls::ClientConfig>,
+    key: &str,
+    connect_timeout: Duration,
+) -> Result<AsyncTlsStream, String> {
+    #[cfg(target_os = "linux")]
+    let ktls = crate::server::ktls::enabled();
+    #[cfg(not(target_os = "linux"))]
+    let ktls = false;
+    tls_handshake_with(tcp, name, config, key, connect_timeout, ktls).await
+}
+
+async fn tls_handshake_with(
+    tcp: TcpStream,
+    name: rustls::pki_types::ServerName<'static>,
+    config: &Arc<rustls::ClientConfig>,
+    key: &str,
+    connect_timeout: Duration,
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] ktls: bool,
+) -> Result<AsyncTlsStream, String> {
+    let failed = |e: std::io::Error| format!("TLS handshake with {key} failed: {e}");
+    let timed_out = || format!("TLS handshake with {key} timed out");
+    #[cfg(target_os = "linux")]
+    if ktls {
+        use crate::server::ktls;
+        // The keys must be extractable: a per-connection copy of the config
+        // (cheap next to the handshake; the session cache is shared).
+        let mut config = (**config).clone();
+        config.enable_secret_extraction = true;
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+        let stream = tokio::time::timeout(connect_timeout, connector.connect(name, ktls::Corked::new(tcp)))
+            .await
+            .map_err(|_| timed_out())?
+            .map_err(failed)?;
+        return match ktls::upgrade(stream) {
+            ktls::Upgraded::Ktls(s) => Ok(AsyncTlsStream::Ktls(s)),
+            ktls::Upgraded::Kept(s) => Ok(AsyncTlsStream::Corked(s)),
+            ktls::Upgraded::Failed(e) => Err(failed(e)),
+        };
+    }
+    let connector = tokio_rustls::TlsConnector::from(Arc::clone(config));
+    let stream = tokio::time::timeout(connect_timeout, connector.connect(name, tcp)).await.map_err(|_| timed_out())?.map_err(failed)?;
+    Ok(AsyncTlsStream::Rustls(stream))
+}
 
 /// Idle async plain-HTTP backend connections, per `host:port`.
 fn pool() -> &'static Pool<TcpStream> {
@@ -98,29 +186,51 @@ impl UpstreamConn for TcpStream {
 
 impl UpstreamConn for AsyncTlsStream {
     fn peer_closed(&self) -> bool {
-        // A close_notify or a FIN both show up on the socket.
-        tcp_closed(self.get_ref().0)
+        // A close_notify or a FIN both show up on the socket (a kTLS socket
+        // fails the peek on a control record: closed too).
+        match self {
+            AsyncTlsStream::Rustls(s) => tcp_closed(s.get_ref().0),
+            #[cfg(target_os = "linux")]
+            AsyncTlsStream::Corked(s) => tcp_closed(s.get_ref().0.get_ref()),
+            #[cfg(target_os = "linux")]
+            AsyncTlsStream::Ktls(s) => tcp_closed(s.tcp()),
+        }
     }
 
-    fn into_body_reader(mut self, prefix: Vec<u8>, read_timeout: Duration) -> Result<Box<dyn Read + Send>, String> {
-        // A TLS stream can't become a blocking socket: a task copies it into
-        // a bounded channel that the (blocking) streaming writer reads.
-        let (tx, rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
-        tokio::spawn(async move {
-            let mut buf = vec![0u8; 16 * 1024];
-            loop {
-                match tokio::time::timeout(read_timeout, self.read(&mut buf)).await {
-                    Ok(Ok(n)) if n > 0 => {
-                        if tx.send(buf[..n].to_vec()).await.is_err() {
-                            return; // the client went away
-                        }
-                    }
-                    _ => return, // end of body, error or stall: the reader sees EOF
-                }
+    fn into_body_reader(self, prefix: Vec<u8>, read_timeout: Duration) -> Result<Box<dyn Read + Send>, String> {
+        match self {
+            AsyncTlsStream::Rustls(s) => Ok(copied_body(s, prefix, read_timeout)),
+            #[cfg(target_os = "linux")]
+            AsyncTlsStream::Corked(s) => Ok(copied_body(s, prefix, read_timeout)),
+            // The kernel decrypts: the socket becomes a blocking reader, as
+            // for plain HTTP, without a copying task.
+            #[cfg(target_os = "linux")]
+            AsyncTlsStream::Ktls(s) => {
+                let reader = s.into_blocking_reader(read_timeout).map_err(|e| e.to_string())?;
+                Ok(Box::new(ConcatReader::new(prefix, reader)))
             }
-        });
-        Ok(Box::new(ChannelBodyReader { rx, chunk: prefix, pos: 0 }))
+        }
     }
+}
+
+/// A rustls stream can't become a blocking socket: a task copies it into a
+/// bounded channel that the (blocking) streaming writer reads.
+fn copied_body<S: AsyncRead + Unpin + Send + 'static>(mut stream: S, prefix: Vec<u8>, read_timeout: Duration) -> Box<dyn Read + Send> {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+    tokio::spawn(async move {
+        let mut buf = vec![0u8; 16 * 1024];
+        loop {
+            match tokio::time::timeout(read_timeout, stream.read(&mut buf)).await {
+                Ok(Ok(n)) if n > 0 => {
+                    if tx.send(buf[..n].to_vec()).await.is_err() {
+                        return; // the client went away
+                    }
+                }
+                _ => return, // end of body, error or stall: the reader sees EOF
+            }
+        }
+    });
+    Box::new(ChannelBodyReader { rx, chunk: prefix, pos: 0 })
 }
 
 /// Blocking `Read` over the chunks a copying task sends.
@@ -204,12 +314,7 @@ pub async fn forward_as(
                 let tcp = connect(&key, connect_timeout).await?;
                 let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
                     .map_err(|e| format!("invalid upstream hostname '{}': {}", host, e))?;
-                let connector = tokio_rustls::TlsConnector::from(Arc::clone(&tls.config));
-                match tokio::time::timeout(connect_timeout, connector.connect(server_name, tcp)).await {
-                    Ok(Ok(stream)) => Ok(stream),
-                    Ok(Err(e)) => Err(format!("TLS handshake with {} failed: {}", key, e)),
-                    Err(_) => Err(format!("TLS handshake with {} timed out", key)),
-                }
+                tls_handshake(tcp, server_name, &tls.config, &key, connect_timeout).await
             };
             forward_on(tls.pool, &pooled, request, host_header, client, read_timeout, connect_tls).await
         }
@@ -262,12 +367,7 @@ pub async fn forward_gateway(
             let connect_tls = || async {
                 let tcp = connect(&key, connect_timeout).await?;
                 let name = rustls::pki_types::ServerName::try_from(server_name.to_string()).map_err(|e| format!("invalid TLS server name '{server_name}': {e}"))?;
-                let connector = tokio_rustls::TlsConnector::from(Arc::clone(&tls.config));
-                match tokio::time::timeout(connect_timeout, connector.connect(name, tcp)).await {
-                    Ok(Ok(stream)) => Ok(stream),
-                    Ok(Err(e)) => Err(format!("TLS handshake with {key} failed: {e}")),
-                    Err(_) => Err(format!("TLS handshake with {key} timed out")),
-                }
+                tls_handshake(tcp, name, &tls.config, &key, connect_timeout).await
             };
             forward_on(tls.pool, &pooled, request, host_header, client, read_timeout, connect_tls).await
         }

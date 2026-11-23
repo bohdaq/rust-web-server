@@ -8430,6 +8430,13 @@ tls_ktls = true   # RWS_CONFIG_TLS_KTLS
 - HTTP/1.1 and HTTP/2 over TLS 1.2 and 1.3 with AES-128-GCM,
   AES-256-GCM or ChaCha20-Poly1305 are handed over; a connection that
   can't be stays on rustls. HTTP/3 (QUIC) is unaffected.
+- The proxy's HTTPS connections to [upstreams](/proxy/config-driven/)
+  (routes on the non-blocking path) use it too: after the handshake the
+  kernel decrypts, and a streamed response body is read straight from the
+  socket instead of through a copying task. `bench/ktls-proxy.sh` measures
+  it; on the machine above a proxied 1 MiB body cost the front 4–11% less
+  CPU and 1–64 KiB bodies 4–7% more. Session tickets an upstream sends are
+  skipped, so the next connection to it does a full handshake.
 - A TLS 1.3 key update from the client ends the connection (the client
   has to reconnect): rustls can't yet hand over the secrets needed to
   follow it. Counted in `rws_tls_ktls_key_update_closes_total`.

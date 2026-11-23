@@ -370,7 +370,7 @@ async fn a_request_sent_with_the_finished_message_is_kept() {
     client.flush().await.unwrap();
     client.get_mut().0.release().await;
     let mut server = ktls(server.await.unwrap());
-    assert_eq!(23, server.prefix.len(), "rustls decrypted the request during the handshake");
+    assert_eq!(23, server.reader.prefix.len(), "rustls decrypted the request during the handshake");
     let mut buf = [0u8; 23];
     server.read_exact(&mut buf).await.unwrap();
     assert_eq!(b"GET /first HTTP/1.1\r\n\r\n", &buf);
@@ -505,7 +505,8 @@ async fn a_client_connection_runs_on_ktls_and_skips_session_tickets() {
     if !kernel_has_ktls() {
         return;
     }
-    for version in [&rustls::version::TLS13, &rustls::version::TLS12] {
+    let cases = [(&rustls::version::TLS13, false), (&rustls::version::TLS13, true), (&rustls::version::TLS12, false), (&rustls::version::TLS12, true)];
+    for (version, blocking) in cases {
         let pki = pki();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -536,6 +537,20 @@ async fn a_client_connection_runs_on_ktls_and_skips_session_tickets() {
             Upgraded::Failed(e) => panic!("failed: {e}"),
         };
         client.write_all(b"request").await.unwrap();
+        if blocking {
+            // The blocking reader (streamed upstream bodies) does the same.
+            let mut reader = client.into_blocking_reader(std::time::Duration::from_secs(5)).unwrap();
+            let got = tokio::task::spawn_blocking(move || {
+                let mut got = Vec::new();
+                std::io::Read::read_to_end(&mut reader, &mut got).unwrap();
+                got
+            })
+            .await
+            .unwrap();
+            assert_eq!(b"response", &got[..]);
+            server.await.unwrap();
+            continue;
+        }
         // One byte at a time: tickets and the close_notify arrive in pieces.
         let mut got = Vec::new();
         let mut byte = [0u8; 1];

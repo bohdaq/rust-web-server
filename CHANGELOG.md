@@ -17,7 +17,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   rustls. Measure first (`bench/ktls.sh`): on Linux 6.8 with an AES-NI/AVX2
   CPU it saved no CPU for large files and cost 12–40% more for small ones. New metrics
   `rws_tls_ktls_connections_total{result}` and
-  `rws_tls_ktls_key_update_closes_total`. Ignored in FIPS builds.
+  `rws_tls_ktls_key_update_closes_total`. Ignored in FIPS builds. The
+  proxy's HTTPS upstream connections (non-blocking path) use it too; a
+  streamed upstream body is then read from the socket directly
+  (`bench/ktls-proxy.sh`).
 
 ### Fixed
 

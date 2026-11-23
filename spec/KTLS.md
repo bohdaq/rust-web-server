@@ -26,9 +26,9 @@ Branch `ktls` (worktree `~/git/rws-ktls`), pushed, not merged, not released.
 | 1 | Server H1: secret extraction, `KtlsStream`, sendfile over TLS, setting `tls_ktls` | done |
 | 2 | Control records (alert/close), KeyUpdate, startup probe, fallback, metrics | done |
 | 3 | Tests (loopback rustls client), CI, docs, re-benchmark | done (CI: branch push) |
-| 4a | H2 connections on kTLS | done with step 1 (same `KtlsStream`); h2spec run pending |
+| 4a | H2 connections on kTLS | done; h2spec 146/146 with kTLS off and on (151/151 connections on kTLS) |
 | 4b | rws-proxy: splice upstream → kTLS client socket | todo |
-| 4c | rws HTTP client: kTLS after client handshake | todo |
+| 4c | rws HTTP client: kTLS after client handshake | done for the proxy's async upstream pool (`AsyncTlsStream` enum; blocking reader for streamed bodies). Sync `http_client`/sync proxy pool not done (blocking rustls `StreamOwned`; no measurable reason) |
 | 5 | Upstream issues + HITOP note | todo |
 
 ## Design notes
@@ -88,6 +88,19 @@ kernel's AES-GCM costs what the saved copies do; `TLS_TX_ZEROCOPY_RO` and
 6.11 rewrote x86 AES-GCM (Eric Biggers) — worth re-running there, and on
 a NIC with TLS offload. Small responses are ~15% slower with kTLS
 (`recvmsg` + per-record kernel crypto setup).
+
+### Proxy front, upstream rustls vs kTLS (`bench/ktls-proxy.sh`)
+
+Front = plain HTTP rws proxying to an HTTPS rws backend (same box).
+
+| upstream | file | front CPU ms/req (run 1 / run 2) |
+|---|---|---:|
+| rustls | 1k | 0.0742 / 0.0747 |
+| kTLS | 1k | 0.0794 / 0.0798 |
+| rustls | 64k | 0.1712 / 0.1716 |
+| kTLS | 64k | 0.1791 / 0.1784 |
+| rustls | 1m | 2.068 / 2.073 |
+| kTLS | 1m | 1.840 / 1.990 |
 
 ## Log
 

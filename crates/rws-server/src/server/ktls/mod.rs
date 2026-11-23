@@ -415,11 +415,11 @@ pub fn upgrade<T: Handshaken>(mut tls: T) -> Upgraded<T> {
         Ok(tx_seq) => {
             record(Outcome::Enabled);
             let mut stream = KtlsStream::new(tcp);
-            stream.client = T::CLIENT;
+            stream.reader.client = T::CLIENT;
             stream.records_left = AtomicU64::new(record_limit.saturating_sub(tx_seq).saturating_sub(RECORD_LIMIT_MARGIN));
-            stream.prefix = prefix;
-            stream.read_closed = peer_closed && stream.prefix.is_empty();
-            stream.closed_after_prefix = peer_closed;
+            stream.reader.closed = peer_closed && prefix.is_empty();
+            stream.reader.prefix = prefix;
+            stream.reader.closed_after_prefix = peer_closed;
             Upgraded::Ktls(stream)
         }
         Err(e) => {
@@ -511,22 +511,10 @@ fn records_for(bytes: u64) -> u64 {
     bytes.div_ceil(MAX_RECORD).max(1)
 }
 
-/// A TCP stream whose TLS record layer runs in the kernel. Reads and writes
-/// are plaintext; [`crate::server::sendfile`] can use its socket directly.
-pub struct KtlsStream {
-    tcp: TcpStream,
-    /// A control message (alert, post-handshake message) read in part.
-    control: Vec<u8>,
-    control_type: u8,
-    /// Client side: TLS 1.3 session tickets the server sends after the
-    /// handshake are skipped (rustls can't take them once the keys are out,
-    /// so the next connection does a full handshake).
-    client: bool,
-    /// Records we may still send under these keys: AES-GCM has a
-    /// confidentiality limit (about 2^24.5 records) and a kTLS connection
-    /// can't rekey, so it ends before the limit. Atomic because `sendfile`
-    /// reserves through `&self`.
-    records_left: AtomicU64,
+/// The read side of a kTLS connection, shared by [`KtlsStream`] and
+/// [`BlockingKtlsReader`]: plaintext rustls decrypted before the hand-over,
+/// then records from the kernel, with control records acted on.
+struct RecordReader {
     /// Plaintext rustls decrypted before the hand-over, read first.
     prefix: Vec<u8>,
     prefix_read: usize,
@@ -534,35 +522,58 @@ pub struct KtlsStream {
     /// once `prefix` is read.
     closed_after_prefix: bool,
     /// `close_notify` received or EOF seen: further reads return 0.
-    read_closed: bool,
-    /// Our `close_notify` is sent (by `poll_shutdown`).
-    close_notify_sent: bool,
+    closed: bool,
+    /// A control message (alert, post-handshake message) read in part.
+    control: Vec<u8>,
+    control_type: u8,
+    /// Client side: TLS 1.3 session tickets the server sends after the
+    /// handshake are skipped (rustls can't take them once the keys are out,
+    /// so the next connection does a full handshake).
+    client: bool,
 }
 
-impl KtlsStream {
-    fn new(tcp: TcpStream) -> Self {
-        KtlsStream { tcp, control: Vec::new(), control_type: 0, client: false, records_left: AtomicU64::new(u64::MAX), prefix: Vec::new(), prefix_read: 0, closed_after_prefix: false, read_closed: false, close_notify_sent: false }
+/// What one `recvmsg` amounted to.
+enum Got {
+    /// `n` bytes of application data in the caller's buffer (0 = EOF).
+    Data(usize),
+    /// A control record (or part of one) was handled: read again.
+    Again,
+}
+
+impl RecordReader {
+    fn new() -> Self {
+        RecordReader { prefix: Vec::new(), prefix_read: 0, closed_after_prefix: false, closed: false, control: Vec::new(), control_type: 0, client: false }
     }
 
-    pub fn tcp(&self) -> &TcpStream {
-        &self.tcp
+    /// Copy prefix plaintext into `out`; `None` once there is none.
+    fn take_prefix(&mut self, out: &mut [u8]) -> Option<usize> {
+        if self.prefix_read >= self.prefix.len() || out.is_empty() {
+            return None;
+        }
+        let n = (self.prefix.len() - self.prefix_read).min(out.len());
+        out[..n].copy_from_slice(&self.prefix[self.prefix_read..self.prefix_read + n]);
+        self.prefix_read += n;
+        if self.prefix_read == self.prefix.len() {
+            self.prefix = Vec::new();
+            self.prefix_read = 0;
+            self.closed |= self.closed_after_prefix;
+        }
+        Some(n)
     }
 
-    /// Whether `bytes` more plaintext stay within the cipher's limit.
-    fn has_room(&self, bytes: u64) -> bool {
-        records_for(bytes) <= self.records_left.load(Ordering::Relaxed)
-    }
-
-    /// Reserve the records `bytes` of plaintext take; `false` (nothing
-    /// reserved) when that would pass the cipher's limit — the connection
-    /// must end.
-    pub fn reserve_records(&self, bytes: u64) -> bool {
-        let need = records_for(bytes);
-        self.records_left.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| left.checked_sub(need)).is_ok()
-    }
-
-    fn limit_reached() -> io::Error {
-        io::Error::other("kTLS: the cipher's record limit is reached; closing the connection")
+    /// Account for a record (`n` bytes of `record_type` in `buf`).
+    fn got(&mut self, buf: &[u8], n: usize, record_type: u8) -> io::Result<Got> {
+        if record_type == sys::RECORD_APPLICATION_DATA {
+            if !self.control.is_empty() {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "kTLS: application data inside a TLS control message"));
+            }
+            if n == 0 {
+                self.closed = true;
+            }
+            return Ok(Got::Data(n));
+        }
+        self.control_record(record_type, &buf[..n])?;
+        Ok(if self.closed { Got::Data(0) } else { Got::Again })
     }
 
     /// Bytes of a non-data record (`record_type`). The kernel returns a
@@ -582,7 +593,7 @@ impl KtlsStream {
                         return Err(io::Error::new(io::ErrorKind::ConnectionAborted, format!("kTLS: peer sent TLS alert {}", self.control[1])));
                     }
                     // close_notify: the peer's clean end of stream.
-                    self.read_closed = true;
+                    self.closed = true;
                     2
                 }
                 sys::RECORD_HANDSHAKE if self.control.len() >= 4 => {
@@ -612,58 +623,118 @@ impl KtlsStream {
                 }
             };
             self.control.drain(..used);
-            if self.control.is_empty() || self.read_closed {
+            if self.control.is_empty() || self.closed {
                 return Ok(());
             }
         }
     }
 }
 
+/// A TCP stream whose TLS record layer runs in the kernel. Reads and writes
+/// are plaintext; [`crate::server::sendfile`] can use its socket directly.
+pub struct KtlsStream {
+    tcp: TcpStream,
+    reader: RecordReader,
+    /// Records we may still send under these keys: AES-GCM has a
+    /// confidentiality limit (about 2^24.5 records) and a kTLS connection
+    /// can't rekey, so it ends before the limit. Atomic because `sendfile`
+    /// reserves through `&self`.
+    records_left: AtomicU64,
+    /// Our `close_notify` is sent (by `poll_shutdown`).
+    close_notify_sent: bool,
+}
+
+impl KtlsStream {
+    fn new(tcp: TcpStream) -> Self {
+        KtlsStream { tcp, reader: RecordReader::new(), records_left: AtomicU64::new(u64::MAX), close_notify_sent: false }
+    }
+
+    pub fn tcp(&self) -> &TcpStream {
+        &self.tcp
+    }
+
+    /// Whether `bytes` more plaintext stay within the cipher's limit.
+    fn has_room(&self, bytes: u64) -> bool {
+        records_for(bytes) <= self.records_left.load(Ordering::Relaxed)
+    }
+
+    /// Reserve the records `bytes` of plaintext take; `false` (nothing
+    /// reserved) when that would pass the cipher's limit — the connection
+    /// must end.
+    pub fn reserve_records(&self, bytes: u64) -> bool {
+        let need = records_for(bytes);
+        self.records_left.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| left.checked_sub(need)).is_ok()
+    }
+
+    fn limit_reached() -> io::Error {
+        io::Error::other("kTLS: the cipher's record limit is reached; closing the connection")
+    }
+
+    /// The rest of the stream as a blocking reader on the same socket (for
+    /// code that reads a body on a blocking thread), with `read_timeout`.
+    pub fn into_blocking_reader(self, read_timeout: std::time::Duration) -> io::Result<BlockingKtlsReader> {
+        let socket = self.tcp.into_std()?;
+        socket.set_nonblocking(false)?;
+        socket.set_read_timeout(Some(read_timeout))?;
+        Ok(BlockingKtlsReader { socket, reader: self.reader })
+    }
+}
+
 impl AsyncRead for KtlsStream {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
-        if this.prefix_read < this.prefix.len() {
-            let n = (this.prefix.len() - this.prefix_read).min(buf.remaining());
-            buf.put_slice(&this.prefix[this.prefix_read..this.prefix_read + n]);
-            this.prefix_read += n;
-            if this.prefix_read == this.prefix.len() {
-                this.prefix = Vec::new();
-                this.prefix_read = 0;
-                this.read_closed |= this.closed_after_prefix;
-            }
+        // SAFETY: only written into (by a copy or recvmsg); we mark as
+        // initialised just what was written.
+        let unfilled = unsafe { &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+        if let Some(n) = this.reader.take_prefix(unfilled) {
+            // SAFETY: n bytes were copied in.
+            unsafe { buf.assume_init(n) };
+            buf.advance(n);
             return Poll::Ready(Ok(()));
         }
-        if this.read_closed || buf.remaining() == 0 {
+        if this.reader.closed || unfilled.is_empty() {
             return Poll::Ready(Ok(()));
         }
         loop {
             ready!(this.tcp.poll_read_ready(cx))?;
             let fd = this.tcp.as_raw_fd();
-            // SAFETY: recvmsg only writes into the slice; we mark as
-            // initialised just what it returned.
-            let unfilled = unsafe { &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
             match this.tcp.try_io(Interest::READABLE, || sys::recv_record(fd, unfilled)) {
-                Ok((n, sys::RECORD_APPLICATION_DATA)) => {
-                    if !this.control.is_empty() {
-                        return Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, "kTLS: application data inside a TLS control message")));
-                    }
-                    if n == 0 {
-                        this.read_closed = true;
-                    }
-                    // SAFETY: the kernel wrote `n` bytes.
-                    unsafe { buf.assume_init(n) };
-                    buf.advance(n);
-                    return Poll::Ready(Ok(()));
-                }
-                Ok((n, record_type)) => {
-                    let body = unfilled[..n].to_vec();
-                    this.control_record(record_type, &body)?;
-                    if this.read_closed {
+                Ok((n, record_type)) => match this.reader.got(unfilled, n, record_type)? {
+                    Got::Data(n) => {
+                        // SAFETY: the kernel wrote `n` bytes.
+                        unsafe { buf.assume_init(n) };
+                        buf.advance(n);
                         return Poll::Ready(Ok(()));
                     }
-                }
+                    Got::Again => continue,
+                },
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(e) => return Poll::Ready(Err(e)),
+            }
+        }
+    }
+}
+
+/// A kTLS connection's read side on a blocking socket
+/// ([`KtlsStream::into_blocking_reader`]).
+pub struct BlockingKtlsReader {
+    socket: std::net::TcpStream,
+    reader: RecordReader,
+}
+
+impl std::io::Read for BlockingKtlsReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if let Some(n) = self.reader.take_prefix(buf) {
+            return Ok(n);
+        }
+        if self.reader.closed || buf.is_empty() {
+            return Ok(0);
+        }
+        loop {
+            let (n, record_type) = sys::recv_record(self.socket.as_raw_fd(), buf)?;
+            match self.reader.got(buf, n, record_type)? {
+                Got::Data(n) => return Ok(n),
+                Got::Again => continue,
             }
         }
     }

@@ -248,6 +248,54 @@ async fn a_chunked_tls_response_is_streamed_through_the_channel() {
     assert!(raw.starts_with(b"5\r\nhello\r\n0\r\n"), "{:?}", String::from_utf8_lossy(&raw));
 }
 
+/// `tls_ktls`: the upstream connection is handed to kernel TLS after the
+/// handshake, pooled and reused like a rustls one, and a streamed response
+/// is read from the socket on a blocking thread (no copying task).
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ktls_upstream_connections_are_pooled_and_stream() {
+    if crate::server::ktls::supported_ciphers().is_empty() {
+        return eprintln!("skipped: no kernel TLS here");
+    }
+    const CHUNKED: &[u8] = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+    for (response, per_conn) in [(OK, 100), (CHUNKED, 1)] {
+        let (port, config, accepted, _) = crate::proxy::tests::tls_backend_with_pem(response, per_conn);
+        let pool: &'static crate::proxy::Pool<super::AsyncTlsStream> = fresh_tls_pool();
+        let key = format!("127.0.0.1:{port}");
+        let connect = || {
+            let (config, key) = (Arc::clone(&config), key.clone());
+            async move {
+                let tcp = tokio::net::TcpStream::connect(&key).await.map_err(|e| e.to_string())?;
+                let name = rustls::pki_types::ServerName::try_from("localhost").unwrap();
+                let stream = super::tls_handshake_with(tcp, name, &config, &key, Duration::from_secs(2), true).await?;
+                assert!(matches!(stream, super::AsyncTlsStream::Ktls(_)), "handed to the kernel");
+                Ok(stream)
+            }
+        };
+        let rounds = if response == OK { 5 } else { 1 };
+        for _ in 0..rounds {
+            let mut response = super::forward_on(pool, &key, &get("/"), "localhost", crate::proxy::Peer::plain("10.0.0.1"), Duration::from_secs(2), connect)
+                .await
+                .unwrap();
+            if let Some(mut pipe) = response.stream_pipe.take() {
+                let raw = tokio::task::spawn_blocking(move || {
+                    let mut raw = Vec::new();
+                    let _ = pipe.read_to_end(&mut raw);
+                    raw
+                })
+                .await
+                .unwrap();
+                assert!(raw.starts_with(b"5\r\nhello\r\n0\r\n"), "{:?}", String::from_utf8_lossy(&raw));
+            } else {
+                assert_eq!(b"hello".to_vec(), body(&response));
+            }
+        }
+        if response == OK {
+            assert_eq!(1, accepted.load(Ordering::SeqCst), "5 HTTPS requests over kTLS, 1 handshake");
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_untrusted_tls_backend_is_an_error() {
     // Self-signed, checked against the WebPKI roots.
