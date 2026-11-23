@@ -27,9 +27,9 @@ Branch `ktls` (worktree `~/git/rws-ktls`), pushed, not merged, not released.
 | 2 | Control records (alert/close), KeyUpdate, startup probe, fallback, metrics | done |
 | 3 | Tests (loopback rustls client), CI, docs, re-benchmark | done (CI: branch push) |
 | 4a | H2 connections on kTLS | done; h2spec 146/146 with kTLS off and on (151/151 connections on kTLS) |
-| 4b | rws-proxy: splice upstream → kTLS client socket | todo |
+| 4b | rws-proxy: splice upstream → kTLS client socket | not done — see Log |
 | 4c | rws HTTP client: kTLS after client handshake | done for the proxy's async upstream pool (`AsyncTlsStream` enum; blocking reader for streamed bodies). Sync `http_client`/sync proxy pool not done (blocking rustls `StreamOwned`; no measurable reason) |
-| 5 | Upstream issues + HITOP note | todo |
+| 5 | Upstream issues + HITOP note | drafts in `spec/KTLS_UPSTREAM.md`; nothing filed (one finding is security-sensitive: private, outside this repo) |
 
 ## Design notes
 
@@ -106,3 +106,14 @@ Front = plain HTTP rws proxying to an HTTPS rws backend (same box).
 
 - 2026-11-23: steps 0–3 + 4a on branch `ktls`. Commits: fix(h2,h3)
   streamed file; feat(tls) kTLS.
+- 2026-11-23: review fixes (TLS 1.2 GCM explicit nonce start, acceptor
+  gate, ULP before drain, record limit, control-record reassembly), 4c
+  (async upstream pool), h2spec 146/146 on kTLS, local CI-equivalent
+  suites green (CI doesn't run on branches). The h2/h3 fix is also on its
+  own branch `fix-h2-streamed-file` off origin/main.
+- 4b (splice upstream→client) not started: it needs a way to hand the
+  upstream socket to `http1_async` past `Response.stream_pipe` (a
+  `Box<dyn Read>`; a new `Response` field breaks struct literals), only
+  applies to `Content-Length` bodies over 1 MB, and the 4c numbers (−4…−11%
+  at 1 MiB) don't justify the risk to the proxy path yet. Plain-HTTP
+  upstreams would benefit too — a candidate of its own, not kTLS work.
